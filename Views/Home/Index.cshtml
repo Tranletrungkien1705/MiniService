@@ -1,0 +1,27 @@
+@{ ViewData["Title"] = "Bảng điều khiển"; var d = (SvcDash)ViewBag.Dash; }
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">RO đang mở</div><div class="stat-num" style="color:#1d4ed8">@d.OpenRO</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Đang sửa</div><div class="stat-num text-primary">@d.InGarage</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Giao xe hôm nay</div><div class="stat-num text-success">@d.DoneToday</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Doanh thu tháng</div><div class="stat-num" style="font-size:20px">@d.RevenueMonth.ToString("N0")đ</div></div></div></div>
+</div>
+<div class="row g-3">
+    <div class="col-lg-7"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">RO theo trạng thái</h6>
+        @foreach (var (st, cnt) in d.ByStatus)
+        {
+            var (txt, code, css) = Ui.Status(st);
+            <div class="d-flex justify-content-between align-items-center border-bottom py-1">
+                <span><span class="badge bg-@css">@code</span> <span class="ms-1">@txt</span></span>
+                <span class="fw-semibold">@cnt</span>
+            </div>
+        }
+        @if (d.ByStatus.Count == 0) { <div class="text-muted">Chưa có RO.</div> }
+    </div></div></div>
+    <div class="col-lg-5"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-2">Tác vụ</h6>
+        <a href="/RO/Create" class="btn btn-primary w-100 mb-2"><i class="bi bi-plus-lg me-1"></i>Tiếp nhận xe (tạo RO)</a>
+        <a href="/RO?status=5" class="btn btn-outline-primary w-100 mb-2"><i class="bi bi-wrench me-1"></i>Xe đang sửa</a>
+        <div class="text-muted small mt-2">API tra cứu: <code>GET /api/ro?plate=30A</code></div>
+    </div></div></div>
+</div>
