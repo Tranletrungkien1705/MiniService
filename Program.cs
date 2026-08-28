@@ -3,7 +3,7 @@ using MiniService.Data;
 using MiniService.Models;
 using MiniService.Services;
 using Serilog;
-using Serilog.Sinks.Elasticsearch;
+using Serilog.Sinks.OpenSearch;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
@@ -14,10 +14,12 @@ var logCfg = new LoggerConfiguration()
     .Enrich.WithProperty("app", "miniservice")
     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] ({CorrelationId}) {Message:lj}{NewLine}{Exception}");
 if (!string.IsNullOrWhiteSpace(elasticUrl))
-    logCfg = logCfg.WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(elasticUrl))
+    logCfg = logCfg.WriteTo.OpenSearch(new OpenSearchSinkOptions(new Uri(elasticUrl))
     {
         AutoRegisterTemplate = true,
         IndexFormat = "fleet-logs-{0:yyyy.MM.dd}",
+        BatchPostingLimit = 20,
+        Period = TimeSpan.FromSeconds(3),
         ModifyConnectionSettings = c =>
         {
             var user = Environment.GetEnvironmentVariable("ELASTIC_USER");
