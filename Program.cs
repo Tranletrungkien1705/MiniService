@@ -53,6 +53,29 @@ app.MapGet("/api/ro", async (string? plate, IRoService svc) =>
     }));
 });
 
+// Nhập KH thật từ DB dự án chính (CarService.Ser_Customer). Cần X-Api-Key (tenant).
+app.MapPost("/api/import/customers", async (List<ImportCustomerDto> items, AppDbContext db) =>
+{
+    if (items == null || items.Count == 0) return Results.BadRequest(new { error = "Danh sách rỗng." });
+    int added = 0, skipped = 0;
+    var existing = await db.Customers.Select(c => c.Phone).ToListAsync();
+    var seen = new HashSet<string>(existing.Where(p => p != null)!);
+    foreach (var it in items)
+    {
+        if (string.IsNullOrWhiteSpace(it.Name)) { skipped++; continue; }
+        if (!string.IsNullOrWhiteSpace(it.Phone) && !seen.Add(it.Phone)) { skipped++; continue; }
+        db.Customers.Add(new Customer
+        {
+            Code = string.IsNullOrWhiteSpace(it.DealerCode) ? "KH" + (added + 1).ToString("D5") : $"{it.DealerCode}-{it.Phone}",
+            Name = it.Name.Trim(), Phone = it.Phone, Email = it.Email,
+            Address = it.Address, TaxCode = it.TaxCode, DealerCode = it.DealerCode
+        });
+        added++;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok(new { added, skipped, total = items.Count });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -65,3 +88,4 @@ app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Inde
 app.Run();
 
 record RegisterOrgDto(string Name);
+record ImportCustomerDto(string? Name, string? Phone, string? Email, string? Address, string? TaxCode, string? DealerCode);

@@ -54,6 +54,9 @@ public static class Seeder
         sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"EInvoiceStatus\" text");
         sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"EInvoiceError\" text");
         sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"EInvoiceAt\" timestamp");
+        sql.Add("ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"Address\" text");
+        sql.Add("ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"TaxCode\" text");
+        sql.Add("ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"DealerCode\" text");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
     }
 }

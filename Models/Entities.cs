@@ -36,6 +36,10 @@ public class Customer : IOrgOwned
     public string Name { get; set; } = "";
     public string? Phone { get; set; }
     public string? Email { get; set; }
+    // Bổ sung theo cột thật của Ser_Customer (CarService.Main): địa chỉ, MST, mã đại lý quản lý.
+    public string? Address { get; set; }
+    public string? TaxCode { get; set; }        // TaxCode
+    public string? DealerCode { get; set; }     // DealerCode — đại lý quản lý KH
     public List<Car> Cars { get; set; } = [];
 }
 
