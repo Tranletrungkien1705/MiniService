@@ -112,6 +112,33 @@ app.MapPost("/api/import/customers", async (List<ImportCustomerDto> items, AppDb
     return Results.Ok(new { added, skipped, total = items.Count });
 });
 
+// Nhập xe + chủ xe thật từ CarService.Ser_Car (kèm tạo/khớp khách theo SĐT).
+app.MapPost("/api/import/cars", async (List<ImportCarDto> items, AppDbContext db) =>
+{
+    if (items == null || items.Count == 0) return Results.BadRequest(new { error = "Danh sách rỗng." });
+    int cars = 0, custAdded = 0, skipped = 0;
+    var custByPhone = await db.Customers.Where(c => c.Phone != null).ToDictionaryAsync(c => c.Phone!, c => c.Id);
+    var existingPlates = (await db.Cars.Select(c => c.Plate).ToListAsync()).ToHashSet();
+    foreach (var it in items)
+    {
+        if (string.IsNullOrWhiteSpace(it.Plate)) { skipped++; continue; }
+        if (!existingPlates.Add(it.Plate.Trim())) { skipped++; continue; }
+        int custId;
+        if (!string.IsNullOrWhiteSpace(it.OwnerPhone) && custByPhone.TryGetValue(it.OwnerPhone, out var cid)) custId = cid;
+        else
+        {
+            var cus = new Customer { Code = "KH-" + (it.OwnerPhone ?? Guid.NewGuid().ToString("N")[..6]), Name = it.OwnerName ?? "Khách", Phone = it.OwnerPhone, DealerCode = it.DealerCode };
+            db.Customers.Add(cus); await db.SaveChangesAsync();
+            custId = cus.Id; custAdded++;
+            if (!string.IsNullOrWhiteSpace(it.OwnerPhone)) custByPhone[it.OwnerPhone] = custId;
+        }
+        db.Cars.Add(new Car { Plate = it.Plate.Trim(), Model = it.Model ?? "", Year = it.Year, Vin = it.Vin, EngineNo = it.EngineNo, Color = it.Color, CurrentKm = it.CurrentKm, CustomerId = custId });
+        cars++;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok(new { cars, customersAdded = custAdded, skipped, total = items.Count });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -128,3 +155,4 @@ finally { Log.CloseAndFlush(); }
 
 record RegisterOrgDto(string Name);
 record ImportCustomerDto(string? Name, string? Phone, string? Email, string? Address, string? TaxCode, string? DealerCode);
+record ImportCarDto(string? Plate, string? Model, int Year, string? Vin, string? EngineNo, string? Color, int CurrentKm, string? OwnerName, string? OwnerPhone, string? DealerCode);
