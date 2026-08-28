@@ -58,7 +58,9 @@ function CreateRO() {
   useEffect(() => { if (cars?.length && !f.carId) setF(s => ({ ...s, carId: cars[0].id })) }, [cars])
   const car = (cars || []).find(c => c.id == f.carId)
   const submit = async () => {
-    try { const r = await api('/ros', { method: 'POST', body: JSON.stringify({ ...f, carId: +f.carId, expectedDelivery: f.expectedDelivery || null }) }); toast('Đã tiếp nhận xe, RO #' + r.id); nav('/ro/' + r.id) }
+    // datetime-local thiếu giây → thêm ':00' cho hợp ISO 8601 (nếu không STJ từ chối DateTime).
+    const ed = f.expectedDelivery ? (f.expectedDelivery.length === 16 ? f.expectedDelivery + ':00' : f.expectedDelivery) : null
+    try { const r = await api('/ros', { method: 'POST', body: JSON.stringify({ ...f, carId: +f.carId, expectedDelivery: ed }) }); toast('Đã tiếp nhận xe, RO #' + r.id); nav('/ro/' + r.id) }
     catch (e) { toast('❌ ' + e.message) }
   }
   return <div className="card" style={{ maxWidth: 760 }}><div className="card-body">
