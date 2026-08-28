@@ -16,8 +16,8 @@ var logCfg = new LoggerConfiguration()
 if (!string.IsNullOrWhiteSpace(elasticUrl))
     logCfg = logCfg.WriteTo.OpenSearch(new OpenSearchSinkOptions(new Uri(elasticUrl))
     {
-        AutoRegisterTemplate = true,
-        IndexFormat = "fleet-logs-{0:yyyy.MM.dd}",
+        AutoRegisterTemplate = false,   // Bonsai chặn PUT template; index tự tạo (tên khớp whitelist *events*)
+        IndexFormat = "fleet-events-{0:yyyy.MM.dd}",
         BatchPostingLimit = 20,
         Period = TimeSpan.FromSeconds(3),
         ModifyConnectionSettings = c =>

@@ -84,9 +84,9 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
         return Ok(new
         {
             r.Id, r.Code, status = (int)r.Status, statusText = Ui.Status(r.Status).text,
-            r.Odometer, r.Technician, r.IntakeNote,
-            car = new { r.Car.Plate, r.Car.Model, r.Car.Year, r.Car.Vin },
-            customer = new { r.Customer.Name, r.Customer.Phone, r.Customer.Address },
+            r.Odometer, r.Technician, r.IntakeNote, r.CustomerRequest, r.ServiceAdvisor, r.ExpectedDelivery, r.CreatedAt,
+            car = new { r.Car.Plate, r.Car.Model, r.Car.Year, r.Car.Vin, r.Car.EngineNo, r.Car.Color, r.Car.CurrentKm },
+            customer = new { r.Customer.Name, r.Customer.Phone, r.Customer.Address, r.Customer.TaxCode },
             lines = r.Lines.Select(l => new { l.Id, type = (int)l.Type, l.Name, l.Quantity, l.UnitPrice, l.Amount }),
             r.LaborTotal, r.PartTotal, r.Total,
             eInvoice = new { code = r.EInvoiceCode, status = r.EInvoiceStatus, error = r.EInvoiceError, at = r.EInvoiceAt },
@@ -97,7 +97,11 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
     [HttpPost("ros")]
     public async Task<IActionResult> CreateRO([FromBody] CreateRoReq req)
     {
-        var id = await svc.CreateROAsync(new RepairOrder { CarId = req.CarId, Odometer = req.Odometer, IntakeNote = req.IntakeNote, Technician = req.Technician });
+        var id = await svc.CreateROAsync(new RepairOrder
+        {
+            CarId = req.CarId, Odometer = req.Odometer, IntakeNote = req.IntakeNote, Technician = req.Technician,
+            CustomerRequest = req.CustomerRequest, ServiceAdvisor = req.ServiceAdvisor, ExpectedDelivery = req.ExpectedDelivery
+        });
         await cache.RemoveByPrefixAsync("svc:");
         return Ok(new { id });
     }
@@ -130,6 +134,6 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
     }
 }
 
-public record CreateRoReq(int CarId, int Odometer, string? IntakeNote, string? Technician);
+public record CreateRoReq(int CarId, int Odometer, string? IntakeNote, string? Technician, string? CustomerRequest, string? ServiceAdvisor, DateTime? ExpectedDelivery);
 public record AddLineReq(LineType Type, string Name, decimal Quantity, decimal UnitPrice);
 public record TransitionReq(ROStatus To);

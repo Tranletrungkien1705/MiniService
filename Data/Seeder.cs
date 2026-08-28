@@ -72,6 +72,9 @@ public static class Seeder
         sql.Add("ALTER TABLE miniservice.\"Cars\" ADD COLUMN IF NOT EXISTS \"Color\" text");
         sql.Add("ALTER TABLE miniservice.\"Cars\" ADD COLUMN IF NOT EXISTS \"CurrentKm\" integer NOT NULL DEFAULT 0");
         sql.Add("ALTER TABLE miniservice.\"Lines\" ADD COLUMN IF NOT EXISTS \"PartId\" integer");
+        sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CustomerRequest\" text");
+        sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"ServiceAdvisor\" text");
+        sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"ExpectedDelivery\" timestamp");
         // Bảng MỚI tồn kho/xuất kho/thanh toán — EnsureCreated không tạo trên DB đã tồn tại → CREATE tường minh.
         sql.Add(@"CREATE TABLE IF NOT EXISTS miniservice.""Parts"" (""Id"" serial PRIMARY KEY, ""OrgId"" uuid NOT NULL DEFAULT '" + def + @"',
             ""Code"" text NOT NULL DEFAULT '', ""Name"" text NOT NULL DEFAULT '', ""Unit"" text NOT NULL DEFAULT 'cái',

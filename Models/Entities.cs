@@ -70,7 +70,10 @@ public class RepairOrder : IOrgOwned
     public ROStatus Status { get; set; } = ROStatus.Created;
     public int Odometer { get; set; }             // số km
     public string? IntakeNote { get; set; }       // ghi nhận tình trạng khi nhận xe
+    public string? CustomerRequest { get; set; }  // yêu cầu của khách hàng
+    public string? ServiceAdvisor { get; set; }   // cố vấn dịch vụ tiếp nhận
     public string? Technician { get; set; }       // thợ phụ trách
+    public DateTime? ExpectedDelivery { get; set; } // ngày hẹn trả xe
     public string CreatedBy { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.Now;
     public DateTime? IntakeAt { get; set; }        // xe vào xưởng (INGA)

@@ -53,22 +53,30 @@ function ROs() {
 
 function CreateRO() {
   const { data: cars } = useApi('/cars')
-  const [f, setF] = useState({ carId: '', odometer: 0, technician: '', intakeNote: '' })
+  const [f, setF] = useState({ carId: '', odometer: 0, serviceAdvisor: '', technician: '', expectedDelivery: '', customerRequest: '', intakeNote: '' })
   const nav = useNavigate(); const toast = React.useContext(ToastCtx)
   useEffect(() => { if (cars?.length && !f.carId) setF(s => ({ ...s, carId: cars[0].id })) }, [cars])
+  const car = (cars || []).find(c => c.id == f.carId)
   const submit = async () => {
-    try { const r = await api('/ros', { method: 'POST', body: JSON.stringify({ ...f, carId: +f.carId }) }); toast('Đã tiếp nhận xe, RO #' + r.id); nav('/ro/' + r.id) }
+    try { const r = await api('/ros', { method: 'POST', body: JSON.stringify({ ...f, carId: +f.carId, expectedDelivery: f.expectedDelivery || null }) }); toast('Đã tiếp nhận xe, RO #' + r.id); nav('/ro/' + r.id) }
     catch (e) { toast('❌ ' + e.message) }
   }
-  return <div className="card" style={{ maxWidth: 640 }}><div className="card-body">
-    <div className="mb-2"><label className="form-label small text-muted">Chọn xe *</label>
-      <select className="form-select" value={f.carId} onChange={e => setF({ ...f, carId: e.target.value })}>
-        {(cars || []).map(c => <option key={c.id} value={c.id}>{c.plate} — {c.model} ({c.customerName || ''})</option>)}</select>
-      {cars && !cars.length && <div className="text-danger small mt-1">Chưa có xe — <Link to="/cars">thêm xe</Link> trước.</div>}</div>
-    <div className="row g-2"><div className="col-4"><label className="form-label small text-muted">Số km</label><input type="number" className="form-control" value={f.odometer} onChange={e => setF({ ...f, odometer: +e.target.value })} /></div>
-      <div className="col-8"><label className="form-label small text-muted">Thợ phụ trách</label><input className="form-control" value={f.technician} onChange={e => setF({ ...f, technician: e.target.value })} /></div></div>
-    <div className="mb-3 mt-2"><label className="form-label small text-muted">Ghi nhận tình trạng</label><textarea className="form-control" rows={2} value={f.intakeNote} onChange={e => setF({ ...f, intakeNote: e.target.value })} /></div>
-    <button className="btn btn-primary" onClick={submit} disabled={!f.carId}><i className="bi bi-check-lg me-1" />Tiếp nhận</button>
+  return <div className="card" style={{ maxWidth: 760 }}><div className="card-body">
+    <h6 className="fw-bold mb-3">Phiếu tiếp nhận xe</h6>
+    <div className="row g-3">
+      <div className="col-md-6"><label className="form-label small text-muted">Xe (biển số) *</label>
+        <select className="form-select" value={f.carId} onChange={e => setF({ ...f, carId: e.target.value })}>
+          {(cars || []).map(c => <option key={c.id} value={c.id}>{c.plate} — {c.model} ({c.customerName || ''})</option>)}</select>
+        {cars && !cars.length && <div className="text-danger small mt-1">Chưa có xe — <Link to="/cars">thêm xe</Link> trước.</div>}</div>
+      <div className="col-md-6">{car && <div className="border rounded p-2 bg-light small"><b>{car.plate}</b> · {car.model} {car.year || ''}<br />VIN: {car.vin || '—'} · Màu: {car.color || '—'} · Chủ: {car.customerName}</div>}</div>
+      <div className="col-md-3"><label className="form-label small text-muted">Số km hiện tại</label><input type="number" className="form-control" value={f.odometer} onChange={e => setF({ ...f, odometer: +e.target.value })} /></div>
+      <div className="col-md-5"><label className="form-label small text-muted">Cố vấn dịch vụ</label><input className="form-control" value={f.serviceAdvisor} onChange={e => setF({ ...f, serviceAdvisor: e.target.value })} /></div>
+      <div className="col-md-4"><label className="form-label small text-muted">Hẹn trả xe</label><input type="datetime-local" className="form-control" value={f.expectedDelivery} onChange={e => setF({ ...f, expectedDelivery: e.target.value })} /></div>
+      <div className="col-md-6"><label className="form-label small text-muted">Thợ phụ trách</label><input className="form-control" value={f.technician} onChange={e => setF({ ...f, technician: e.target.value })} /></div>
+      <div className="col-md-6"><label className="form-label small text-muted">Yêu cầu của khách</label><input className="form-control" value={f.customerRequest} onChange={e => setF({ ...f, customerRequest: e.target.value })} placeholder="VD bảo dưỡng 20.000km, kêu phanh…" /></div>
+      <div className="col-12"><label className="form-label small text-muted">Ghi nhận tình trạng khi nhận xe</label><textarea className="form-control" rows={2} value={f.intakeNote} onChange={e => setF({ ...f, intakeNote: e.target.value })} /></div>
+    </div>
+    <button className="btn btn-primary mt-3" onClick={submit} disabled={!f.carId}><i className="bi bi-check-lg me-1" />Tiếp nhận &amp; lập RO/báo giá</button>
   </div></div>
 }
 
@@ -86,8 +94,17 @@ function RODetail() {
   const settle = () => run(async () => { const m = prompt('Quyết toán — 0=Tiền mặt,1=Chuyển khoản,2=Thẻ', '0'); if (m === null) return; const x = await api('/inventory/settle', { method: 'POST', body: JSON.stringify({ roId: +id, method: +m, note: null }) }); toast(x.msg); reload() })
   return <div className="row g-3">
     <div className="col-lg-8"><div className="card"><div className="card-body">
-      <h5 className="fw-bold">{r.code} <span className="badge bg-secondary">{r.statusText}</span></h5>
-      <div className="text-muted small mb-2">{r.car.plate} · {r.car.model} · {r.odometer || 0} km · KH: {r.customer.name} ({r.customer.phone || ''})</div>
+      <div className="d-flex justify-content-between align-items-start">
+        <h5 className="fw-bold">{r.code} <span className="badge bg-secondary">{r.statusText}</span>{(r.status === 0 || r.status === 1) && <span className="badge bg-warning text-dark ms-1">BÁO GIÁ</span>}</h5>
+      </div>
+      <div className="row g-1 small mb-2 text-muted">
+        <div className="col-md-6"><b>Xe:</b> {r.car.plate} · {r.car.model} {r.car.year || ''} · {r.odometer || 0} km · VIN {r.car.vin || '—'}</div>
+        <div className="col-md-6"><b>KH:</b> {r.customer.name} ({r.customer.phone || ''})</div>
+        {r.customerRequest && <div className="col-md-6"><b>Yêu cầu:</b> {r.customerRequest}</div>}
+        {r.serviceAdvisor && <div className="col-md-3"><b>CVDV:</b> {r.serviceAdvisor}</div>}
+        {r.technician && <div className="col-md-3"><b>Thợ:</b> {r.technician}</div>}
+        {r.expectedDelivery && <div className="col-md-6"><b>Hẹn trả:</b> {new Date(r.expectedDelivery).toLocaleString('vi-VN')}</div>}
+      </div>
       <table className="table table-sm"><thead><tr><th>Loại</th><th>Nội dung</th><th className="text-end">SL</th><th className="text-end">Đơn giá</th><th className="text-end">Thành tiền</th><th /></tr></thead>
         <tbody>{r.lines.map(l => <tr key={l.id}><td>{l.type === 0 ? <span className="badge bg-info">Công</span> : <span className="badge bg-secondary">PT</span>}</td><td>{l.name}</td><td className="text-end">{l.quantity}</td><td className="text-end">{fmtM(l.unitPrice)}</td><td className="text-end">{fmtM(l.amount)}</td><td className="text-end"><i className="bi bi-x text-danger" style={{ cursor: 'pointer' }} onClick={() => delLine(l.id)} /></td></tr>)}
           {!r.lines.length && <tr><td colSpan={6} className="text-muted">Chưa có dòng</td></tr>}</tbody>
