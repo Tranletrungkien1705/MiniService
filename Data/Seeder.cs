@@ -36,6 +36,17 @@ public static class Seeder
             db.ROs.Add(ro);
             await db.SaveChangesAsync();
         }
+        // Tồn kho phụ tùng
+        if (!await db.Parts.AnyAsync())
+        {
+            db.Parts.AddRange(
+                new Part { Code = "PT001", Name = "Dầu động cơ Hyundai 5W-30 (4L)", Unit = "bình", Price = 650000, OnHand = 40, MinStock = 10 },
+                new Part { Code = "PT002", Name = "Lọc dầu", Unit = "cái", Price = 180000, OnHand = 60, MinStock = 15 },
+                new Part { Code = "PT003", Name = "Lọc gió động cơ", Unit = "cái", Price = 220000, OnHand = 8, MinStock = 10 },
+                new Part { Code = "PT004", Name = "Má phanh trước", Unit = "bộ", Price = 850000, OnHand = 12, MinStock = 6 },
+                new Part { Code = "PT005", Name = "Bugi", Unit = "cái", Price = 120000, OnHand = 3, MinStock = 20 });
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
@@ -57,6 +68,21 @@ public static class Seeder
         sql.Add("ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"Address\" text");
         sql.Add("ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"TaxCode\" text");
         sql.Add("ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"DealerCode\" text");
+        sql.Add("ALTER TABLE miniservice.\"Cars\" ADD COLUMN IF NOT EXISTS \"EngineNo\" text");
+        sql.Add("ALTER TABLE miniservice.\"Cars\" ADD COLUMN IF NOT EXISTS \"Color\" text");
+        sql.Add("ALTER TABLE miniservice.\"Cars\" ADD COLUMN IF NOT EXISTS \"CurrentKm\" integer NOT NULL DEFAULT 0");
+        sql.Add("ALTER TABLE miniservice.\"Lines\" ADD COLUMN IF NOT EXISTS \"PartId\" integer");
+        // Bảng MỚI tồn kho/xuất kho/thanh toán — EnsureCreated không tạo trên DB đã tồn tại → CREATE tường minh.
+        sql.Add(@"CREATE TABLE IF NOT EXISTS miniservice.""Parts"" (""Id"" serial PRIMARY KEY, ""OrgId"" uuid NOT NULL DEFAULT '" + def + @"',
+            ""Code"" text NOT NULL DEFAULT '', ""Name"" text NOT NULL DEFAULT '', ""Unit"" text NOT NULL DEFAULT 'cái',
+            ""Price"" numeric(18,2) NOT NULL DEFAULT 0, ""OnHand"" integer NOT NULL DEFAULT 0, ""MinStock"" integer NOT NULL DEFAULT 5)");
+        sql.Add(@"CREATE TABLE IF NOT EXISTS miniservice.""StockOuts"" (""Id"" serial PRIMARY KEY, ""OrgId"" uuid NOT NULL DEFAULT '" + def + @"',
+            ""Code"" text NOT NULL DEFAULT '', ""PartId"" integer NOT NULL DEFAULT 0, ""PartName"" text NOT NULL DEFAULT '',
+            ""Quantity"" integer NOT NULL DEFAULT 0, ""UnitPrice"" numeric(18,2) NOT NULL DEFAULT 0,
+            ""ROId"" integer, ""ROCode"" text, ""Reason"" text, ""CreatedAt"" timestamp NOT NULL DEFAULT now())");
+        sql.Add(@"CREATE TABLE IF NOT EXISTS miniservice.""Payments"" (""Id"" serial PRIMARY KEY, ""OrgId"" uuid NOT NULL DEFAULT '" + def + @"',
+            ""ROId"" integer NOT NULL DEFAULT 0, ""ROCode"" text NOT NULL DEFAULT '', ""Amount"" numeric(18,2) NOT NULL DEFAULT 0,
+            ""Method"" integer NOT NULL DEFAULT 0, ""Note"" text, ""PaidAt"" timestamp NOT NULL DEFAULT now())");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
     }
 }

@@ -13,6 +13,9 @@ public class AppDbContext : DbContext
     public DbSet<Car> Cars => Set<Car>();
     public DbSet<RepairOrder> ROs => Set<RepairOrder>();
     public DbSet<RepairLine> Lines => Set<RepairLine>();
+    public DbSet<Part> Parts => Set<Part>();
+    public DbSet<StockOut> StockOuts => Set<StockOut>();
+    public DbSet<Payment> Payments => Set<Payment>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -39,6 +42,26 @@ public class AppDbContext : DbContext
             e.Property(x => x.Quantity).HasPrecision(18, 2);
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.HasOne(x => x.RO).WithMany(x => x.Lines).HasForeignKey(x => x.ROId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Part>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
+            e.Property(x => x.Price).HasPrecision(18, 2);
+            e.Ignore(x => x.LowStock); e.Ignore(x => x.StockValue);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StockOut>(e =>
+        {
+            e.Ignore(x => x.Amount);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.PartId });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Payment>(e =>
+        {
+            e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.HasIndex(x => new { x.OrgId, x.ROId });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

@@ -42,6 +42,7 @@ builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<ICache, RedisCache>();          // Redis cache (mềm, fallback no-op)
 builder.Services.AddScoped<IIntegrationService, IntegrationService>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IRoService, RoService>();
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();                  // Swagger/OpenAPI

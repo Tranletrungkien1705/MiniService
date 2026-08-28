@@ -23,6 +23,8 @@
         <a href="#/dashboard" data-r="dashboard"><i class="bi bi-speedometer2 me-1"></i> Bảng điều khiển</a>
         <a href="#/ros" data-r="ros"><i class="bi bi-clipboard-check me-1"></i> Lệnh sửa chữa</a>
         <a href="#/customers" data-r="customers"><i class="bi bi-people me-1"></i> Khách hàng</a>
+        <a href="#/inventory" data-r="inventory"><i class="bi bi-box-seam me-1"></i> Tồn kho</a>
+        <a href="#/stockouts" data-r="stockouts"><i class="bi bi-box-arrow-up me-1"></i> Xuất kho</a>
         <a href="/swagger" target="_blank" style="border-top:1px solid #1c2c4d;margin-top:8px"><i class="bi bi-braces me-1"></i> API (Swagger)</a>
         <a href="/" style="color:#5f6f8f"><i class="bi bi-arrow-left me-1"></i> UI cũ (Razor)</a>
     </nav>
@@ -84,8 +86,29 @@ const routes = {
       <div class="card"><div class="card-body"><h6 class="fw-bold">Hóa đơn điện tử</h6>
       ${r.eInvoice.code?`<div class="alert alert-success py-2 small">Mã CQT: <b>${r.eInvoice.code}</b></div><a class="btn btn-sm btn-outline-primary w-100" target="_blank" href="https://minitvan.onrender.com/Lookup/${r.eInvoice.code}">Tra cứu T-VAN</a>`
         : `${r.eInvoice.error?'<div class="alert alert-danger py-2 small">'+r.eInvoice.error+'</div>':''}<button class="btn btn-primary btn-sm w-100" ${r.total<=0?'disabled':''} onclick="issueInv(${id})">Xuất HĐĐT (${fmtM(r.total)})</button>`}
-      </div></div></div></div>
+      </div></div>
+      <div class="card mt-3"><div class="card-body"><h6 class="fw-bold">Quyết toán</h6>
+      <button class="btn btn-success btn-sm w-100" ${r.total<=0?'disabled':''} onclick="settle(${id})"><i class="bi bi-cash-coin me-1"></i>Quyết toán + xuất kho (${fmtM(r.total)})</button>
+      <div class="small text-muted mt-1">Ghi thanh toán + tự xuất kho phụ tùng gắn mã.</div></div></div>
+      </div></div>
       <a href="#/ros" class="btn btn-link mt-2">← Danh sách</a>`;
+  },
+  inventory: async () => {
+    setTitle('Tồn kho phụ tùng');
+    const d = await api('/inventory/dashboard'); const rows = await api('/inventory/parts');
+    el.innerHTML = `<div class="row g-3 mb-3">${card('Số phụ tùng',d.parts,'#2563eb')}${card('Sắp hết',d.lowStock,'#dc2626')}${card('Giá trị tồn',fmtM(d.stockValue),'#0f766e',true)}${card('Xuất hôm nay',d.stockOutsToday,'#f59e0b')}</div>
+    <div class="card"><div class="card-body"><table class="table table-hover align-middle mb-0"><thead><tr><th>Mã</th><th>Tên</th><th class="text-end">Giá</th><th class="text-end">Tồn</th><th class="text-end">Định mức</th><th></th></tr></thead><tbody>
+    ${rows.map(p=>`<tr class="${p.lowStock?'table-danger':''}"><td class="small">${p.code}</td><td class="fw-semibold">${esc(p.name)}</td><td class="text-end">${fmtM(p.price)}</td>
+      <td class="text-end fw-bold ${p.lowStock?'text-danger':''}">${p.onHand} ${p.unit}</td><td class="text-end text-muted">${p.minStock}</td>
+      <td class="text-end"><button class="btn btn-sm btn-outline-primary" onclick="issueStock(${p.id},'${esc(p.name)}',${p.onHand})">Xuất kho</button></td></tr>`).join('')}
+    </tbody></table></div></div>`;
+  },
+  stockouts: async () => {
+    setTitle('Lịch sử xuất kho');
+    const rows = await api('/inventory/stockouts');
+    el.innerHTML = `<div class="card"><div class="card-body"><table class="table table-hover align-middle mb-0"><thead><tr><th>Phiếu</th><th>Phụ tùng</th><th class="text-end">SL</th><th class="text-end">Thành tiền</th><th>RO</th><th>Lý do</th><th>Thời gian</th></tr></thead><tbody>
+    ${rows.map(s=>`<tr><td class="small">${s.code}</td><td>${esc(s.partName)}</td><td class="text-end">${s.quantity}</td><td class="text-end">${fmtM(s.amount)}</td><td class="small">${s.roCode||''}</td><td class="small text-muted">${esc(s.reason||'')}</td><td class="small text-muted">${new Date(s.createdAt).toLocaleString('vi-VN')}</td></tr>`).join('')||'<tr><td colspan=7 class="text-center text-muted py-3">Chưa có phiếu xuất</td></tr>'}
+    </tbody></table></div></div>`;
   },
   customers: async () => {
     setTitle('Khách hàng (data thật)');
@@ -102,6 +125,8 @@ function card(t,v,c,sm){ return `<div class="col-6 col-lg-3"><div class="card"><
 function esc(s){ return (s||'').replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
 window.doTransition = async (id,to)=>{ try{ const r=await api('/ros/'+id+'/transition',{method:'POST',body:JSON.stringify({to})}); toast(r.msg); render(); }catch(e){ toast('❌ '+e.message);} };
 window.issueInv = async (id)=>{ try{ toast('Đang đẩy HĐĐT…'); const r=await api('/ros/'+id+'/einvoice',{method:'POST'}); toast(r.msg); render(); }catch(e){ toast('❌ '+e.message);} };
+window.issueStock = async (partId,name,onHand)=>{ const q=prompt('Xuất kho "'+name+'" (tồn '+onHand+'). Số lượng:'); if(!q)return; try{ const r=await api('/inventory/issue',{method:'POST',body:JSON.stringify({partId,qty:parseInt(q),roId:null,reason:'Xuất thủ công'})}); toast(r.msg); render(); }catch(e){ toast('❌ '+e.message);} };
+window.settle = async (id)=>{ const m=prompt('Quyết toán — hình thức: 0=Tiền mặt, 1=Chuyển khoản, 2=Thẻ','0'); if(m===null)return; try{ const r=await api('/inventory/settle',{method:'POST',body:JSON.stringify({roId:id,method:parseInt(m),note:null})}); toast(r.msg); render(); }catch(e){ toast('❌ '+e.message);} };
 function toast(m){ let t=document.getElementById('toast'); if(!t){t=document.createElement('div');t.id='toast';t.style='position:fixed;bottom:20px;right:20px;background:#111;color:#fff;padding:10px 16px;border-radius:8px;z-index:9999;font-size:14px';document.body.appendChild(t);} t.textContent=m; t.style.display='block'; clearTimeout(t._h); t._h=setTimeout(()=>t.style.display='none',3500); }
 
 async function render(){

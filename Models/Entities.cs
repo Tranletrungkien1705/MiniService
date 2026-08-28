@@ -47,10 +47,14 @@ public class Car : IOrgOwned
 {
     public int Id { get; set; }
     public Guid OrgId { get; set; }
-    public string Plate { get; set; } = "";      // biển số
-    public string? Vin { get; set; }
+    public string Plate { get; set; } = "";      // biển số (PlateNo)
+    public string? Vin { get; set; }             // FrameNo
     public string Model { get; set; } = "";
-    public int Year { get; set; }
+    public int Year { get; set; }                // ProductYear
+    // Bổ sung theo cột thật Ser_Car
+    public string? EngineNo { get; set; }
+    public string? Color { get; set; }           // ColorCode
+    public int CurrentKm { get; set; }
     public int CustomerId { get; set; }
     public Customer Customer { get; set; } = null!;
 }
@@ -96,6 +100,54 @@ public class RepairLine : IOrgOwned
     public string Name { get; set; } = "";
     public decimal Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }
+    public int? PartId { get; set; }              // dòng phụ tùng gắn mã kho → xuất kho
     public decimal Amount => Quantity * UnitPrice;
     public RepairOrder RO { get; set; } = null!;
+}
+
+// ===== TỒN KHO / XUẤT KHO (Ser_Car_Inv_*) =====
+/// <summary>Phụ tùng (master) + tồn kho hiện có.</summary>
+public class Part : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Unit { get; set; } = "cái";
+    public decimal Price { get; set; }            // giá bán
+    public int OnHand { get; set; }               // tồn kho
+    public int MinStock { get; set; } = 5;        // định mức cảnh báo
+    public bool LowStock => OnHand <= MinStock;
+    public decimal StockValue => OnHand * Price;
+}
+
+/// <summary>Phiếu xuất kho — giảm tồn, gắn với RO nếu xuất cho sửa chữa.</summary>
+public class StockOut : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";
+    public int PartId { get; set; }
+    public string PartName { get; set; } = "";
+    public int Quantity { get; set; }
+    public decimal UnitPrice { get; set; }
+    public int? ROId { get; set; }
+    public string? ROCode { get; set; }
+    public string? Reason { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public decimal Amount => Quantity * UnitPrice;
+}
+
+/// <summary>Thanh toán / quyết toán RO.</summary>
+public enum PayMethod { Cash = 0, Transfer = 1, Card = 2 }
+public class Payment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ROId { get; set; }
+    public string ROCode { get; set; } = "";
+    public decimal Amount { get; set; }
+    public PayMethod Method { get; set; }
+    public string? Note { get; set; }
+    public DateTime PaidAt { get; set; } = DateTime.Now;
 }
