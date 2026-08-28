@@ -139,6 +139,37 @@ app.MapPost("/api/import/cars", async (List<ImportCarDto> items, AppDbContext db
     return Results.Ok(new { cars, customersAdded = custAdded, skipped, total = items.Count });
 });
 
+// Nhập RO thật từ Ser_RO (khớp/ tạo xe+khách theo biển số; 1 dòng tổng chi phí; trạng thái = Đã giao).
+app.MapPost("/api/import/ros", async (List<ImportRoDto> items, AppDbContext db) =>
+{
+    if (items == null || items.Count == 0) return Results.BadRequest(new { error = "Danh sách rỗng." });
+    int ros = 0, skipped = 0;
+    var carByPlate = await db.Cars.ToDictionaryAsync(c => c.Plate, c => c);
+    var custByPhone = (await db.Customers.Where(c => c.Phone != null).ToListAsync()).GroupBy(c => c.Phone!).ToDictionary(g => g.Key, g => g.First().Id);
+    var existingCodes = (await db.ROs.Select(r => r.Code).ToListAsync()).ToHashSet();
+    foreach (var it in items)
+    {
+        if (string.IsNullOrWhiteSpace(it.RoNo) || string.IsNullOrWhiteSpace(it.Plate)) { skipped++; continue; }
+        if (!existingCodes.Add(it.RoNo)) { skipped++; continue; }
+        // khách
+        int custId;
+        if (!string.IsNullOrWhiteSpace(it.OwnerPhone) && custByPhone.TryGetValue(it.OwnerPhone, out var cid)) custId = cid;
+        else { var cus = new Customer { Code = "KH-" + (it.OwnerPhone ?? Guid.NewGuid().ToString("N")[..6]), Name = it.OwnerName ?? "Khách", Phone = it.OwnerPhone }; db.Customers.Add(cus); await db.SaveChangesAsync(); custId = cus.Id; if (it.OwnerPhone != null) custByPhone[it.OwnerPhone] = custId; }
+        // xe
+        if (!carByPlate.TryGetValue(it.Plate.Trim(), out var car))
+        { car = new Car { Plate = it.Plate.Trim(), Model = it.Model ?? "", CustomerId = custId }; db.Cars.Add(car); await db.SaveChangesAsync(); carByPlate[car.Plate] = car; }
+        var ro = new RepairOrder
+        {
+            Code = it.RoNo.Trim(), CarId = car.Id, CustomerId = car.CustomerId, Status = ROStatus.Finished,
+            CreatedBy = "import", CreatedAt = it.CreatedAt == default ? DateTime.Now : it.CreatedAt, FinishedAt = it.CreatedAt,
+            Lines = it.Total > 0 ? new() { new RepairLine { Type = LineType.Labor, Name = "Chi phí dịch vụ (nhập từ CarService)", Quantity = 1, UnitPrice = it.Total } } : new()
+        };
+        db.ROs.Add(ro); ros++;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok(new { ros, skipped, total = items.Count });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -156,3 +187,4 @@ finally { Log.CloseAndFlush(); }
 record RegisterOrgDto(string Name);
 record ImportCustomerDto(string? Name, string? Phone, string? Email, string? Address, string? TaxCode, string? DealerCode);
 record ImportCarDto(string? Plate, string? Model, int Year, string? Vin, string? EngineNo, string? Color, int CurrentKm, string? OwnerName, string? OwnerPhone, string? DealerCode);
+record ImportRoDto(string? RoNo, string? Plate, string? Model, string? OwnerName, string? OwnerPhone, decimal Total, DateTime CreatedAt);
