@@ -21,13 +21,14 @@ public interface IRoService
     Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price);
     Task RemoveLineAsync(int lineId);
     Task<(bool ok, string msg)> TransitionAsync(int roId, ROStatus to);
+    Task<(bool ok, string msg)> IssueEInvoiceAsync(int roId);
     Task<(bool ok, string msg)> DeleteROAsync(int roId);
     Task<SvcDash> DashboardAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
 
-public class RoService(AppDbContext db) : IRoService
+public class RoService(AppDbContext db, IIntegrationService integ) : IRoService
 {
     /// <summary>Chuyển trạng thái hợp lệ theo state machine idn.CarService.</summary>
     public static ROStatus[] AllowedNext(ROStatus s) => s switch
@@ -113,7 +114,30 @@ public class RoService(AppDbContext db) : IRoService
         if (to == ROStatus.InGarage) ro.IntakeAt ??= DateTime.Now;
         if (to == ROStatus.Finished) ro.FinishedAt ??= DateTime.Now;
         await db.SaveChangesAsync();
+
+        // Quyết toán (PAID) → tự đẩy HĐĐT sang MiniTVAN + thông báo khách.
+        if (to == ROStatus.Paid && string.IsNullOrEmpty(ro.EInvoiceCode))
+        {
+            var (iok, imsg) = await IssueEInvoiceAsync(roId);
+            return (true, $"Đã quyết toán. {imsg}");
+        }
         return (true, $"Đã chuyển sang: {Ui.Status(to).text}.");
+    }
+
+    public async Task<(bool ok, string msg)> IssueEInvoiceAsync(int roId)
+    {
+        var ro = await db.ROs.Include(r => r.Customer).Include(r => r.Car).Include(r => r.Lines).FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy RO.");
+        if (!string.IsNullOrEmpty(ro.EInvoiceCode)) return (false, "RO đã có hóa đơn điện tử: " + ro.EInvoiceCode);
+        if (ro.Total <= 0) return (false, "Chưa có dòng chi phí — không thể xuất hóa đơn.");
+
+        var r = await integ.PushEInvoiceAsync(ro);
+        ro.EInvoiceStatus = r.status; ro.EInvoiceAt = DateTime.Now;
+        if (r.ok) { ro.EInvoiceCode = r.tctCode; ro.EInvoiceError = null; }
+        else { ro.EInvoiceError = r.error; }
+        await db.SaveChangesAsync();
+        if (r.ok) { await integ.NotifyCustomerAsync(ro); return (true, $"Đã xuất HĐĐT, mã tra cứu {r.tctCode}."); }
+        return (false, "Xuất HĐĐT thất bại: " + r.error);
     }
 
     public async Task<(bool ok, string msg)> DeleteROAsync(int roId)

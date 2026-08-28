@@ -49,6 +49,11 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON miniservice.\"Orgs\" (\"ApiKey\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
+        // cột tích hợp HĐĐT (thêm mới)
+        sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"EInvoiceCode\" text");
+        sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"EInvoiceStatus\" text");
+        sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"EInvoiceError\" text");
+        sql.Add("ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"EInvoiceAt\" timestamp");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
     }
 }

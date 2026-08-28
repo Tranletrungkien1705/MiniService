@@ -89,6 +89,14 @@ public class ROController(IRoService svc) : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> IssueEInvoice(int id)
+    {
+        var (ok, msg) = await svc.IssueEInvoiceAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> Delete(int id)
     {
         var (ok, msg) = await svc.DeleteROAsync(id);

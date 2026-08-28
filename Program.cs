@@ -16,6 +16,8 @@ builder.Services.AddDbContext<AppDbContext>(o =>
     else o.UseSqlite(conn);
 });
 builder.Services.AddScoped<ITenantContext, TenantContext>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<IIntegrationService, IntegrationService>();
 builder.Services.AddScoped<IRoService, RoService>();
 builder.Services.AddControllersWithViews();
 

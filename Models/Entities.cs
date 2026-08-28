@@ -68,6 +68,12 @@ public class RepairOrder : IOrgOwned
     public DateTime? IntakeAt { get; set; }        // xe vào xưởng (INGA)
     public DateTime? FinishedAt { get; set; }      // giao xe (FNS)
 
+    // Tích hợp HĐĐT: khi quyết toán (PAID) tự đẩy hóa đơn sang MiniTVAN → lên cơ quan thuế.
+    public string? EInvoiceCode { get; set; }      // mã tra cứu CQT cấp
+    public string? EInvoiceStatus { get; set; }    // Accepted / Rejected / Error
+    public string? EInvoiceError { get; set; }
+    public DateTime? EInvoiceAt { get; set; }
+
     public Car Car { get; set; } = null!;
     public Customer Customer { get; set; } = null!;
     public List<RepairLine> Lines { get; set; } = [];

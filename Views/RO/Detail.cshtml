@@ -77,6 +77,23 @@
                 </form>
             }
         </div></div>
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-2"><i class="bi bi-receipt me-1"></i>Hóa đơn điện tử (tích hợp thuế)</h6>
+            @if (!string.IsNullOrEmpty(Model.EInvoiceCode))
+            {
+                <div class="alert alert-success py-2 small mb-2"><i class="bi bi-patch-check me-1"></i>Đã phát hành & truyền cơ quan thuế.<br />Mã tra cứu: <b>@Model.EInvoiceCode</b></div>
+                <a href="https://minitvan.onrender.com/Lookup/@Model.EInvoiceCode" target="_blank" class="btn btn-sm btn-outline-primary w-100"><i class="bi bi-box-arrow-up-right me-1"></i>Tra cứu trên cổng T-VAN</a>
+            }
+            else
+            {
+                if (!string.IsNullOrEmpty(Model.EInvoiceError)) { <div class="alert alert-danger py-2 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>@Model.EInvoiceError</div> }
+                <div class="small text-muted mb-2">Quyết toán (PAID) sẽ tự đẩy hóa đơn sang MiniTVAN. Hoặc xuất thủ công:</div>
+                <form asp-action="IssueEInvoice" method="post">
+                    @Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                    <button class="btn btn-sm btn-primary w-100" @(Model.Total <= 0 ? "disabled" : "")><i class="bi bi-send me-1"></i>Xuất HĐĐT (@Model.Total.ToString("N0")đ)</button>
+                </form>
+            }
+        </div></div>
         <div class="card"><div class="card-body">
             <h6 class="fw-bold mb-2">Mốc thời gian</h6>
             <ul class="list-unstyled small mb-0">
