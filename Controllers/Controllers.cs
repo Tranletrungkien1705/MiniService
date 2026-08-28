@@ -8,7 +8,10 @@ namespace MiniService.Controllers;
 
 public class HomeController(IRoService svc) : Controller
 {
-    public async Task<IActionResult> Index() { ViewBag.Dash = await svc.DashboardAsync(); return View(); }
+    // Trang chính "/" = SPA client-side (wwwroot/index.html). UI Razor cũ vẫn truy cập qua /Razor.
+    public IActionResult Index() => Redirect("/index.html");
+    // Giữ UI Razor cũ (dashboard server-side) tại /Razor để tham chiếu.
+    public async Task<IActionResult> Razor() { ViewBag.Dash = await svc.DashboardAsync(); return View("Index"); }
 }
 
 public class CustomerController(IRoService svc) : Controller
