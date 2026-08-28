@@ -2,10 +2,33 @@ using Microsoft.EntityFrameworkCore;
 using MiniService.Data;
 using MiniService.Models;
 using MiniService.Services;
+using Serilog;
+using Serilog.Sinks.Elasticsearch;
 
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
+// ---- Logging xuyên suốt: Serilog structured, đẩy Elasticsearch (ELK) khi có ELASTIC_URL, kèm CorrelationId ----
+var elasticUrl = Environment.GetEnvironmentVariable("ELASTIC_URL");
+var logCfg = new LoggerConfiguration()
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("app", "miniservice")
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] ({CorrelationId}) {Message:lj}{NewLine}{Exception}");
+if (!string.IsNullOrWhiteSpace(elasticUrl))
+    logCfg = logCfg.WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(elasticUrl))
+    {
+        AutoRegisterTemplate = true,
+        IndexFormat = "fleet-logs-{0:yyyy.MM.dd}",
+        ModifyConnectionSettings = c =>
+        {
+            var user = Environment.GetEnvironmentVariable("ELASTIC_USER");
+            var pass = Environment.GetEnvironmentVariable("ELASTIC_PASS");
+            return string.IsNullOrEmpty(user) ? c : c.BasicAuthentication(user, pass);
+        }
+    });
+Log.Logger = logCfg.CreateLogger();
+
 var builder = WebApplication.CreateBuilder(args);
+builder.Host.UseSerilog();
 builder.WebHost.UseUrls($"http://0.0.0.0:{Environment.GetEnvironmentVariable("PORT") ?? "8080"}");
 
 var conn = Environment.GetEnvironmentVariable("CONNECTION_STRING")
@@ -17,13 +40,22 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 });
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddHttpClient();
+builder.Services.AddSingleton<ICache, RedisCache>();          // Redis cache (mềm, fallback no-op)
 builder.Services.AddScoped<IIntegrationService, IntegrationService>();
 builder.Services.AddScoped<IRoService, RoService>();
 builder.Services.AddControllersWithViews();
+builder.Services.AddEndpointsApiExplorer();                  // Swagger/OpenAPI
+builder.Services.AddSwaggerGen(c => c.SwaggerDoc("v1", new() { Title = "MiniService API", Version = "v1", Description = "Car Service (RO) — API-first cho SPA + tích hợp HĐĐT" }));
 
 var app = builder.Build();
 using (var scope = app.Services.CreateScope())
     await Seeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
+
+app.UseMiddleware<CorrelationMiddleware>();   // gán/đọc X-Correlation-Id trước tiên
+app.UseSerilogRequestLogging();               // log mỗi request kèm CorrelationId
+
+app.UseSwagger();
+app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "MiniService API v1"); c.RoutePrefix = "swagger"; });
 
 app.Use(async (ctx, next) =>
 {
@@ -84,8 +116,11 @@ app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
     return Results.Ok(new { orgId = org.Id, apiKey = org.ApiKey });
 });
 
+app.MapControllers();   // API v1 ([ApiController]) cho SPA
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
-app.Run();
+
+try { Log.Information("MiniService khởi động (Redis={Redis}, Elastic={Elastic})", !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("REDIS_URL")), !string.IsNullOrEmpty(elasticUrl)); app.Run(); }
+finally { Log.CloseAndFlush(); }
 
 record RegisterOrgDto(string Name);
 record ImportCustomerDto(string? Name, string? Phone, string? Email, string? Address, string? TaxCode, string? DealerCode);
