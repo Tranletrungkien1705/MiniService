@@ -37,7 +37,8 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
 
     // ---- Khách hàng ----
     [HttpGet("customers")]
-    public async Task<IActionResult> Customers([FromQuery] string? q) => Ok(await svc.CustomersAsync(q));
+    public async Task<IActionResult> Customers([FromQuery] string? q)
+        => Ok((await svc.CustomersAsync(q)).Select(c => new { c.Id, c.Code, c.Name, c.Phone, c.Email, c.Address, c.TaxCode, c.DealerCode }));
 
     [HttpPost("customers")]
     public async Task<IActionResult> CreateCustomer([FromBody] Customer c)
@@ -51,7 +52,8 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
 
     // ---- Xe ----
     [HttpGet("cars")]
-    public async Task<IActionResult> Cars([FromQuery] string? q) => Ok(await svc.CarsAsync(q));
+    public async Task<IActionResult> Cars([FromQuery] string? q)
+        => Ok((await svc.CarsAsync(q)).Select(c => new { c.Id, c.Plate, c.Model, c.Year, c.Vin, c.EngineNo, c.Color, c.CurrentKm, c.CustomerId, customerName = c.Customer != null ? c.Customer.Name : null }));
 
     [HttpPost("cars")]
     public async Task<IActionResult> CreateCar([FromBody] Car car)

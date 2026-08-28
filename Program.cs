@@ -55,6 +55,9 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<CorrelationMiddleware>();   // gán/đọc X-Correlation-Id trước tiên
 app.UseSerilogRequestLogging();               // log mỗi request kèm CorrelationId
 
+app.UseDefaultFiles();   // wwwroot/index.html = SPA client-side là trang chính "/"
+app.UseStaticFiles();
+
 app.UseSwagger();
 app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "MiniService API v1"); c.RoutePrefix = "swagger"; });
 

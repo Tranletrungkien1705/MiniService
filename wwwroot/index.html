@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MiniService — Quản lý dịch vụ ô tô</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <style>
+        body { font-family: system-ui,"Segoe UI",sans-serif; background:#f2f5fb; }
+        .sidebar { width:216px; min-height:100vh; background:#0f1f3d; position:sticky; top:0; }
+        .sidebar a { color:#9fb0cf; display:block; padding:9px 16px; text-decoration:none; font-size:14px; }
+        .sidebar a.active,.sidebar a:hover { color:#fff; background:rgba(37,99,235,.3); border-left:3px solid #2563eb; }
+        .brand { color:#fff; font-weight:800; padding:16px; font-size:17px; }
+        .card { border:none; box-shadow:0 1px 4px rgba(2,10,40,.07); border-radius:12px; }
+        .stat { font-size:26px; font-weight:800; }
+        code.api { background:#eef; padding:1px 6px; border-radius:4px; font-size:12px; }
+    </style>
+</head>
+<body>
+<div class="d-flex">
+    <nav class="sidebar">
+        <div class="brand"><i class="bi bi-tools"></i> MiniService <span class="badge bg-primary" style="font-size:9px">SPA</span></div>
+        <a href="#/dashboard" data-r="dashboard"><i class="bi bi-speedometer2 me-1"></i> Bảng điều khiển</a>
+        <a href="#/ros" data-r="ros"><i class="bi bi-clipboard-check me-1"></i> Lệnh sửa chữa</a>
+        <a href="#/createro" data-r="createro"><i class="bi bi-plus-square me-1"></i> Tiếp nhận xe</a>
+        <a href="#/customers" data-r="customers"><i class="bi bi-people me-1"></i> Khách hàng</a>
+        <a href="#/cars" data-r="cars"><i class="bi bi-car-front me-1"></i> Xe</a>
+        <a href="#/inventory" data-r="inventory"><i class="bi bi-box-seam me-1"></i> Tồn kho</a>
+        <a href="#/stockouts" data-r="stockouts"><i class="bi bi-box-arrow-up me-1"></i> Xuất kho</a>
+        <a href="/swagger" target="_blank" style="border-top:1px solid #1c2c4d;margin-top:8px"><i class="bi bi-braces me-1"></i> API (Swagger)</a>
+    </nav>
+    <div class="flex-fill">
+        <div class="bg-white border-bottom px-4 py-2 d-flex justify-content-between align-items-center">
+            <h6 class="mb-0 fw-bold" id="title">…</h6>
+            <span class="small text-muted">API gọi: <code class="api" id="lastapi">—</code></span>
+        </div>
+        <div class="p-4" id="view">Đang tải…</div>
+    </div>
+</div>
+<script>
+const API='/api/v1', el=document.getElementById('view');
+const fmtM=n=>(n||0).toLocaleString('vi-VN')+'đ';
+const esc=s=>(s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const setTitle=t=>document.getElementById('title').textContent=t;
+async function api(path,opts){ document.getElementById('lastapi').textContent=(opts?.method||'GET')+' '+API+path;
+  const r=await fetch(API+path,{headers:{'Content-Type':'application/json'},...opts});
+  if(!r.ok){let e;try{e=await r.json()}catch{e={error:r.status}}throw new Error(e.error||e.msg||('HTTP '+r.status));}
+  return r.status===204?null:r.json(); }
+function nav(){ document.querySelectorAll('.sidebar a[data-r]').forEach(a=>a.classList.toggle('active',location.hash.startsWith('#/'+a.dataset.r))); }
+const card=(t,v,c,sm)=>`<div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">${t}</div><div class="stat" style="color:${c};${sm?'font-size:18px':''}">${v}</div></div></div></div>`;
+function toast(m){let t=document.getElementById('toast');if(!t){t=document.createElement('div');t.id='toast';t.style='position:fixed;bottom:20px;right:20px;background:#111;color:#fff;padding:10px 16px;border-radius:8px;z-index:9999;font-size:14px';document.body.appendChild(t);}t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',3800);}
+
+const routes={
+  dashboard: async()=>{ setTitle('Bảng điều khiển'); const d=await api('/dashboard');
+    el.innerHTML=`<div class="row g-3 mb-3">${card('RO đang mở',d.openRO,'#2563eb')}${card('Đang sửa',d.inGarage,'#f59e0b')}${card('Xong hôm nay',d.doneToday,'#16a34a')}${card('Doanh thu tháng',fmtM(d.revenueMonth),'#0f766e',true)}</div>
+    <div class="card"><div class="card-body"><div class="d-flex justify-content-between"><h6 class="fw-bold">RO theo trạng thái</h6><a href="#/createro" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tiếp nhận xe</a></div>
+    ${(d.byStatus||[]).map(s=>`<div class="d-flex justify-content-between small border-bottom py-1"><span>${s.statusText}</span><b>${s.count}</b></div>`).join('')||'<span class="text-muted">—</span>'}</div></div>`; },
+
+  ros: async()=>{ setTitle('Lệnh sửa chữa'); const rows=await api('/ros');
+    el.innerHTML=`<div class="card"><div class="card-body"><div class="text-end mb-2"><a href="#/createro" class="btn btn-sm btn-primary"><i class="bi bi-plus"></i> Tiếp nhận xe</a></div>
+    <table class="table table-hover align-middle mb-0"><thead><tr><th>Mã</th><th>Biển số</th><th>Khách</th><th class="text-end">Tổng</th><th>Trạng thái</th><th>HĐĐT</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr style="cursor:pointer" onclick="location.hash='#/ro/${r.id}'"><td class="fw-semibold">${r.code}</td><td>${esc(r.plate)}</td><td class="small">${esc(r.customer)}</td><td class="text-end">${fmtM(r.total)}</td><td><span class="badge bg-secondary">${r.statusText}</span></td><td>${r.eInvoice?'<span class="badge bg-success">'+r.eInvoice+'</span>':'<span class="text-muted small">—</span>'}</td></tr>`).join('')||'<tr><td colspan=6 class="text-center text-muted py-3">Chưa có RO</td></tr>'}
+    </tbody></table></div></div>`; },
+
+  createro: async()=>{ setTitle('Tiếp nhận xe (tạo RO)'); const cars=await api('/cars');
+    el.innerHTML=`<div class="card" style="max-width:640px"><div class="card-body">
+    <div class="mb-2"><label class="form-label small text-muted">Chọn xe *</label><select id="carId" class="form-select">${cars.map(c=>`<option value="${c.id}">${esc(c.plate)} — ${esc(c.model)} (${esc(c.customer?.name||c.customerName||'')})</option>`).join('')}</select>
+      ${cars.length?'':'<div class="text-danger small mt-1">Chưa có xe — <a href="#/cars">thêm xe</a> trước.</div>'}</div>
+    <div class="row g-2"><div class="col-4"><label class="form-label small text-muted">Số km</label><input id="odo" type="number" class="form-control" value="0"></div>
+      <div class="col-8"><label class="form-label small text-muted">Thợ phụ trách</label><input id="tech" class="form-control"></div></div>
+    <div class="mb-3 mt-2"><label class="form-label small text-muted">Ghi nhận tình trạng khi nhận xe</label><textarea id="note" class="form-control" rows="2"></textarea></div>
+    <button class="btn btn-primary" onclick="createRO()"><i class="bi bi-check-lg me-1"></i>Tiếp nhận</button></div></div>`; },
+
+  ro: async(id)=>{ const r=await api('/ros/'+id); setTitle('RO '+r.code);
+    el.innerHTML=`<div class="row g-3"><div class="col-lg-8"><div class="card"><div class="card-body">
+      <h5 class="fw-bold">${r.code} <span class="badge bg-secondary">${r.statusText}</span></h5>
+      <div class="text-muted small mb-2">${esc(r.car.plate)} · ${esc(r.car.model)} · ${r.odometer||0} km · KH: ${esc(r.customer.name)} (${r.customer.phone||''})</div>
+      <table class="table table-sm"><thead><tr><th>Loại</th><th>Nội dung</th><th class="text-end">SL</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th><th></th></tr></thead><tbody>
+      ${r.lines.map(l=>`<tr><td>${l.type===0?'<span class="badge bg-info">Công</span>':'<span class="badge bg-secondary">PT</span>'}</td><td>${esc(l.name)}</td><td class="text-end">${l.quantity}</td><td class="text-end">${fmtM(l.unitPrice)}</td><td class="text-end">${fmtM(l.amount)}</td><td class="text-end"><i class="bi bi-x text-danger" style="cursor:pointer" onclick="delLine(${id},${l.id})"></i></td></tr>`).join('')||'<tr><td colspan=6 class="text-muted">Chưa có dòng</td></tr>'}
+      </tbody><tfoot><tr class="fw-bold"><td colspan=4 class="text-end">TỔNG</td><td class="text-end" style="color:#1d4ed8">${fmtM(r.total)}</td><td></td></tr></tfoot></table>
+      <div class="border rounded p-2 bg-light"><div class="small fw-bold mb-1">Thêm dòng chi phí</div><div class="row g-1">
+        <div class="col-2"><select id="ltype" class="form-select form-select-sm"><option value="0">Công</option><option value="1">Phụ tùng</option></select></div>
+        <div class="col-4"><input id="lname" class="form-control form-control-sm" placeholder="Nội dung"></div>
+        <div class="col-2"><input id="lqty" type="number" value="1" class="form-control form-control-sm" placeholder="SL"></div>
+        <div class="col-2"><input id="lprice" type="number" class="form-control form-control-sm" placeholder="Đơn giá"></div>
+        <div class="col-2"><button class="btn btn-sm btn-primary w-100" onclick="addLine(${id})">Thêm</button></div></div></div>
+      </div></div></div>
+      <div class="col-lg-4"><div class="card mb-3"><div class="card-body"><h6 class="fw-bold">Chuyển trạng thái</h6>
+      ${r.allowedNext.map(n=>`<button class="btn btn-outline-primary btn-sm w-100 mb-2" onclick="doTransition(${id},${n.value})">${n.text}</button>`).join('')||'<div class="text-muted small">Kết thúc.</div>'}</div></div>
+      <div class="card mb-3"><div class="card-body"><h6 class="fw-bold">Hóa đơn điện tử</h6>
+      ${r.eInvoice.code?`<div class="alert alert-success py-2 small">Mã CQT: <b>${r.eInvoice.code}</b></div><a class="btn btn-sm btn-outline-primary w-100" target="_blank" href="https://minitvan.onrender.com/Lookup/${r.eInvoice.code}">Tra cứu T-VAN</a>`:`${r.eInvoice.error?'<div class="alert alert-danger py-2 small">'+esc(r.eInvoice.error)+'</div>':''}<button class="btn btn-primary btn-sm w-100" ${r.total<=0?'disabled':''} onclick="issueInv(${id})">Xuất HĐĐT (${fmtM(r.total)})</button>`}</div></div>
+      <div class="card"><div class="card-body"><h6 class="fw-bold">Quyết toán</h6>
+      <button class="btn btn-success btn-sm w-100" ${r.total<=0?'disabled':''} onclick="settle(${id})"><i class="bi bi-cash-coin me-1"></i>Quyết toán + xuất kho</button>
+      <div class="small text-muted mt-1">Ghi thanh toán + tự xuất kho phụ tùng.</div></div></div></div></div>
+      <a href="#/ros" class="btn btn-link mt-2">← Danh sách</a>`; },
+
+  customers: async()=>{ setTitle('Khách hàng'); const q=new URLSearchParams(location.hash.split('?')[1]||'').get('q')||''; const rows=await api('/customers'+(q?'?q='+encodeURIComponent(q):''));
+    el.innerHTML=`<div class="card"><div class="card-body">
+    <div class="d-flex gap-2 mb-3"><input class="form-control form-control-sm" style="max-width:260px" placeholder="Tìm tên/mã…" value="${esc(q)}" onchange="location.hash='#/customers?q='+encodeURIComponent(this.value)">
+    <button class="btn btn-sm btn-primary ms-auto" onclick="newCustomer()"><i class="bi bi-plus"></i> Thêm KH</button></div>
+    <table class="table table-hover align-middle mb-0"><thead><tr><th>Mã</th><th>Tên</th><th>SĐT</th><th>Địa chỉ</th><th>MST</th><th>Đại lý</th></tr></thead><tbody>
+    ${rows.map(c=>`<tr><td class="small">${esc(c.code)}</td><td class="fw-semibold">${esc(c.name)}</td><td>${esc(c.phone)}</td><td class="small text-muted">${esc(c.address)}</td><td class="small">${esc(c.taxCode)}</td><td class="small">${esc(c.dealerCode)}</td></tr>`).join('')||'<tr><td colspan=6 class="text-center text-muted py-3">Chưa có</td></tr>'}
+    </tbody></table><div class="small text-muted mt-2">${rows.length} khách hàng (data thật từ CarService).</div></div></div>`; },
+
+  cars: async()=>{ setTitle('Xe'); const rows=await api('/cars');
+    el.innerHTML=`<div class="card"><div class="card-body"><div class="text-end mb-2"><button class="btn btn-sm btn-primary" onclick="newCar()"><i class="bi bi-plus"></i> Thêm xe</button></div>
+    <table class="table table-hover align-middle mb-0"><thead><tr><th>Biển số</th><th>Model</th><th>Năm</th><th>Số khung (VIN)</th><th>Khách</th></tr></thead><tbody>
+    ${rows.map(c=>`<tr><td class="fw-semibold">${esc(c.plate)}</td><td>${esc(c.model)}</td><td>${c.year||''}</td><td class="small">${esc(c.vin)}</td><td class="small">${esc(c.customer?.name||c.customerName||'')}</td></tr>`).join('')||'<tr><td colspan=5 class="text-center text-muted py-3">Chưa có</td></tr>'}
+    </tbody></table></div></div>`; },
+
+  inventory: async()=>{ setTitle('Tồn kho phụ tùng'); const d=await api('/inventory/dashboard'); const rows=await api('/inventory/parts');
+    el.innerHTML=`<div class="row g-3 mb-3">${card('Số phụ tùng',d.parts,'#2563eb')}${card('Sắp hết',d.lowStock,'#dc2626')}${card('Giá trị tồn',fmtM(d.stockValue),'#0f766e',true)}${card('Xuất hôm nay',d.stockOutsToday,'#f59e0b')}</div>
+    <div class="card"><div class="card-body"><div class="text-end mb-2"><button class="btn btn-sm btn-primary" onclick="newPart()"><i class="bi bi-plus"></i> Thêm PT</button></div>
+    <table class="table table-hover align-middle mb-0"><thead><tr><th>Mã</th><th>Tên</th><th class="text-end">Giá</th><th class="text-end">Tồn</th><th class="text-end">Định mức</th><th></th></tr></thead><tbody>
+    ${rows.map(p=>`<tr class="${p.lowStock?'table-danger':''}"><td class="small">${esc(p.code)}</td><td class="fw-semibold">${esc(p.name)}</td><td class="text-end">${fmtM(p.price)}</td><td class="text-end fw-bold ${p.lowStock?'text-danger':''}">${p.onHand} ${esc(p.unit)}</td><td class="text-end text-muted">${p.minStock}</td>
+      <td class="text-end"><button class="btn btn-sm btn-outline-success me-1" onclick="receiveStock(${p.id},'${esc(p.name)}')">Nhập</button><button class="btn btn-sm btn-outline-primary" onclick="issueStock(${p.id},'${esc(p.name)}',${p.onHand})">Xuất</button></td></tr>`).join('')}
+    </tbody></table></div></div>`; },
+
+  stockouts: async()=>{ setTitle('Lịch sử xuất kho'); const rows=await api('/inventory/stockouts');
+    el.innerHTML=`<div class="card"><div class="card-body"><table class="table table-hover align-middle mb-0"><thead><tr><th>Phiếu</th><th>Phụ tùng</th><th class="text-end">SL</th><th class="text-end">Thành tiền</th><th>RO</th><th>Lý do</th><th>Thời gian</th></tr></thead><tbody>
+    ${rows.map(s=>`<tr><td class="small">${esc(s.code)}</td><td>${esc(s.partName)}</td><td class="text-end">${s.quantity}</td><td class="text-end">${fmtM(s.amount)}</td><td class="small">${esc(s.roCode)}</td><td class="small text-muted">${esc(s.reason)}</td><td class="small text-muted">${new Date(s.createdAt).toLocaleString('vi-VN')}</td></tr>`).join('')||'<tr><td colspan=7 class="text-center text-muted py-3">Chưa có phiếu xuất</td></tr>'}
+    </tbody></table></div></div>`; }
+};
+
+// ---- actions ----
+async function act(fn){ try{ await fn(); }catch(e){ toast('❌ '+e.message); } }
+window.createRO=()=>act(async()=>{ const carId=+document.getElementById('carId').value; if(!carId){toast('Chọn xe');return;}
+  const r=await api('/ros',{method:'POST',body:JSON.stringify({carId,odometer:+document.getElementById('odo').value,intakeNote:document.getElementById('note').value,technician:document.getElementById('tech').value})}); toast('Đã tiếp nhận xe, RO #'+r.id); location.hash='#/ro/'+r.id; });
+window.addLine=(id)=>act(async()=>{ const name=document.getElementById('lname').value.trim(); if(!name){toast('Nhập nội dung');return;} await api('/ros/'+id+'/lines',{method:'POST',body:JSON.stringify({type:+document.getElementById('ltype').value,name,quantity:+document.getElementById('lqty').value,unitPrice:+document.getElementById('lprice').value})}); render(); });
+window.delLine=(id,lineId)=>act(async()=>{ await api('/ros/'+id+'/lines/'+lineId,{method:'DELETE'}); render(); });
+window.doTransition=(id,to)=>act(async()=>{ const r=await api('/ros/'+id+'/transition',{method:'POST',body:JSON.stringify({to})}); toast(r.msg); render(); });
+window.issueInv=(id)=>act(async()=>{ toast('Đang đẩy HĐĐT…'); const r=await api('/ros/'+id+'/einvoice',{method:'POST'}); toast(r.msg); render(); });
+window.settle=(id)=>act(async()=>{ const m=prompt('Quyết toán — 0=Tiền mặt,1=Chuyển khoản,2=Thẻ','0'); if(m===null)return; const r=await api('/inventory/settle',{method:'POST',body:JSON.stringify({roId:id,method:+m,note:null})}); toast(r.msg); render(); });
+window.issueStock=(pid,name,onHand)=>act(async()=>{ const q=prompt('Xuất "'+name+'" (tồn '+onHand+'). SL:'); if(!q)return; const r=await api('/inventory/issue',{method:'POST',body:JSON.stringify({partId:pid,qty:+q,roId:null,reason:'Xuất thủ công'})}); toast(r.msg); render(); });
+window.receiveStock=(pid,name)=>act(async()=>{ const q=prompt('Nhập kho "'+name+'". SL:'); if(!q)return; const r=await api('/inventory/parts/'+pid+'/receive',{method:'POST',body:JSON.stringify({qty:+q})}); toast(r.msg); render(); });
+window.newCustomer=()=>act(async()=>{ const name=prompt('Tên khách hàng:'); if(!name)return; const phone=prompt('SĐT:')||''; await api('/customers',{method:'POST',body:JSON.stringify({name,phone})}); toast('Đã thêm KH'); render(); });
+window.newCar=()=>act(async()=>{ const plate=prompt('Biển số:'); if(!plate)return; const model=prompt('Model:')||''; const cs=await api('/customers'); const cid=cs[0]?.id; if(!cid){toast('Cần có KH trước');return;} await api('/cars',{method:'POST',body:JSON.stringify({plate,model,customerId:cid})}); toast('Đã thêm xe'); render(); });
+window.newPart=()=>act(async()=>{ const name=prompt('Tên phụ tùng:'); if(!name)return; const price=+(prompt('Giá:')||0); const onHand=+(prompt('Tồn đầu:')||0); await api('/inventory/parts',{method:'POST',body:JSON.stringify({name,price,onHand,unit:'cái',minStock:5})}); toast('Đã thêm PT'); render(); });
+
+async function render(){ nav(); const h=(location.hash.replace('#/','')||'dashboard'); const [path]=h.split('?'); const parts=path.split('/');
+  try{ if(parts[0]==='ro'&&parts[1]) await routes.ro(parts[1]); else if(routes[parts[0]]) await routes[parts[0]](); else await routes.dashboard(); }
+  catch(e){ el.innerHTML='<div class="alert alert-danger">Lỗi: '+esc(e.message)+'</div>'; } }
+window.addEventListener('hashchange',render);
+if(!location.hash) location.hash='#/dashboard';
+render();
+</script>
+</body>
+</html>
