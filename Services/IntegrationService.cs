@@ -19,7 +19,11 @@ public interface IIntegrationService
     Task NotifyCustomerAsync(RepairOrder ro);
     // Tra bảo hiểm (MiniInsurance theo biển số) + bảo hành (MiniStamp theo VIN) khi xe vào xưởng.
     Task<VehicleStatus> LookupVehicleAsync(string? plate, string? vin);
+    // Lập yêu cầu bồi thường sang MiniInsurance cho xe còn bảo hiểm (sửa sau tai nạn).
+    Task<ClaimResult> FileInsuranceClaimAsync(string? plate, decimal amount, string? description);
 }
+
+public record ClaimResult(bool ok, string? code, string? status, string? error);
 
 public class IntegrationService(IHttpClientFactory http, IConfiguration cfg) : IIntegrationService
 {
@@ -113,6 +117,26 @@ public class IntegrationService(IHttpClientFactory http, IConfiguration cfg) : I
             catch { /* best-effort */ }
 
         return new VehicleStatus(insFound, insured, policy, insurer, insEnd, wFound, wActive, wEnd, wDays, product);
+    }
+
+    public async Task<ClaimResult> FileInsuranceClaimAsync(string? plate, decimal amount, string? description)
+    {
+        if (string.IsNullOrWhiteSpace(plate)) return new(false, null, null, "Xe chưa có biển số.");
+        var insUrl = Env(cfg, "INSURANCE_URL", "https://miniinsurance.onrender.com").TrimEnd('/');
+        var payload = new { plate, amount, description = description ?? "Sửa chữa sau va chạm" };
+        try
+        {
+            var c = http.CreateClient();
+            c.Timeout = TimeSpan.FromSeconds(20);
+            var res = await c.PostAsync($"{insUrl}/api/ext/claim",
+                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"));
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+            var r = doc.RootElement;
+            if (res.IsSuccessStatusCode)
+                return new(true, Str(r, "code"), Str(r, "status"), null);
+            return new(false, null, null, Str(r, "error") ?? $"HTTP {(int)res.StatusCode}");
+        }
+        catch (Exception ex) { return new(false, null, null, "Không kết nối được MiniInsurance: " + ex.Message); }
     }
 
     private static string? Str(JsonElement e, string prop)

@@ -21,6 +21,8 @@ public class RoServiceTests
         public Task NotifyCustomerAsync(RepairOrder ro) => Task.CompletedTask;
         public Task<VehicleStatus> LookupVehicleAsync(string? plate, string? vin) =>
             Task.FromResult(new VehicleStatus(false, false, null, null, null, false, false, null, null, null));
+        public Task<ClaimResult> FileInsuranceClaimAsync(string? plate, decimal amount, string? description) =>
+            Task.FromResult(new ClaimResult(true, "BT2608-001", "Đã khai báo", null));
     }
 
     private static (RoService svc, AppDbContext db) NewSvc()

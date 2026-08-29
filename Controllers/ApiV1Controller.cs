@@ -97,6 +97,7 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
             lines = r.Lines.Select(l => new { l.Id, type = (int)l.Type, l.Name, l.Quantity, l.UnitPrice, l.Amount }),
             r.LaborTotal, r.PartTotal, r.Total,
             eInvoice = new { code = r.EInvoiceCode, status = r.EInvoiceStatus, error = r.EInvoiceError, at = r.EInvoiceAt },
+            insuranceClaim = new { code = r.InsuranceClaimCode, status = r.InsuranceClaimStatus },
             vehicleStatus = new
             {
                 insuranceFound = vs.InsuranceFound, insured = vs.Insured, policyCode = vs.PolicyCode,
@@ -144,6 +145,14 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
     public async Task<IActionResult> IssueEInvoice(int id)
     {
         var (ok, msg) = await svc.IssueEInvoiceAsync(id);
+        return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, msg });
+    }
+
+    /// <summary>Lập yêu cầu bồi thường bảo hiểm cho RO (xe còn BH sửa sau tai nạn) → MiniInsurance.</summary>
+    [HttpPost("ros/{id:int}/file-claim")]
+    public async Task<IActionResult> FileClaim(int id)
+    {
+        var (ok, msg) = await svc.FileInsuranceClaimAsync(id);
         return ok ? Ok(new { ok, msg }) : BadRequest(new { ok, msg });
     }
 }

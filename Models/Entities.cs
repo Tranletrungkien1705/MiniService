@@ -84,6 +84,9 @@ public class RepairOrder : IOrgOwned
     public string? EInvoiceStatus { get; set; }    // Accepted / Rejected / Error
     public string? EInvoiceError { get; set; }
     public DateTime? EInvoiceAt { get; set; }
+    // Bồi thường bảo hiểm (tích hợp MiniInsurance) khi xe còn BH sửa sau tai nạn
+    public string? InsuranceClaimCode { get; set; }
+    public string? InsuranceClaimStatus { get; set; }
 
     public Car Car { get; set; } = null!;
     public Customer Customer { get; set; } = null!;

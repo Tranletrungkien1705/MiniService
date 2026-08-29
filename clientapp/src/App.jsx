@@ -93,6 +93,7 @@ function RODetail() {
   const delLine = lid => run(async () => { await api(`/ros/${id}/lines/${lid}`, { method: 'DELETE' }); reload() })
   const trans = to => run(async () => { const x = await api(`/ros/${id}/transition`, { method: 'POST', body: JSON.stringify({ to }) }); toast(x.msg); reload() })
   const issueInv = () => run(async () => { toast('Đang đẩy HĐĐT…'); const x = await api(`/ros/${id}/einvoice`, { method: 'POST' }); toast(x.msg); reload() })
+  const fileClaim = () => run(async () => { toast('Đang gửi yêu cầu bồi thường…'); const x = await api(`/ros/${id}/file-claim`, { method: 'POST' }); toast(x.msg); reload() })
   const settle = () => run(async () => { const m = prompt('Quyết toán — 0=Tiền mặt,1=Chuyển khoản,2=Thẻ', '0'); if (m === null) return; const x = await api('/inventory/settle', { method: 'POST', body: JSON.stringify({ roId: +id, method: +m, note: null }) }); toast(x.msg); reload() })
   return <div className="row g-3">
     <div className="col-lg-8"><div className="card"><div className="card-body">
@@ -133,10 +134,16 @@ function RODetail() {
         <div>
           {r.vehicleStatus.insuranceFound
             ? (r.vehicleStatus.insured
-                ? <div className="alert alert-success py-2 small mb-0"><b>Còn bảo hiểm</b> — {r.vehicleStatus.insurer}<br />HĐ {r.vehicleStatus.policyCode} · đến {r.vehicleStatus.insuranceEnd} · <span className="text-muted">có thể yêu cầu bồi thường</span></div>
+                ? <div className="alert alert-success py-2 small mb-0"><b>Còn bảo hiểm</b> — {r.vehicleStatus.insurer}<br />HĐ {r.vehicleStatus.policyCode} · đến {r.vehicleStatus.insuranceEnd}</div>
                 : <div className="alert alert-warning py-2 small mb-0"><b>Bảo hiểm hết hiệu lực</b></div>)
             : <div className="alert alert-secondary py-2 small mb-0">Không tìm thấy bảo hiểm (biển {r.car.plate})</div>}
-        </div></div></div>}
+        </div>
+        {r.vehicleStatus.insured && <div className="mt-2">
+          {r.insuranceClaim && r.insuranceClaim.code
+            ? <div className="alert alert-info py-2 small mb-0">Đã lập bồi thường: <b>{r.insuranceClaim.code}</b> ({r.insuranceClaim.status})</div>
+            : <button className="btn btn-outline-danger btn-sm w-100" disabled={r.total <= 0} onClick={fileClaim}>Yêu cầu bồi thường BH ({fmtM(r.total)})</button>}
+        </div>}
+      </div></div>}
       <div className="card mb-3"><div className="card-body"><h6 className="fw-bold">Hóa đơn điện tử</h6>
         {r.eInvoice.code ? <><div className="alert alert-success py-2 small">Mã CQT: <b>{r.eInvoice.code}</b></div><a className="btn btn-sm btn-outline-primary w-100" target="_blank" href={'https://minitvan.onrender.com/Lookup/' + r.eInvoice.code}>Tra cứu T-VAN</a></>
           : <>{r.eInvoice.error && <div className="alert alert-danger py-2 small">{r.eInvoice.error}</div>}<button className="btn btn-primary btn-sm w-100" disabled={r.total <= 0} onClick={issueInv}>Xuất HĐĐT ({fmtM(r.total)})</button></>}</div></div>

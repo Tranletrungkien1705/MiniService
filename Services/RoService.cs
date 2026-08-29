@@ -22,6 +22,7 @@ public interface IRoService
     Task RemoveLineAsync(int lineId);
     Task<(bool ok, string msg)> TransitionAsync(int roId, ROStatus to);
     Task<(bool ok, string msg)> IssueEInvoiceAsync(int roId);
+    Task<(bool ok, string msg)> FileInsuranceClaimAsync(int roId);
     Task<(bool ok, string msg)> DeleteROAsync(int roId);
     Task<SvcDash> DashboardAsync();
     // dropdown data
@@ -138,6 +139,23 @@ public class RoService(AppDbContext db, IIntegrationService integ) : IRoService
         await db.SaveChangesAsync();
         if (r.ok) { await integ.NotifyCustomerAsync(ro); return (true, $"Đã xuất HĐĐT, mã tra cứu {r.tctCode}."); }
         return (false, "Xuất HĐĐT thất bại: " + r.error);
+    }
+
+    public async Task<(bool ok, string msg)> FileInsuranceClaimAsync(int roId)
+    {
+        var ro = await db.ROs.Include(r => r.Car).Include(r => r.Lines).FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy RO.");
+        if (!string.IsNullOrEmpty(ro.InsuranceClaimCode)) return (false, "RO đã có yêu cầu bồi thường: " + ro.InsuranceClaimCode);
+        if (ro.Total <= 0) return (false, "Chưa có chi phí sửa chữa — không thể yêu cầu bồi thường.");
+
+        var r = await integ.FileInsuranceClaimAsync(ro.Car?.Plate, ro.Total, $"Sửa chữa {ro.Code}");
+        if (r.ok)
+        {
+            ro.InsuranceClaimCode = r.code; ro.InsuranceClaimStatus = r.status;
+            await db.SaveChangesAsync();
+            return (true, $"Đã gửi yêu cầu bồi thường {r.code} ({r.status}).");
+        }
+        return (false, "Không lập được yêu cầu bồi thường: " + r.error);
     }
 
     public async Task<(bool ok, string msg)> DeleteROAsync(int roId)
