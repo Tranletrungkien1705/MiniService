@@ -21,6 +21,8 @@ public interface IIntegrationService
     Task<VehicleStatus> LookupVehicleAsync(string? plate, string? vin);
     // Lập yêu cầu bồi thường sang MiniInsurance cho xe còn bảo hiểm (sửa sau tai nạn).
     Task<ClaimResult> FileInsuranceClaimAsync(string? plate, decimal amount, string? description);
+    // Tích điểm thân thiết (MiniLoyalty) khi quyết toán; trả chuỗi mô tả ngắn hoặc null.
+    Task<string?> EarnLoyaltyAsync(string? phone, string? name, decimal amount, string? refNo);
 }
 
 public record ClaimResult(bool ok, string? code, string? status, string? error);
@@ -137,6 +139,30 @@ public class IntegrationService(IHttpClientFactory http, IConfiguration cfg) : I
             return new(false, null, null, Str(r, "error") ?? $"HTTP {(int)res.StatusCode}");
         }
         catch (Exception ex) { return new(false, null, null, "Không kết nối được MiniInsurance: " + ex.Message); }
+    }
+
+    public async Task<string?> EarnLoyaltyAsync(string? phone, string? name, decimal amount, string? refNo)
+    {
+        if (string.IsNullOrWhiteSpace(phone) || amount <= 0) return null;
+        var url = Env(cfg, "LOYALTY_URL", "https://miniloyalty-pj9w.onrender.com").TrimEnd('/');
+        var payload = new { phone, name, amount, refNo };
+        try
+        {
+            var c = http.CreateClient();
+            c.Timeout = TimeSpan.FromSeconds(15);
+            var res = await c.PostAsync($"{url}/api/ext/auto-earn",
+                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"));
+            if (!res.IsSuccessStatusCode) return null;
+            using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+            var r = doc.RootElement;
+            var mc = Str(r, "memberCode");
+            var earned = r.TryGetProperty("earned", out var e) && e.ValueKind == JsonValueKind.Number ? e.GetInt32() : 0;
+            var bal = r.TryGetProperty("balance", out var b) && b.ValueKind == JsonValueKind.Number ? b.GetInt32() : 0;
+            var rank = Str(r, "rank");
+            var newbie = r.TryGetProperty("enrolled", out var en) && en.ValueKind == JsonValueKind.True;
+            return mc == null ? null : $"{mc} +{earned:N0}đ → {bal:N0}đ ({rank}){(newbie ? " • hội viên mới" : "")}";
+        }
+        catch { return null; }
     }
 
     private static string? Str(JsonElement e, string prop)

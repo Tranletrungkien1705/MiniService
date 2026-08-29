@@ -23,6 +23,8 @@ public class RoServiceTests
             Task.FromResult(new VehicleStatus(false, false, null, null, null, false, false, null, null, null));
         public Task<ClaimResult> FileInsuranceClaimAsync(string? plate, decimal amount, string? description) =>
             Task.FromResult(new ClaimResult(true, "BT2608-001", "Đã khai báo", null));
+        public Task<string?> EarnLoyaltyAsync(string? phone, string? name, decimal amount, string? refNo) =>
+            Task.FromResult<string?>("HV260001 +100đ");
     }
 
     private static (RoService svc, AppDbContext db) NewSvc()

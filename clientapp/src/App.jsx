@@ -147,6 +147,8 @@ function RODetail() {
       <div className="card mb-3"><div className="card-body"><h6 className="fw-bold">Hóa đơn điện tử</h6>
         {r.eInvoice.code ? <><div className="alert alert-success py-2 small">Mã CQT: <b>{r.eInvoice.code}</b></div><a className="btn btn-sm btn-outline-primary w-100" target="_blank" href={'https://minitvan.onrender.com/Lookup/' + r.eInvoice.code}>Tra cứu T-VAN</a></>
           : <>{r.eInvoice.error && <div className="alert alert-danger py-2 small">{r.eInvoice.error}</div>}<button className="btn btn-primary btn-sm w-100" disabled={r.total <= 0} onClick={issueInv}>Xuất HĐĐT ({fmtM(r.total)})</button></>}</div></div>
+      {r.loyaltyInfo && <div className="card mb-3"><div className="card-body"><h6 className="fw-bold">Điểm thưởng <span className="text-muted small fw-normal">(MiniLoyalty)</span></h6>
+        <div className="alert alert-success py-2 small mb-0">{r.loyaltyInfo}</div></div></div>}
       <div className="card"><div className="card-body"><h6 className="fw-bold">Quyết toán</h6>
         <button className="btn btn-success btn-sm w-100" disabled={r.total <= 0} onClick={settle}><i className="bi bi-cash-coin me-1" />Quyết toán + xuất kho</button>
         <div className="small text-muted mt-1">Ghi thanh toán + tự xuất kho phụ tùng.</div></div></div>

@@ -87,6 +87,8 @@ public class RepairOrder : IOrgOwned
     // Bồi thường bảo hiểm (tích hợp MiniInsurance) khi xe còn BH sửa sau tai nạn
     public string? InsuranceClaimCode { get; set; }
     public string? InsuranceClaimStatus { get; set; }
+    // Điểm thưởng khách hàng thân thiết khi quyết toán (tích hợp MiniLoyalty)
+    public string? LoyaltyInfo { get; set; }
 
     public Car Car { get; set; } = null!;
     public Customer Customer { get; set; } = null!;

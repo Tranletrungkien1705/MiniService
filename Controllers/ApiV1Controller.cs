@@ -98,6 +98,7 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
             r.LaborTotal, r.PartTotal, r.Total,
             eInvoice = new { code = r.EInvoiceCode, status = r.EInvoiceStatus, error = r.EInvoiceError, at = r.EInvoiceAt },
             insuranceClaim = new { code = r.InsuranceClaimCode, status = r.InsuranceClaimStatus },
+            loyaltyInfo = r.LoyaltyInfo,
             vehicleStatus = new
             {
                 insuranceFound = vs.InsuranceFound, insured = vs.Insured, policyCode = vs.PolicyCode,

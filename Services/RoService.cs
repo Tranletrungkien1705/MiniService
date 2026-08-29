@@ -116,11 +116,20 @@ public class RoService(AppDbContext db, IIntegrationService integ) : IRoService
         if (to == ROStatus.Finished) ro.FinishedAt ??= DateTime.Now;
         await db.SaveChangesAsync();
 
-        // Quyết toán (PAID) → tự đẩy HĐĐT sang MiniTVAN + thông báo khách.
-        if (to == ROStatus.Paid && string.IsNullOrEmpty(ro.EInvoiceCode))
+        // Quyết toán (PAID) → tự đẩy HĐĐT sang MiniTVAN + tích điểm thân thiết (MiniLoyalty).
+        if (to == ROStatus.Paid)
         {
-            var (iok, imsg) = await IssueEInvoiceAsync(roId);
-            return (true, $"Đã quyết toán. {imsg}");
+            if (string.IsNullOrEmpty(ro.LoyaltyInfo))
+            {
+                var full = await db.ROs.Include(r => r.Customer).Include(r => r.Lines).FirstOrDefaultAsync(r => r.Id == roId);
+                var info = await integ.EarnLoyaltyAsync(full?.Customer?.Phone, full?.Customer?.Name, full?.Total ?? 0, ro.Code);
+                if (info != null) { ro.LoyaltyInfo = info; await db.SaveChangesAsync(); }
+            }
+            if (string.IsNullOrEmpty(ro.EInvoiceCode))
+            {
+                var (iok, imsg) = await IssueEInvoiceAsync(roId);
+                return (true, $"Đã quyết toán. {imsg}");
+            }
         }
         return (true, $"Đã chuyển sang: {Ui.Status(to).text}.");
     }
