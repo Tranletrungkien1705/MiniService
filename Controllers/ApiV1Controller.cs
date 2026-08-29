@@ -56,10 +56,15 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
         => Ok((await svc.CarsAsync(q)).Select(c => new { c.Id, c.Plate, c.Model, c.Year, c.Vin, c.EngineNo, c.Color, c.CurrentKm, c.CustomerId, customerName = c.Customer != null ? c.Customer.Name : null }));
 
     [HttpPost("cars")]
-    public async Task<IActionResult> CreateCar([FromBody] Car car)
+    public async Task<IActionResult> CreateCar([FromBody] CreateCarReq req)
     {
-        if (string.IsNullOrWhiteSpace(car.Plate)) return BadRequest(new { error = "Cần biển số." });
-        var id = await svc.CreateCarAsync(car);
+        if (string.IsNullOrWhiteSpace(req.Plate)) return BadRequest(new { error = "Cần biển số." });
+        if (req.CustomerId <= 0) return BadRequest(new { error = "Cần chủ xe (customerId)." });
+        var id = await svc.CreateCarAsync(new Car
+        {
+            Plate = req.Plate.Trim(), Vin = req.Vin, Model = req.Model ?? "", Year = req.Year,
+            EngineNo = req.EngineNo, Color = req.Color, CurrentKm = req.CurrentKm, CustomerId = req.CustomerId
+        });
         return Ok(new { id });
     }
 
@@ -143,6 +148,7 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
     }
 }
 
+public record CreateCarReq(string Plate, string? Vin, string? Model, int Year, string? EngineNo, string? Color, int CurrentKm, int CustomerId);
 public record CreateRoReq(int CarId, int Odometer, string? IntakeNote, string? Technician, string? CustomerRequest, string? ServiceAdvisor, DateTime? ExpectedDelivery);
 public record AddLineReq(LineType Type, string Name, decimal Quantity, decimal UnitPrice);
 public record TransitionReq(ROStatus To);
