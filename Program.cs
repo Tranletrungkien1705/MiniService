@@ -10,6 +10,9 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 // ---- Logging xuyên suốt: Serilog structured, đẩy Elasticsearch (ELK) khi có ELASTIC_URL, kèm CorrelationId ----
 var elasticUrl = Environment.GetEnvironmentVariable("ELASTIC_URL");
 var logCfg = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("System", Serilog.Events.LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .Enrich.WithProperty("app", "miniservice")
     .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] ({CorrelationId}) {Message:lj}{NewLine}{Exception}");
@@ -55,7 +58,10 @@ using (var scope = app.Services.CreateScope())
     await Seeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
 
 app.UseMiddleware<CorrelationMiddleware>();   // gán/đọc X-Correlation-Id trước tiên
-app.UseSerilogRequestLogging();               // log mỗi request kèm CorrelationId
+app.UseSerilogRequestLogging(o => o.GetLevel = (ctx, _, ex) =>   // bỏ log /healthz (Render health-check spam Bonsai)
+    ex != null || ctx.Response.StatusCode >= 500 ? Serilog.Events.LogEventLevel.Error
+    : ctx.Request.Path.StartsWithSegments("/healthz") ? Serilog.Events.LogEventLevel.Verbose
+    : Serilog.Events.LogEventLevel.Information);
 
 app.UseDefaultFiles();   // wwwroot/index.html = SPA client-side là trang chính "/"
 app.UseStaticFiles();
