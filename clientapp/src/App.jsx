@@ -122,6 +122,21 @@ function RODetail() {
       <div className="card mb-3"><div className="card-body"><h6 className="fw-bold">Chuyển trạng thái</h6>
         {r.allowedNext.map(n => <button key={n.value} className="btn btn-outline-primary btn-sm w-100 mb-2" onClick={() => trans(n.value)}>{n.text}</button>)}
         {!r.allowedNext.length && <div className="text-muted small">Kết thúc.</div>}</div></div>
+      {r.vehicleStatus && <div className="card mb-3"><div className="card-body"><h6 className="fw-bold">Tình trạng xe <span className="text-muted small fw-normal">(tra chéo fleet)</span></h6>
+        <div className="mb-2">
+          {r.vehicleStatus.warrantyFound
+            ? (r.vehicleStatus.warrantyActive
+                ? <div className="alert alert-success py-2 small mb-0"><b>Còn bảo hành</b> — {r.vehicleStatus.product}<br />Đến {r.vehicleStatus.warrantyEnd} ({r.vehicleStatus.warrantyDaysLeft} ngày) · <span className="text-muted">hãng chịu chi phí lỗi kỹ thuật</span></div>
+                : <div className="alert alert-warning py-2 small mb-0"><b>Hết bảo hành</b> — khách tự chi trả</div>)
+            : <div className="alert alert-secondary py-2 small mb-0">Không tìm thấy tem bảo hành (VIN {r.car.vin || '—'})</div>}
+        </div>
+        <div>
+          {r.vehicleStatus.insuranceFound
+            ? (r.vehicleStatus.insured
+                ? <div className="alert alert-success py-2 small mb-0"><b>Còn bảo hiểm</b> — {r.vehicleStatus.insurer}<br />HĐ {r.vehicleStatus.policyCode} · đến {r.vehicleStatus.insuranceEnd} · <span className="text-muted">có thể yêu cầu bồi thường</span></div>
+                : <div className="alert alert-warning py-2 small mb-0"><b>Bảo hiểm hết hiệu lực</b></div>)
+            : <div className="alert alert-secondary py-2 small mb-0">Không tìm thấy bảo hiểm (biển {r.car.plate})</div>}
+        </div></div></div>}
       <div className="card mb-3"><div className="card-body"><h6 className="fw-bold">Hóa đơn điện tử</h6>
         {r.eInvoice.code ? <><div className="alert alert-success py-2 small">Mã CQT: <b>{r.eInvoice.code}</b></div><a className="btn btn-sm btn-outline-primary w-100" target="_blank" href={'https://minitvan.onrender.com/Lookup/' + r.eInvoice.code}>Tra cứu T-VAN</a></>
           : <>{r.eInvoice.error && <div className="alert alert-danger py-2 small">{r.eInvoice.error}</div>}<button className="btn btn-primary btn-sm w-100" disabled={r.total <= 0} onClick={issueInv}>Xuất HĐĐT ({fmtM(r.total)})</button></>}</div></div>

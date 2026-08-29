@@ -19,6 +19,8 @@ public class RoServiceTests
         public Task<EInvoiceResult> PushEInvoiceAsync(RepairOrder ro) =>
             Task.FromResult(new EInvoiceResult(true, "Accepted", "TCT-TEST-001", null));
         public Task NotifyCustomerAsync(RepairOrder ro) => Task.CompletedTask;
+        public Task<VehicleStatus> LookupVehicleAsync(string? plate, string? vin) =>
+            Task.FromResult(new VehicleStatus(false, false, null, null, null, false, false, null, null, null));
     }
 
     private static (RoService svc, AppDbContext db) NewSvc()

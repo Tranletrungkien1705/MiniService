@@ -6,12 +6,19 @@ namespace MiniService.Services;
 
 public record EInvoiceResult(bool ok, string status, string? tctCode, string? error);
 
+/// <summary>Tình trạng bảo hiểm + bảo hành 1 xe (tra khi xe vào xưởng) — quyết ai chịu chi phí.</summary>
+public record VehicleStatus(
+    bool InsuranceFound, bool Insured, string? PolicyCode, string? Insurer, string? InsuranceEnd,
+    bool WarrantyFound, bool WarrantyActive, string? WarrantyEnd, int? WarrantyDaysLeft, string? Product);
+
 public interface IIntegrationService
 {
     // Đẩy hóa đơn điện tử sang MiniTVAN (phát hành + truyền cơ quan thuế).
     Task<EInvoiceResult> PushEInvoiceAsync(RepairOrder ro);
     // Gửi thông báo cho khách qua MiniNotify.
     Task NotifyCustomerAsync(RepairOrder ro);
+    // Tra bảo hiểm (MiniInsurance theo biển số) + bảo hành (MiniStamp theo VIN) khi xe vào xưởng.
+    Task<VehicleStatus> LookupVehicleAsync(string? plate, string? vin);
 }
 
 public class IntegrationService(IHttpClientFactory http, IConfiguration cfg) : IIntegrationService
@@ -60,6 +67,56 @@ public class IntegrationService(IHttpClientFactory http, IConfiguration cfg) : I
             return new(false, "Error", null, "Không kết nối được MiniTVAN: " + ex.Message);
         }
     }
+
+    public async Task<VehicleStatus> LookupVehicleAsync(string? plate, string? vin)
+    {
+        var insUrl = Env(cfg, "INSURANCE_URL", "https://miniinsurance.onrender.com").TrimEnd('/');
+        var stpUrl = Env(cfg, "STAMP_URL", "https://ministamp.onrender.com").TrimEnd('/');
+        bool insFound = false, insured = false, wFound = false, wActive = false;
+        string? policy = null, insurer = null, insEnd = null, wEnd = null, product = null; int? wDays = null;
+
+        var c = http.CreateClient();
+        c.Timeout = TimeSpan.FromSeconds(10);
+
+        // Bảo hiểm theo biển số
+        if (!string.IsNullOrWhiteSpace(plate))
+            try
+            {
+                var res = await c.GetAsync($"{insUrl}/api/policy?plate={Uri.EscapeDataString(plate)}");
+                if (res.IsSuccessStatusCode)
+                {
+                    using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+                    var r = doc.RootElement; insFound = true;
+                    insured = r.TryGetProperty("insured", out var i) && i.ValueKind == JsonValueKind.True;
+                    policy = Str(r, "Code") ?? Str(r, "code");
+                    insurer = Str(r, "insurer");
+                    insEnd = Str(r, "endDate");
+                }
+            }
+            catch { /* best-effort */ }
+
+        // Bảo hành theo VIN
+        if (!string.IsNullOrWhiteSpace(vin))
+            try
+            {
+                var res = await c.GetAsync($"{stpUrl}/api/warranty?vin={Uri.EscapeDataString(vin)}");
+                if (res.IsSuccessStatusCode)
+                {
+                    using var doc = JsonDocument.Parse(await res.Content.ReadAsStringAsync());
+                    var r = doc.RootElement; wFound = true;
+                    wActive = r.TryGetProperty("active", out var a) && a.ValueKind == JsonValueKind.True;
+                    wEnd = Str(r, "warrantyEnd");
+                    product = Str(r, "product");
+                    if (r.TryGetProperty("daysLeft", out var d) && d.ValueKind == JsonValueKind.Number) wDays = d.GetInt32();
+                }
+            }
+            catch { /* best-effort */ }
+
+        return new VehicleStatus(insFound, insured, policy, insurer, insEnd, wFound, wActive, wEnd, wDays, product);
+    }
+
+    private static string? Str(JsonElement e, string prop)
+        => e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 
     public async Task NotifyCustomerAsync(RepairOrder ro)
     {

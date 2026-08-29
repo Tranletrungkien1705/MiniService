@@ -11,7 +11,7 @@ namespace MiniService.Controllers;
 [ApiController]
 [Route("api/v1")]
 [Produces("application/json")]
-public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controller> log) : ControllerBase
+public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controller> log, IIntegrationService integ) : ControllerBase
 {
     // ---- Dashboard ----
     /// <summary>Số liệu tổng quan (headcount RO, doanh thu tháng...). Có cache Redis 15s.</summary>
@@ -81,6 +81,8 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
     {
         var r = await svc.GetROAsync(id);
         if (r == null) return NotFound();
+        // Tra chéo bảo hiểm (MiniInsurance) + bảo hành (MiniStamp) cho chiếc xe này — quyết ai chịu chi phí.
+        var vs = await integ.LookupVehicleAsync(r.Car.Plate, r.Car.Vin);
         return Ok(new
         {
             r.Id, r.Code, status = (int)r.Status, statusText = Ui.Status(r.Status).text,
@@ -90,6 +92,13 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
             lines = r.Lines.Select(l => new { l.Id, type = (int)l.Type, l.Name, l.Quantity, l.UnitPrice, l.Amount }),
             r.LaborTotal, r.PartTotal, r.Total,
             eInvoice = new { code = r.EInvoiceCode, status = r.EInvoiceStatus, error = r.EInvoiceError, at = r.EInvoiceAt },
+            vehicleStatus = new
+            {
+                insuranceFound = vs.InsuranceFound, insured = vs.Insured, policyCode = vs.PolicyCode,
+                insurer = vs.Insurer, insuranceEnd = vs.InsuranceEnd,
+                warrantyFound = vs.WarrantyFound, warrantyActive = vs.WarrantyActive,
+                warrantyEnd = vs.WarrantyEnd, warrantyDaysLeft = vs.WarrantyDaysLeft, product = vs.Product
+            },
             allowedNext = RoService.AllowedNext(r.Status).Select(s => new { value = (int)s, text = Ui.Status(s).text })
         });
     }
