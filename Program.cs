@@ -1,10 +1,15 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using MiniService.Data;
 using MiniService.Models;
 using MiniService.Services;
 using Serilog;
 using Serilog.Sinks.OpenSearch;
 
+JwtSecurityTokenHandler.DefaultMapInboundClaims = false;   // giữ claim gốc từ MiniSSO
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 // ---- Logging xuyên suốt: Serilog structured, đẩy Elasticsearch (ELK) khi có ELASTIC_URL, kèm CorrelationId ----
@@ -49,6 +54,19 @@ builder.Services.AddSingleton<ICache, RedisCache>();          // Redis cache (m�
 builder.Services.AddScoped<IIntegrationService, IntegrationService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IRoService, RoService>();
+// SSO chung: tin token MiniSSO (OIDC RS256).
+var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY") ?? "https://minisso.onrender.com";
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>
+{
+    o.Authority = ssoAuthority;
+    o.RequireHttpsMetadata = ssoAuthority.StartsWith("https");
+    o.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true, ValidIssuer = ssoAuthority,
+        ValidateAudience = false, ValidateLifetime = true, NameClaimType = "name", RoleClaimType = "role"
+    };
+});
+builder.Services.AddAuthorization();
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();                  // Swagger/OpenAPI
 builder.Services.AddSwaggerGen(c => c.SwaggerDoc("v1", new() { Title = "MiniService API", Version = "v1", Description = "Car Service (RO) — API-first cho SPA + tích hợp HĐĐT" }));
@@ -68,6 +86,18 @@ app.UseStaticFiles();
 
 app.UseSwagger();
 app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "MiniService API v1"); c.RoutePrefix = "swagger"; });
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+// SSO chung: endpoint xác thực bằng token MiniSSO.
+app.MapGet("/api/whoami", (ClaimsPrincipal u) => Results.Ok(new
+{
+    app = "miniservice",
+    sub = u.FindFirst("sub")?.Value, name = u.Identity?.Name ?? u.FindFirst("name")?.Value,
+    email = u.FindFirst("email")?.Value, tenant = u.FindFirst("tenant")?.Value,
+    roles = u.FindAll("role").Select(c => c.Value)
+})).RequireAuthorization();
 
 app.Use(async (ctx, next) =>
 {
