@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -89,6 +90,8 @@ app.UseSwaggerUI(c => { c.SwaggerEndpoint("/swagger/v1/swagger.json", "MiniServi
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+_ = ReportLicenseAsync(ssoAuthority, "miniservice");
 
 // SSO chung: endpoint xác thực bằng token MiniSSO.
 app.MapGet("/api/whoami", (ClaimsPrincipal u) => Results.Ok(new
@@ -218,6 +221,22 @@ app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 
 app.MapControllers();   // API v1 ([ApiController]) cho SPA
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
+
+// Bản quyền: tự báo cáo về MiniSSO khi khởi động (công khai, fire-and-forget, không chặn app nếu MiniSSO offline).
+async Task ReportLicenseAsync(string ssoAuthority, string appSlug)
+{
+    try
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+        var licenseKey = Environment.GetEnvironmentVariable("LICENSE_KEY") ?? "FLEET-DEFAULT-2026";
+        var instanceHost = Environment.GetEnvironmentVariable("RENDER_EXTERNAL_HOSTNAME") ?? Environment.MachineName;
+        var payload = JsonSerializer.Serialize(new { licenseKey, appSlug, instanceHost });
+        using var resp = await http.PostAsync($"{ssoAuthority}/api/v1/license/check", new StringContent(payload, System.Text.Encoding.UTF8, "application/json"));
+        var body = await resp.Content.ReadAsStringAsync();
+        Log.Information("License check {App}: {Body}", appSlug, body);
+    }
+    catch (Exception ex) { Log.Warning("License check {App} thất bại (bỏ qua, không chặn app): {Msg}", appSlug, ex.Message); }
+}
 
 try { Log.Information("MiniService khởi động (Redis={Redis}, Elastic={Elastic})", !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("REDIS_URL")), !string.IsNullOrEmpty(elasticUrl)); app.Run(); }
 finally { Log.CloseAndFlush(); }
