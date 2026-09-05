@@ -125,7 +125,8 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
     [HttpPost("ros/{id:int}/lines")]
     public async Task<IActionResult> AddLine(int id, [FromBody] AddLineReq req)
     {
-        await svc.AddLineAsync(id, req.Type, req.Name, req.Quantity, req.UnitPrice);
+        try { await svc.AddLineAsync(id, req.Type, req.Name, req.Quantity, req.UnitPrice); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
         return Ok(new { ok = true });
     }
 
