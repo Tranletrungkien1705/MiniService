@@ -102,8 +102,12 @@ public class RoService(AppDbContext db, IIntegrationService integ) : IRoService
 
     public async Task RemoveLineAsync(int lineId)
     {
-        var l = await db.Lines.FirstOrDefaultAsync(x => x.Id == lineId);
-        if (l != null) { db.Lines.Remove(l); await db.SaveChangesAsync(); }
+        var l = await db.Lines.Include(x => x.RO).FirstOrDefaultAsync(x => x.Id == lineId);
+        if (l == null) return;
+        if (l.RO.Status is ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding)
+            throw new InvalidOperationException("RO đã kết thúc — không xóa dòng.");
+        db.Lines.Remove(l);
+        await db.SaveChangesAsync();
     }
 
     public async Task<(bool ok, string msg)> TransitionAsync(int roId, ROStatus to)

@@ -79,7 +79,8 @@ public class ROController(IRoService svc) : Controller
     [HttpPost, ValidateAntiForgeryToken]
     public async Task<IActionResult> RemoveLine(int id, int lineId)
     {
-        await svc.RemoveLineAsync(lineId);
+        try { await svc.RemoveLineAsync(lineId); }
+        catch (InvalidOperationException ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Detail), new { id });
     }
 

@@ -130,7 +130,11 @@ public class ApiV1Controller(IRoService svc, ICache cache, ILogger<ApiV1Controll
     }
 
     [HttpDelete("ros/{id:int}/lines/{lineId:int}")]
-    public async Task<IActionResult> RemoveLine(int id, int lineId) { await svc.RemoveLineAsync(lineId); return Ok(new { ok = true }); }
+    public async Task<IActionResult> RemoveLine(int id, int lineId)
+    {
+        try { await svc.RemoveLineAsync(lineId); return Ok(new { ok = true }); }
+        catch (InvalidOperationException ex) { return BadRequest(new { error = ex.Message }); }
+    }
 
     [HttpPost("ros/{id:int}/transition")]
     public async Task<IActionResult> Transition(int id, [FromBody] TransitionReq req)
