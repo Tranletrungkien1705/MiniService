@@ -456,13 +456,107 @@ public static class Seeder
             db.CustomerCares.AddRange(c1, c2, c3);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.Payments.AnyAsync())
+        {
+            var roFns1 = await db.ROs.Include(r => r.Lines).FirstOrDefaultAsync(r => r.Code == "ROSEED-FNS-001");
+            var roFns2 = await db.ROs.Include(r => r.Lines).FirstOrDefaultAsync(r => r.Code == "ROSEED-FNS-002");
+            var ro1 = await db.ROs.Include(r => r.Lines).FirstOrDefaultAsync(r => r.Code == "ROSEED-001");
+
+            var payments = new List<Payment>();
+
+            if (roFns1 != null)
+            {
+                payments.Add(new Payment
+                {
+                    PaymentNo = "PT260426-001",
+                    ROId = roFns1.Id,
+                    CustomerId = roFns1.CustomerId,
+                    CarId = roFns1.CarId,
+                    PaymentDate = DateTime.Today.AddDays(-1),
+                    Method = PaymentMethod.Cash,
+                    Status = PaymentStatus.Completed,
+                    PayPersonName = "Nguyễn Văn An",
+                    PayPersonPhone = "0901111111",
+                    RoTotalAmount = roFns1.Total,
+                    DiscountAmount = 0,
+                    ThirdPartyAmount = roFns1.WarrantyTotal,
+                    PayableAmount = roFns1.CustomerTotal,
+                    PaymentAmount = roFns1.CustomerTotal,
+                    Note = "Khách thanh toán tiền mặt đầy đủ tại quầy thu ngân sau khi nghiệm thu xe.",
+                    Cashier = "Thu ngân Mai",
+                    CreatedBy = "seed",
+                    CreatedAt = DateTime.Now.AddDays(-1).AddHours(-4),
+                    CompletedAt = DateTime.Now.AddDays(-1).AddHours(-4)
+                });
+            }
+
+            if (roFns2 != null)
+            {
+                payments.Add(new Payment
+                {
+                    PaymentNo = "PT260427-002",
+                    ROId = roFns2.Id,
+                    CustomerId = roFns2.CustomerId,
+                    CarId = roFns2.CarId,
+                    PaymentDate = DateTime.Today,
+                    Method = PaymentMethod.PosCard,
+                    Status = PaymentStatus.Completed,
+                    PayPersonName = "Trần Thị Bình",
+                    PayPersonPhone = "0902222222",
+                    RoTotalAmount = roFns2.Total,
+                    DiscountAmount = 50000,
+                    ThirdPartyAmount = roFns2.WarrantyTotal,
+                    PayableAmount = roFns2.CustomerTotal - 50000,
+                    PaymentAmount = roFns2.CustomerTotal - 50000,
+                    TransactionRef = "POS-MB-982143",
+                    Note = "Quẹt thẻ Visa Vietcombank qua máy POS MB Bank. Áp dụng voucher giảm giá 50.000đ thành viên thân thiết.",
+                    Cashier = "Thu ngân Mai",
+                    CreatedBy = "seed",
+                    CreatedAt = DateTime.Now.AddHours(-6),
+                    CompletedAt = DateTime.Now.AddHours(-6)
+                });
+            }
+
+            if (ro1 != null)
+            {
+                payments.Add(new Payment
+                {
+                    PaymentNo = "PT260427-003",
+                    ROId = ro1.Id,
+                    CustomerId = ro1.CustomerId,
+                    CarId = ro1.CarId,
+                    PaymentDate = DateTime.Today,
+                    Method = PaymentMethod.BankTransfer,
+                    Status = PaymentStatus.Draft,
+                    PayPersonName = "Nguyễn Văn An",
+                    PayPersonPhone = "0901111111",
+                    RoTotalAmount = ro1.Total,
+                    DiscountAmount = 0,
+                    ThirdPartyAmount = ro1.WarrantyTotal,
+                    PayableAmount = ro1.CustomerTotal,
+                    PaymentAmount = ro1.CustomerTotal,
+                    TransactionRef = "MB-FT260427-0091",
+                    Note = "Khách hẹn chuyển khoản qua tài khoản ngân hàng đại lý MB Bank khi đến nhận xe.",
+                    Cashier = "Thu ngân Mai",
+                    CreatedBy = "seed",
+                    CreatedAt = DateTime.Now.AddHours(-1)
+                });
+            }
+
+            if (payments.Count > 0)
+            {
+                db.Payments.AddRange(payments);
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -640,7 +734,36 @@ public static class Seeder
                 FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE RESTRICT,
                 FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT
             );",
-            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerCares_OrgId_CareNo"" ON ""CustomerCares"" (""OrgId"", ""CareNo"");"
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerCares_OrgId_CareNo"" ON ""CustomerCares"" (""OrgId"", ""CareNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""Payments"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PaymentNo"" TEXT NOT NULL,
+                ""ROId"" INTEGER NOT NULL,
+                ""CustomerId"" INTEGER NOT NULL,
+                ""CarId"" INTEGER NOT NULL,
+                ""PaymentDate"" TEXT NOT NULL,
+                ""Method"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""PayPersonName"" TEXT NOT NULL,
+                ""PayPersonPhone"" TEXT NULL,
+                ""PayPersonIdCard"" TEXT NULL,
+                ""RoTotalAmount"" TEXT NOT NULL,
+                ""DiscountAmount"" TEXT NOT NULL,
+                ""ThirdPartyAmount"" TEXT NOT NULL,
+                ""PayableAmount"" TEXT NOT NULL,
+                ""PaymentAmount"" TEXT NOT NULL,
+                ""TransactionRef"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                ""Cashier"" TEXT NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""CompletedAt"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Payments_OrgId_PaymentNo"" ON ""Payments"" (""OrgId"", ""PaymentNo"");"
         };
 
         foreach (var sql in sqls)

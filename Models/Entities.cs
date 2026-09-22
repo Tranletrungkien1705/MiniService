@@ -112,6 +112,24 @@ public enum CustomerCareStatus
     Rejected = 3            // REJ   — Không liên hệ được / Khách bận hoặc từ chối
 }
 
+/// <summary>Trạng thái Phiếu thu / Quyết toán thanh toán — theo Ser_Payment idn.CarService.</summary>
+public enum PaymentStatus
+{
+    Draft = 0,     // DRAFT — Lập phiếu / Chờ thu tiền
+    Completed = 1, // COMP  — Đã thu tiền / Hoàn tất thanh toán
+    Cancelled = 2  // CANC  — Đã hủy phiếu thu
+}
+
+/// <summary>Hình thức thanh toán — theo Ser_PaymentType / Mst_PaymentType idn.CarService.</summary>
+public enum PaymentMethod
+{
+    Cash = 0,         // Tiền mặt
+    BankTransfer = 1, // Chuyển khoản ngân hàng
+    PosCard = 2,      // Quẹt thẻ POS (ATM/Visa/MasterCard)
+    Insurance = 3,    // Bảo hiểm bảo lãnh chi trả
+    Internal = 4      // Nội bộ đại lý hỗ trợ
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -160,12 +178,15 @@ public class RepairOrder : IOrgOwned
     public List<WarrantyReport> WarrantyReports { get; set; } = [];
     public List<StockOut> StockOuts { get; set; } = [];
     public List<CustomerCare> CustomerCares { get; set; } = [];
+    public List<Payment> Payments { get; set; } = [];
 
     public decimal Total => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
     public decimal PartTotal => Lines.Where(l => l.Type == LineType.Part).Sum(l => l.Amount);
     public decimal CustomerTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount);
     public decimal WarrantyTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Warranty).Sum(l => l.Amount);
+    public decimal PaidAmount => Payments.Where(p => p.Status == PaymentStatus.Completed).Sum(p => p.PaymentAmount);
+    public decimal RemainingBalance => Math.Max(0, CustomerTotal - PaidAmount);
 }
 
 public class Part : IOrgOwned
@@ -422,4 +443,36 @@ public class CustomerCare : IOrgOwned
     public RepairOrder RO { get; set; } = null!;
     public Car Car { get; set; } = null!;
     public Customer Customer { get; set; } = null!;
+}
+
+/// <summary>Phiếu thu tiền & Quyết toán thanh toán dịch vụ — Ser_Payment trong idn.CarService.</summary>
+public class Payment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PaymentNo { get; set; } = "";             // Số phiếu thu (VD: PT260427-001)
+    public int ROId { get; set; }                           // Lệnh sửa chữa thanh toán
+    public int CustomerId { get; set; }                     // Khách hàng / Chủ xe
+    public int CarId { get; set; }                          // Xe làm dịch vụ
+    public DateTime PaymentDate { get; set; } = DateTime.Today; // Ngày thu tiền
+    public PaymentMethod Method { get; set; } = PaymentMethod.Cash; // Phương thức thanh toán
+    public PaymentStatus Status { get; set; } = PaymentStatus.Completed; // Trạng thái phiếu thu
+    public string PayPersonName { get; set; } = "";          // Người nộp tiền (PayPersonName)
+    public string? PayPersonPhone { get; set; }              // SĐT người nộp tiền
+    public string? PayPersonIdCard { get; set; }             // CMND/CCCD người nộp (PayPersonIDCardNo)
+    public decimal RoTotalAmount { get; set; }               // Tổng chi phí RO
+    public decimal DiscountAmount { get; set; }              // Chiết khấu / Giảm giá trực tiếp (AmountDiscountOther)
+    public decimal ThirdPartyAmount { get; set; }            // Phần tiền bảo hành / bảo hiểm chi trả
+    public decimal PayableAmount { get; set; }               // Số tiền khách hàng cần thanh toán
+    public decimal PaymentAmount { get; set; }               // Số tiền thực thu (PaymentAmount)
+    public string? TransactionRef { get; set; }              // Mã tham chiếu GD / Mã chuẩn chi ngân hàng / POS
+    public string? Note { get; set; }                        // Diễn giải / Lý do thu tiền (Note)
+    public string Cashier { get; set; } = "Thu ngân";       // Nhân viên thu ngân lập phiếu
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? CompletedAt { get; set; }               // Thời điểm hoàn tất thu tiền
+
+    public RepairOrder RO { get; set; } = null!;
+    public Customer Customer { get; set; } = null!;
+    public Car Car { get; set; } = null!;
 }

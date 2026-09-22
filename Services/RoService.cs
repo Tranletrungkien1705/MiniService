@@ -10,6 +10,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingStockIns, decimal MonthStockInValue,
     int PendingStockOuts, decimal MonthStockOutValue,
     int PendingCustomerCares, int FeedbackCustomerCares,
+    int PendingPayments, decimal MonthPaymentRevenue,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -68,6 +69,13 @@ public interface IRoService
     Task<(bool ok, string msg)> UpdateCustomerCareSurveyAsync(int id, CustomerCareStatus status, bool hasCarProblem, int? qualityRating, int? staffRating, bool? willingToReturn, int? facilityRating, string? feedback, string? internalNote, string? contactedBy);
     Task<(bool ok, string msg)> DeleteCustomerCareAsync(int id);
     Task<List<RepairOrder>> ROsEligibleForCustomerCareAsync();
+    // payment (Ser_Payment)
+    Task<List<Payment>> PaymentsAsync(PaymentStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId = null);
+    Task<Payment?> GetPaymentAsync(int id);
+    Task<int> CreatePaymentAsync(Payment payment);
+    Task<(bool ok, string msg)> TransitionPaymentStatusAsync(int id, PaymentStatus to, string? cashier = null, string? note = null);
+    Task<(bool ok, string msg)> DeletePaymentAsync(int id);
+    Task<List<RepairOrder>> ROsForPaymentAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -121,6 +129,14 @@ public class RoService(AppDbContext db) : IRoService
     {
         StockOutStatus.Pending => [StockOutStatus.Executing, StockOutStatus.Finished, StockOutStatus.Rejected],
         StockOutStatus.Executing => [StockOutStatus.Finished, StockOutStatus.Rejected],
+        _ => []
+    };
+
+    /// <summary>Chuyển trạng thái Phiếu thu theo Ser_Payment idn.CarService.</summary>
+    public static PaymentStatus[] AllowedNextPayment(PaymentStatus s) => s switch
+    {
+        PaymentStatus.Draft => [PaymentStatus.Completed, PaymentStatus.Cancelled],
+        PaymentStatus.Completed => [PaymentStatus.Cancelled],
         _ => []
     };
 
@@ -199,7 +215,7 @@ public class RoService(AppDbContext db) : IRoService
 
     public Task<RepairOrder?> GetROAsync(int id) =>
         db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer).Include(r => r.Lines).Include(r => r.Appointment)
-          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares)
+          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares).Include(r => r.Payments)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -340,6 +356,12 @@ public class RoService(AppDbContext db) : IRoService
         var pendingCustomerCares = await db.CustomerCares.CountAsync(c => c.Status == CustomerCareStatus.Pending);
         var feedbackCustomerCares = await db.CustomerCares.CountAsync(c => c.Status == CustomerCareStatus.NeedFeedback);
 
+        var pendingPayments = await db.Payments.CountAsync(p => p.Status == PaymentStatus.Draft);
+        var monthPayments = await db.Payments
+            .Where(p => p.Status == PaymentStatus.Completed && p.PaymentDate >= monthStart)
+            .ToListAsync();
+        var monthPaymentRevenue = monthPayments.Sum(p => p.PaymentAmount);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -358,6 +380,8 @@ public class RoService(AppDbContext db) : IRoService
             monthStockOutValue,
             pendingCustomerCares,
             feedbackCustomerCares,
+            pendingPayments,
+            monthPaymentRevenue,
             byStatus);
     }
 
@@ -1019,5 +1043,159 @@ public class RoService(AppDbContext db) : IRoService
             .Include(r => r.CustomerCares)
             .Where(r => (r.Status == ROStatus.Finished || r.Status == ROStatus.Paid) && !r.CustomerCares.Any())
             .OrderByDescending(r => r.FinishedAt ?? r.CreatedAt)
+            .ToListAsync();
+
+    // --- Payment & Cashier Management (Ser_Payment & Ser_PaymentDetail) ---
+    public async Task<List<Payment>> PaymentsAsync(PaymentStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId = null)
+    {
+        var query = db.Payments
+            .Include(p => p.RO)
+            .Include(p => p.Customer)
+            .Include(p => p.Car)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(p => p.Status == status.Value);
+        if (roId.HasValue && roId.Value > 0) query = query.Where(p => p.ROId == roId.Value);
+        if (fromDate.HasValue) query = query.Where(p => p.PaymentDate >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(p => p.PaymentDate <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(p => p.PaymentNo.ToLower().Contains(kw)
+                || p.PayPersonName.ToLower().Contains(kw)
+                || (p.PayPersonPhone != null && p.PayPersonPhone.ToLower().Contains(kw))
+                || (p.TransactionRef != null && p.TransactionRef.ToLower().Contains(kw))
+                || p.RO.Code.ToLower().Contains(kw)
+                || p.Car.Plate.ToLower().Contains(kw)
+                || p.Customer.Name.ToLower().Contains(kw));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(p => p.PaymentDate).ThenByDescending(p => p.CreatedAt).ToList();
+    }
+
+    public Task<Payment?> GetPaymentAsync(int id) =>
+        db.Payments
+            .Include(p => p.RO).ThenInclude(r => r.Lines)
+            .Include(p => p.Customer)
+            .Include(p => p.Car)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+    public async Task<int> CreatePaymentAsync(Payment payment)
+    {
+        var ro = await db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines)
+            .Include(r => r.Payments)
+            .FirstOrDefaultAsync(r => r.Id == payment.ROId)
+            ?? throw new InvalidOperationException("Không tìm thấy Lệnh sửa chữa (RO).");
+
+        payment.CustomerId = ro.CustomerId;
+        payment.CarId = ro.CarId;
+        payment.RoTotalAmount = ro.Total;
+        payment.ThirdPartyAmount = ro.WarrantyTotal;
+        payment.PayableAmount = Math.Max(0, payment.RoTotalAmount - payment.DiscountAmount - payment.ThirdPartyAmount);
+
+        if (payment.PaymentAmount <= 0)
+        {
+            payment.PaymentAmount = payment.PayableAmount;
+        }
+
+        if (string.IsNullOrWhiteSpace(payment.PayPersonName))
+        {
+            payment.PayPersonName = ro.Customer.Name;
+        }
+        if (string.IsNullOrWhiteSpace(payment.PayPersonPhone))
+        {
+            payment.PayPersonPhone = ro.Customer.Phone;
+        }
+
+        payment.PaymentNo = $"PT{DateTime.Now:yyMMdd}-{await db.Payments.CountAsync() + 1:D3}";
+        payment.CreatedAt = DateTime.Now;
+
+        if (payment.Status == PaymentStatus.Completed)
+        {
+            payment.CompletedAt = DateTime.Now;
+            // Nếu thu tiền đủ hoặc hoàn tất thanh toán, tự động chuyển trạng thái RO sang PAID nếu đang ở CheckEnd / Repaired / HasRO
+            if (ro.Status is ROStatus.CheckEnd or ROStatus.Repaired or ROStatus.HasRO)
+            {
+                ro.Status = ROStatus.Paid;
+            }
+        }
+
+        db.Payments.Add(payment);
+        await db.SaveChangesAsync();
+        return payment.Id;
+    }
+
+    public async Task<(bool ok, string msg)> TransitionPaymentStatusAsync(int id, PaymentStatus to, string? cashier = null, string? note = null)
+    {
+        var payment = await db.Payments
+            .Include(p => p.RO).ThenInclude(r => r.Payments)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (payment == null) return (false, "Không tìm thấy phiếu thu.");
+
+        if (!AllowedNextPayment(payment.Status).Contains(to))
+            return (false, $"Không thể chuyển từ '{Ui.PaymentStatus(payment.Status).text}' sang '{Ui.PaymentStatus(to).text}'.");
+
+        if (to == PaymentStatus.Completed)
+        {
+            payment.Status = PaymentStatus.Completed;
+            payment.CompletedAt = DateTime.Now;
+            if (!string.IsNullOrWhiteSpace(cashier)) payment.Cashier = cashier.Trim();
+            if (!string.IsNullOrWhiteSpace(note)) payment.Note = string.IsNullOrWhiteSpace(payment.Note) ? note.Trim() : $"{payment.Note} | {note.Trim()}";
+
+            if (payment.RO.Status is ROStatus.CheckEnd or ROStatus.Repaired or ROStatus.HasRO)
+            {
+                payment.RO.Status = ROStatus.Paid;
+            }
+
+            await db.SaveChangesAsync();
+            return (true, $"Đã hoàn tất thu tiền phiếu {payment.PaymentNo} ({payment.PaymentAmount:N0}đ)! Trạng thái RO đã chuyển sang 'Đã thanh toán'.");
+        }
+        else if (to == PaymentStatus.Cancelled)
+        {
+            payment.Status = PaymentStatus.Cancelled;
+            if (!string.IsNullOrWhiteSpace(note)) payment.Note = string.IsNullOrWhiteSpace(payment.Note) ? $"[Hủy: {note.Trim()}]" : $"{payment.Note} [Hủy: {note.Trim()}]";
+
+            // Nếu RO đang là Paid và không còn phiếu thu Completed nào khác, có thể đưa RO về CheckEnd
+            var otherCompleted = payment.RO.Payments.Any(p => p.Id != id && p.Status == PaymentStatus.Completed);
+            if (!otherCompleted && payment.RO.Status == ROStatus.Paid)
+            {
+                payment.RO.Status = ROStatus.CheckEnd;
+            }
+
+            await db.SaveChangesAsync();
+            return (true, $"Đã hủy phiếu thu {payment.PaymentNo}.");
+        }
+
+        return (false, "Trạng thái không hợp lệ.");
+    }
+
+    public async Task<(bool ok, string msg)> DeletePaymentAsync(int id)
+    {
+        var payment = await db.Payments.FirstOrDefaultAsync(p => p.Id == id);
+        if (payment == null) return (false, "Không tìm thấy phiếu thu.");
+
+        if (payment.Status == PaymentStatus.Completed)
+            return (false, "Không thể xóa phiếu thu đã hoàn tất (Completed). Vui lòng thực hiện Hủy phiếu nếu cần thu hồi.");
+
+        db.Payments.Remove(payment);
+        await db.SaveChangesAsync();
+        return (true, "Đã xóa phiếu thu.");
+    }
+
+    public Task<List<RepairOrder>> ROsForPaymentAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines)
+            .Include(r => r.Payments)
+            .Where(r => r.Status != ROStatus.Created && r.Status != ROStatus.Rejected && r.Status != ROStatus.NotResponding)
+            .OrderByDescending(r => r.Status == ROStatus.CheckEnd || r.Status == ROStatus.Repaired)
+            .ThenByDescending(r => r.CreatedAt)
             .ToListAsync();
 }

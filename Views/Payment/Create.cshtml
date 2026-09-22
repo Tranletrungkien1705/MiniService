@@ -1,0 +1,195 @@
+@{
+    ViewData["Title"] = "Lập phiếu thu tiền dịch vụ (Ser_Payment)";
+    var ros = (List<RepairOrder>)ViewBag.ROs;
+    var selectedRoId = (int?)ViewBag.SelectedROId;
+    var preloadedRo = (RepairOrder?)ViewBag.PreloadedRO;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-cash-coin me-2"></i>Lập phiếu thu tiền &amp; Quyết toán dịch vụ</h5>
+                        <div class="text-muted small">Quy trình Bước 6: PAID thanh toán lệnh sửa chữa theo tiêu chuẩn Car Service</div>
+                    </div>
+                    <a href="/Payment" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <form asp-action="Create" method="post" id="paymentForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chọn Lệnh sửa chữa (RO) cần quyết toán <span class="text-danger">*</span></label>
+                        <select name="roId" id="roSelect" class="form-select" onchange="onRoSelected(this)" required>
+                            <option value="">-- Chọn lệnh sửa chữa cần thu tiền --</option>
+                            @foreach (var r in ros)
+                            {
+                                var (stText, stCode, _) = Ui.Status(r.Status);
+                                var isSel = (selectedRoId.HasValue && selectedRoId.Value == r.Id) || (preloadedRo != null && preloadedRo.Id == r.Id);
+                                <option value="@r.Id" selected="@isSel"
+                                        data-plate="@r.Car.Plate"
+                                        data-model="@r.Car.Model"
+                                        data-customer="@r.Customer.Name"
+                                        data-phone="@r.Customer.Phone"
+                                        data-total="@r.Total"
+                                        data-warranty="@r.WarrantyTotal"
+                                        data-customertotal="@r.CustomerTotal"
+                                        data-paid="@r.PaidAmount"
+                                        data-remaining="@r.RemainingBalance">
+                                    [@r.Code] @r.Car.Plate · @r.Customer.Name (@stText) - Khách trả: @r.CustomerTotal.ToString("N0")đ (Còn nợ: @r.RemainingBalance.ToString("N0")đ)
+                                </option>
+                            }
+                        </select>
+                    </div>
+
+                    <div id="roSummaryAlert" class="alert alert-primary mb-3 @(preloadedRo == null ? "d-none" : "")">
+                        <div class="row g-2 small">
+                            <div class="col-md-3"><strong>Biển số:</strong> <span id="lblPlate">@(preloadedRo?.Car.Plate)</span></div>
+                            <div class="col-md-3"><strong>Dòng xe:</strong> <span id="lblModel">@(preloadedRo?.Car.Model)</span></div>
+                            <div class="col-md-3"><strong>Khách hàng:</strong> <span id="lblCustomer">@(preloadedRo?.Customer.Name)</span></div>
+                            <div class="col-md-3"><strong>SĐT:</strong> <span id="lblPhone">@(preloadedRo?.Customer.Phone)</span></div>
+                            <div class="col-md-3"><strong>Tổng chi phí RO:</strong> <span id="lblTotal" class="fw-bold">@(preloadedRo?.Total.ToString("N0"))đ</span></div>
+                            <div class="col-md-3"><strong>Hãng BH chi trả:</strong> <span id="lblWarranty" class="text-primary">@(preloadedRo?.WarrantyTotal.ToString("N0"))đ</span></div>
+                            <div class="col-md-3"><strong>Khách phải trả:</strong> <span id="lblCustomerTotal" class="text-success fw-bold">@(preloadedRo?.CustomerTotal.ToString("N0"))đ</span></div>
+                            <div class="col-md-3"><strong>Đã thanh toán:</strong> <span id="lblPaid" class="text-info">@(preloadedRo?.PaidAmount.ToString("N0"))đ</span></div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Người nộp tiền <span class="text-danger">*</span></label>
+                            <input name="payPersonName" id="payPersonName" class="form-control" placeholder="Họ tên người nộp tiền (chủ xe hoặc lái xe)" value="@(preloadedRo?.Customer.Name)" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Số điện thoại người nộp</label>
+                            <input name="payPersonPhone" id="payPersonPhone" class="form-control" placeholder="SĐT liên hệ người nộp" value="@(preloadedRo?.Customer.Phone)" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Số CCCD / CMND (tùy chọn)</label>
+                            <input name="payPersonIdCard" class="form-control" placeholder="Số CCCD của người nộp (theo mẫu Kế toán)" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ngày thu tiền <span class="text-danger">*</span></label>
+                            <input name="paymentDate" type="date" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Hình thức thanh toán <span class="text-danger">*</span></label>
+                            <select name="method" class="form-select" id="paymentMethodSelect" onchange="onMethodChange(this)">
+                                <option value="0">Tiền mặt (Cash)</option>
+                                <option value="1">Chuyển khoản ngân hàng (Bank Transfer)</option>
+                                <option value="2">Quẹt thẻ POS (Visa/Master/ATM)</option>
+                                <option value="3">Bảo hiểm bảo lãnh (Insurance)</option>
+                                <option value="4">Nội bộ hỗ trợ (Internal)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Trạng thái thu tiền <span class="text-danger">*</span></label>
+                            <select name="status" class="form-select">
+                                <option value="1" selected>Đã thu tiền (Completed) — Chuyển RO sang PAID</option>
+                                <option value="0">Lập phiếu nháp (Draft) — Chưa vào sổ thu tiền</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Chiết khấu / Giảm giá (VNĐ)</label>
+                            <input name="discountAmount" id="discountInput" type="number" step="1000" min="0" value="0" class="form-control" oninput="calculateAmount()" placeholder="0" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold text-success">Số tiền thực thu (VNĐ) <span class="text-danger">*</span></label>
+                            <input name="paymentAmount" id="paymentAmountInput" type="number" step="1000" min="0" value="@(preloadedRo != null ? (preloadedRo.RemainingBalance > 0 ? preloadedRo.RemainingBalance : preloadedRo.CustomerTotal) : 0)" class="form-control fw-bold text-success" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Mã GD / Chuẩn chi POS</label>
+                            <input name="transactionRef" id="transactionRefInput" class="form-control" placeholder="VD: MB-FT99824 hoặc POS-0123" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Thu ngân lập phiếu</label>
+                            <input name="cashier" class="form-control" value="Thu ngân Mai" placeholder="Họ tên thu ngân phụ trách" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ghi chú thanh toán</label>
+                            <input name="note" class="form-control" placeholder="Ghi chú thêm về nội dung thanh toán / chứng từ kèm theo" />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+                        <a href="/Payment" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle me-1"></i>Lưu &amp; Xuất phiếu thu</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function onRoSelected(select) {
+        var opt = select.options[select.selectedIndex];
+        var alertBox = document.getElementById('roSummaryAlert');
+        if (!opt.value) {
+            alertBox.classList.add('d-none');
+            return;
+        }
+
+        alertBox.classList.remove('d-none');
+        document.getElementById('lblPlate').innerText = opt.getAttribute('data-plate');
+        document.getElementById('lblModel').innerText = opt.getAttribute('data-model');
+        document.getElementById('lblCustomer').innerText = opt.getAttribute('data-customer');
+        document.getElementById('lblPhone').innerText = opt.getAttribute('data-phone') || '—';
+        document.getElementById('lblTotal').innerText = Number(opt.getAttribute('data-total')).toLocaleString('vi-VN') + 'đ';
+        document.getElementById('lblWarranty').innerText = Number(opt.getAttribute('data-warranty')).toLocaleString('vi-VN') + 'đ';
+        document.getElementById('lblCustomerTotal').innerText = Number(opt.getAttribute('data-customertotal')).toLocaleString('vi-VN') + 'đ';
+        document.getElementById('lblPaid').innerText = Number(opt.getAttribute('data-paid')).toLocaleString('vi-VN') + 'đ';
+
+        document.getElementById('payPersonName').value = opt.getAttribute('data-customer');
+        document.getElementById('payPersonPhone').value = opt.getAttribute('data-phone') || '';
+
+        var remaining = Number(opt.getAttribute('data-remaining'));
+        var cusTotal = Number(opt.getAttribute('data-customertotal'));
+        var defaultPay = remaining > 0 ? remaining : cusTotal;
+        document.getElementById('paymentAmountInput').value = defaultPay;
+    }
+
+    function calculateAmount() {
+        var sel = document.getElementById('roSelect');
+        var opt = sel.options[sel.selectedIndex];
+        if (!opt || !opt.value) return;
+
+        var cusTotal = Number(opt.getAttribute('data-customertotal'));
+        var paid = Number(opt.getAttribute('data-paid'));
+        var remaining = Math.max(0, cusTotal - paid);
+        var discount = Number(document.getElementById('discountInput').value) || 0;
+
+        var payable = Math.max(0, remaining - discount);
+        document.getElementById('paymentAmountInput').value = payable;
+    }
+
+    function onMethodChange(select) {
+        var refInput = document.getElementById('transactionRefInput');
+        if (select.value === "1") {
+            refInput.placeholder = "Mã GD ngân hàng (VD: MB-FT260427-001)";
+        } else if (select.value === "2") {
+            refInput.placeholder = "Số chuẩn chi / Trace No máy POS";
+        } else if (select.value === "3") {
+            refInput.placeholder = "Số hợp đồng bảo hiểm / Bảo lãnh";
+        } else {
+            refInput.placeholder = "Mã tham chiếu (nếu có)";
+        }
+    }
+</script>
+}

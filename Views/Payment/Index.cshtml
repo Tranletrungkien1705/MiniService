@@ -1,0 +1,129 @@
+@model List<Payment>
+@{
+    ViewData["Title"] = "Quản lý Thu ngân & Phiếu thu thanh toán (Ser_Payment)";
+    var curStatus = (PaymentStatus?)ViewBag.Status;
+    var totalCount = Model.Count;
+    var completedCount = Model.Count(p => p.Status == PaymentStatus.Completed);
+    var draftCount = Model.Count(p => p.Status == PaymentStatus.Draft);
+    var cancelledCount = Model.Count(p => p.Status == PaymentStatus.Cancelled);
+    var totalRevenue = Model.Where(p => p.Status == PaymentStatus.Completed).Sum(p => p.PaymentAmount);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng thực thu hoàn tất</div>
+            <div class="stat-num text-success">@totalRevenue.ToString("N0")đ</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số phiếu thu</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã thu tiền (Completed)</div>
+            <div class="stat-num text-success">@completedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ thu tiền / Nháp (Draft)</div>
+            <div class="stat-num text-warning">@draftCount @if(cancelledCount > 0){<span style="font-size:12px;font-weight:normal" class="text-danger">(@cancelledCount hủy)</span>}</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã phiếu / RO / Biển số / Khách..." style="max-width:220px" />
+                <input name="fromDate" type="date" value="@ViewBag.FromDate" class="form-control form-control-sm" style="max-width:140px" />
+                <input name="toDate" type="date" value="@ViewBag.ToDate" class="form-control form-control-sm" style="max-width:140px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (PaymentStatus s in Enum.GetValues(typeof(PaymentStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.PaymentStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary"><i class="bi bi-funnel me-1"></i>Lọc</button>
+            </form>
+            <a href="/Payment/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập phiếu thu mới</a>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Số phiếu thu</th>
+                        <th>Ngày thu</th>
+                        <th>Lệnh RO</th>
+                        <th>Biển số xe</th>
+                        <th>Khách hàng / Người nộp</th>
+                        <th>Hình thức TT</th>
+                        <th class="text-end">Tiền RO</th>
+                        <th class="text-end">Chiết khấu</th>
+                        <th class="text-end">Thực thu</th>
+                        <th>Thu ngân</th>
+                        <th>Trạng thái</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var p in Model)
+                {
+                    var (stName, stCode, stCss) = Ui.PaymentStatus(p.Status);
+                    var (mName, mIcon, mCss) = Ui.PaymentMethod(p.Method);
+                    <tr>
+                        <td class="fw-bold font-monospace">
+                            <a href="/Payment/Detail/@p.Id" class="text-decoration-none text-primary">@p.PaymentNo</a>
+                            @if (!string.IsNullOrWhiteSpace(p.TransactionRef))
+                            {
+                                <div class="text-muted small" style="font-size:11px"><i class="bi bi-hash"></i>@p.TransactionRef</div>
+                            }
+                        </td>
+                        <td class="small">@p.PaymentDate.ToString("dd/MM/yyyy")</td>
+                        <td>
+                            <a href="/RO/Detail/@p.ROId" class="badge bg-light text-dark border text-decoration-none">
+                                <i class="bi bi-clipboard2-pulse me-1 text-primary"></i>@p.RO.Code
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">@p.Car.Plate</span>
+                            <div class="text-muted small" style="font-size:11px">@p.Car.Model</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@p.PayPersonName</div>
+                            <div class="text-muted small" style="font-size:11px">@p.Customer.Name @if(!string.IsNullOrWhiteSpace(p.PayPersonPhone)){<span>· @p.PayPersonPhone</span>}</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-@mCss border border-@mCss"><i class="bi @mIcon me-1"></i>@mName</span>
+                        </td>
+                        <td class="text-end small text-muted">@p.RoTotalAmount.ToString("N0")đ</td>
+                        <td class="text-end small text-warning">@(p.DiscountAmount > 0 ? $"-{p.DiscountAmount:N0}đ" : "0đ")</td>
+                        <td class="text-end fw-bold text-success">@p.PaymentAmount.ToString("N0")đ</td>
+                        <td class="small text-muted">@p.Cashier</td>
+                        <td><span class="badge bg-@stCss">@stName</span></td>
+                        <td class="text-end">
+                            <a href="/Payment/Detail/@p.Id" class="btn btn-sm btn-outline-secondary" title="Xem chi tiết & In phiếu">
+                                <i class="bi bi-printer me-1"></i>Xem
+                            </a>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="12" class="text-center text-muted py-4">Chưa có phiếu thu nào phù hợp điều kiện lọc.</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

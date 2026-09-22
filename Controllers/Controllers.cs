@@ -625,6 +625,109 @@ public class CustomerCareController(IRoService svc) : Controller
     }
 }
 
+public class PaymentController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(PaymentStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+        ViewBag.ROId = roId;
+        var list = await svc.PaymentsAsync(status, q, fromDate, toDate, roId);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.ROs = await svc.ROsForPaymentAsync();
+        ViewBag.SelectedROId = roId;
+        if (roId.HasValue && roId.Value > 0)
+        {
+            var ro = await svc.GetROAsync(roId.Value);
+            ViewBag.PreloadedRO = ro;
+        }
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int roId, DateTime paymentDate, PaymentMethod method, PaymentStatus status,
+        string payPersonName, string? payPersonPhone, string? payPersonIdCard, decimal discountAmount,
+        decimal paymentAmount, string? transactionRef, string? note, string? cashier)
+    {
+        if (roId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn Lệnh sửa chữa (RO) cần thanh toán.";
+            ViewBag.ROs = await svc.ROsForPaymentAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+
+        if (string.IsNullOrWhiteSpace(payPersonName))
+        {
+            TempData["Error"] = "Vui lòng nhập tên người nộp tiền.";
+            ViewBag.ROs = await svc.ROsForPaymentAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+
+        try
+        {
+            var payment = new Payment
+            {
+                ROId = roId,
+                PaymentDate = paymentDate != default ? paymentDate : DateTime.Today,
+                Method = method,
+                Status = status,
+                PayPersonName = payPersonName.Trim(),
+                PayPersonPhone = payPersonPhone?.Trim(),
+                PayPersonIdCard = payPersonIdCard?.Trim(),
+                DiscountAmount = Math.Max(0, discountAmount),
+                PaymentAmount = paymentAmount,
+                TransactionRef = transactionRef?.Trim(),
+                Note = note?.Trim(),
+                Cashier = string.IsNullOrWhiteSpace(cashier) ? "Thu ngân" : cashier.Trim(),
+                CreatedBy = "web"
+            };
+
+            var id = await svc.CreatePaymentAsync(payment);
+            TempData["Success"] = $"Đã lập phiếu thu {payment.PaymentNo} thành công (Số tiền: {payment.PaymentAmount:N0}đ).";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.ROs = await svc.ROsForPaymentAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var payment = await svc.GetPaymentAsync(id);
+        if (payment == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextPayment(payment.Status);
+        return View(payment);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, PaymentStatus to, string? note)
+    {
+        var (ok, msg) = await svc.TransitionPaymentStatusAsync(id, to, "Thu ngân", note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeletePaymentAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

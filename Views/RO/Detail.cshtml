@@ -139,6 +139,50 @@
 
         <div class="card mb-3"><div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-cash-coin text-success me-1"></i>Thu ngân &amp; Thanh toán</h6>
+                <a href="/Payment/Create?roId=@Model.Id" class="btn btn-sm btn-outline-success"><i class="bi bi-plus-lg me-1"></i>Lập phiếu thu</a>
+            </div>
+            <div class="p-2 bg-light rounded border mb-2 small">
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">Khách phải trả:</span>
+                    <span class="fw-semibold">@Model.CustomerTotal.ToString("N0")đ</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">Đã thanh toán:</span>
+                    <span class="text-success fw-semibold">@Model.PaidAmount.ToString("N0")đ</span>
+                </div>
+                <div class="d-flex justify-content-between border-top pt-1 mt-1">
+                    <span class="fw-bold">Còn thiếu:</span>
+                    <span class="fw-bold @(Model.RemainingBalance > 0 ? "text-danger" : "text-success")">
+                        @(Model.RemainingBalance > 0 ? $"{Model.RemainingBalance:N0}đ" : "Đã thanh toán đủ")
+                    </span>
+                </div>
+            </div>
+            @if (Model.Payments.Count > 0)
+            {
+                <div class="list-group list-group-flush small">
+                    @foreach (var p in Model.Payments)
+                    {
+                        var (ptxt, pcode, pcss) = Ui.PaymentStatus(p.Status);
+                        var (pmtxt, pmicon, _) = Ui.PaymentMethod(p.Method);
+                        <a href="/Payment/Detail/@p.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold">@p.PaymentNo <span class="badge bg-light text-dark border font-monospace ms-1" style="font-size:10px"><i class="bi @pmicon me-1"></i>@pmtxt</span></div>
+                                <div class="text-muted" style="font-size:11px">@p.PaymentAmount.ToString("N0")đ · @p.PaymentDate.ToString("dd/MM/yyyy")</div>
+                            </div>
+                            <span class="badge bg-@pcss">@pcode</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small">Chưa có phiếu thu cho lệnh này. Nhấn "Lập phiếu thu" để ghi nhận thanh toán và chuyển trạng thái sang PAID.</div>
+            }
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="fw-bold mb-0"><i class="bi bi-box-arrow-up-right text-primary me-1"></i>Xuất kho phụ tùng</h6>
                 <a href="/StockOut/Create?roId=@Model.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>Xuất kho</a>
             </div>

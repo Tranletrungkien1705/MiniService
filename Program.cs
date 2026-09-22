@@ -618,6 +618,114 @@ app.MapDelete("/api/customercare/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Thu ngân & Phiếu thu thanh toán (Ser_Payment & Ser_PaymentDetail)
+app.MapGet("/api/payments", async (PaymentStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId, IRoService svc) =>
+{
+    var list = await svc.PaymentsAsync(status, q, fromDate, toDate, roId);
+    return Results.Ok(list.Select(p => new
+    {
+        p.Id,
+        p.PaymentNo,
+        p.PaymentDate,
+        method = Ui.PaymentMethod(p.Method).text,
+        methodValue = (int)p.Method,
+        status = Ui.PaymentStatus(p.Status).text,
+        statusCode = Ui.PaymentStatus(p.Status).code,
+        statusValue = (int)p.Status,
+        roId = p.ROId,
+        roCode = p.RO?.Code,
+        plate = p.Car?.Plate,
+        customer = p.Customer?.Name,
+        p.PayPersonName,
+        p.PayPersonPhone,
+        p.RoTotalAmount,
+        p.DiscountAmount,
+        p.ThirdPartyAmount,
+        p.PayableAmount,
+        p.PaymentAmount,
+        p.TransactionRef,
+        p.Cashier,
+        p.Note,
+        p.CreatedAt,
+        p.CompletedAt
+    }));
+});
+
+app.MapGet("/api/payments/{id:int}", async (int id, IRoService svc) =>
+{
+    var p = await svc.GetPaymentAsync(id);
+    if (p == null) return Results.NotFound(new { error = "Không tìm thấy phiếu thu." });
+    return Results.Ok(new
+    {
+        p.Id,
+        p.PaymentNo,
+        p.PaymentDate,
+        method = Ui.PaymentMethod(p.Method).text,
+        methodValue = (int)p.Method,
+        status = Ui.PaymentStatus(p.Status).text,
+        statusCode = Ui.PaymentStatus(p.Status).code,
+        statusValue = (int)p.Status,
+        ro = new { p.RO.Id, p.RO.Code, p.RO.Status, roTotal = p.RO.Total, lines = p.RO.Lines.Select(l => new { l.Id, l.Name, l.Quantity, l.UnitPrice, l.Amount, type = Ui.Line(l.Type) }) },
+        car = new { p.Car.Id, p.Car.Plate, p.Car.Model, p.Car.Vin, p.Car.Year },
+        customer = new { p.Customer.Id, p.Customer.Name, p.Customer.Phone, p.Customer.Email },
+        p.PayPersonName,
+        p.PayPersonPhone,
+        p.PayPersonIdCard,
+        p.RoTotalAmount,
+        p.DiscountAmount,
+        p.ThirdPartyAmount,
+        p.PayableAmount,
+        p.PaymentAmount,
+        amountInWords = Ui.MoneyToWords(p.PaymentAmount),
+        p.TransactionRef,
+        p.Cashier,
+        p.Note,
+        p.CreatedAt,
+        p.CompletedAt
+    });
+});
+
+app.MapPost("/api/payments", async (CreatePaymentDto dto, IRoService svc) =>
+{
+    try
+    {
+        var payment = new Payment
+        {
+            ROId = dto.RoId,
+            PaymentDate = dto.PaymentDate ?? DateTime.Today,
+            Method = dto.Method,
+            Status = dto.Status ?? PaymentStatus.Completed,
+            PayPersonName = dto.PayPersonName?.Trim() ?? "",
+            PayPersonPhone = dto.PayPersonPhone?.Trim(),
+            PayPersonIdCard = dto.PayPersonIdCard?.Trim(),
+            DiscountAmount = dto.DiscountAmount ?? 0,
+            PaymentAmount = dto.PaymentAmount ?? 0,
+            TransactionRef = dto.TransactionRef?.Trim(),
+            Note = dto.Note?.Trim(),
+            Cashier = dto.Cashier ?? "Thu ngân",
+            CreatedBy = "api"
+        };
+        var id = await svc.CreatePaymentAsync(payment);
+        return Results.Ok(new { paymentId = id, paymentNo = payment.PaymentNo, paymentAmount = payment.PaymentAmount, message = "Đã lập phiếu thu thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/payments/{id:int}/status", async (int id, TransitionPaymentDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionPaymentStatusAsync(id, dto.ToStatus, dto.Cashier, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/payments/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeletePaymentAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -644,3 +752,5 @@ record CreateStockOutItemDto(int PartId, decimal Quantity, decimal? UnitPrice, d
 record TransitionStockOutDto(StockOutStatus ToStatus, string? ApprovedBy, string? Note);
 record CreateCustomerCareDto(int RoId, string? InternalNote, string? CreatedBy);
 record SubmitCareSurveyDto(CustomerCareStatus Status, bool HasCarProblem, int? QualityRating, int? StaffRating, bool? WillingToReturn, int? FacilityRating, string? CustomerFeedback, string? InternalNote, string? ContactedBy);
+record CreatePaymentDto(int RoId, DateTime? PaymentDate, PaymentMethod Method, PaymentStatus? Status, string? PayPersonName, string? PayPersonPhone, string? PayPersonIdCard, decimal? DiscountAmount, decimal? PaymentAmount, string? TransactionRef, string? Note, string? Cashier);
+record TransitionPaymentDto(PaymentStatus ToStatus, string? Cashier, string? Note);

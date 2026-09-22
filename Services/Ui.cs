@@ -122,4 +122,57 @@ public static class Ui
         3 => "Cần nâng cấp / cải thiện",
         _ => "—"
     };
+
+    public static (string text, string code, string css) PaymentStatus(PaymentStatus s) => s switch
+    {
+        Models.PaymentStatus.Draft => ("Lập phiếu", "DRAFT", "warning"),
+        Models.PaymentStatus.Completed => ("Đã thu tiền", "COMP", "success"),
+        Models.PaymentStatus.Cancelled => ("Đã hủy", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) PaymentMethod(PaymentMethod m) => m switch
+    {
+        Models.PaymentMethod.Cash => ("Tiền mặt", "bi-cash", "success"),
+        Models.PaymentMethod.BankTransfer => ("Chuyển khoản", "bi-bank", "primary"),
+        Models.PaymentMethod.PosCard => ("Quẹt thẻ POS", "bi-credit-card", "info"),
+        Models.PaymentMethod.Insurance => ("Bảo hiểm bảo lãnh", "bi-shield-check", "warning"),
+        Models.PaymentMethod.Internal => ("Nội bộ hỗ trợ", "bi-building", "secondary"),
+        _ => (m.ToString(), "bi-cash", "secondary")
+    };
+
+    public static string MoneyToWords(decimal total)
+    {
+        if (total <= 0) return "Không đồng";
+        long number = (long)Math.Round(total);
+        string[] units = ["", "nghìn", "triệu", "tỷ", "nghìn tỷ", "triệu tỷ"];
+        string[] digits = ["không", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
+
+        string ReadThreeDigits(int n, bool full)
+        {
+            int h = n / 100, t = (n % 100) / 10, u = n % 10;
+            if (n == 0) return full ? "không trăm" : "";
+            var sb = new System.Text.StringBuilder();
+            if (h > 0 || full) sb.Append(digits[h] + " trăm ");
+            if (t > 1) { sb.Append(digits[t] + " mươi "); if (u == 1) sb.Append("mốt"); else if (u == 5) sb.Append("lăm"); else if (u > 0) sb.Append(digits[u]); }
+            else if (t == 1) { sb.Append("mười "); if (u == 5) sb.Append("lăm"); else if (u > 0) sb.Append(digits[u]); }
+            else if (u > 0) { if (h > 0 || full) sb.Append("lẻ "); sb.Append(digits[u]); }
+            return sb.ToString().Trim();
+        }
+
+        var groups = new List<int>();
+        while (number > 0) { groups.Add((int)(number % 1000)); number /= 1000; }
+        var result = new List<string>();
+        for (int i = groups.Count - 1; i >= 0; i--)
+        {
+            if (groups[i] == 0) continue;
+            var text = ReadThreeDigits(groups[i], i < groups.Count - 1);
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                result.Add(text + (i > 0 ? " " + units[i] : ""));
+            }
+        }
+        var str = string.Join(" ", result).Trim() + " đồng chẵn";
+        return char.ToUpper(str[0]) + str.Substring(1);
+    }
 }

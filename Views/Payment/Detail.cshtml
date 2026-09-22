@@ -1,0 +1,270 @@
+@model Payment
+@{
+    ViewData["Title"] = $"Phiếu thu {Model.PaymentNo}";
+    var (stText, stCode, stCss) = Ui.PaymentStatus(Model.Status);
+    var (mText, mIcon, mCss) = Ui.PaymentMethod(Model.Method);
+    var next = (PaymentStatus[])ViewBag.Next;
+    var deletable = Model.Status is PaymentStatus.Draft or PaymentStatus.Cancelled;
+}
+
+<style>
+    @@media print {
+        .sidebar, .topbar, .action-sidebar, .no-print { display: none !important; }
+        .main-content { margin-left: 0 !important; padding: 0 !important; }
+        .content-area { padding: 0 !important; }
+        .receipt-card { border: none !important; box-shadow: none !important; width: 100% !important; margin: 0 !important; }
+        body { background: #fff !important; }
+    }
+    .receipt-box {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 32px;
+    }
+    .receipt-header {
+        border-bottom: 2px solid #1e3a8a;
+        padding-bottom: 16px;
+        margin-bottom: 24px;
+    }
+    .receipt-title {
+        color: #1e3a8a;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .sign-box {
+        margin-top: 40px;
+        text-align: center;
+    }
+    .sign-space {
+        height: 70px;
+    }
+</style>
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="receipt-box receipt-card shadow-sm">
+            <!-- Header Phiếu Thu -->
+            <div class="receipt-header d-flex justify-content-between align-items-start">
+                <div>
+                    <h5 class="fw-bold mb-1 text-primary"><i class="bi bi-tools me-1"></i>HYUNDAI 3S SERVICE CENTER</h5>
+                    <div class="text-muted small">Đại lý Dịch vụ Ủy quyền Hyundai Car Service</div>
+                    <div class="text-muted small">Hotline Dịch vụ: 1900 6868 · CSKH: 024.3988.9999</div>
+                </div>
+                <div class="text-end">
+                    <div class="badge bg-light text-dark border p-2 mb-1 text-uppercase" style="font-size:11px">
+                        Mẫu số 01 - TT<br />(Ban hành theo TT 200/2014/TT-BTC)
+                    </div>
+                    <div class="text-muted small">Số: <strong class="text-primary font-monospace">@Model.PaymentNo</strong></div>
+                    <div class="text-muted small">Ngày thu: <strong>@Model.PaymentDate.ToString("dd/MM/yyyy")</strong></div>
+                </div>
+            </div>
+
+            <!-- Tiêu đề chính -->
+            <div class="text-center my-3">
+                <h4 class="receipt-title mb-1">PHIẾU THU TIỀN DỊCH VỤ SỬA CHỮA</h4>
+                <div class="text-muted small">Liên 2: Giao cho khách hàng thanh toán</div>
+                <div class="mt-2">
+                    <span class="badge bg-@stCss px-3 py-1">@stText (@stCode)</span>
+                    <span class="badge bg-light text-@mCss border border-@mCss px-3 py-1 ms-1"><i class="bi @mIcon me-1"></i>@mText</span>
+                </div>
+            </div>
+
+            <!-- Thông tin khách hàng & xe -->
+            <div class="table-responsive my-3">
+                <table class="table table-borderless table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td style="width:28%" class="text-muted">Họ và tên người nộp tiền:</td>
+                            <td class="fw-bold">@Model.PayPersonName</td>
+                            <td style="width:20%" class="text-muted">Số điện thoại:</td>
+                            <td>@(Model.PayPersonPhone ?? "—")</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Khách hàng / Chủ sở hữu:</td>
+                            <td class="fw-semibold">@Model.Customer.Name</td>
+                            <td class="text-muted">Số CCCD / CMND:</td>
+                            <td>@(Model.PayPersonIdCard ?? "—")</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Biển số xe:</td>
+                            <td><span class="badge bg-light text-dark border fw-bold">@Model.Car.Plate</span> <span class="text-muted ms-1">(@Model.Car.Model)</span></td>
+                            <td class="text-muted">Số VIN / Khung:</td>
+                            <td class="font-monospace small">@(Model.Car.Vin ?? "—")</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Lệnh sửa chữa (RO):</td>
+                            <td colspan="3">
+                                <a href="/RO/Detail/@Model.ROId" class="badge bg-light text-primary border text-decoration-none">
+                                    <i class="bi bi-clipboard2-pulse me-1"></i>@Model.RO.Code
+                                </a>
+                                <span class="text-muted ms-2 small">(Số km nhận xe: @Model.RO.Odometer.ToString("N0") km · KTV: @(Model.RO.Technician ?? "—"))</span>
+                            </td>
+                        </tr>
+                        @if (!string.IsNullOrWhiteSpace(Model.TransactionRef))
+                        {
+                            <tr>
+                                <td class="text-muted">Mã GD / Chuẩn chi POS:</td>
+                                <td colspan="3" class="font-monospace text-primary fw-semibold">
+                                    <i class="bi bi-hash"></i>@Model.TransactionRef
+                                </td>
+                            </tr>
+                        }
+                        <tr>
+                            <td class="text-muted">Lý do thu tiền:</td>
+                            <td colspan="3">@(string.IsNullOrWhiteSpace(Model.Note) ? $"Thanh toán chi phí dịch vụ sửa chữa và phụ tùng theo Lệnh RO {Model.RO.Code}" : Model.Note)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Bảng kê quyết toán số tiền -->
+            <div class="table-responsive my-3">
+                <table class="table table-bordered align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nội dung thanh toán</th>
+                            <th class="text-end" style="width:220px">Số tiền (VNĐ)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Tổng chi phí sửa chữa theo Lệnh RO (Tiền công + Phụ tùng)</td>
+                            <td class="text-end fw-semibold">@Model.RoTotalAmount.ToString("N0")đ</td>
+                        </tr>
+                        @if (Model.ThirdPartyAmount > 0)
+                        {
+                            <tr>
+                                <td class="text-primary"><i class="bi bi-shield-check me-1"></i>Hãng bảo hành chi trả (Warranty Claim)</td>
+                                <td class="text-end text-primary fw-semibold">-@Model.ThirdPartyAmount.ToString("N0")đ</td>
+                            </tr>
+                        }
+                        @if (Model.DiscountAmount > 0)
+                        {
+                            <tr>
+                                <td class="text-warning"><i class="bi bi-tag me-1"></i>Chiết khấu / Giảm giá trực tiếp</td>
+                                <td class="text-end text-warning fw-semibold">-@Model.DiscountAmount.ToString("N0")đ</td>
+                            </tr>
+                        }
+                        <tr class="table-light">
+                            <td class="fw-bold">Số tiền khách hàng cần thanh toán (Payable)</td>
+                            <td class="text-end fw-bold">@Model.PayableAmount.ToString("N0")đ</td>
+                        </tr>
+                        <tr class="table-success border-success">
+                            <td class="fw-bold fs-6 text-success"><i class="bi bi-check-circle me-1"></i>SỐ TIỀN THỰC THU (PAYMENT AMOUNT)</td>
+                            <td class="text-end fw-bold fs-5 text-success">@Model.PaymentAmount.ToString("N0")đ</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Số tiền bằng chữ -->
+            <div class="p-3 bg-light rounded border mb-4">
+                <div class="small text-muted mb-1">Viết bằng chữ:</div>
+                <div class="fw-bold text-dark font-italic fs-6">
+                    <i class="bi bi-chat-left-quote me-1 text-primary"></i>@Ui.MoneyToWords(Model.PaymentAmount)
+                </div>
+            </div>
+
+            <!-- Chữ ký các bên -->
+            <div class="row sign-box">
+                <div class="col-4">
+                    <div class="fw-bold">Người nộp tiền</div>
+                    <div class="text-muted small">(Ký, ghi rõ họ tên)</div>
+                    <div class="sign-space"></div>
+                    <div class="fw-semibold small">@Model.PayPersonName</div>
+                </div>
+                <div class="col-4">
+                    <div class="fw-bold">Kế toán / Thủ quỹ</div>
+                    <div class="text-muted small">(Ký, ghi rõ họ tên)</div>
+                    <div class="sign-space"></div>
+                    <div class="fw-semibold small">Trần Mai Anh</div>
+                </div>
+                <div class="col-4">
+                    <div class="fw-bold">Thu ngân lập phiếu</div>
+                    <div class="text-muted small">(Ký, ghi rõ họ tên)</div>
+                    <div class="sign-space"></div>
+                    <div class="fw-semibold small text-primary">@Model.Cashier</div>
+                </div>
+            </div>
+
+            <!-- Footer note -->
+            <div class="mt-4 pt-3 border-top text-center text-muted small" style="font-size:11.5px">
+                <em>* Phiếu thu có giá trị xác nhận đại lý đã nhận đủ số tiền nêu trên. Quý khách vui lòng kiểm tra lại biên lai trước khi rời quầy.</em>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Sidebar -->
+    <div class="col-lg-4 action-sidebar">
+        <div class="card mb-3"><div class="card-body">
+            <h6 class="fw-bold mb-3"><i class="bi bi-sliders me-1"></i>Thao tác phiếu thu</h6>
+
+            <button onclick="window.print()" class="btn btn-outline-primary w-100 mb-2">
+                <i class="bi bi-printer me-1"></i>In phiếu thu (Print)
+            </button>
+
+            @if (next.Length == 0)
+            {
+                <div class="alert alert-secondary small mb-2">Phiếu thu ở trạng thái kết thúc (@stText).</div>
+            }
+
+            @foreach (var n in next)
+            {
+                var (nt, nc, ncss) = Ui.PaymentStatus(n);
+                <form asp-action="Transition" method="post" class="mb-2">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <input type="hidden" name="to" value="@((int)n)" />
+                    @if (n == PaymentStatus.Completed)
+                    {
+                        <button class="btn btn-success w-100 text-start" onclick="return confirm('Xác nhận đã thu đủ số tiền @Model.PaymentAmount.ToString("N0")đ và chuyển RO sang PAID?')">
+                            <i class="bi bi-check-circle me-1"></i>Xác nhận đã thu tiền <span class="badge bg-light text-success float-end">COMP</span>
+                        </button>
+                    }
+                    else if (n == PaymentStatus.Cancelled)
+                    {
+                        <div class="input-group mb-2">
+                            <input name="note" class="form-control form-control-sm" placeholder="Lý do hủy phiếu thu..." />
+                            <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Bạn có chắc chắn muốn hủy phiếu thu này?')">Hủy phiếu</button>
+                        </div>
+                    }
+                </form>
+            }
+
+            @if (deletable)
+            {
+                <form asp-action="Delete" method="post" onsubmit="return confirm('Xóa phiếu thu này? Thao tác này không thể hoàn tác.')" class="mt-2 pt-2 border-top">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <button class="btn btn-outline-danger w-100 btn-sm"><i class="bi bi-trash me-1"></i>Xóa phiếu thu</button>
+                </form>
+            }
+        </div></div>
+
+        <!-- Chi tiết Lệnh sửa chữa -->
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-clipboard2-pulse text-primary me-1"></i>Lệnh sửa chữa RO</h6>
+                <a href="/RO/Detail/@Model.ROId" class="btn btn-sm btn-link p-0">Chi tiết RO <i class="bi bi-arrow-right"></i></a>
+            </div>
+            <div class="small">
+                <div><strong>Mã RO:</strong> @Model.RO.Code</div>
+                <div><strong>Trạng thái RO:</strong> <span class="badge bg-info">@Ui.Status(Model.RO.Status).text</span></div>
+                <div><strong>Hạng mục CV:</strong> @Model.RO.Lines.Count dòng (Công: @Model.RO.LaborTotal.ToString("N0")đ, VT: @Model.RO.PartTotal.ToString("N0")đ)</div>
+                <div><strong>Tổng tiền RO:</strong> @Model.RO.Total.ToString("N0")đ</div>
+            </div>
+        </div></div>
+
+        <!-- Thông tin hệ thống -->
+        <div class="card"><div class="card-body small text-muted">
+            <h6 class="fw-bold text-dark mb-2"><i class="bi bi-info-circle me-1"></i>Nhật ký hệ thống</h6>
+            <div><strong>Người tạo:</strong> @Model.CreatedBy</div>
+            <div><strong>Thời gian tạo:</strong> @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+            @if (Model.CompletedAt.HasValue)
+            {
+                <div class="text-success"><strong>Thời gian thu tiền:</strong> @Model.CompletedAt.Value.ToString("dd/MM/yyyy HH:mm")</div>
+            }
+        </div></div>
+    </div>
+</div>
