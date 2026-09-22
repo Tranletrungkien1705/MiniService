@@ -151,6 +151,12 @@ public static class Ui
         _ => (s.ToString(), "", "secondary")
     };
 
+    public static (string text, string css) PackageScope(bool isPublic) =>
+        isPublic ? ("Toàn hệ thống", "primary") : ("Nội bộ đại lý", "secondary");
+
+    public static (string text, string css) PackageActive(bool isActive) =>
+        isActive ? ("Đang áp dụng", "success") : ("Tạm dừng", "secondary");
+
     public static string MoneyToWords(decimal total)
     {
         if (total <= 0) return "Không đồng";

@@ -113,7 +113,16 @@ public class ROController(IRoService svc) : Controller
         if (ro == null) return NotFound();
         ViewBag.Next = RoService.AllowedNext(ro.Status);
         ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.ServicePackages = await svc.ServicePackagesForSelectAsync();
         return View(ro);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyPackage(int id, int packageId)
+    {
+        var (ok, msg, _) = await svc.ApplyServicePackageToROAsync(packageId, id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -841,7 +850,16 @@ public class QuoteController(IRoService svc) : Controller
         var quote = await svc.GetQuoteAsync(id);
         if (quote == null) return NotFound();
         ViewBag.Next = RoService.AllowedNextQuote(quote.Status);
+        ViewBag.ServicePackages = await svc.ServicePackagesForSelectAsync();
         return View(quote);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyPackage(int id, int packageId)
+    {
+        var (ok, msg, _) = await svc.ApplyServicePackageToQuoteAsync(packageId, id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
     }
 
     public async Task<IActionResult> Print(int id)
@@ -889,6 +907,132 @@ public class QuoteController(IRoService svc) : Controller
         var (ok, msg) = await svc.DeleteQuoteAsync(id);
         TempData[ok ? "Success" : "Error"] = msg;
         return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
+public class ServicePackageController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? isPublic, bool? isActive)
+    {
+        ViewBag.Q = q;
+        ViewBag.IsPublic = isPublic;
+        ViewBag.IsActive = isActive;
+        var list = await svc.ServicePackagesAsync(q, isPublic, isActive);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string packageNo, string name, decimal takingTimeHours, string? description, bool isPublic, bool isActive,
+        int[] itemTypes, int[]? partIds, string[]? codes, string[]? names, string[]? units, decimal[]? quantities, decimal[]? unitPrices, decimal[]? vatPercents, int[]? expenseTypes, string[]? notes)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            TempData["Error"] = "Vui lòng nhập tên gói dịch vụ.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+
+        try
+        {
+            var package = new ServicePackage
+            {
+                PackageNo = packageNo?.Trim() ?? "",
+                Name = name.Trim(),
+                TakingTimeHours = takingTimeHours > 0 ? takingTimeHours : 1.0m,
+                Description = description?.Trim(),
+                IsPublic = isPublic,
+                IsActive = isActive,
+                CreatedBy = "web"
+            };
+
+            var items = new List<ServicePackageItem>();
+            if (itemTypes != null && itemTypes.Length > 0)
+            {
+                for (int i = 0; i < itemTypes.Length; i++)
+                {
+                    var type = (LineType)itemTypes[i];
+                    var pid = (partIds != null && partIds.Length > i && partIds[i] > 0) ? (int?)partIds[i] : null;
+                    var c = (codes != null && codes.Length > i) ? codes[i]?.Trim() ?? "" : "";
+                    var n = (names != null && names.Length > i) ? names[i]?.Trim() ?? "" : "";
+                    var u = (units != null && units.Length > i) ? units[i]?.Trim() ?? (type == LineType.Labor ? "Lần" : "Cái") : (type == LineType.Labor ? "Lần" : "Cái");
+                    var q = (quantities != null && quantities.Length > i && quantities[i] > 0) ? quantities[i] : 1;
+                    var p = (unitPrices != null && unitPrices.Length > i && unitPrices[i] >= 0) ? unitPrices[i] : 0;
+                    var vat = (vatPercents != null && vatPercents.Length > i && vatPercents[i] >= 0) ? vatPercents[i] : 8;
+                    var exp = (expenseTypes != null && expenseTypes.Length > i) ? (ExpenseType)expenseTypes[i] : ExpenseType.Customer;
+                    var note = (notes != null && notes.Length > i) ? notes[i]?.Trim() : null;
+
+                    if (string.IsNullOrWhiteSpace(n) && !pid.HasValue) continue;
+
+                    items.Add(new ServicePackageItem
+                    {
+                        Type = type,
+                        PartId = pid,
+                        Code = c,
+                        Name = n,
+                        Unit = u,
+                        Quantity = q,
+                        UnitPrice = p,
+                        VatPercent = vat,
+                        ExpenseType = exp,
+                        Note = note
+                    });
+                }
+            }
+
+            var id = await svc.CreateServicePackageAsync(package, items);
+            TempData["Success"] = $"Đã tạo gói dịch vụ '{package.PackageNo} - {package.Name}' ({items.Count} hạng mục).";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var package = await svc.GetServicePackageAsync(id);
+        if (package == null) return NotFound();
+        var openStatuses = new[] { ROStatus.Created, ROStatus.Printed, ROStatus.HasRO, ROStatus.Wait4Part, ROStatus.HasPart, ROStatus.InGarage };
+        var allROs = await svc.ROsAsync(null, null);
+        ViewBag.EligibleROs = allROs.Where(r => openStatuses.Contains(r.Status)).OrderByDescending(r => r.CreatedAt).ToList();
+        var allQuotes = await svc.QuotesAsync(null, null, null, null);
+        ViewBag.EligibleQuotes = allQuotes.Where(q => q.Status is QuoteStatus.Draft or QuoteStatus.Sent or QuoteStatus.Confirmed).OrderByDescending(q => q.QuoteDate).ToList();
+        return View(package);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyToRO(int id, int roId)
+    {
+        var (ok, msg, _) = await svc.ApplyServicePackageToROAsync(id, roId);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok) return RedirectToAction("Detail", "RO", new { id = roId });
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyToQuote(int id, int quoteId)
+    {
+        var (ok, msg, _) = await svc.ApplyServicePackageToQuoteAsync(id, quoteId);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok) return RedirectToAction("Detail", "Quote", new { id = quoteId });
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteServicePackageAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
     }
 }
 

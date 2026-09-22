@@ -25,6 +25,8 @@ public class AppDbContext : DbContext
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Quote> Quotes => Set<Quote>();
     public DbSet<QuoteItem> QuoteItems => Set<QuoteItem>();
+    public DbSet<ServicePackage> ServicePackages => Set<ServicePackage>();
+    public DbSet<ServicePackageItem> ServicePackageItems => Set<ServicePackageItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -173,6 +175,25 @@ public class AppDbContext : DbContext
             e.Property(x => x.Quantity).HasPrecision(18, 2);
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.Property(x => x.DiscountPercent).HasPrecision(5, 2);
+            e.Property(x => x.VatPercent).HasPrecision(5, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ServicePackage>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PackageNo }).IsUnique();
+            e.Property(x => x.TakingTimeHours).HasPrecision(5, 2);
+            e.Ignore(x => x.LaborSubTotal); e.Ignore(x => x.PartSubTotal);
+            e.Ignore(x => x.SubTotal); e.Ignore(x => x.TotalVat); e.Ignore(x => x.Total);
+            e.Ignore(x => x.ItemCount); e.Ignore(x => x.LaborCount); e.Ignore(x => x.PartCount);
+            e.HasMany(x => x.Items).WithOne(x => x.ServicePackage).HasForeignKey(x => x.ServicePackageId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ServicePackageItem>(e =>
+        {
+            e.Ignore(x => x.SubTotal); e.Ignore(x => x.VatAmount); e.Ignore(x => x.Amount);
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.Property(x => x.VatPercent).HasPrecision(5, 2);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);

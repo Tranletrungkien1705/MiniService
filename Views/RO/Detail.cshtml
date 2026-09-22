@@ -4,6 +4,7 @@
     var (stTxt, stCode, stCss) = Ui.Status(Model.Status);
     var next = (ROStatus[])ViewBag.Next;
     var parts = (List<Part>?)ViewBag.Parts ?? [];
+    var servicePackages = (List<ServicePackage>?)ViewBag.ServicePackages ?? [];
     bool editable = Model.Status is not (ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding);
     bool deletable = Model.Status is ROStatus.Created or ROStatus.Printed or ROStatus.Rejected or ROStatus.NotResponding;
 }
@@ -27,7 +28,15 @@
         </div></div>
 
         <div class="card"><div class="card-body">
-            <h6 class="fw-bold mb-3">Chi tiết công &amp; phụ tùng</h6>
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="fw-bold mb-0">Chi tiết công &amp; phụ tùng</h6>
+                @if (editable && servicePackages.Count > 0)
+                {
+                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#applyPackageModal">
+                        <i class="bi bi-collection me-1"></i>Áp dụng gói bảo dưỡng
+                    </button>
+                }
+            </div>
             <table class="table align-middle">
                 <thead><tr><th>Loại</th><th>Đối tượng TT</th><th>Nội dung</th><th class="text-end">SL</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th><th></th></tr></thead>
                 <tbody>
@@ -286,6 +295,42 @@
         </div></div>
     </div>
 </div>
+
+@if (editable && servicePackages.Count > 0)
+{
+    <div class="modal fade" id="applyPackageModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-action="ApplyPackage" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold"><i class="bi bi-collection text-primary me-2"></i>Áp dụng gói bảo dưỡng vào RO</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small">Chọn gói bảo dưỡng chuẩn. Hệ thống sẽ tự động thêm tất cả các dòng tiền công và phụ tùng trong gói vào lệnh sửa chữa <b>@Model.Code</b>.</p>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Gói bảo dưỡng định kỳ</label>
+                            <select name="packageId" class="form-select" required>
+                                <option value="">-- Chọn gói bảo dưỡng --</option>
+                                @foreach (var p in servicePackages)
+                                {
+                                    <option value="@p.Id">[@p.PackageNo] @p.Name (@p.TakingTimeHours:0.#h · @p.Items.Count mục · @p.Total.ToString("N0")đ)</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Xác nhận áp dụng</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
+
 @section Scripts {
 <script>
 function onPartChange(sel) {

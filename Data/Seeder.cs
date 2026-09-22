@@ -652,13 +652,107 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        if (!await db.ServicePackages.AnyAsync())
+        {
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+            var pFilter = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pAir = await db.Parts.FirstOrDefaultAsync(p => p.Code == "28113-1R100");
+            var pCabin = await db.Parts.FirstOrDefaultAsync(p => p.Code == "97133-D3000");
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+            var pSpark = await db.Parts.FirstOrDefaultAsync(p => p.Code == "18846-11070");
+
+            var packages = new List<ServicePackage>();
+
+            // 1. Gói BD Cấp 1 (5.000 km)
+            packages.Add(new ServicePackage
+            {
+                PackageNo = "PKG-BD-5K",
+                Name = "Gói bảo dưỡng định kỳ Cấp 1 (5.000 km)",
+                TakingTimeHours = 0.8m,
+                Description = "Kiểm tra tổng quát 20 hạng mục tiêu chuẩn Hyundai, thay dầu máy & lọc nhớt động cơ chính hãng.",
+                IsPublic = true,
+                IsActive = true,
+                CreatedBy = "system",
+                CreatedAt = DateTime.Now.AddDays(-30),
+                Items = [
+                    new ServicePackageItem { Type = LineType.Labor, Code = "SRV-BD-01", Name = "Công bảo dưỡng cấp 1 (kiểm tra gầm, siết ốc, áp suất lốp, nước rửa kính)", Unit = "Lần", Quantity = 1, UnitPrice = 250000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Định mức 0.8 giờ công" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pOil?.Id, Code = pOil?.Code ?? "05100-00441", Name = pOil?.Name ?? "Dầu nhờn động cơ Hyundai 5W-30 (Can 4L)", Unit = pOil?.Unit ?? "Can", Quantity = 1, UnitPrice = pOil?.SalePrice ?? 650000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Dầu nhớt chính hãng HTC" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pFilter?.Id, Code = pFilter?.Code ?? "26300-35505", Name = pFilter?.Name ?? "Lọc dầu động cơ chính hãng Hyundai", Unit = pFilter?.Unit ?? "Cái", Quantity = 1, UnitPrice = pFilter?.SalePrice ?? 180000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Thay mới lọc dầu" }
+                ]
+            });
+
+            // 2. Gói BD Cấp 2 (10.000 km)
+            packages.Add(new ServicePackage
+            {
+                PackageNo = "PKG-BD-10K",
+                Name = "Gói bảo dưỡng định kỳ Cấp 2 (10.000 km)",
+                TakingTimeHours = 1.2m,
+                Description = "Bao gồm cấp 1 + Vệ sinh lọc gió động cơ, lọc gió máy lạnh, bảo dưỡng 4 cụm phanh đĩa và đảo lốp cân mâm.",
+                IsPublic = true,
+                IsActive = true,
+                CreatedBy = "system",
+                CreatedAt = DateTime.Now.AddDays(-25),
+                Items = [
+                    new ServicePackageItem { Type = LineType.Labor, Code = "SRV-BD-02", Name = "Công bảo dưỡng cấp 2, bảo dưỡng hệ thống phanh 4 bánh & đảo lốp", Unit = "Lần", Quantity = 1, UnitPrice = 380000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Định mức 1.2 giờ công" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pOil?.Id, Code = pOil?.Code ?? "05100-00441", Name = pOil?.Name ?? "Dầu nhờn động cơ Hyundai 5W-30 (Can 4L)", Unit = pOil?.Unit ?? "Can", Quantity = 1, UnitPrice = pOil?.SalePrice ?? 650000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Dầu nhớt chính hãng" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pFilter?.Id, Code = pFilter?.Code ?? "26300-35505", Name = pFilter?.Name ?? "Lọc dầu động cơ chính hãng Hyundai", Unit = pFilter?.Unit ?? "Cái", Quantity = 1, UnitPrice = pFilter?.SalePrice ?? 180000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Thay mới lọc dầu" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pAir?.Id, Code = pAir?.Code ?? "28113-1R100", Name = pAir?.Name ?? "Lọc gió động cơ Hyundai Accent", Unit = pAir?.Unit ?? "Cái", Quantity = 1, UnitPrice = pAir?.SalePrice ?? 240000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Vệ sinh hoặc thay mới lọc gió" }
+                ]
+            });
+
+            // 3. Gói BD Cấp 3 (20.000 km)
+            packages.Add(new ServicePackage
+            {
+                PackageNo = "PKG-BD-20K",
+                Name = "Gói bảo dưỡng định kỳ Cấp 3 (20.000 km)",
+                TakingTimeHours = 1.8m,
+                Description = "Bảo dưỡng trung bình: Thay dầu nhớt, lọc dầu, lọc gió động cơ, lọc gió cabin máy lạnh than hoạt tính, vệ sinh kim phun buồng đốt.",
+                IsPublic = true,
+                IsActive = true,
+                CreatedBy = "system",
+                CreatedAt = DateTime.Now.AddDays(-20),
+                Items = [
+                    new ServicePackageItem { Type = LineType.Labor, Code = "SRV-BD-03", Name = "Công bảo dưỡng cấp 3 toàn diện khoang máy, hệ thống phanh và gầm xe", Unit = "Lần", Quantity = 1, UnitPrice = 520000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Định mức 1.8 giờ công" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pOil?.Id, Code = pOil?.Code ?? "05100-00441", Name = pOil?.Name ?? "Dầu nhờn động cơ Hyundai 5W-30 (Can 4L)", Unit = pOil?.Unit ?? "Can", Quantity = 1, UnitPrice = pOil?.SalePrice ?? 650000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Dầu nhớt chính hãng" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pFilter?.Id, Code = pFilter?.Code ?? "26300-35505", Name = pFilter?.Name ?? "Lọc dầu động cơ chính hãng Hyundai", Unit = pFilter?.Unit ?? "Cái", Quantity = 1, UnitPrice = pFilter?.SalePrice ?? 180000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Thay mới lọc dầu" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pAir?.Id, Code = pAir?.Code ?? "28113-1R100", Name = pAir?.Name ?? "Lọc gió động cơ Hyundai Accent", Unit = pAir?.Unit ?? "Cái", Quantity = 1, UnitPrice = pAir?.SalePrice ?? 240000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Thay mới lọc gió động cơ" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pCabin?.Id, Code = pCabin?.Code ?? "97133-D3000", Name = pCabin?.Name ?? "Lọc gió điều hòa than hoạt tính", Unit = pCabin?.Unit ?? "Cái", Quantity = 1, UnitPrice = pCabin?.SalePrice ?? 280000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Khử mùi diệt khuẩn điều hòa" }
+                ]
+            });
+
+            // 4. Gói BD Cấp 4 (40.000 km) - Đại tu định kỳ
+            packages.Add(new ServicePackage
+            {
+                PackageNo = "PKG-BD-40K",
+                Name = "Gói bảo dưỡng định kỳ Cấp 4 (40.000 km) — Đại dưỡng toàn diện",
+                TakingTimeHours = 3.0m,
+                Description = "Gói bảo dưỡng lớn cao cấp theo khuyến cáo Hyundai Motor: Thay dầu máy, lọc dầu, lọc gió động cơ, lọc gió điều hòa than hoạt tính, thay 4 bugi Iridium mới, thay má phanh đĩa.",
+                IsPublic = true,
+                IsActive = true,
+                CreatedBy = "system",
+                CreatedAt = DateTime.Now.AddDays(-15),
+                Items = [
+                    new ServicePackageItem { Type = LineType.Labor, Code = "SRV-BD-04", Name = "Công đại dưỡng toàn diện cấp 40.000km (khoang động cơ, gầm, phanh, bugi, điện)", Unit = "Lần", Quantity = 1, UnitPrice = 900000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Định mức 3.0 giờ công thợ bậc cao" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pOil?.Id, Code = pOil?.Code ?? "05100-00441", Name = pOil?.Name ?? "Dầu nhờn động cơ Hyundai 5W-30 (Can 4L)", Unit = pOil?.Unit ?? "Can", Quantity = 1, UnitPrice = pOil?.SalePrice ?? 650000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Dầu nhớt chính hãng" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pFilter?.Id, Code = pFilter?.Code ?? "26300-35505", Name = pFilter?.Name ?? "Lọc dầu động cơ chính hãng Hyundai", Unit = pFilter?.Unit ?? "Cái", Quantity = 1, UnitPrice = pFilter?.SalePrice ?? 180000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Thay mới lọc dầu" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pAir?.Id, Code = pAir?.Code ?? "28113-1R100", Name = pAir?.Name ?? "Lọc gió động cơ Hyundai Accent", Unit = pAir?.Unit ?? "Cái", Quantity = 1, UnitPrice = pAir?.SalePrice ?? 240000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Thay mới lọc gió động cơ" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pCabin?.Id, Code = pCabin?.Code ?? "97133-D3000", Name = pCabin?.Name ?? "Lọc gió điều hòa than hoạt tính", Unit = pCabin?.Unit ?? "Cái", Quantity = 1, UnitPrice = pCabin?.SalePrice ?? 280000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Khử mùi diệt khuẩn điều hòa" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pSpark?.Id, Code = pSpark?.Code ?? "18846-11070", Name = pSpark?.Name ?? "Bugi đánh lửa Iridium cao cấp", Unit = pSpark?.Unit ?? "Cái", Quantity = 4, UnitPrice = pSpark?.SalePrice ?? 220000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Bộ 4 bugi đánh lửa Iridium" },
+                    new ServicePackageItem { Type = LineType.Part, PartId = pBrake?.Id, Code = pBrake?.Code ?? "58101-C1A00", Name = pBrake?.Name ?? "Bộ má phanh đĩa trước", Unit = pBrake?.Unit ?? "Bộ", Quantity = 1, UnitPrice = pBrake?.SalePrice ?? 1350000, VatPercent = 8, ExpenseType = ExpenseType.Customer, Note = "Thay má phanh an toàn" }
+                ]
+            });
+
+            db.ServicePackages.AddRange(packages);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -910,7 +1004,37 @@ public static class Seeder
                 FOREIGN KEY (""QuoteId"") REFERENCES ""Quotes"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE SET NULL
             );",
-            @"ALTER TABLE ""StockOuts"" ADD COLUMN ""QuoteId"" INTEGER NULL;"
+            @"ALTER TABLE ""StockOuts"" ADD COLUMN ""QuoteId"" INTEGER NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""ServicePackages"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PackageNo"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""TakingTimeHours"" TEXT NOT NULL,
+                ""Description"" TEXT NULL,
+                ""IsPublic"" INTEGER NOT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ServicePackages_OrgId_PackageNo"" ON ""ServicePackages"" (""OrgId"", ""PackageNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""ServicePackageItems"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ServicePackageId"" INTEGER NOT NULL,
+                ""Type"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NULL,
+                ""Code"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""VatPercent"" TEXT NOT NULL,
+                ""ExpenseType"" INTEGER NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""ServicePackageId"") REFERENCES ""ServicePackages"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE SET NULL
+            );"
         };
 
         foreach (var sql in sqls)

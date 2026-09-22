@@ -4,6 +4,7 @@
     var (stText, stCode, stCss) = Ui.QuoteStatus(Model.Status);
     var (payText, payIcon, payCss) = Ui.PaymentMethod(Model.PaymentMethod);
     var nextStatuses = (QuoteStatus[])ViewBag.Next;
+    var servicePackages = (List<ServicePackage>?)ViewBag.ServicePackages ?? [];
 }
 
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
@@ -53,6 +54,13 @@
 
             @if (Model.Status is QuoteStatus.Confirmed or QuoteStatus.Sent or QuoteStatus.Draft)
             {
+                if (servicePackages.Count > 0)
+                {
+                    <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#applyPackageModal">
+                        <i class="bi bi-collection me-1"></i>Thêm gói bảo dưỡng
+                    </button>
+                }
+
                 <form method="post" action="/Quote/ConvertToStockOut/@Model.Id" class="d-inline" onsubmit="return confirm('Chuyển báo giá này thành Phiếu xuất kho phụ tùng?');">
                     @Html.AntiForgeryToken()
                     <button type="submit" class="btn btn-success">
@@ -295,3 +303,39 @@
         </div>
     </div>
 </div>
+
+@if (servicePackages.Count > 0)
+{
+    <!-- Modal Áp dụng Gói dịch vụ vào Báo giá -->
+    <div class="modal fade" id="applyPackageModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" action="/Quote/ApplyPackage/@Model.Id">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold"><i class="bi bi-collection text-primary me-2"></i>Thêm gói bảo dưỡng vào Báo giá</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-muted mb-3">Chọn gói bảo dưỡng định kỳ tiêu chuẩn để tự động nạp các hạng mục công & phụ tùng vào báo giá <b>@Model.QuoteNo</b>.</p>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Gói bảo dưỡng định kỳ</label>
+                            <select name="packageId" class="form-select" required>
+                                <option value="">-- Chọn gói bảo dưỡng --</option>
+                                @foreach (var p in servicePackages)
+                                {
+                                    <option value="@p.Id">[@p.PackageNo] @p.Name (@p.TakingTimeHours:0.#h · @p.Items.Count mục · @p.Total.ToString("N0")đ)</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Nạp vào báo giá</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}

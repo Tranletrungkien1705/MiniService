@@ -888,6 +888,141 @@ app.MapDelete("/api/quotes/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Gói dịch vụ bảo dưỡng định kỳ (Ser_ServicePackage & Ser_ServicePackageServiceItems / PartItems)
+app.MapGet("/api/servicepackages", async (string? q, bool? isPublic, bool? isActive, IRoService svc) =>
+{
+    var list = await svc.ServicePackagesAsync(q, isPublic, isActive);
+    return Results.Ok(list.Select(p => new
+    {
+        p.Id,
+        p.PackageNo,
+        p.Name,
+        p.TakingTimeHours,
+        p.Description,
+        p.IsPublic,
+        scope = Ui.PackageScope(p.IsPublic).text,
+        p.IsActive,
+        status = Ui.PackageActive(p.IsActive).text,
+        p.ItemCount,
+        p.LaborCount,
+        p.PartCount,
+        p.LaborSubTotal,
+        p.PartSubTotal,
+        p.SubTotal,
+        p.TotalVat,
+        p.Total,
+        p.CreatedBy,
+        p.CreatedAt
+    }));
+});
+
+app.MapGet("/api/servicepackages/{id:int}", async (int id, IRoService svc) =>
+{
+    var p = await svc.GetServicePackageAsync(id);
+    if (p == null) return Results.NotFound(new { error = "Không tìm thấy gói dịch vụ." });
+    return Results.Ok(new
+    {
+        p.Id,
+        p.PackageNo,
+        p.Name,
+        p.TakingTimeHours,
+        p.Description,
+        p.IsPublic,
+        scope = Ui.PackageScope(p.IsPublic).text,
+        p.IsActive,
+        status = Ui.PackageActive(p.IsActive).text,
+        p.ItemCount,
+        p.LaborCount,
+        p.PartCount,
+        p.LaborSubTotal,
+        p.PartSubTotal,
+        p.SubTotal,
+        p.TotalVat,
+        p.Total,
+        p.CreatedBy,
+        p.CreatedAt,
+        items = p.Items.Select(i => new
+        {
+            i.Id,
+            type = Ui.Line(i.Type),
+            typeValue = (int)i.Type,
+            i.PartId,
+            i.Code,
+            i.Name,
+            i.Unit,
+            i.Quantity,
+            i.UnitPrice,
+            i.VatPercent,
+            i.SubTotal,
+            i.VatAmount,
+            i.Amount,
+            expenseType = Ui.Expense(i.ExpenseType).text,
+            expenseTypeValue = (int)i.ExpenseType,
+            i.Note,
+            inStock = i.Part?.InStock
+        })
+    });
+});
+
+app.MapPost("/api/servicepackages", async (CreateServicePackageDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.Name))
+            return Results.BadRequest(new { error = "Vui lòng nhập tên gói dịch vụ (Name)." });
+
+        var package = new ServicePackage
+        {
+            PackageNo = dto.PackageNo?.Trim() ?? "",
+            Name = dto.Name.Trim(),
+            TakingTimeHours = dto.TakingTimeHours ?? 1.0m,
+            Description = dto.Description?.Trim(),
+            IsPublic = dto.IsPublic ?? true,
+            IsActive = dto.IsActive ?? true,
+            CreatedBy = "api"
+        };
+
+        var items = (dto.Items ?? []).Select(i => new ServicePackageItem
+        {
+            Type = i.Type,
+            PartId = (i.PartId.HasValue && i.PartId.Value > 0) ? i.PartId : null,
+            Code = i.Code ?? "",
+            Name = i.Name ?? "",
+            Unit = i.Unit ?? (i.Type == LineType.Labor ? "Lần" : "Cái"),
+            Quantity = i.Quantity <= 0 ? 1 : i.Quantity,
+            UnitPrice = i.UnitPrice,
+            VatPercent = i.VatPercent ?? 8,
+            ExpenseType = i.ExpenseType ?? ExpenseType.Customer,
+            Note = i.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateServicePackageAsync(package, items);
+        return Results.Ok(new { packageId = id, packageNo = package.PackageNo, total = package.Total, message = "Đã tạo gói dịch vụ thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/servicepackages/{id:int}/apply-to-ro", async (int id, ApplyPackageRoDto dto, IRoService svc) =>
+{
+    var (ok, msg, itemsAdded) = await svc.ApplyServicePackageToROAsync(id, dto.RoId);
+    return ok ? Results.Ok(new { message = msg, itemsAdded, roId = dto.RoId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/servicepackages/{id:int}/apply-to-quote", async (int id, ApplyPackageQuoteDto dto, IRoService svc) =>
+{
+    var (ok, msg, itemsAdded) = await svc.ApplyServicePackageToQuoteAsync(id, dto.QuoteId);
+    return ok ? Results.Ok(new { message = msg, itemsAdded, quoteId = dto.QuoteId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/servicepackages/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteServicePackageAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -920,3 +1055,7 @@ record CreateQuoteDto(int? CustomerId, string CustomerName, string? CustomerPhon
 record CreateQuoteItemDto(int? PartId, string? PartCode, string? PartName, string? Unit, decimal Quantity, decimal? UnitPrice, decimal? DiscountPercent, decimal? VatPercent, string? Note);
 record TransitionQuoteDto(QuoteStatus ToStatus);
 record ConvertQuoteRoDto(string? Technician);
+record CreateServicePackageDto(string? PackageNo, string Name, decimal? TakingTimeHours, string? Description, bool? IsPublic, bool? IsActive, List<CreateServicePackageItemDto>? Items);
+record CreateServicePackageItemDto(LineType Type, int? PartId, string? Code, string? Name, string? Unit, decimal Quantity, decimal UnitPrice, decimal? VatPercent, ExpenseType? ExpenseType, string? Note);
+record ApplyPackageRoDto(int RoId);
+record ApplyPackageQuoteDto(int QuoteId);

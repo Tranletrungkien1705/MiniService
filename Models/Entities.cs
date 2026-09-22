@@ -553,3 +553,55 @@ public class QuoteItem : IOrgOwned
     public decimal VatAmount => Math.Round(TaxableAmount * (VatPercent / 100m), 2);
     public decimal Amount => TaxableAmount + VatAmount;
 }
+
+/// <summary>Gói dịch vụ bảo dưỡng định kỳ xe — Ser_ServicePackage trong idn.CarService.</summary>
+public class ServicePackage : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PackageNo { get; set; } = "";             // Mã gói dịch vụ (VD: PKG-BD-5K, PKG-BD-10K)
+    public string Name { get; set; } = "";                  // Tên gói dịch vụ (ServicePackageName)
+    public decimal TakingTimeHours { get; set; } = 1.0m;    // Thời gian định mức dự kiến (giờ) (TakingTime)
+    public string? Description { get; set; }                // Diễn giải / Chi tiết nội dung gói
+    public bool IsPublic { get; set; } = true;              // Cờ áp dụng toàn hệ thống hãng hay riêng đại lý (IsPublicFlag)
+    public bool IsActive { get; set; } = true;              // Đang áp dụng / Tạm dừng
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public List<ServicePackageItem> Items { get; set; } = [];
+
+    public decimal LaborSubTotal => Items.Where(i => i.Type == LineType.Labor).Sum(i => i.Quantity * i.UnitPrice);
+    public decimal PartSubTotal => Items.Where(i => i.Type == LineType.Part).Sum(i => i.Quantity * i.UnitPrice);
+    public decimal SubTotal => Items.Sum(i => i.Quantity * i.UnitPrice);
+    public decimal TotalVat => Items.Sum(i => i.VatAmount);
+    public decimal Total => Items.Sum(i => i.Amount);
+    public int ItemCount => Items.Count;
+    public int LaborCount => Items.Count(i => i.Type == LineType.Labor);
+    public int PartCount => Items.Count(i => i.Type == LineType.Part);
+}
+
+/// <summary>Chi tiết hạng mục công việc / phụ tùng gói dịch vụ — Ser_ServicePackageServiceItems / Ser_ServicePackagePartItems.</summary>
+public class ServicePackageItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ServicePackageId { get; set; }
+    public LineType Type { get; set; }                      // Công thợ (Labor) hoặc Phụ tùng (Part)
+    public int? PartId { get; set; }                        // Liên kết danh mục phụ tùng kho (nếu là Part)
+    public string Code { get; set; } = "";                  // Mã công việc (SerCode) hoặc Mã phụ tùng (PartCode)
+    public string Name { get; set; } = "";                  // Tên công việc hoặc Tên phụ tùng
+    public string Unit { get; set; } = "Lần";               // Đơn vị tính (Lần / Giờ / Cái / Can / Bộ...)
+    public decimal Quantity { get; set; } = 1;              // Số lượng hoặc Số giờ công định mức (ActManHour)
+    public decimal UnitPrice { get; set; }                  // Đơn giá bán trước thuế
+    public decimal VatPercent { get; set; } = 8;            // Thuế suất VAT (%)
+    public ExpenseType ExpenseType { get; set; } = ExpenseType.Customer; // Đối tượng thanh toán
+    public string? Note { get; set; }                       // Ghi chú chi tiết
+
+    public ServicePackage ServicePackage { get; set; } = null!;
+    public Part? Part { get; set; }
+
+    public decimal SubTotal => Quantity * UnitPrice;
+    public decimal VatAmount => Math.Round(SubTotal * (VatPercent / 100m), 2);
+    public decimal Amount => SubTotal + VatAmount;
+}
+

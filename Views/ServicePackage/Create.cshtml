@@ -1,0 +1,309 @@
+@{
+    ViewData["Title"] = "Tạo gói dịch vụ bảo dưỡng";
+    var parts = (List<Part>?)ViewBag.Parts ?? [];
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="fw-bold mb-0"><i class="bi bi-collection text-primary me-2"></i>Tạo gói dịch vụ bảo dưỡng mới</h4>
+        <div class="text-muted small">Thiết lập combo công việc và danh mục phụ tùng thay thế định kỳ theo chuẩn hãng</div>
+    </div>
+    <a href="/ServicePackage" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+</div>
+
+<form method="post" action="/ServicePackage/Create" id="packageForm">
+    @Html.AntiForgeryToken()
+
+    <div class="row g-3 mb-4">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3 text-primary"><i class="bi bi-info-circle me-2"></i>Thông tin cơ bản gói dịch vụ</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Mã gói bảo dưỡng</label>
+                            <input name="packageNo" class="form-control" placeholder="VD: PKG-BD-5K (để trống tự sinh)" />
+                            <div class="form-text">Mã định danh duy nhất (PackageNo)</div>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Tên gói dịch vụ <span class="text-danger">*</span></label>
+                            <input name="name" class="form-control" placeholder="VD: Gói bảo dưỡng định kỳ Cấp 1 (5.000 km)" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Thời gian định mức (giờ)</label>
+                            <input name="takingTimeHours" type="number" step="0.1" class="form-control" value="1.0" min="0.1" />
+                            <div class="form-text">Thời gian thực hiện dự kiến (TakingTime)</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Phạm vi áp dụng</label>
+                            <select name="isPublic" class="form-select">
+                                <option value="true" selected>Toàn hệ thống (HTC)</option>
+                                <option value="false">Nội bộ đại lý</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Trạng thái kích hoạt</label>
+                            <select name="isActive" class="form-select">
+                                <option value="true" selected>Đang áp dụng</option>
+                                <option value="false">Tạm dừng</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Mô tả / Hạng mục kiểm tra tiêu chuẩn</label>
+                            <textarea name="description" class="form-control" rows="2" placeholder="Ghi chú các hạng mục kiểm tra an toàn theo cấp km của hãng..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card shadow-sm border-0 bg-light">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3"><i class="bi bi-calculator me-2"></i>Tổng hợp chi phí dự kiến</h6>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Tổng tiền công thợ:</span>
+                        <span class="fw-semibold" id="sumLabor">0 đ</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Tổng tiền phụ tùng:</span>
+                        <span class="fw-semibold" id="sumPart">0 đ</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Tiền trước thuế:</span>
+                        <span class="fw-semibold" id="sumSubTotal">0 đ</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Tổng thuế VAT:</span>
+                        <span class="fw-semibold" id="sumVat">0 đ</span>
+                    </div>
+                    <hr />
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-bold">TỔNG TRỌN GÓI:</span>
+                        <span class="fw-bold fs-5 text-primary" id="sumGrandTotal">0 đ</span>
+                    </div>
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+                            <i class="bi bi-check-circle me-1"></i>Lưu gói bảo dưỡng
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hạng mục công việc & Phụ tùng -->
+    <div class="card shadow-sm border-0 mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-list-check me-2"></i>Chi tiết tiền công &amp; phụ tùng trong gói</h6>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-info" onclick="addRow(0)">
+                    <i class="bi bi-wrench me-1"></i>Thêm tiền công
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow(1)">
+                    <i class="bi bi-box-seam me-1"></i>Thêm phụ tùng
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered align-middle mb-0" id="itemsTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:10%">Loại</th>
+                            <th style="width:25%">Phụ tùng kho / Nội dung</th>
+                            <th style="width:8%">ĐVT</th>
+                            <th style="width:9%" class="text-center">Số lượng / Giờ</th>
+                            <th style="width:13%" class="text-end">Đơn giá (đ)</th>
+                            <th style="width:8%" class="text-center">VAT (%)</th>
+                            <th style="width:13%" class="text-end">Thành tiền (đ)</th>
+                            <th style="width:11%">Đối tượng TT</th>
+                            <th style="width:3%"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsBody">
+                        <!-- Dynamic rows will be inserted here -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="p-3 text-center text-muted" id="emptyNotice">
+                <i class="bi bi-arrow-up-circle me-1"></i>Nhấn <b>"Thêm tiền công"</b> hoặc <b>"Thêm phụ tùng"</b> để định nghĩa cơ cấu gói bảo dưỡng.
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    var partsList = [
+        @foreach (var p in parts)
+        {
+            <text>{ id: @p.Id, code: "@p.Code", name: "@Html.Raw(p.Name.Replace("\"", "\\\""))", unit: "@p.Unit", price: @p.SalePrice, inStock: @p.InStock },</text>
+        }
+    ];
+
+    var rowIndex = 0;
+
+    function addRow(type) {
+        document.getElementById('emptyNotice').style.display = 'none';
+        var tbody = document.getElementById('itemsBody');
+        var tr = document.createElement('tr');
+        tr.id = 'row_' + rowIndex;
+
+        var typeBadge = type === 0 ? '<span class="badge bg-info">Công thợ</span>' : '<span class="badge bg-primary">Phụ tùng</span>';
+
+        var contentHtml = '';
+        if (type === 1) {
+            contentHtml = `
+                <select name="partIds" class="form-select form-select-sm mb-1" onchange="onSelectPart(${rowIndex}, this)">
+                    <option value="0">-- Chọn phụ tùng kho --</option>
+                    ${partsList.map(p => `<option value="${p.id}" data-code="${p.code}" data-name="${p.name}" data-unit="${p.unit}" data-price="${p.price}">[${p.code}] ${p.name} (${p.price.toLocaleString('vi-VN')}đ)</option>`).join('')}
+                </select>
+                <div class="input-group input-group-sm">
+                    <input type="text" name="codes" id="code_${rowIndex}" class="form-control" placeholder="Mã PT" style="max-width:120px;" />
+                    <input type="text" name="names" id="name_${rowIndex}" class="form-control" placeholder="Tên phụ tùng" required />
+                </div>
+            `;
+        } else {
+            contentHtml = `
+                <input type="hidden" name="partIds" value="0" />
+                <div class="input-group input-group-sm">
+                    <input type="text" name="codes" id="code_${rowIndex}" class="form-control" placeholder="Mã công (SRV...)" style="max-width:120px;" value="SRV-01" />
+                    <input type="text" name="names" id="name_${rowIndex}" class="form-control" placeholder="Nội dung công việc kiểm tra / bảo dưỡng" required />
+                </div>
+            `;
+        }
+
+        var defaultUnit = type === 0 ? 'Lần' : 'Cái';
+        var defaultPrice = type === 0 ? 250000 : 0;
+
+        tr.innerHTML = `
+            <td class="text-center">
+                <input type="hidden" name="itemTypes" value="${type}" />
+                ${typeBadge}
+            </td>
+            <td>
+                ${contentHtml}
+            </td>
+            <td>
+                <input type="text" name="units" id="unit_${rowIndex}" class="form-control form-control-sm text-center" value="${defaultUnit}" />
+            </td>
+            <td>
+                <input type="number" step="0.01" min="0.01" name="quantities" id="qty_${rowIndex}" class="form-control form-control-sm text-center" value="1" oninput="calcRow(${rowIndex})" />
+            </td>
+            <td>
+                <input type="number" step="1000" min="0" name="unitPrices" id="price_${rowIndex}" class="form-control form-control-sm text-end" value="${defaultPrice}" oninput="calcRow(${rowIndex})" />
+            </td>
+            <td>
+                <input type="number" step="1" min="0" max="100" name="vatPercents" id="vat_${rowIndex}" class="form-control form-control-sm text-center" value="8" oninput="calcRow(${rowIndex})" />
+            </td>
+            <td class="text-end fw-semibold">
+                <span id="amount_${rowIndex}">0 đ</span>
+            </td>
+            <td>
+                <select name="expenseTypes" class="form-select form-select-sm">
+                    <option value="0" selected>Khách trả</option>
+                    <option value="1">Bảo hành</option>
+                    <option value="2">Bảo hiểm</option>
+                    <option value="3">Nội bộ</option>
+                </select>
+                <input type="text" name="notes" class="form-control form-control-sm mt-1" placeholder="Ghi chú" />
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeRow(${rowIndex})"><i class="bi bi-x-lg"></i></button>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+        calcRow(rowIndex);
+        rowIndex++;
+    }
+
+    function onSelectPart(idx, sel) {
+        var opt = sel.options[sel.selectedIndex];
+        if (sel.value > 0) {
+            var code = opt.getAttribute('data-code');
+            var name = opt.getAttribute('data-name');
+            var unit = opt.getAttribute('data-unit');
+            var price = parseFloat(opt.getAttribute('data-price')) || 0;
+
+            document.getElementById('code_' + idx).value = code;
+            document.getElementById('name_' + idx).value = name;
+            document.getElementById('unit_' + idx).value = unit;
+            document.getElementById('price_' + idx).value = price;
+            calcRow(idx);
+        }
+    }
+
+    function removeRow(idx) {
+        var tr = document.getElementById('row_' + idx);
+        if (tr) tr.remove();
+        calcTotals();
+        var tbody = document.getElementById('itemsBody');
+        if (tbody.children.length === 0) {
+            document.getElementById('emptyNotice').style.display = 'block';
+        }
+    }
+
+    function calcRow(idx) {
+        var qty = parseFloat(document.getElementById('qty_' + idx)?.value) || 0;
+        var price = parseFloat(document.getElementById('price_' + idx)?.value) || 0;
+        var vat = parseFloat(document.getElementById('vat_' + idx)?.value) || 0;
+
+        var subTotal = qty * price;
+        var vatAmount = subTotal * (vat / 100);
+        var total = subTotal + vatAmount;
+
+        var span = document.getElementById('amount_' + idx);
+        if (span) span.innerText = Math.round(total).toLocaleString('vi-VN') + ' đ';
+
+        calcTotals();
+    }
+
+    function calcTotals() {
+        var tbody = document.getElementById('itemsBody');
+        var rows = tbody.getElementsByTagName('tr');
+
+        var totalLabor = 0;
+        var totalPart = 0;
+        var subTotal = 0;
+        var totalVat = 0;
+
+        for (var i = 0; i < rows.length; i++) {
+            var tr = rows[i];
+            var typeInput = tr.querySelector('input[name="itemTypes"]');
+            var qtyInput = tr.querySelector('input[name="quantities"]');
+            var priceInput = tr.querySelector('input[name="unitPrices"]');
+            var vatInput = tr.querySelector('input[name="vatPercents"]');
+
+            if (!typeInput || !qtyInput || !priceInput || !vatInput) continue;
+
+            var type = parseInt(typeInput.value);
+            var qty = parseFloat(qtyInput.value) || 0;
+            var price = parseFloat(priceInput.value) || 0;
+            var vat = parseFloat(vatInput.value) || 0;
+
+            var st = qty * price;
+            var vt = st * (vat / 100);
+
+            if (type === 0) totalLabor += st;
+            else totalPart += st;
+
+            subTotal += st;
+            totalVat += vt;
+        }
+
+        var grandTotal = subTotal + totalVat;
+
+        document.getElementById('sumLabor').innerText = Math.round(totalLabor).toLocaleString('vi-VN') + ' đ';
+        document.getElementById('sumPart').innerText = Math.round(totalPart).toLocaleString('vi-VN') + ' đ';
+        document.getElementById('sumSubTotal').innerText = Math.round(subTotal).toLocaleString('vi-VN') + ' đ';
+        document.getElementById('sumVat').innerText = Math.round(totalVat).toLocaleString('vi-VN') + ' đ';
+        document.getElementById('sumGrandTotal').innerText = Math.round(grandTotal).toLocaleString('vi-VN') + ' đ';
+    }
+
+    // Khởi tạo sẵn 1 dòng công và 1 dòng phụ tùng mẫu
+    addRow(0);
+    addRow(1);
+</script>
+}

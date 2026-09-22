@@ -12,6 +12,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingCustomerCares, int FeedbackCustomerCares,
     int PendingPayments, decimal MonthPaymentRevenue,
     int PendingQuotes, decimal MonthQuoteValue,
+    int ServicePackages,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -86,6 +87,14 @@ public interface IRoService
     Task<(bool ok, string msg, int? roId)> ConvertQuoteToROAsync(int id, string? technician = null);
     Task<(bool ok, string msg)> DeleteQuoteAsync(int id);
     Task<List<Customer>> CustomersForSelectAsync();
+    // service packages (Ser_ServicePackage)
+    Task<List<ServicePackage>> ServicePackagesAsync(string? q, bool? isPublic, bool? isActive);
+    Task<ServicePackage?> GetServicePackageAsync(int id);
+    Task<int> CreateServicePackageAsync(ServicePackage package, List<ServicePackageItem> items);
+    Task<(bool ok, string msg)> DeleteServicePackageAsync(int id);
+    Task<List<ServicePackage>> ServicePackagesForSelectAsync();
+    Task<(bool ok, string msg, int itemsAdded)> ApplyServicePackageToROAsync(int packageId, int roId);
+    Task<(bool ok, string msg, int itemsAdded)> ApplyServicePackageToQuoteAsync(int packageId, int quoteId);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -386,6 +395,7 @@ public class RoService(AppDbContext db) : IRoService
             .Where(q => (q.Status == QuoteStatus.Confirmed || q.Status == QuoteStatus.Converted) && q.QuoteDate >= monthStart)
             .ToListAsync();
         var monthQuoteValue = monthQuotes.Sum(q => q.Total);
+        var totalServicePackages = await db.ServicePackages.CountAsync();
 
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
@@ -409,6 +419,7 @@ public class RoService(AppDbContext db) : IRoService
             monthPaymentRevenue,
             pendingQuotes,
             monthQuoteValue,
+            totalServicePackages,
             byStatus);
     }
 
@@ -1461,5 +1472,169 @@ public class RoService(AppDbContext db) : IRoService
         db.Quotes.Remove(quote);
         await db.SaveChangesAsync();
         return (true, "Đã xóa báo giá thành công.");
+    }
+
+    // --- Service Package Management (Ser_ServicePackage) ---
+    public async Task<List<ServicePackage>> ServicePackagesAsync(string? q, bool? isPublic, bool? isActive)
+    {
+        var query = db.ServicePackages
+            .Include(p => p.Items).ThenInclude(i => i.Part)
+            .AsQueryable();
+
+        if (isPublic.HasValue) query = query.Where(p => p.IsPublic == isPublic.Value);
+        if (isActive.HasValue) query = query.Where(p => p.IsActive == isActive.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(p => p.PackageNo.ToLower().Contains(kw)
+                || p.Name.ToLower().Contains(kw)
+                || (p.Description != null && p.Description.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderBy(p => p.PackageNo).ToList();
+    }
+
+    public Task<ServicePackage?> GetServicePackageAsync(int id) =>
+        db.ServicePackages
+            .Include(p => p.Items).ThenInclude(i => i.Part)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+    public async Task<int> CreateServicePackageAsync(ServicePackage package, List<ServicePackageItem> items)
+    {
+        if (string.IsNullOrWhiteSpace(package.PackageNo))
+        {
+            var count = await db.ServicePackages.CountAsync();
+            package.PackageNo = $"PKG-BD-{count + 1:D2}";
+        }
+        else
+        {
+            package.PackageNo = package.PackageNo.Trim().ToUpperInvariant();
+        }
+
+        var exists = await db.ServicePackages.AnyAsync(p => p.PackageNo == package.PackageNo);
+        if (exists)
+            throw new InvalidOperationException($"Mã gói dịch vụ '{package.PackageNo}' đã tồn tại trong hệ thống.");
+
+        package.CreatedAt = DateTime.Now;
+
+        foreach (var item in items)
+        {
+            if (item.Type == LineType.Part && item.PartId.HasValue && item.PartId.Value > 0)
+            {
+                var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == item.PartId.Value);
+                if (part != null)
+                {
+                    item.Code = string.IsNullOrWhiteSpace(item.Code) ? part.Code : item.Code;
+                    item.Name = string.IsNullOrWhiteSpace(item.Name) ? part.Name : item.Name;
+                    item.Unit = string.IsNullOrWhiteSpace(item.Unit) ? part.Unit : item.Unit;
+                    if (item.UnitPrice <= 0) item.UnitPrice = part.SalePrice > 0 ? part.SalePrice : part.CostPrice;
+                }
+            }
+            package.Items.Add(item);
+        }
+
+        db.ServicePackages.Add(package);
+        await db.SaveChangesAsync();
+        return package.Id;
+    }
+
+    public async Task<(bool ok, string msg)> DeleteServicePackageAsync(int id)
+    {
+        var package = await db.ServicePackages.Include(p => p.Items).FirstOrDefaultAsync(p => p.Id == id);
+        if (package == null) return (false, "Không tìm thấy gói dịch vụ.");
+
+        db.ServicePackageItems.RemoveRange(package.Items);
+        db.ServicePackages.Remove(package);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa gói dịch vụ '{package.PackageNo} - {package.Name}'.");
+    }
+
+    public Task<List<ServicePackage>> ServicePackagesForSelectAsync() =>
+        db.ServicePackages
+            .Include(p => p.Items)
+            .Where(p => p.IsActive)
+            .OrderBy(p => p.PackageNo)
+            .ToListAsync();
+
+    public async Task<(bool ok, string msg, int itemsAdded)> ApplyServicePackageToROAsync(int packageId, int roId)
+    {
+        var package = await db.ServicePackages
+            .Include(p => p.Items).ThenInclude(i => i.Part)
+            .FirstOrDefaultAsync(p => p.Id == packageId);
+        if (package == null) return (false, "Không tìm thấy gói dịch vụ.", 0);
+
+        var ro = await db.ROs.Include(r => r.Lines).FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa (RO).", 0);
+
+        if (ro.Status is ROStatus.Paid or ROStatus.Finished or ROStatus.Rejected or ROStatus.NotResponding)
+            return (false, $"Không thể thêm hạng mục vào RO đang ở trạng thái '{Ui.Status(ro.Status).text}'.", 0);
+
+        if (package.Items.Count == 0)
+            return (false, "Gói dịch vụ này chưa có hạng mục nào để áp dụng.", 0);
+
+        int count = 0;
+        foreach (var item in package.Items)
+        {
+            var lineName = !string.IsNullOrWhiteSpace(item.Name) ? item.Name : (item.Part != null ? item.Part.Name : "Hạng mục bảo dưỡng");
+            ro.Lines.Add(new RepairLine
+            {
+                ROId = roId,
+                Type = item.Type,
+                ExpenseType = item.ExpenseType,
+                PartId = item.PartId,
+                Name = $"[{package.PackageNo}] {lineName}",
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice
+            });
+            count++;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã áp dụng gói '{package.PackageNo} - {package.Name}' ({count} hạng mục) vào Lệnh sửa chữa {ro.Code}.", count);
+    }
+
+    public async Task<(bool ok, string msg, int itemsAdded)> ApplyServicePackageToQuoteAsync(int packageId, int quoteId)
+    {
+        var package = await db.ServicePackages
+            .Include(p => p.Items).ThenInclude(i => i.Part)
+            .FirstOrDefaultAsync(p => p.Id == packageId);
+        if (package == null) return (false, "Không tìm thấy gói dịch vụ.", 0);
+
+        var quote = await db.Quotes.Include(q => q.Items).FirstOrDefaultAsync(q => q.Id == quoteId);
+        if (quote == null) return (false, "Không tìm thấy Báo giá.", 0);
+
+        if (quote.Status is QuoteStatus.Converted or QuoteStatus.Rejected)
+            return (false, $"Không thể thêm hạng mục vào Báo giá đang ở trạng thái '{Ui.QuoteStatus(quote.Status).text}'.", 0);
+
+        if (package.Items.Count == 0)
+            return (false, "Gói dịch vụ này chưa có hạng mục nào để nạp.", 0);
+
+        int count = 0;
+        foreach (var item in package.Items)
+        {
+            var partCode = !string.IsNullOrWhiteSpace(item.Code) ? item.Code : (item.Part != null ? item.Part.Code : (item.Type == LineType.Labor ? "CONG-BD" : "PT-BD"));
+            var partName = !string.IsNullOrWhiteSpace(item.Name) ? item.Name : (item.Part != null ? item.Part.Name : "Hạng mục bảo dưỡng");
+            var unit = !string.IsNullOrWhiteSpace(item.Unit) ? item.Unit : (item.Part != null ? item.Part.Unit : (item.Type == LineType.Labor ? "Lần" : "Cái"));
+
+            quote.Items.Add(new QuoteItem
+            {
+                QuoteId = quoteId,
+                PartId = item.PartId,
+                PartCode = partCode,
+                PartName = $"[{package.PackageNo}] {partName}",
+                Unit = unit,
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice,
+                DiscountPercent = 0,
+                VatPercent = item.VatPercent,
+                Note = string.IsNullOrWhiteSpace(item.Note) ? $"Combo {package.PackageNo}" : $"[{package.PackageNo}] {item.Note}"
+            });
+            count++;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã nạp gói '{package.PackageNo} - {package.Name}' ({count} hạng mục) vào Báo giá {quote.QuoteNo}.", count);
     }
 }

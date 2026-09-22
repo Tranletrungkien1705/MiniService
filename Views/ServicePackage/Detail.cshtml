@@ -1,0 +1,302 @@
+@model ServicePackage
+@{
+    ViewData["Title"] = $"{Model.PackageNo} — {Model.Name}";
+    var (scopeTxt, scopeCss) = Ui.PackageScope(Model.IsPublic);
+    var (actTxt, actCss) = Ui.PackageActive(Model.IsActive);
+    var eligibleROs = (List<RepairOrder>?)ViewBag.EligibleROs ?? [];
+    var eligibleQuotes = (List<Quote>?)ViewBag.EligibleQuotes ?? [];
+    var laborItems = Model.Items.Where(i => i.Type == LineType.Labor).ToList();
+    var partItems = Model.Items.Where(i => i.Type == LineType.Part).ToList();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="fw-bold mb-0">@Model.PackageNo</h4>
+            <span class="badge bg-@scopeCss fs-6">@scopeTxt</span>
+            <span class="badge bg-@actCss fs-6">@actTxt</span>
+        </div>
+        <div class="text-muted small">
+            Định mức: <b>@Model.TakingTimeHours:0.1 giờ</b> · Tạo bởi <b>@Model.CreatedBy</b> ngày @Model.CreatedAt.ToString("dd/MM/yyyy")
+        </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/ServicePackage" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+
+        @if (Model.IsActive && Model.Items.Count > 0)
+        {
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#applyRoModal">
+                <i class="bi bi-clipboard2-pulse me-1"></i>Áp dụng vào Lệnh SC (RO)
+            </button>
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#applyQuoteModal">
+                <i class="bi bi-file-earmark-text me-1"></i>Nạp vào Báo giá (Quote)
+            </button>
+        }
+
+        <form method="post" action="/ServicePackage/Delete/@Model.Id" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa gói dịch vụ này?');">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-danger" title="Xóa gói dịch vụ"><i class="bi bi-trash"></i></button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small">Tổng tiền trọn gói (gồm VAT)</div>
+                <div class="stat-num text-primary">@Model.Total.ToString("N0") <span style="font-size:14px;font-weight:normal;color:#6b7280">đ</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small">Tiền công thợ (@Model.LaborCount mục)</div>
+                <div class="stat-num text-info">@Model.LaborSubTotal.ToString("N0") <span style="font-size:14px;font-weight:normal;color:#6b7280">đ</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small">Tiền phụ tùng (@Model.PartCount mục)</div>
+                <div class="stat-num text-secondary">@Model.PartSubTotal.ToString("N0") <span style="font-size:14px;font-weight:normal;color:#6b7280">đ</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small">Thuế GTGT (VAT)</div>
+                <div class="stat-num text-warning">@Model.TotalVat.ToString("N0") <span style="font-size:14px;font-weight:normal;color:#6b7280">đ</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <h5 class="fw-bold mb-2">@Model.Name</h5>
+        <p class="text-muted mb-0">@(string.IsNullOrWhiteSpace(Model.Description) ? "Không có mô tả chi tiết." : Model.Description)</p>
+    </div>
+</div>
+
+<!-- Bảng tiền công thợ -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white py-3">
+        <h6 class="fw-bold mb-0 text-primary">
+            <i class="bi bi-wrench me-2"></i>Danh mục công việc &amp; Hạng mục kiểm tra định kỳ (@laborItems.Count mục)
+        </h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:4%" class="text-center">STT</th>
+                        <th style="width:14%">Mã công việc</th>
+                        <th style="width:36%">Nội dung công việc kiểm tra / bảo dưỡng</th>
+                        <th style="width:8%" class="text-center">ĐVT</th>
+                        <th style="width:10%" class="text-center">Giờ công / SL</th>
+                        <th style="width:12%" class="text-end">Đơn giá</th>
+                        <th style="width:6%" class="text-center">VAT</th>
+                        <th style="width:10%" class="text-end">Thành tiền</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @{ int lIdx = 1; }
+                @foreach (var item in laborItems)
+                {
+                    <tr>
+                        <td class="text-center">@(lIdx++)</td>
+                        <td><span class="badge bg-light text-dark border font-monospace">@item.Code</span></td>
+                        <td>
+                            <div class="fw-semibold">@item.Name</div>
+                            @if (!string.IsNullOrWhiteSpace(item.Note))
+                            {
+                                <div class="text-muted small" style="font-size:11px">@item.Note</div>
+                            }
+                        </td>
+                        <td class="text-center">@item.Unit</td>
+                        <td class="text-center fw-bold">@item.Quantity.ToString("0.##")</td>
+                        <td class="text-end">@item.UnitPrice.ToString("N0")đ</td>
+                        <td class="text-center">@item.VatPercent:0#%</td>
+                        <td class="text-end fw-bold">@item.Amount.ToString("N0")đ</td>
+                    </tr>
+                }
+                @if (laborItems.Count == 0)
+                {
+                    <tr><td colspan="8" class="text-center text-muted py-3">Không có hạng mục tiền công.</td></tr>
+                }
+                </tbody>
+                @if (laborItems.Count > 0)
+                {
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="7" class="text-end fw-semibold">Tổng tiền công (trước thuế):</td>
+                            <td class="text-end fw-bold text-primary">@Model.LaborSubTotal.ToString("N0")đ</td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Bảng phụ tùng thay thế -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white py-3">
+        <h6 class="fw-bold mb-0 text-primary">
+            <i class="bi bi-box-seam me-2"></i>Danh mục phụ tùng &amp; Vật tư thay thế định kỳ (@partItems.Count mục)
+        </h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:4%" class="text-center">STT</th>
+                        <th style="width:14%">Mã phụ tùng</th>
+                        <th style="width:30%">Tên phụ tùng chính hãng</th>
+                        <th style="width:7%" class="text-center">ĐVT</th>
+                        <th style="width:8%" class="text-center">Số lượng</th>
+                        <th style="width:11%" class="text-center">Tồn kho hiện tại</th>
+                        <th style="width:12%" class="text-end">Đơn giá</th>
+                        <th style="width:4%" class="text-center">VAT</th>
+                        <th style="width:10%" class="text-end">Thành tiền</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @{ int pIdx = 1; }
+                @foreach (var item in partItems)
+                {
+                    <tr>
+                        <td class="text-center">@(pIdx++)</td>
+                        <td><span class="badge bg-light text-dark border font-monospace">@item.Code</span></td>
+                        <td>
+                            <div class="fw-semibold">@item.Name</div>
+                            @if (!string.IsNullOrWhiteSpace(item.Note))
+                            {
+                                <div class="text-muted small" style="font-size:11px">@item.Note</div>
+                            }
+                        </td>
+                        <td class="text-center">@item.Unit</td>
+                        <td class="text-center fw-bold">@item.Quantity.ToString("0.##")</td>
+                        <td class="text-center">
+                            @if (item.Part != null)
+                            {
+                                <span class="badge @(item.Part.InStock >= item.Quantity ? "bg-success-subtle text-success-emphasis" : "bg-danger-subtle text-danger-emphasis")">
+                                    <i class="bi @(item.Part.InStock >= item.Quantity ? "bi-check-circle" : "bi-exclamation-triangle") me-1"></i>@item.Part.InStock @item.Part.Unit
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td class="text-end">@item.UnitPrice.ToString("N0")đ</td>
+                        <td class="text-center">@item.VatPercent:0#%</td>
+                        <td class="text-end fw-bold">@item.Amount.ToString("N0")đ</td>
+                    </tr>
+                }
+                @if (partItems.Count == 0)
+                {
+                    <tr><td colspan="9" class="text-center text-muted py-3">Không có phụ tùng thay thế định kỳ trong gói này.</td></tr>
+                }
+                </tbody>
+                @if (partItems.Count > 0)
+                {
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="8" class="text-end fw-semibold">Tổng tiền phụ tùng (trước thuế):</td>
+                            <td class="text-end fw-bold text-primary">@Model.PartSubTotal.ToString("N0")đ</td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Áp dụng vào RO -->
+<div class="modal fade" id="applyRoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/ServicePackage/ApplyToRO/@Model.Id">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-clipboard2-pulse me-2 text-primary"></i>Áp dụng gói vào Lệnh sửa chữa (RO)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">
+                        Hệ thống sẽ tự động thêm tất cả <b>@Model.Items.Count hạng mục</b> (gồm @laborItems.Count công thợ và @partItems.Count phụ tùng) vào lệnh sửa chữa được chọn.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chọn Lệnh sửa chữa (RO) đang mở</label>
+                        @if (eligibleROs.Count > 0)
+                        {
+                            <select name="roId" class="form-select" required>
+                                <option value="">-- Chọn RO --</option>
+                                @foreach (var ro in eligibleROs)
+                                {
+                                    <option value="@ro.Id">[@ro.Code] Xe @ro.Car.Plate (@ro.Car.Model) — @ro.Customer.Name (Hiện có @ro.Lines.Count dòng · @Ui.Status(ro.Status).text)</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning small mb-0">Hiện không có Lệnh sửa chữa nào đang mở để nạp gói. Vui lòng tạo RO mới trước.</div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary" @(eligibleROs.Count == 0 ? "disabled" : "")><i class="bi bi-check-lg me-1"></i>Xác nhận nạp vào RO</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Áp dụng vào Báo giá (Quote) -->
+<div class="modal fade" id="applyQuoteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/ServicePackage/ApplyToQuote/@Model.Id">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-file-earmark-text me-2 text-primary"></i>Nạp gói vào Báo giá (Quote)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">
+                        Hệ thống sẽ tự động nạp các hạng mục từ gói <b>@Model.PackageNo</b> vào báo giá được chọn.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chọn Báo giá dịch vụ</label>
+                        @if (eligibleQuotes.Count > 0)
+                        {
+                            <select name="quoteId" class="form-select" required>
+                                <option value="">-- Chọn báo giá --</option>
+                                @foreach (var q in eligibleQuotes)
+                                {
+                                    <option value="@q.Id">[@q.QuoteNo] KH: @q.CustomerName (@(q.Car != null ? q.Car.Plate : "Không có xe")) — @q.Total.ToString("N0")đ (@Ui.QuoteStatus(q.Status).text)</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning small mb-0">Hiện không có Báo giá nào đang mở để nạp gói. Vui lòng tạo báo giá mới trước.</div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary" @(eligibleQuotes.Count == 0 ? "disabled" : "")><i class="bi bi-check-lg me-1"></i>Xác nhận nạp vào Báo giá</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
