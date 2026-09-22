@@ -974,19 +974,147 @@ public static class Seeder
             }
             await db.SaveChangesAsync();
         }
+
+        if (!await db.ReceptionSheets.AnyAsync())
+        {
+            var car1 = await db.Cars.FirstAsync();
+            var car2 = await db.Cars.OrderByDescending(c => c.Id).FirstAsync();
+            var ro1 = await db.ROs.FirstOrDefaultAsync(r => r.Code == "ROSEED-001");
+            var roWar = await db.ROs.FirstOrDefaultAsync(r => r.Code == "ROSEED-WAR-001");
+            var app2 = await db.Appointments.FirstOrDefaultAsync();
+
+            var receptions = new List<ReceptionSheet>();
+
+            // 1. Phiếu tiếp nhận xe đã bàn giao hoàn tất (Delivered)
+            var rec1 = new ReceptionSheet
+            {
+                ReceptionNo = "TN260427-001",
+                CarId = car1.Id,
+                CustomerId = car1.CustomerId,
+                ROId = ro1?.Id,
+                Odometer = 25400,
+                FuelLevel = 3,
+                LevelOfInspection = "Bảo dưỡng cấp 2 (10.000 km)",
+                CustomerRequest = "Bảo dưỡng định kỳ 20.000 km, thay dầu máy, lọc nhớt và kiểm tra phanh.",
+                ValuablesInCar = "Kính mắt Rayban trong hộc đồ, không để tiền mặt hay đồ quý.",
+                ExteriorCondition = "Vết xước nhẹ cản trước bên phụ (đã ghi nhận cùng khách).",
+                Status = ReceptionStatus.Delivered,
+                CreatedBy = "CVDV Hoàng",
+                CreatedAt = DateTime.Now.AddHours(-4),
+                DeliveryDateTime = DateTime.Now.AddHours(-1),
+                DeliveryBy = "CVDV Hoàng",
+                DeliveryNote = "Khách hàng đã nhận xe sạch sẽ, hài lòng về tiến độ phục vụ.",
+                Items = [
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.DTL", Name = "Bảng đồng hồ & Đèn cảnh báo taplo", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.COI", Name = "Còi xe & Hệ thống tín hiệu âm thanh", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.GMBP", Name = "Cần gạt mưa & Vòi xịt rửa kính", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.HTAT", Name = "Dây đai an toàn & Hệ thống túi khí", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.HTDH", Name = "Hệ thống điều hòa nhiệt độ & Quạt gió", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Ngoại quan & Thân vỏ", Code = "TRUOCVASAUXE.DT", Name = "Cụm đèn chiếu sáng trước (Pha/Cos/Xi-nhan)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Ngoại quan & Thân vỏ", Code = "TRUOCVASAUXE.DS", Name = "Cụm đèn sau (Đèn hậu/Phanh/Lùi)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Ngoại quan & Thân vỏ", Code = "THANVO.XUOC", Name = "Kiểm tra trầy xước / móp méo thân vỏ xe", ReceptionStatus = AuditStatus.Attention, DeliveryStatus = AuditStatus.Good, Note = "Xước nhẹ cản trước" },
+                    new ReceptionItem { Group = "Khoang động cơ", Code = "KHOANGDONGCO.DDC", Name = "Mức & Tình trạng dầu nhớt động cơ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang động cơ", Code = "KHOANGDONGCO.DP", Name = "Mức dầu phanh / Dầu ly hợp", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang động cơ", Code = "KHOANGDONGCO.NLM", Name = "Mức nước làm mát động cơ & Bình phụ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Lốp xe & Phanh", Code = "LOPXE.BXTT", Name = "Bánh xe trước trái (Áp suất & Gai lốp)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Lốp xe & Phanh", Code = "LOPXE.BXTP", Name = "Bánh xe trước phải (Áp suất & Gai lốp)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Lốp xe & Phanh", Code = "LOPXE.BXST", Name = "Bánh xe sau trái (Áp suất & Gai lốp)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Lốp xe & Phanh", Code = "LOPXE.BXSP", Name = "Bánh xe sau phải (Áp suất & Gai lốp)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Cốp sau & Dụng cụ", Code = "COPSAU.BDC", Name = "Bộ đồ nghề sửa chữa & Kích nâng", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Cốp sau & Dụng cụ", Code = "COPSAU.LDP", Name = "Lốp xe dự phòng & Áp suất lốp phụ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good }
+                ]
+            };
+            receptions.Add(rec1);
+
+            // 2. Phiếu tiếp nhận đang trong xưởng sửa chữa (InService), có hạng mục cần chú ý
+            var rec2 = new ReceptionSheet
+            {
+                ReceptionNo = "TN260427-002",
+                CarId = car2.Id,
+                CustomerId = car2.CustomerId,
+                ROId = roWar?.Id,
+                Odometer = 18200,
+                FuelLevel = 2,
+                LevelOfInspection = "Kiểm tra bảo hành hãng",
+                CustomerRequest = "Động cơ rung giật khi đạp ga 50 km/h, đèn Check Engine nhấp nháy.",
+                ValuablesInCar = "Không có đồ đạc quý trên xe.",
+                ExteriorCondition = "Thân vỏ nguyên bản không trầy xước.",
+                IsWarranty = true,
+                Status = ReceptionStatus.InService,
+                CreatedBy = "CVDV Quang",
+                CreatedAt = DateTime.Now.AddHours(-2),
+                Items = [
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.DTL", Name = "Bảng đồng hồ & Đèn cảnh báo taplo", ReceptionStatus = AuditStatus.Replace, DeliveryStatus = AuditStatus.Good, Note = "Đèn Check Engine sáng báo lỗi P0302" },
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.COI", Name = "Còi xe & Hệ thống tín hiệu âm thanh", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.HTDH", Name = "Hệ thống điều hòa nhiệt độ & Quạt gió", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Ngoại quan & Thân vỏ", Code = "TRUOCVASAUXE.DT", Name = "Cụm đèn chiếu sáng trước (Pha/Cos/Xi-nhan)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang động cơ", Code = "KHOANGDONGCO.DDC", Name = "Mức & Tình trạng dầu nhớt động cơ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang động cơ", Code = "KHOANGDONGCO.LG", Name = "Tình trạng lọc gió động cơ & lọc máy lạnh", ReceptionStatus = AuditStatus.Attention, DeliveryStatus = AuditStatus.Good, Note = "Lọc gió bám bụi nhiều, cần vệ sinh thổi bụi" },
+                    new ReceptionItem { Group = "Lốp xe & Phanh", Code = "LOPXE.BXTP", Name = "Bánh xe trước phải (Áp suất & Gai lốp)", ReceptionStatus = AuditStatus.Attention, DeliveryStatus = AuditStatus.Good, Note = "Áp suất 2.1 bar, hơi non (tiêu chuẩn 2.3 bar)" },
+                    new ReceptionItem { Group = "Cốp sau & Dụng cụ", Code = "COPSAU.LDP", Name = "Lốp xe dự phòng & Áp suất lốp phụ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good }
+                ]
+            };
+            receptions.Add(rec2);
+
+            // 3. Phiếu tiếp nhận mới lập chờ tạo RO (Pending)
+            var rec3 = new ReceptionSheet
+            {
+                ReceptionNo = "TN260427-003",
+                CarId = car1.Id,
+                CustomerId = car1.CustomerId,
+                AppointmentId = app2?.Id,
+                Odometer = 26500,
+                FuelLevel = 4,
+                LevelOfInspection = "Bảo dưỡng cấp 1 (5.000 km)",
+                CustomerRequest = "Khách hàng chuẩn bị đi công tác xa, yêu cầu kiểm tra kỹ hệ thống lái, phanh, áp suất lốp và mức dầu nhờn.",
+                ValuablesInCar = "Không có",
+                ExteriorCondition = "Thân vỏ sạch sẽ, không móp méo.",
+                Status = ReceptionStatus.Pending,
+                CreatedBy = "CVDV Hương",
+                CreatedAt = DateTime.Now.AddMinutes(-30),
+                Items = [
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.DTL", Name = "Bảng đồng hồ & Đèn cảnh báo taplo", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang lái", Code = "KHOANGLAI.GMBP", Name = "Cần gạt mưa & Vòi xịt rửa kính", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang động cơ", Code = "KHOANGDONGCO.DDC", Name = "Mức & Tình trạng dầu nhớt động cơ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Khoang động cơ", Code = "KHOANGDONGCO.DP", Name = "Mức dầu phanh / Dầu ly hợp", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Lốp xe & Phanh", Code = "LOPXE.BXTT", Name = "Bánh xe trước trái (Áp suất & Gai lốp)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+                    new ReceptionItem { Group = "Cốp sau & Dụng cụ", Code = "COPSAU.BDC", Name = "Bộ đồ nghề sửa chữa & Kích nâng", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good }
+                ]
+            };
+            receptions.Add(rec3);
+
+            db.ReceptionSheets.AddRange(receptions);
+            await db.SaveChangesAsync();
+
+            if (ro1 != null)
+            {
+                ro1.ReceptionSheetId = rec1.Id;
+            }
+            if (roWar != null)
+            {
+                roWar.ReceptionSheetId = rec2.Id;
+            }
+            if (app2 != null)
+            {
+                app2.ReceptionSheetId = rec3.Id;
+            }
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON miniservice.\"Orgs\" (\"ApiKey\")",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"AppointmentId\" integer NULL",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CavityId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"ReceptionSheetId\" integer NULL",
+            "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"ReceptionSheetId\" integer NULL",
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartNo\" text NULL",
@@ -1336,7 +1464,50 @@ public static class Seeder
                 ""CreatedAt"" TEXT NOT NULL,
                 FOREIGN KEY (""CurrentROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
             );",
-            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Cavities_OrgId_CavityNo"" ON ""Cavities"" (""OrgId"", ""CavityNo"");"
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Cavities_OrgId_CavityNo"" ON ""Cavities"" (""OrgId"", ""CavityNo"");",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""ReceptionSheetId"" INTEGER NULL;",
+            @"ALTER TABLE ""Appointments"" ADD COLUMN ""ReceptionSheetId"" INTEGER NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""ReceptionSheets"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ReceptionNo"" TEXT NOT NULL,
+                ""CarId"" INTEGER NOT NULL,
+                ""CustomerId"" INTEGER NOT NULL,
+                ""AppointmentId"" INTEGER NULL,
+                ""ROId"" INTEGER NULL,
+                ""Odometer"" INTEGER NOT NULL,
+                ""FuelLevel"" INTEGER NOT NULL,
+                ""LevelOfInspection"" TEXT NOT NULL,
+                ""CustomerRequest"" TEXT NOT NULL,
+                ""ValuablesInCar"" TEXT NULL,
+                ""ExteriorCondition"" TEXT NULL,
+                ""IsWarranty"" INTEGER NOT NULL,
+                ""IsInsurance"" INTEGER NOT NULL,
+                ""IsBackRepair"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""DeliveryDateTime"" TEXT NULL,
+                ""DeliveryBy"" TEXT NULL,
+                ""DeliveryNote"" TEXT NULL,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""AppointmentId"") REFERENCES ""Appointments"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ReceptionSheets_OrgId_ReceptionNo"" ON ""ReceptionSheets"" (""OrgId"", ""ReceptionNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""ReceptionItems"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ReceptionSheetId"" INTEGER NOT NULL,
+                ""Group"" TEXT NOT NULL,
+                ""Code"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""ReceptionStatus"" INTEGER NOT NULL,
+                ""DeliveryStatus"" INTEGER NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""ReceptionSheetId"") REFERENCES ""ReceptionSheets"" (""Id"") ON DELETE CASCADE
+            );"
         };
 
         foreach (var sql in sqls)

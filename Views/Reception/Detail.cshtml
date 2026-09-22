@@ -1,0 +1,307 @@
+@model ReceptionSheet
+@{
+    ViewData["Title"] = $"Phiếu tiếp nhận {Model.ReceptionNo}";
+    var (stTxt, stCode, stCss) = Ui.ReceptionStatus(Model.Status);
+    bool canCreateRO = Model.Status == ReceptionStatus.Pending && !Model.ROId.HasValue;
+    bool canDeliver = Model.Status == ReceptionStatus.InService;
+    bool canCancel = Model.Status is ReceptionStatus.Pending or ReceptionStatus.InService;
+    bool canDelete = Model.Status is ReceptionStatus.Pending or ReceptionStatus.Cancelled && !Model.ROId.HasValue;
+}
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+                    <div>
+                        <h5 class="fw-bold mb-1">
+                            @Model.ReceptionNo
+                            <span class="badge bg-@stCss ms-1" title="@stCode">@stTxt</span>
+                            @if (Model.IsWarranty) { <span class="badge bg-primary ms-1">Bảo hành</span> }
+                            @if (Model.IsInsurance) { <span class="badge bg-info ms-1">Bảo hiểm</span> }
+                            @if (Model.IsBackRepair) { <span class="badge bg-danger ms-1">Sửa lại</span> }
+                        </h5>
+                        <div class="text-muted small">
+                            <i class="bi bi-clock me-1"></i>Tiếp nhận lúc: <b>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</b>
+                            · Cố vấn dịch vụ: <b>@Model.CreatedBy</b>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="/Reception/Print/@Model.Id" target="_blank" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-printer me-1"></i>In phiếu tiếp nhận
+                        </a>
+                        <a href="/Reception" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>Danh sách
+                        </a>
+                    </div>
+                </div>
+
+                @if (Model.Status == ReceptionStatus.Delivered)
+                {
+                    <div class="alert alert-success d-flex justify-content-between align-items-center mt-3 mb-0">
+                        <div>
+                            <i class="bi bi-check-circle-fill me-2 fs-5 text-success"></i>
+                            Xe đã được <b>nghiệm thu và bàn giao trả cho khách hàng</b> vào lúc <b>@(Model.DeliveryDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "—")</b>
+                            (Người giao: <b>@(Model.DeliveryBy ?? "Cố vấn dịch vụ")</b>)
+                            @if (!string.IsNullOrEmpty(Model.DeliveryNote))
+                            {
+                                <div class="mt-1 small"><b>Nhận xét khách hàng:</b> @Model.DeliveryNote</div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3 border-bottom pb-2"><i class="bi bi-car-front text-primary me-2"></i>Thông tin phương tiện &amp; Khách hàng</h6>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded bg-light h-100">
+                            <div class="text-muted small">Phương tiện tiếp nhận</div>
+                            <div class="fw-bold fs-5 text-primary">@Model.Car.Plate</div>
+                            <div>@Model.Car.Model (@Model.Car.Year)</div>
+                            <div class="small text-muted">Số khung (VIN): @(Model.Car.Vin ?? "—")</div>
+                            <div class="border-top mt-2 pt-2 small">
+                                <div>Số Km tiếp nhận: <b class="text-dark">@Model.Odometer.ToString("N0") km</b></div>
+                                <div>Mức nhiên liệu: <b class="text-dark">@Ui.FuelLevelText(Model.FuelLevel)</b></div>
+                                <div>Cấp kiểm tra: <b class="text-dark">@Model.LevelOfInspection</b></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-3 border rounded bg-light h-100">
+                            <div class="text-muted small">Khách hàng / Chủ xe</div>
+                            <div class="fw-bold fs-5">@Model.Customer.Name</div>
+                            <div><i class="bi bi-telephone me-1 text-muted"></i>@(Model.Customer.Phone ?? "—")</div>
+                            <div class="small text-muted"><i class="bi bi-envelope me-1"></i>@(Model.Customer.Email ?? "—")</div>
+                            @if (Model.Appointment != null)
+                            {
+                                <div class="border-top mt-2 pt-2 small text-info">
+                                    <i class="bi bi-calendar2-check me-1"></i>Cuộc hẹn gốc:
+                                    <a href="/Appointment/Detail/@Model.Appointment.Id" class="fw-semibold">@Model.Appointment.AppNo</a>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2 border-bottom pb-2"><i class="bi bi-chat-left-text text-primary me-2"></i>Nội dung yêu cầu &amp; Tình trạng tiếp nhận</h6>
+                <div class="p-3 bg-light rounded mb-3">
+                    <div class="text-muted small mb-1">Yêu cầu của khách / Hiện tượng hư hỏng:</div>
+                    <p class="mb-0 fw-semibold" style="white-space:pre-wrap">@Model.CustomerRequest</p>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <div class="p-2 border rounded small">
+                            <span class="text-muted">Đồ đạc tư trang để lại:</span>
+                            <div class="fw-semibold">@(Model.ValuablesInCar ?? "Không có")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-2 border rounded small">
+                            <span class="text-muted">Hiện trạng thân vỏ ngoài xe:</span>
+                            <div class="fw-semibold">@(Model.ExteriorCondition ?? "Nguyên bản")</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bảng kiểm tra quanh xe -->
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0">
+                    <i class="bi bi-card-checklist text-primary me-2"></i>Biên bản kiểm tra quanh xe (Walk-Around Inspection)
+                </h6>
+                <div>
+                    <span class="badge bg-light text-dark border">@Model.ItemCount hạng mục</span>
+                    @if (Model.IssuesCount > 0)
+                    {
+                        <span class="badge bg-warning text-dark ms-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>@Model.IssuesCount lưu ý</span>
+                    }
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Hạng mục</th>
+                                <th style="width:160px">Tiếp nhận</th>
+                                @if (Model.Status == ReceptionStatus.Delivered)
+                                {
+                                    <th style="width:160px">Giao xe</th>
+                                }
+                                <th>Ghi chú hiện trạng</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @{ string currentGroup = ""; }
+                        @foreach (var itm in Model.Items)
+                        {
+                            if (itm.Group != currentGroup)
+                            {
+                                currentGroup = itm.Group;
+                                <tr class="table-secondary">
+                                    <td colspan="@(Model.Status == ReceptionStatus.Delivered ? 4 : 3)" class="fw-bold text-dark text-uppercase small py-1">
+                                        <i class="bi bi-folder2-open me-2 text-primary"></i>@currentGroup
+                                    </td>
+                                </tr>
+                            }
+                            var (recTxt, recCss, recIcon) = Ui.AuditStatus(itm.ReceptionStatus);
+                            var (delTxt, delCss, delIcon) = Ui.AuditStatus(itm.DeliveryStatus);
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">@itm.Name</div>
+                                    <div class="text-muted small font-monospace" style="font-size:11px">@itm.Code</div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-@recCss text-white">
+                                        <i class="bi @recIcon me-1"></i>@recTxt
+                                    </span>
+                                </td>
+                                @if (Model.Status == ReceptionStatus.Delivered)
+                                {
+                                    <td>
+                                        <span class="badge bg-@delCss text-white">
+                                            <i class="bi @delIcon me-1"></i>@delTxt
+                                        </span>
+                                    </td>
+                                }
+                                <td>
+                                    <span class="small text-secondary">@(string.IsNullOrEmpty(itm.Note) ? "—" : itm.Note)</span>
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        @if (canCreateRO)
+        {
+            <div class="card mb-3 border-primary">
+                <div class="card-header bg-primary text-white fw-bold">
+                    <i class="bi bi-clipboard2-pulse me-1"></i>Lập Lệnh sửa chữa (RO)
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        Sau khi hoàn tất kiểm tra xe cùng khách, tạo ngay Lệnh sửa chữa chính thức (RO) để chuyển xe vào khu vực sửa chữa.
+                    </p>
+                    <form asp-action="CreateRO" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Kỹ thuật viên / Thợ phụ trách</label>
+                            <input type="text" name="technician" class="form-control form-control-sm" value="Kỹ thuật viên xưởng" placeholder="Tên thợ phụ trách" />
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">
+                            <i class="bi bi-plus-circle me-1"></i>Tạo Lệnh Sửa Chữa (RO) Ngay
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+
+        @if (canDeliver)
+        {
+            <div class="card mb-3 border-success">
+                <div class="card-header bg-success text-white fw-bold">
+                    <i class="bi bi-box-arrow-right me-1"></i>Nghiệm thu &amp; Bàn giao xe (Delivery)
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        Khi xưởng đã hoàn tất sửa chữa, kiểm tra KCS và khách thanh toán, thực hiện nghiệm thu bàn giao và trả xe cho khách hàng.
+                    </p>
+                    <form asp-action="Deliver" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold">Người bàn giao xe</label>
+                            <input type="text" name="deliveryBy" class="form-control form-control-sm" value="@Model.CreatedBy" placeholder="Cố vấn dịch vụ giao xe" required />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Ý kiến / Nhận xét của khách khi nhận xe</label>
+                            <textarea name="note" rows="2" class="form-control form-control-sm" placeholder="VD: Khách hài lòng, xe sạch sẽ, phụ tùng đã thay đúng yêu cầu..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success w-100 fw-bold" onclick="return confirm('Xác nhận nghiệm thu và bàn giao xe cho khách hàng?')">
+                            <i class="bi bi-check2-circle me-1"></i>Xác Nhận Bàn Giao Xe
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+
+        @if (Model.RO != null)
+        {
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0"><i class="bi bi-clipboard2-pulse text-primary me-1"></i>Lệnh sửa chữa (RO)</h6>
+                        <span class="badge bg-@Ui.Status(Model.RO.Status).css">@Ui.Status(Model.RO.Status).text</span>
+                    </div>
+                    <div class="p-2 border rounded bg-light mb-2 small">
+                        <div class="fw-bold text-primary fs-6">@Model.RO.Code</div>
+                        <div>Tổng chi phí: <b class="text-success">@Model.RO.Total.ToString("N0")đ</b></div>
+                        <div>Hạng mục: <b>@Model.RO.Lines.Count dòng</b></div>
+                        @if (Model.RO.Cavity != null)
+                        {
+                            <div>Khoang sửa chữa: <b class="text-danger">@Model.RO.Cavity.CavityName</b></div>
+                        }
+                    </div>
+                    <a href="/RO/Detail/@Model.RO.Id" class="btn btn-sm btn-outline-primary w-100">
+                        <i class="bi bi-arrow-up-right me-1"></i>Xem Lệnh sửa chữa chi tiết
+                    </a>
+                </div>
+            </div>
+        }
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2 border-bottom pb-2 small text-muted"><i class="bi bi-clock-history me-1"></i>Dòng thời gian</h6>
+                <div class="small text-muted">
+                    <div class="mb-1">Tiếp nhận xe: <b>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</b></div>
+                    @if (Model.DeliveryDateTime.HasValue)
+                    {
+                        <div class="mb-1 text-success">Bàn giao xe: <b>@Model.DeliveryDateTime.Value.ToString("dd/MM/yyyy HH:mm")</b></div>
+                    }
+                </div>
+
+                @if (canCancel)
+                {
+                    <hr class="my-2" />
+                    <button type="button" class="btn btn-outline-warning btn-sm w-100" data-bs-toggle="collapse" data-bs-target="#cancelBox">
+                        <i class="bi bi-x-circle me-1"></i>Hủy phiếu tiếp nhận
+                    </button>
+                    <div class="collapse mt-2" id="cancelBox">
+                        <form asp-action="Cancel" method="post">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Id" />
+                            <input type="text" name="reason" class="form-control form-control-sm mb-2" placeholder="Lý do hủy tiếp nhận..." required />
+                            <button type="submit" class="btn btn-warning btn-sm w-100 fw-semibold" onclick="return confirm('Hủy phiếu tiếp nhận này?')">Xác nhận hủy</button>
+                        </form>
+                    </div>
+                }
+
+                @if (canDelete)
+                {
+                    <form asp-action="Delete" method="post" onsubmit="return confirm('Xóa phiếu tiếp nhận này?')" class="mt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-outline-danger btn-sm w-100"><i class="bi bi-trash me-1"></i>Xóa phiếu</button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</div>

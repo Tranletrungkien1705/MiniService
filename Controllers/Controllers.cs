@@ -1288,6 +1288,171 @@ public class CavityController(IRoService svc) : Controller
     }
 }
 
+public class ReceptionController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(ReceptionStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+        var list = await svc.ReceptionsAsync(status, q, fromDate, toDate);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? appointmentId, int? carId)
+    {
+        ViewBag.Cars = await svc.CarsForSelectAsync();
+        ViewBag.Appointments = await svc.AppointmentsEligibleForReceptionAsync();
+        ViewBag.DefaultChecklist = svc.GetDefaultChecklistItems();
+        ViewBag.InspectionLevels = Ui.InspectionLevels;
+
+        Appointment? app = null;
+        if (appointmentId.HasValue && appointmentId.Value > 0)
+        {
+            app = await svc.GetAppointmentAsync(appointmentId.Value);
+            if (app != null)
+            {
+                ViewBag.SelectedAppointment = app;
+                ViewBag.SelectedCarId = app.CarId;
+            }
+        }
+        else if (carId.HasValue && carId.Value > 0)
+        {
+            ViewBag.SelectedCarId = carId.Value;
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int carId, int? appointmentId, int odometer, int fuelLevel,
+        string levelOfInspection, string customerRequest, string? valuablesInCar, string? exteriorCondition,
+        bool isWarranty, bool isInsurance, bool isBackRepair, string? createdBy,
+        string[]? groups, string[]? codes, string[]? names, int[]? receptionStatuses, string[]? notes)
+    {
+        if (carId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn xe tiếp nhận dịch vụ.";
+            return RedirectToAction(nameof(Create), new { appointmentId, carId });
+        }
+
+        if (string.IsNullOrWhiteSpace(customerRequest))
+        {
+            TempData["Error"] = "Vui lòng nhập yêu cầu của khách hàng hoặc triệu chứng xe.";
+            return RedirectToAction(nameof(Create), new { appointmentId, carId });
+        }
+
+        try
+        {
+            var sheet = new ReceptionSheet
+            {
+                CarId = carId,
+                AppointmentId = (appointmentId.HasValue && appointmentId.Value > 0) ? appointmentId : null,
+                Odometer = odometer,
+                FuelLevel = fuelLevel >= 1 && fuelLevel <= 4 ? fuelLevel : 2,
+                LevelOfInspection = string.IsNullOrWhiteSpace(levelOfInspection) ? "Bảo dưỡng 10.000 km" : levelOfInspection.Trim(),
+                CustomerRequest = customerRequest.Trim(),
+                ValuablesInCar = valuablesInCar?.Trim(),
+                ExteriorCondition = exteriorCondition?.Trim(),
+                IsWarranty = isWarranty,
+                IsInsurance = isInsurance,
+                IsBackRepair = isBackRepair,
+                CreatedBy = !string.IsNullOrWhiteSpace(createdBy) ? createdBy.Trim() : "Cố vấn dịch vụ"
+            };
+
+            var items = new List<ReceptionItem>();
+            if (codes != null && codes.Length > 0)
+            {
+                for (int i = 0; i < codes.Length; i++)
+                {
+                    var code = codes[i];
+                    var grp = (groups != null && groups.Length > i) ? groups[i] : "";
+                    var nm = (names != null && names.Length > i) ? names[i] : "";
+                    var st = (receptionStatuses != null && receptionStatuses.Length > i) ? (AuditStatus)receptionStatuses[i] : AuditStatus.Good;
+                    var nt = (notes != null && notes.Length > i) ? notes[i] : null;
+
+                    items.Add(new ReceptionItem
+                    {
+                        Group = grp,
+                        Code = code,
+                        Name = nm,
+                        ReceptionStatus = st,
+                        DeliveryStatus = AuditStatus.Good,
+                        Note = nt?.Trim()
+                    });
+                }
+            }
+
+            var id = await svc.CreateReceptionAsync(sheet, items);
+            TempData["Success"] = $"Đã tạo phiếu tiếp nhận & kiểm tra xe {sheet.ReceptionNo} thành công!";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { appointmentId, carId });
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var sheet = await svc.GetReceptionAsync(id);
+        if (sheet == null) return NotFound();
+        return View(sheet);
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var sheet = await svc.GetReceptionAsync(id);
+        if (sheet == null) return NotFound();
+        return View(sheet);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateRO(int id, string? technician)
+    {
+        var (ok, msg, roId) = await svc.CreateROFromReceptionAsync(id, technician);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok && roId.HasValue) return RedirectToAction("Detail", "RO", new { id = roId.Value });
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Deliver(int id, string? deliveryBy, string? note, int[]? itemIds, int[]? deliveryStatuses)
+    {
+        List<(int itemId, AuditStatus status)>? deliveryItems = null;
+        if (itemIds != null && deliveryStatuses != null && itemIds.Length == deliveryStatuses.Length)
+        {
+            deliveryItems = [];
+            for (int i = 0; i < itemIds.Length; i++)
+            {
+                deliveryItems.Add((itemIds[i], (AuditStatus)deliveryStatuses[i]));
+            }
+        }
+
+        var (ok, msg) = await svc.DeliverCarAsync(id, deliveryBy, note, deliveryItems);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? reason)
+    {
+        var (ok, msg) = await svc.CancelReceptionAsync(id, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteReceptionAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

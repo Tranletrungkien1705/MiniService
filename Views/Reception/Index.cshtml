@@ -1,0 +1,170 @@
+@model List<ReceptionSheet>
+@{
+    ViewData["Title"] = "Phiếu tiếp nhận & Kiểm tra xe (Reception & Inspection)";
+    var curStatus = (ReceptionStatus?)ViewBag.Status;
+    var totalCount = Model.Count;
+    var pendingCount = Model.Count(s => s.Status == ReceptionStatus.Pending);
+    var inServiceCount = Model.Count(s => s.Status == ReceptionStatus.InService);
+    var deliveredCount = Model.Count(s => s.Status == ReceptionStatus.Delivered);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số phiếu tiếp nhận</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ lập lệnh SC (RO)</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đang trong xưởng sửa chữa</div>
+            <div class="stat-num text-info">@inServiceCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã nghiệm thu bàn giao</div>
+            <div class="stat-num text-success">@deliveredCount</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Biển số / Mã phiếu / Tên KH / SĐT / Yêu cầu..." style="max-width:270px" />
+                <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" title="Từ ngày" style="max-width:145px" />
+                <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" title="Đến ngày" style="max-width:145px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:190px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (ReceptionStatus s in Enum.GetValues(typeof(ReceptionStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.ReceptionStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curStatus.HasValue || !string.IsNullOrEmpty(ViewBag.Q) || !string.IsNullOrEmpty(ViewBag.FromDate) || !string.IsNullOrEmpty(ViewBag.ToDate))
+                {
+                    <a href="/Reception" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/Appointment" class="btn btn-sm btn-outline-info"><i class="bi bi-calendar2-check me-1"></i>Lịch hẹn</a>
+                <a href="/RO" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard2-pulse me-1"></i>Lệnh SC (RO)</a>
+                <a href="/Reception/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập phiếu tiếp nhận xe</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Số phiếu / Thời gian</th>
+                        <th>Phương tiện</th>
+                        <th>Khách hàng</th>
+                        <th>Số Km / Mức xăng</th>
+                        <th>Cấp bảo dưỡng &amp; Yêu cầu</th>
+                        <th>Hạng mục kiểm tra</th>
+                        <th>Trạng thái</th>
+                        <th>Lệnh RO</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var s in Model)
+                {
+                    var (stTxt, stCode, stCss) = Ui.ReceptionStatus(s.Status);
+                    <tr>
+                        <td>
+                            <a href="/Reception/Detail/@s.Id" class="fw-bold text-decoration-none">@s.ReceptionNo</a>
+                            <div class="text-muted small">@s.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                            <div class="text-secondary" style="font-size:11px">CVDV: @s.CreatedBy</div>
+                        </td>
+                        <td>
+                            <div class="fw-bold text-primary">@s.Car.Plate</div>
+                            <div class="small">@s.Car.Model</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@s.Customer.Name</div>
+                            <div class="text-muted small"><i class="bi bi-telephone me-1"></i>@(s.Customer.Phone ?? "—")</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@s.Odometer.ToString("N0") km</div>
+                            <div class="small text-muted"><i class="bi bi-fuel-pump me-1"></i>@Ui.FuelLevelText(s.FuelLevel)</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold small text-dark">@s.LevelOfInspection</div>
+                            <div class="text-muted small text-truncate" style="max-width:220px;" title="@s.CustomerRequest">@s.CustomerRequest</div>
+                            <div class="mt-1">
+                                @if (s.IsWarranty) { <span class="badge bg-primary" style="font-size:10px">Bảo hành</span> }
+                                @if (s.IsInsurance) { <span class="badge bg-info" style="font-size:10px">Bảo hiểm</span> }
+                                @if (s.IsBackRepair) { <span class="badge bg-danger" style="font-size:10px">Làm lại</span> }
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">
+                                @s.ItemCount mục
+                            </span>
+                            @if (s.IssuesCount > 0)
+                            {
+                                <span class="badge bg-warning text-dark ms-1" title="Hạng mục cần chú ý hoặc thay thế">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>@s.IssuesCount lưu ý
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success-subtle text-success ms-1">
+                                    <i class="bi bi-check-circle me-1"></i>Tốt
+                                </span>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge bg-@stCss" title="@stCode">@stTxt</span>
+                            @if (s.Status == ReceptionStatus.Delivered && s.DeliveryDateTime.HasValue)
+                            {
+                                <div class="text-muted" style="font-size:10px">Giao: @s.DeliveryDateTime.Value.ToString("dd/MM HH:mm")</div>
+                            }
+                        </td>
+                        <td>
+                            @if (s.RO != null)
+                            {
+                                <a href="/RO/Detail/@s.RO.Id" class="badge bg-light text-primary border text-decoration-none">
+                                    <i class="bi bi-clipboard2-pulse me-1"></i>@s.RO.Code
+                                </a>
+                                <div><span class="badge bg-@Ui.Status(s.RO.Status).css" style="font-size:10px">@Ui.Status(s.RO.Status).code</span></div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">— Chưa tạo —</span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/Reception/Detail/@s.Id" class="btn btn-outline-primary" title="Chi tiết"><i class="bi bi-eye"></i></a>
+                                <a href="/Reception/Print/@s.Id" class="btn btn-outline-secondary" target="_blank" title="In phiếu"><i class="bi bi-printer"></i></a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                            Không có phiếu tiếp nhận nào phù hợp tiêu chí tìm kiếm.
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

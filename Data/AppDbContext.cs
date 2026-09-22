@@ -30,6 +30,8 @@ public class AppDbContext : DbContext
     public DbSet<OrderPart> OrderParts => Set<OrderPart>();
     public DbSet<OrderPartLine> OrderPartLines => Set<OrderPartLine>();
     public DbSet<Cavity> Cavities => Set<Cavity>();
+    public DbSet<ReceptionSheet> ReceptionSheets => Set<ReceptionSheet>();
+    public DbSet<ReceptionItem> ReceptionItems => Set<ReceptionItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -67,6 +69,7 @@ public class AppDbContext : DbContext
             e.HasMany(x => x.Payments).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.OrderParts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Cavity).WithMany().HasForeignKey(x => x.CavityId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.ReceptionSheet).WithMany().HasForeignKey(x => x.ReceptionSheetId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -104,6 +107,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.RO).WithMany().HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.ReceptionSheet).WithMany().HasForeignKey(x => x.ReceptionSheetId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<StockIn>(e =>
@@ -234,6 +238,22 @@ public class AppDbContext : DbContext
             e.Ignore(x => x.IsInUse);
             e.Ignore(x => x.ElapsedTime);
             e.HasOne(x => x.CurrentRO).WithMany().HasForeignKey(x => x.CurrentROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ReceptionSheet>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ReceptionNo }).IsUnique();
+            e.Ignore(x => x.ItemCount);
+            e.Ignore(x => x.IssuesCount);
+            e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.RO).WithMany().HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Items).WithOne(x => x.ReceptionSheet).HasForeignKey(x => x.ReceptionSheetId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ReceptionItem>(e =>
+        {
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

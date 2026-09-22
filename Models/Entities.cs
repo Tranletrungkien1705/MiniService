@@ -176,6 +176,24 @@ public enum CavityStatus
     Inactive = 3      // 3: Tạm ngừng sử dụng
 }
 
+/// <summary>Trạng thái Phiếu tiếp nhận & kiểm tra xe — theo Ser_ReceptionF (Pending = 'P', Approve/Delivery = 'A') idn.CarService.</summary>
+public enum ReceptionStatus
+{
+    Pending = 0,    // P: Đang tiếp nhận / Chờ lập RO
+    InService = 1,  // Đang sửa chữa / Đã lập lệnh RO vào xưởng
+    Delivered = 2,  // A: Đã nghiệm thu bàn giao xe cho khách
+    Cancelled = 3   // Đã hủy phiếu tiếp nhận
+}
+
+/// <summary>Kết quả kiểm tra hạng mục tiếp nhận xe — theo Ser_ReceptionFDtl (AuditStatus) idn.CarService.</summary>
+public enum AuditStatus
+{
+    Good = 0,       // Tốt / Đạt tiêu chuẩn
+    Attention = 1,  // Cần chú ý / Theo dõi
+    Replace = 2,    // Cần sửa chữa / Thay thế
+    NA = 3          // Không có / Không áp dụng
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -223,6 +241,8 @@ public class RepairOrder : IOrgOwned
     public Appointment? Appointment { get; set; }
     public int? CavityId { get; set; }
     public Cavity? Cavity { get; set; }
+    public int? ReceptionSheetId { get; set; }
+    public ReceptionSheet? ReceptionSheet { get; set; }
     public List<RepairLine> Lines { get; set; } = [];
     public List<WarrantyReport> WarrantyReports { get; set; } = [];
     public List<StockOut> StockOuts { get; set; } = [];
@@ -230,6 +250,7 @@ public class RepairOrder : IOrgOwned
     public List<Payment> Payments { get; set; } = [];
     public List<Quote> Quotes { get; set; } = [];
     public List<OrderPart> OrderParts { get; set; } = [];
+    public List<ReceptionSheet> ReceptionSheets { get; set; } = [];
 
     public decimal Total => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
@@ -361,6 +382,8 @@ public class Appointment : IOrgOwned
     public Car Car { get; set; } = null!;
     public Customer Customer { get; set; } = null!;
     public RepairOrder? RO { get; set; }
+    public int? ReceptionSheetId { get; set; }
+    public ReceptionSheet? ReceptionSheet { get; set; }
 }
 
 /// <summary>Phiếu Nhập kho phụ tùng — Ser_Inv_StockIn trong idn.CarService.</summary>
@@ -743,5 +766,57 @@ public class Cavity : IOrgOwned
 
     public bool IsInUse => Status == CavityStatus.Occupied;
     public TimeSpan? ElapsedTime => (StartUseDate.HasValue && Status == CavityStatus.Occupied) ? (DateTime.Now - StartUseDate.Value) : null;
+}
+
+/// <summary>Phiếu tiếp nhận & kiểm tra xe ban đầu (Walk-around Reception & Inspection Form) — Ser_ReceptionF trong idn.CarService.</summary>
+public class ReceptionSheet : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ReceptionNo { get; set; } = "";             // Số phiếu tiếp nhận (VD: TN260427-001)
+    public int CarId { get; set; }                            // Xe làm dịch vụ
+    public int CustomerId { get; set; }                       // Khách hàng / Chủ xe
+    public int? AppointmentId { get; set; }                   // Cuộc hẹn gốc (nếu có đặt trước)
+    public int? ROId { get; set; }                            // Lệnh sửa chữa sinh ra từ tiếp nhận
+    public int Odometer { get; set; }                         // Số km đồng hồ khi tiếp nhận xe (Km)
+    public int FuelLevel { get; set; } = 2;                   // Mức nhiên liệu (1: 1/4, 2: 1/2, 3: 3/4, 4: Đầy bình)
+    public string LevelOfInspection { get; set; } = "Bảo dưỡng 10.000 km"; // Cấp kiểm tra / bảo dưỡng (LevelOfInspection)
+    public string CustomerRequest { get; set; } = "";         // Yêu cầu của khách / Triệu chứng xe (CusRequest)
+    public string? ValuablesInCar { get; set; }               // Đồ đạc / Tài sản khách để lại trên xe
+    public string? ExteriorCondition { get; set; }            // Ghi chú trầy xước / móp méo bên ngoài thân vỏ
+    public bool IsWarranty { get; set; } = false;             // Xe có hạng mục bảo hành hãng (WarrantlyStatus)
+    public bool IsInsurance { get; set; } = false;            // Xe có làm bảo hiểm (InsuaranceStatus)
+    public bool IsBackRepair { get; set; } = false;           // Xe làm lại / sửa lại lỗi tái phát (BackRepairStatus)
+    public ReceptionStatus Status { get; set; } = ReceptionStatus.Pending; // Trạng thái phiếu (P / A)
+    public string CreatedBy { get; set; } = "Cố vấn dịch vụ"; // Cố vấn dịch vụ tiếp nhận xe (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Thời điểm tiếp nhận xe
+    public DateTime? DeliveryDateTime { get; set; }           // Thời điểm bàn giao trả xe cho khách (DeliveryDateTime)
+    public string? DeliveryBy { get; set; }                   // Cố vấn bàn giao xe (DeliveryBy)
+    public string? DeliveryNote { get; set; }                 // Ý kiến khách hàng khi nhận bàn giao (DeliveryRemark)
+
+    public Car Car { get; set; } = null!;
+    public Customer Customer { get; set; } = null!;
+    public Appointment? Appointment { get; set; }
+    public RepairOrder? RO { get; set; }
+    public List<ReceptionItem> Items { get; set; } = [];
+
+    public int ItemCount => Items.Count;
+    public int IssuesCount => Items.Count(i => i.ReceptionStatus == AuditStatus.Attention || i.ReceptionStatus == AuditStatus.Replace);
+}
+
+/// <summary>Chi tiết hạng mục kiểm tra quanh xe — Ser_ReceptionFDtl trong idn.CarService.</summary>
+public class ReceptionItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ReceptionSheetId { get; set; }
+    public string Group { get; set; } = "";                   // Nhóm hạng mục (Khoang lái, Thân vỏ & Đèn, Khoang động cơ, Lốp xe & Phanh, Cốp sau & Đồ nghề)
+    public string Code { get; set; } = "";                    // Mã hạng mục (KHOANGLAI.DTL, KHOANGDONGCO.DDC...)
+    public string Name { get; set; } = "";                    // Tên hạng mục kiểm tra
+    public AuditStatus ReceptionStatus { get; set; } = AuditStatus.Good; // Trạng thái khi tiếp nhận (Đạt, Theo dõi, Cần thay, K/A)
+    public AuditStatus DeliveryStatus { get; set; } = AuditStatus.Good;  // Trạng thái khi bàn giao xe
+    public string? Note { get; set; }                         // Ghi chú chi tiết hạng mục
+
+    public ReceptionSheet ReceptionSheet { get; set; } = null!;
 }
 

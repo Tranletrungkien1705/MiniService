@@ -1,0 +1,197 @@
+@model ReceptionSheet
+@{
+    Layout = null;
+    var (stTxt, stCode, _) = Ui.ReceptionStatus(Model.Status);
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>In Phiếu Tiếp Nhận Xe @Model.ReceptionNo — Hyundai Car Service</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <style>
+        body { font-family: "Segoe UI", Arial, sans-serif; font-size: 13px; color: #1f2937; background: #fff; }
+        .print-container { max-width: 860px; margin: 20px auto; padding: 24px; border: 1px solid #d1d5db; border-radius: 8px; }
+        .table-custom th, .table-custom td { padding: 4px 8px; font-size: 12px; }
+        .badge-status { font-weight: 600; padding: 2px 6px; font-size: 11px; border-radius: 4px; }
+        .fuel-box { display: inline-block; width: 45px; height: 18px; border: 1px solid #9ca3af; text-align: center; font-size: 11px; line-height: 16px; margin-right: 4px; border-radius: 2px; }
+        .fuel-box.active { background: #1d4ed8; color: #fff; font-weight: bold; border-color: #1d4ed8; }
+        @@media print {
+            .no-print { display: none !important; }
+            .print-container { border: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
+            body { font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print bg-light border-bottom p-3 mb-3 text-center sticky-top">
+    <button onclick="window.print()" class="btn btn-primary btn-sm me-2 fw-bold">
+        <i class="bi bi-printer me-1"></i>In Phiếu Tiếp Nhận (Print)
+    </button>
+    <button onclick="window.close()" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-x-circle me-1"></i>Đóng
+    </button>
+</div>
+
+<div class="print-container">
+    <!-- Header đại lý -->
+    <div class="row align-items-center border-bottom pb-3 mb-3">
+        <div class="col-8">
+            <h5 class="fw-bold text-uppercase mb-0 text-primary">HYUNDAI CAR SERVICE</h5>
+            <div class="text-muted small">TRUNG TÂM DỊCH VỤ SỬA CHỮA &amp; BẢO DƯỠNG XE CHÍNH HÃNG</div>
+            <div class="text-muted small">Hotline dịch vụ: 1900-6868 · Website: https://service.hyundai.vn</div>
+        </div>
+        <div class="col-4 text-end">
+            <div class="fw-bold fs-6">PHIẾU TIẾP NHẬN XE</div>
+            <div class="text-muted small font-monospace">Số: <b>@Model.ReceptionNo</b></div>
+            <div class="text-muted small">Ngày: <b>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</b></div>
+        </div>
+    </div>
+
+    <!-- Tiêu đề chính -->
+    <div class="text-center my-3">
+        <h4 class="fw-bold text-uppercase mb-1">BIÊN BẢN TIẾP NHẬN &amp; KIỂM TRA QUANH XE</h4>
+        <div class="small text-muted fst-italic">(Walk-Around Reception &amp; Inspection Sheet)</div>
+    </div>
+
+    <!-- Thông tin khách hàng & xe -->
+    <table class="table table-bordered table-custom mb-3">
+        <tbody>
+            <tr>
+                <td style="width:18%" class="bg-light fw-bold">Khách hàng:</td>
+                <td style="width:32%"><b>@Model.Customer.Name</b></td>
+                <td style="width:18%" class="bg-light fw-bold">Biển số xe:</td>
+                <td style="width:32%"><b class="text-primary fs-6">@Model.Car.Plate</b></td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Điện thoại:</td>
+                <td>@(Model.Customer.Phone ?? "—")</td>
+                <td class="bg-light fw-bold">Dòng xe / Model:</td>
+                <td>@Model.Car.Model (@Model.Car.Year)</td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Số Km (Odometer):</td>
+                <td><b>@Model.Odometer.ToString("N0") km</b></td>
+                <td class="bg-light fw-bold">Số khung (VIN):</td>
+                <td class="font-monospace">@(Model.Car.Vin ?? "—")</td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Mức nhiên liệu:</td>
+                <td>
+                    <span class="fuel-box @(Model.FuelLevel == 1 ? "active" : "")">1/4</span>
+                    <span class="fuel-box @(Model.FuelLevel == 2 ? "active" : "")">1/2</span>
+                    <span class="fuel-box @(Model.FuelLevel == 3 ? "active" : "")">3/4</span>
+                    <span class="fuel-box @(Model.FuelLevel == 4 ? "active" : "")">Full</span>
+                </td>
+                <td class="bg-light fw-bold">Cấp kiểm tra / BD:</td>
+                <td><b>@Model.LevelOfInspection</b></td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Cố vấn dịch vụ:</td>
+                <td>@Model.CreatedBy</td>
+                <td class="bg-light fw-bold">Phân loại:</td>
+                <td>
+                    @(Model.IsWarranty ? "[X] Bảo hành " : "[ ] Bảo hành ")
+                    @(Model.IsInsurance ? "[X] Bảo hiểm " : "[ ] Bảo hiểm ")
+                    @(Model.IsBackRepair ? "[X] Sửa lại " : "[ ] Sửa lại ")
+                </td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Yêu cầu của khách:</td>
+                <td colspan="3" class="fw-semibold">@Model.CustomerRequest</td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Tư trang trên xe:</td>
+                <td>@(Model.ValuablesInCar ?? "Không có")</td>
+                <td class="bg-light fw-bold">Thân vỏ ngoài xe:</td>
+                <td>@(Model.ExteriorCondition ?? "Nguyên bản")</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Bảng kiểm tra quanh xe 5 nhóm -->
+    <div class="fw-bold mb-1 small text-uppercase">Kết quả kiểm tra quanh xe (Walk-Around Inspection Checklist):</div>
+    <table class="table table-bordered table-custom mb-3">
+        <thead class="table-light text-center">
+            <tr>
+                <th style="width:40px">STT</th>
+                <th>Hạng mục kiểm tra</th>
+                <th style="width:80px">Tiếp nhận</th>
+                <th style="width:80px">Giao xe</th>
+                <th>Hiện trạng / Ghi chú kỹ thuật</th>
+            </tr>
+        </thead>
+        <tbody>
+        @{
+            string currentGroup = "";
+            int no = 1;
+        }
+        @foreach (var itm in Model.Items)
+        {
+            if (itm.Group != currentGroup)
+            {
+                currentGroup = itm.Group;
+                <tr class="table-secondary">
+                    <td colspan="5" class="fw-bold text-uppercase py-1">
+                        <i class="bi bi-chevron-right me-1"></i>@currentGroup
+                    </td>
+                </tr>
+            }
+            var recSymbol = itm.ReceptionStatus switch
+            {
+                AuditStatus.Good => "✓ Đạt",
+                AuditStatus.Attention => "! Cần chú ý",
+                AuditStatus.Replace => "✗ Cần thay",
+                _ => "— K/A"
+            };
+            var delSymbol = itm.DeliveryStatus switch
+            {
+                AuditStatus.Good => "✓ Đạt",
+                AuditStatus.Attention => "! Chú ý",
+                AuditStatus.Replace => "✗ Xong",
+                _ => "— K/A"
+            };
+            <tr>
+                <td class="text-center">@(no++)</td>
+                <td>
+                    <b>@itm.Name</b>
+                    <span class="text-muted font-monospace" style="font-size:10px">(@itm.Code)</span>
+                </td>
+                <td class="text-center fw-semibold @(itm.ReceptionStatus == AuditStatus.Replace ? "text-danger" : (itm.ReceptionStatus == AuditStatus.Attention ? "text-warning" : "text-success"))">
+                    @recSymbol
+                </td>
+                <td class="text-center text-muted">
+                    @(Model.Status == ReceptionStatus.Delivered ? delSymbol : "—")
+                </td>
+                <td class="small">@(string.IsNullOrEmpty(itm.Note) ? "—" : itm.Note)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <!-- Cam kết & Chữ ký -->
+    <div class="border p-2 rounded mb-3 small bg-light">
+        <b>Cam kết dịch vụ:</b> Khách hàng và Cố vấn dịch vụ đã cùng tiến hành kiểm tra xe, thống nhất về tình trạng xe, mức nhiên liệu, tư trang để lại và các nội dung yêu cầu sửa chữa nêu trên. Đại lý cam kết thực hiện đúng tiêu chuẩn kỹ thuật Hyundai.
+    </div>
+
+    <div class="row text-center mt-4 pt-2">
+        <div class="col-6">
+            <div class="fw-bold">KHÁCH HÀNG / ĐẠI DIỆN CHỦ XE</div>
+            <div class="text-muted small fst-italic">(Ký và ghi rõ họ tên)</div>
+            <div style="height:70px"></div>
+            <div class="fw-semibold">@Model.Customer.Name</div>
+        </div>
+        <div class="col-6">
+            <div class="fw-bold">CỐ VẤN DỊCH VỤ TIẾP NHẬN</div>
+            <div class="text-muted small fst-italic">(Ký và ghi rõ họ tên)</div>
+            <div style="height:70px"></div>
+            <div class="fw-semibold">@Model.CreatedBy</div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

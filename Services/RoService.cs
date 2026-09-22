@@ -15,6 +15,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int ServicePackages,
     int PendingOrderParts, decimal MonthOrderPartValue,
     int TotalCavities, int OccupiedCavities, int AvailableCavities,
+    int PendingReceptions, int TodayReceptions,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -116,6 +117,16 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteCavityAsync(int cavityId);
     Task<List<Cavity>> CavitiesForSelectAsync(CavityType? type = null);
     Task<List<RepairOrder>> ROsEligibleForCavityAsync();
+    // reception & walk-around inspection (Ser_ReceptionF & Ser_ReceptionFDtl)
+    Task<List<ReceptionSheet>> ReceptionsAsync(ReceptionStatus? status, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<ReceptionSheet?> GetReceptionAsync(int id);
+    Task<int> CreateReceptionAsync(ReceptionSheet sheet, List<ReceptionItem>? items = null);
+    Task<(bool ok, string msg, int? roId)> CreateROFromReceptionAsync(int id, string? technician = null);
+    Task<(bool ok, string msg)> DeliverCarAsync(int id, string? deliveryBy, string? note, List<(int itemId, AuditStatus status)>? deliveryItems = null);
+    Task<(bool ok, string msg)> CancelReceptionAsync(int id, string? reason = null);
+    Task<(bool ok, string msg)> DeleteReceptionAsync(int id);
+    Task<List<Appointment>> AppointmentsEligibleForReceptionAsync();
+    List<ReceptionItem> GetDefaultChecklistItems();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -197,6 +208,14 @@ public class RoService(AppDbContext db) : IRoService
         _ => []
     };
 
+    /// <summary>Chuyển trạng thái Phiếu tiếp nhận & kiểm tra xe theo Ser_ReceptionF idn.CarService.</summary>
+    public static ReceptionStatus[] AllowedNextReception(ReceptionStatus s) => s switch
+    {
+        ReceptionStatus.Pending => [ReceptionStatus.InService, ReceptionStatus.Cancelled],
+        ReceptionStatus.InService => [ReceptionStatus.Delivered, ReceptionStatus.Cancelled],
+        _ => []
+    };
+
     public Task<List<Customer>> CustomersAsync(string? q)
     {
         var query = db.Customers.Include(c => c.Cars).AsQueryable();
@@ -272,7 +291,7 @@ public class RoService(AppDbContext db) : IRoService
 
     public Task<RepairOrder?> GetROAsync(int id) =>
         db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer).Include(r => r.Lines).Include(r => r.Appointment)
-          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts)
+          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -436,6 +455,9 @@ public class RoService(AppDbContext db) : IRoService
         var occupiedCavities = await db.Cavities.CountAsync(c => c.Status == CavityStatus.Occupied);
         var availableCavities = await db.Cavities.CountAsync(c => c.Status == CavityStatus.Available && c.IsActive);
 
+        var pendingReceptions = await db.ReceptionSheets.CountAsync(s => s.Status == ReceptionStatus.Pending);
+        var todayReceptions = await db.ReceptionSheets.CountAsync(s => s.CreatedAt.Date == today);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -464,6 +486,8 @@ public class RoService(AppDbContext db) : IRoService
             totalCavities,
             occupiedCavities,
             availableCavities,
+            pendingReceptions,
+            todayReceptions,
             byStatus);
     }
 
@@ -635,6 +659,7 @@ public class RoService(AppDbContext db) : IRoService
             .Include(a => a.Car)
             .Include(a => a.Customer)
             .Include(a => a.RO)
+            .Include(a => a.ReceptionSheet)
             .FirstOrDefaultAsync(a => a.Id == id);
 
     public async Task<int> CreateAppointmentAsync(Appointment app)
@@ -2115,5 +2140,290 @@ public class RoService(AppDbContext db) : IRoService
             .OrderByDescending(r => r.Status == ROStatus.InGarage)
             .ThenByDescending(r => r.Status == ROStatus.HasRO)
             .ThenByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+    // --- Vehicle Reception & Walk-Around Inspection (Ser_ReceptionF & Ser_ReceptionFDtl) ---
+    public List<ReceptionItem> GetDefaultChecklistItems() =>
+    [
+        // 1. Khoang lái (Cabin)
+        new() { Group = "Khoang lái", Code = "KHOANGLAI.DTL", Name = "Bảng đồng hồ & Đèn cảnh báo taplo", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang lái", Code = "KHOANGLAI.COI", Name = "Còi xe & Hệ thống tín hiệu âm thanh", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang lái", Code = "KHOANGLAI.GMBP", Name = "Cần gạt mưa & Vòi xịt rửa kính", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang lái", Code = "KHOANGLAI.HTAT", Name = "Dây đai an toàn & Hệ thống túi khí", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang lái", Code = "KHOANGLAI.HTDH", Name = "Hệ thống điều hòa nhiệt độ & Quạt gió", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang lái", Code = "KHOANGLAI.CCGD", Name = "Kính cửa sổ & Khóa cửa trung tâm", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang lái", Code = "KHOANGLAI.GLD", Name = "Gương chiếu hậu trong & ngoài xe", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+
+        // 2. Ngoại quan & Thân vỏ (Exterior)
+        new() { Group = "Ngoại quan & Thân vỏ", Code = "TRUOCVASAUXE.DT", Name = "Cụm đèn chiếu sáng trước (Pha/Cos/Xi-nhan)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Ngoại quan & Thân vỏ", Code = "TRUOCVASAUXE.DS", Name = "Cụm đèn sau (Đèn hậu/Phanh/Lùi/Biển số)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Ngoại quan & Thân vỏ", Code = "THANVO.XUOC", Name = "Kiểm tra trầy xước / móp méo thân vỏ xe", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+
+        // 3. Khoang động cơ (Engine Compartment)
+        new() { Group = "Khoang động cơ", Code = "KHOANGDONGCO.DDC", Name = "Mức & Tình trạng dầu nhớt động cơ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang động cơ", Code = "KHOANGDONGCO.DP", Name = "Mức dầu phanh / Dầu ly hợp", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang động cơ", Code = "KHOANGDONGCO.DTLL", Name = "Mức dầu trợ lực lái (nếu có)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang động cơ", Code = "KHOANGDONGCO.NLM", Name = "Mức nước làm mát động cơ & Bình phụ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang động cơ", Code = "KHOANGDONGCO.NRK", Name = "Mức nước rửa kính khoang máy", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang động cơ", Code = "KHOANGDONGCO.DTD", Name = "Tình trạng dây curoa truyền động", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang động cơ", Code = "KHOANGDONGCO.LG", Name = "Tình trạng lọc gió động cơ & lọc máy lạnh", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Khoang động cơ", Code = "KHOANGDONGCO.RRCL", Name = "Kiểm tra rò rỉ dung dịch đáy khoang động cơ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+
+        // 4. Lốp xe & Phanh (Tires & Brakes)
+        new() { Group = "Lốp xe & Phanh", Code = "LOPXE.BXTT", Name = "Bánh xe trước trái (Áp suất & Độ mòn gai)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Lốp xe & Phanh", Code = "LOPXE.BXTP", Name = "Bánh xe trước phải (Áp suất & Độ mòn gai)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Lốp xe & Phanh", Code = "LOPXE.BXST", Name = "Bánh xe sau trái (Áp suất & Độ mòn gai)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Lốp xe & Phanh", Code = "LOPXE.BXSP", Name = "Bánh xe sau phải (Áp suất & Độ mòn gai)", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+
+        // 5. Cốp sau & Dụng cụ (Trunk & Tools)
+        new() { Group = "Cốp sau & Dụng cụ", Code = "COPSAU.BDC", Name = "Bộ đồ nghề sửa chữa, tay quay & Kích nâng", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+        new() { Group = "Cốp sau & Dụng cụ", Code = "COPSAU.LDP", Name = "Lốp xe dự phòng & Áp suất lốp phụ", ReceptionStatus = AuditStatus.Good, DeliveryStatus = AuditStatus.Good },
+    ];
+
+    public async Task<List<ReceptionSheet>> ReceptionsAsync(ReceptionStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.ReceptionSheets
+            .Include(s => s.Car)
+            .Include(s => s.Customer)
+            .Include(s => s.Appointment)
+            .Include(s => s.RO)
+            .Include(s => s.Items)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(s => s.Status == status.Value);
+        if (fromDate.HasValue) query = query.Where(s => s.CreatedAt.Date >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(s => s.CreatedAt.Date <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(s => s.ReceptionNo.ToLower().Contains(kw)
+                || s.Car.Plate.ToLower().Contains(kw)
+                || s.Car.Model.ToLower().Contains(kw)
+                || s.Customer.Name.ToLower().Contains(kw)
+                || (s.Customer.Phone != null && s.Customer.Phone.Contains(kw))
+                || (s.CustomerRequest != null && s.CustomerRequest.ToLower().Contains(kw))
+                || (s.CreatedBy != null && s.CreatedBy.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(s => s.CreatedAt).ToList();
+    }
+
+    public Task<ReceptionSheet?> GetReceptionAsync(int id) =>
+        db.ReceptionSheets
+            .Include(s => s.Car)
+            .Include(s => s.Customer)
+            .Include(s => s.Appointment)
+            .Include(s => s.RO).ThenInclude(r => r!.Lines)
+            .Include(s => s.RO).ThenInclude(r => r!.Cavity)
+            .Include(s => s.Items)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+    public async Task<int> CreateReceptionAsync(ReceptionSheet sheet, List<ReceptionItem>? items = null)
+    {
+        var car = await db.Cars.Include(c => c.Customer).FirstOrDefaultAsync(c => c.Id == sheet.CarId)
+            ?? throw new InvalidOperationException("Phương tiện không tồn tại.");
+        sheet.CustomerId = car.CustomerId;
+
+        if (string.IsNullOrWhiteSpace(sheet.ReceptionNo))
+        {
+            var countToday = await db.ReceptionSheets.CountAsync(s => s.CreatedAt.Date == DateTime.Today);
+            sheet.ReceptionNo = $"TN{DateTime.Today:yyMMdd}-{countToday + 1:D3}";
+        }
+        else
+        {
+            sheet.ReceptionNo = sheet.ReceptionNo.Trim().ToUpperInvariant();
+        }
+
+        sheet.Status = ReceptionStatus.Pending;
+        sheet.CreatedAt = DateTime.Now;
+
+        // Nếu có cuộc hẹn gốc
+        if (sheet.AppointmentId.HasValue)
+        {
+            var app = await db.Appointments.FirstOrDefaultAsync(a => a.Id == sheet.AppointmentId.Value);
+            if (app != null)
+            {
+                if (app.Status == AppointmentStatus.Pending || app.Status == AppointmentStatus.Contacted || app.Status == AppointmentStatus.Confirmed)
+                {
+                    app.Status = AppointmentStatus.CheckedIn;
+                    app.CheckedInAt = DateTime.Now;
+                }
+            }
+        }
+
+        var checklist = items != null && items.Count > 0 ? items : GetDefaultChecklistItems();
+        foreach (var item in checklist)
+        {
+            sheet.Items.Add(new ReceptionItem
+            {
+                Group = item.Group,
+                Code = item.Code,
+                Name = item.Name,
+                ReceptionStatus = item.ReceptionStatus,
+                DeliveryStatus = item.DeliveryStatus,
+                Note = item.Note
+            });
+        }
+
+        db.ReceptionSheets.Add(sheet);
+        await db.SaveChangesAsync();
+
+        if (sheet.AppointmentId.HasValue)
+        {
+            var app = await db.Appointments.FirstOrDefaultAsync(a => a.Id == sheet.AppointmentId.Value);
+            if (app != null)
+            {
+                app.ReceptionSheetId = sheet.Id;
+                await db.SaveChangesAsync();
+            }
+        }
+
+        return sheet.Id;
+    }
+
+    public async Task<(bool ok, string msg, int? roId)> CreateROFromReceptionAsync(int id, string? technician = null)
+    {
+        var sheet = await db.ReceptionSheets
+            .Include(s => s.Car)
+            .Include(s => s.Customer)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+        if (sheet == null) return (false, "Không tìm thấy phiếu tiếp nhận xe.", null);
+
+        if (sheet.ROId.HasValue)
+            return (false, $"Phiếu tiếp nhận {sheet.ReceptionNo} đã được lập Lệnh sửa chữa trước đó.", sheet.ROId);
+
+        if (sheet.Status == ReceptionStatus.Cancelled)
+            return (false, "Phiếu tiếp nhận đã bị hủy, không thể lập Lệnh sửa chữa.", null);
+
+        if (sheet.Status == ReceptionStatus.Delivered)
+            return (false, "Phiếu tiếp nhận đã hoàn tất bàn giao xe.", null);
+
+        var ro = new RepairOrder
+        {
+            CarId = sheet.CarId,
+            CustomerId = sheet.CustomerId,
+            AppointmentId = sheet.AppointmentId,
+            ReceptionSheetId = sheet.Id,
+            Odometer = sheet.Odometer,
+            IntakeNote = $"Tiếp nhận theo phiếu {sheet.ReceptionNo}. Cấp: {sheet.LevelOfInspection}. Yêu cầu: {sheet.CustomerRequest}"
+                + (!string.IsNullOrWhiteSpace(sheet.ValuablesInCar) ? $" | Đồ đạc trên xe: {sheet.ValuablesInCar}" : "")
+                + (!string.IsNullOrWhiteSpace(sheet.ExteriorCondition) ? $" | Thân vỏ: {sheet.ExteriorCondition}" : ""),
+            Technician = !string.IsNullOrWhiteSpace(technician) ? technician.Trim() : (sheet.CreatedBy ?? "Kỹ thuật viên xưởng"),
+            Status = ROStatus.Created,
+            CreatedAt = DateTime.Now,
+            CreatedBy = sheet.CreatedBy ?? "Cố vấn dịch vụ"
+        };
+
+        var countTotal = await db.ROs.CountAsync();
+        ro.Code = $"RO{DateTime.Today:yyMMdd}-{countTotal + 1:D3}";
+
+        db.ROs.Add(ro);
+        await db.SaveChangesAsync();
+
+        sheet.ROId = ro.Id;
+        sheet.Status = ReceptionStatus.InService;
+
+        // Nếu có lịch hẹn, cập nhật ROId cho lịch hẹn
+        if (sheet.AppointmentId.HasValue)
+        {
+            var app = await db.Appointments.FirstOrDefaultAsync(a => a.Id == sheet.AppointmentId.Value);
+            if (app != null)
+            {
+                app.ROId = ro.Id;
+                app.Status = AppointmentStatus.CheckedIn;
+                app.CheckedInAt ??= DateTime.Now;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo Lệnh sửa chữa {ro.Code} thành công từ phiếu tiếp nhận {sheet.ReceptionNo}!", ro.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeliverCarAsync(int id, string? deliveryBy, string? note, List<(int itemId, AuditStatus status)>? deliveryItems = null)
+    {
+        var sheet = await db.ReceptionSheets
+            .Include(s => s.RO)
+            .Include(s => s.Items)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+        if (sheet == null) return (false, "Không tìm thấy phiếu tiếp nhận xe.");
+        if (sheet.Status == ReceptionStatus.Delivered) return (false, "Xe đã được bàn giao trước đó.");
+        if (sheet.Status == ReceptionStatus.Cancelled) return (false, "Phiếu tiếp nhận đã bị hủy.");
+
+        sheet.Status = ReceptionStatus.Delivered;
+        sheet.DeliveryDateTime = DateTime.Now;
+        sheet.DeliveryBy = !string.IsNullOrWhiteSpace(deliveryBy) ? deliveryBy.Trim() : "Cố vấn dịch vụ";
+        sheet.DeliveryNote = note?.Trim();
+
+        if (deliveryItems != null && deliveryItems.Count > 0)
+        {
+            foreach (var (itemId, status) in deliveryItems)
+            {
+                var itm = sheet.Items.FirstOrDefault(i => i.Id == itemId);
+                if (itm != null) itm.DeliveryStatus = status;
+            }
+        }
+
+        // Nếu RO liên kết đang ở Paid, tự động chuyển sang Finished (FNS)
+        if (sheet.RO != null && sheet.RO.Status == ROStatus.Paid)
+        {
+            sheet.RO.Status = ROStatus.Finished;
+            sheet.RO.FinishedAt = DateTime.Now;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã hoàn tất nghiệm thu và bàn giao xe cho khách hàng theo phiếu {sheet.ReceptionNo}!");
+    }
+
+    public async Task<(bool ok, string msg)> CancelReceptionAsync(int id, string? reason = null)
+    {
+        var sheet = await db.ReceptionSheets.FirstOrDefaultAsync(s => s.Id == id);
+        if (sheet == null) return (false, "Không tìm thấy phiếu tiếp nhận xe.");
+
+        if (sheet.Status == ReceptionStatus.Delivered)
+            return (false, "Không thể hủy phiếu tiếp nhận đã bàn giao xe.");
+
+        if (sheet.ROId.HasValue)
+        {
+            var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == sheet.ROId.Value);
+            if (ro != null && ro.Status != ROStatus.Created && ro.Status != ROStatus.Rejected)
+                return (false, $"Lệnh sửa chữa {ro.Code} đang trong quá trình thực hiện ({Ui.Status(ro.Status).text}), không thể hủy phiếu tiếp nhận.");
+        }
+
+        sheet.Status = ReceptionStatus.Cancelled;
+        if (!string.IsNullOrWhiteSpace(reason))
+            sheet.CustomerRequest += $" [Đã hủy: {reason.Trim()}]";
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy phiếu tiếp nhận {sheet.ReceptionNo}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteReceptionAsync(int id)
+    {
+        var sheet = await db.ReceptionSheets.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);
+        if (sheet == null) return (false, "Không tìm thấy phiếu tiếp nhận xe.");
+
+        if (sheet.Status == ReceptionStatus.InService || sheet.Status == ReceptionStatus.Delivered)
+            return (false, "Không thể xóa phiếu tiếp nhận đang trong xưởng hoặc đã bàn giao xe.");
+
+        if (sheet.ROId.HasValue)
+            return (false, "Không thể xóa phiếu tiếp nhận đã sinh Lệnh sửa chữa.");
+
+        db.ReceptionItems.RemoveRange(sheet.Items);
+        db.ReceptionSheets.Remove(sheet);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu tiếp nhận {sheet.ReceptionNo}.");
+    }
+
+    public Task<List<Appointment>> AppointmentsEligibleForReceptionAsync() =>
+        db.Appointments
+            .Include(a => a.Car)
+            .Include(a => a.Customer)
+            .Where(a => a.Status != AppointmentStatus.Cancelled && a.Status != AppointmentStatus.CheckedIn && !a.ROId.HasValue && !a.ReceptionSheetId.HasValue)
+            .OrderByDescending(a => a.AppointmentDate.Date == DateTime.Today)
+            .ThenBy(a => a.AppointmentDate)
             .ToListAsync();
 }

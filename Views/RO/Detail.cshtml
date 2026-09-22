@@ -22,6 +22,12 @@
                             <i class="bi bi-calendar2-check me-1"></i>Từ lịch hẹn: <a href="/Appointment/Detail/@Model.Appointment.Id" class="fw-semibold">@Model.Appointment.AppNo</a> (@Model.Appointment.AppointmentDate.ToString("dd/MM/yyyy HH:mm"))
                         </div>
                     }
+                    @if (Model.ReceptionSheet != null)
+                    {
+                        <div class="small mt-1 text-primary">
+                            <i class="bi bi-card-checklist me-1"></i>Phiếu tiếp nhận: <a href="/Reception/Detail/@Model.ReceptionSheet.Id" class="fw-semibold">@Model.ReceptionSheet.ReceptionNo</a> (<span class="badge bg-@Ui.ReceptionStatus(Model.ReceptionSheet.Status).css" style="font-size:10px">@Ui.ReceptionStatus(Model.ReceptionSheet.Status).text</span>)
+                        </div>
+                    }
                     @if (!string.IsNullOrEmpty(Model.IntakeNote)) { <div class="small mt-1 text-muted">Tình trạng: @Model.IntakeNote</div> }
                 </div>
             </div>

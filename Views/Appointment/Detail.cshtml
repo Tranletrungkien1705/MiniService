@@ -48,6 +48,19 @@
                         </a>
                     </div>
                 }
+                @if (Model.ReceptionSheet != null)
+                {
+                    <div class="alert alert-info d-flex justify-content-between align-items-center mt-2 mb-0">
+                        <div>
+                            <i class="bi bi-card-checklist me-2 fs-5 text-primary"></i>
+                            Phiếu tiếp nhận &amp; kiểm tra quanh xe: <b>@Model.ReceptionSheet.ReceptionNo</b>
+                            <span class="badge bg-@Ui.ReceptionStatus(Model.ReceptionSheet.Status).css ms-1">@Ui.ReceptionStatus(Model.ReceptionSheet.Status).text</span>
+                        </div>
+                        <a href="/Reception/Detail/@Model.ReceptionSheet.Id" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye me-1"></i>Xem phiếu tiếp nhận
+                        </a>
+                    </div>
+                }
             </div>
         </div>
 
@@ -120,6 +133,9 @@
                     <p class="small text-muted mb-3">
                         Khi khách mang xe đến đúng hẹn, thực hiện kiểm tra tiếp nhận và tạo ngay Lệnh sửa chữa (RO) đưa xe vào khu vực sửa chữa.
                     </p>
+                    <a href="/Reception/Create?appointmentId=@Model.Id" class="btn btn-outline-primary w-100 mb-3 fw-semibold">
+                        <i class="bi bi-card-checklist me-1"></i>Lập phiếu tiếp nhận &amp; kiểm tra xe
+                    </a>
                     <form asp-action="CheckIn" method="post">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="id" value="@Model.Id" />

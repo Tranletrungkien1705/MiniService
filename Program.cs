@@ -1322,6 +1322,153 @@ app.MapDelete("/api/cavities/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Tiếp nhận & kiểm tra xe ban đầu (Ser_ReceptionF & Ser_ReceptionFDtl)
+app.MapGet("/api/receptions", async (ReceptionStatus? status, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.ReceptionsAsync(status, q, fromDate, toDate);
+    return Results.Ok(list.Select(s => new
+    {
+        s.Id,
+        s.ReceptionNo,
+        plate = s.Car.Plate,
+        model = s.Car.Model,
+        customer = s.Customer.Name,
+        phone = s.Customer.Phone,
+        s.Odometer,
+        fuelLevel = s.FuelLevel,
+        fuelLevelText = Ui.FuelLevelText(s.FuelLevel),
+        s.LevelOfInspection,
+        s.CustomerRequest,
+        s.ValuablesInCar,
+        s.ExteriorCondition,
+        s.IsWarranty,
+        s.IsInsurance,
+        s.IsBackRepair,
+        status = Ui.ReceptionStatus(s.Status).text,
+        statusCode = Ui.ReceptionStatus(s.Status).code,
+        statusValue = (int)s.Status,
+        roId = s.ROId,
+        roCode = s.RO?.Code,
+        appointmentId = s.AppointmentId,
+        appointmentNo = s.Appointment?.AppNo,
+        itemCount = s.ItemCount,
+        issuesCount = s.IssuesCount,
+        s.CreatedBy,
+        s.CreatedAt,
+        s.DeliveryDateTime,
+        s.DeliveryBy,
+        s.DeliveryNote
+    }));
+});
+
+app.MapGet("/api/receptions/{id:int}", async (int id, IRoService svc) =>
+{
+    var s = await svc.GetReceptionAsync(id);
+    if (s == null) return Results.NotFound(new { error = "Không tìm thấy phiếu tiếp nhận xe." });
+    return Results.Ok(new
+    {
+        s.Id,
+        s.ReceptionNo,
+        car = new { s.Car.Id, s.Car.Plate, s.Car.Model, s.Car.Vin, s.Car.Year },
+        customer = new { s.Customer.Id, s.Customer.Name, s.Customer.Phone, s.Customer.Email },
+        s.Odometer,
+        fuelLevel = s.FuelLevel,
+        fuelLevelText = Ui.FuelLevelText(s.FuelLevel),
+        s.LevelOfInspection,
+        s.CustomerRequest,
+        s.ValuablesInCar,
+        s.ExteriorCondition,
+        s.IsWarranty,
+        s.IsInsurance,
+        s.IsBackRepair,
+        status = Ui.ReceptionStatus(s.Status).text,
+        statusCode = Ui.ReceptionStatus(s.Status).code,
+        statusValue = (int)s.Status,
+        ro = s.RO != null ? new { s.RO.Id, s.RO.Code, s.RO.Status, cavity = s.RO.Cavity?.CavityName } : null,
+        appointment = s.Appointment != null ? new { s.Appointment.Id, s.Appointment.AppNo, s.Appointment.AppointmentDate } : null,
+        s.ItemCount,
+        s.IssuesCount,
+        s.CreatedBy,
+        s.CreatedAt,
+        s.DeliveryDateTime,
+        s.DeliveryBy,
+        s.DeliveryNote,
+        items = s.Items.Select(i => new
+        {
+            i.Id,
+            i.Group,
+            i.Code,
+            i.Name,
+            receptionStatus = Ui.AuditStatus(i.ReceptionStatus).text,
+            receptionStatusValue = (int)i.ReceptionStatus,
+            deliveryStatus = Ui.AuditStatus(i.DeliveryStatus).text,
+            deliveryStatusValue = (int)i.DeliveryStatus,
+            i.Note
+        })
+    });
+});
+
+app.MapPost("/api/receptions", async (CreateReceptionDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.CarId <= 0) return Results.BadRequest(new { error = "Vui lòng chọn CarId hợp lệ." });
+        if (string.IsNullOrWhiteSpace(dto.CustomerRequest)) return Results.BadRequest(new { error = "Vui lòng nhập CustomerRequest." });
+
+        var sheet = new ReceptionSheet
+        {
+            CarId = dto.CarId,
+            AppointmentId = (dto.AppointmentId.HasValue && dto.AppointmentId.Value > 0) ? dto.AppointmentId : null,
+            Odometer = dto.Odometer,
+            FuelLevel = dto.FuelLevel >= 1 && dto.FuelLevel <= 4 ? dto.FuelLevel : 2,
+            LevelOfInspection = string.IsNullOrWhiteSpace(dto.LevelOfInspection) ? "Bảo dưỡng 10.000 km" : dto.LevelOfInspection.Trim(),
+            CustomerRequest = dto.CustomerRequest.Trim(),
+            ValuablesInCar = dto.ValuablesInCar?.Trim(),
+            ExteriorCondition = dto.ExteriorCondition?.Trim(),
+            IsWarranty = dto.IsWarranty ?? false,
+            IsInsurance = dto.IsInsurance ?? false,
+            IsBackRepair = dto.IsBackRepair ?? false,
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+
+        var items = dto.Items?.Select(i => new ReceptionItem
+        {
+            Group = i.Group,
+            Code = i.Code,
+            Name = i.Name,
+            ReceptionStatus = i.ReceptionStatus,
+            DeliveryStatus = AuditStatus.Good,
+            Note = i.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateReceptionAsync(sheet, items);
+        return Results.Ok(new { receptionId = id, receptionNo = sheet.ReceptionNo, message = "Đã lập phiếu tiếp nhận xe thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/receptions/{id:int}/create-ro", async (int id, CreateRoFromReceptionDto? dto, IRoService svc) =>
+{
+    var (ok, msg, roId) = await svc.CreateROFromReceptionAsync(id, dto?.Technician);
+    return ok ? Results.Ok(new { message = msg, roId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/receptions/{id:int}/deliver", async (int id, DeliverReceptionDto dto, IRoService svc) =>
+{
+    var items = dto.Items?.Select(i => (i.ItemId, i.DeliveryStatus)).ToList();
+    var (ok, msg) = await svc.DeliverCarAsync(id, dto.DeliveryBy, dto.Note, items);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/receptions/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteReceptionAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -1367,3 +1514,8 @@ record UpdateCavityDto(string CavityName, CavityType CavityType, string? LiftEqu
 record AssignCarToCavityDto(int RoId, string? Technician, DateTime? ExpectedFinish);
 record ReleaseCavityDto(ROStatus? NextRoStatus);
 record SetCavityStatusDto(CavityStatus Status, string? Note);
+record CreateReceptionDto(int CarId, int? AppointmentId, int Odometer, int FuelLevel, string? LevelOfInspection, string CustomerRequest, string? ValuablesInCar, string? ExteriorCondition, bool? IsWarranty, bool? IsInsurance, bool? IsBackRepair, string? CreatedBy, List<CreateReceptionItemDto>? Items);
+record CreateReceptionItemDto(string Group, string Code, string Name, AuditStatus ReceptionStatus, string? Note);
+record CreateRoFromReceptionDto(string? Technician);
+record DeliverReceptionDto(string? DeliveryBy, string? Note, List<DeliverReceptionItemDto>? Items);
+record DeliverReceptionItemDto(int ItemId, AuditStatus DeliveryStatus);

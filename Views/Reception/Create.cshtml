@@ -1,0 +1,290 @@
+@{
+    ViewData["Title"] = "Lập Phiếu tiếp nhận & Kiểm tra xe ban đầu";
+    var cars = (List<Car>)ViewBag.Cars;
+    var appointments = (List<Appointment>)ViewBag.Appointments;
+    var defaultChecklist = (List<ReceptionItem>)ViewBag.DefaultChecklist;
+    var inspectionLevels = (string[])ViewBag.InspectionLevels;
+    var selectedApp = (Appointment?)ViewBag.SelectedAppointment;
+    var selectedCarId = (int?)ViewBag.SelectedCarId;
+}
+
+<div class="row g-3">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div>
+                <h4 class="fw-bold mb-0">Tiếp nhận xe &amp; Kiểm tra quanh xe (Walk-Around Inspection)</h4>
+                <div class="text-muted small">Quy trình tiếp nhận xe tiêu chuẩn đại lý dịch vụ Hyundai (Ser_ReceptionF &amp; Ser_ReceptionFDtl)</div>
+            </div>
+            <a href="/Reception" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Quay lại danh sách</a>
+        </div>
+    </div>
+</div>
+
+<form asp-action="Create" method="post" id="receptionForm">
+    @Html.AntiForgeryToken()
+
+    @if (selectedApp != null)
+    {
+        <div class="alert alert-info d-flex align-items-center mb-3">
+            <i class="bi bi-calendar2-check-fill fs-4 me-3 text-primary"></i>
+            <div>
+                <strong>Tiếp nhận từ Lịch hẹn @selectedApp.AppNo</strong> (@selectedApp.AppointmentDate.ToString("dd/MM/yyyy HH:mm"))
+                <div class="small">Khách hàng: <b>@selectedApp.Customer.Name</b> · Phương tiện: <b>@selectedApp.Car.Plate (@selectedApp.Car.Model)</b></div>
+            </div>
+        </div>
+        <input type="hidden" name="appointmentId" value="@selectedApp.Id" />
+    }
+    else if (appointments.Count > 0)
+    {
+        <div class="card mb-3 border-info">
+            <div class="card-body py-2 bg-light">
+                <div class="row align-items-center">
+                    <div class="col-md-4 text-muted small"><i class="bi bi-calendar2-check me-1"></i>Hoặc chọn từ Cuộc hẹn chờ tiếp nhận:</div>
+                    <div class="col-md-8">
+                        <select class="form-select form-select-sm" onchange="if(this.value) window.location.href='/Reception/Create?appointmentId=' + this.value">
+                            <option value="">— Chọn cuộc hẹn để tự động điền thông tin —</option>
+                            @foreach (var app in appointments)
+                            {
+                                <option value="@app.Id">[@app.AppNo] @app.Car.Plate - @app.Customer.Name (@app.AppointmentDate.ToString("dd/MM HH:mm"))</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <div class="card mb-3">
+                <div class="card-header bg-white fw-bold py-2"><i class="bi bi-car-front text-primary me-2"></i>Thông tin phương tiện &amp; Khách hàng</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-12">
+                            <label class="form-label small fw-semibold">Phương tiện tiếp nhận <span class="text-danger">*</span></label>
+                            <select name="carId" id="carIdSelect" class="form-select" required>
+                                <option value="">— Chọn xe trong hệ thống —</option>
+                                @foreach (var c in cars)
+                                {
+                                    <option value="@c.Id" selected="@(selectedCarId == c.Id)" data-plate="@c.Plate" data-model="@c.Model" data-vin="@c.Vin" data-customer="@c.Customer.Name" data-phone="@c.Customer.Phone">
+                                        @c.Plate — @c.Model (@c.Year) · KH: @c.Customer.Name (@(c.Customer.Phone ?? "—"))
+                                    </option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Số công-tơ-mét (Km hiện tại) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="number" name="odometer" class="form-control" placeholder="VD: 20000" min="0" value="@(selectedApp != null ? 20000 : 15000)" required />
+                                <span class="input-group-text">km</span>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mức nhiên liệu trong bình <span class="text-danger">*</span></label>
+                            <select name="fuelLevel" class="form-select" required>
+                                <option value="1">1/4 bình xăng/dầu (E)</option>
+                                <option value="2" selected>1/2 bình xăng/dầu</option>
+                                <option value="3">3/4 bình xăng/dầu</option>
+                                <option value="4">Đầy bình xăng/dầu (F)</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Cấp bảo dưỡng / Kiểm tra</label>
+                            <select name="levelOfInspection" class="form-select">
+                                @foreach (var lvl in inspectionLevels)
+                                {
+                                    <option value="@lvl">@lvl</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Cố vấn dịch vụ tiếp nhận</label>
+                            <input type="text" name="createdBy" class="form-control" value="@(selectedApp?.Advisor ?? "Cố vấn dịch vụ")" placeholder="Tên CVDV tiếp nhận" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header bg-white fw-bold py-2"><i class="bi bi-chat-left-text text-primary me-2"></i>Yêu cầu khách hàng &amp; Hiện trạng tiếp nhận</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Yêu cầu của khách / Triệu chứng xe <span class="text-danger">*</span></label>
+                        <textarea name="customerRequest" rows="3" class="form-control" placeholder="Mô tả hiện tượng hư hỏng, yêu cầu bảo dưỡng hoặc sửa chữa từ khách hàng..." required>@(selectedApp?.CustomerRequest ?? "")</textarea>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Đồ đạc / Tư trang có giá trị để lại trên xe</label>
+                            <input type="text" name="valuablesInCar" class="form-control form-control-sm" placeholder="VD: Kính mắt, thẻ thu phí, không để tiền mặt..." />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Hiện trạng thân vỏ bên ngoài (vết xước, móp)</label>
+                            <input type="text" name="exteriorCondition" class="form-control form-control-sm" placeholder="VD: Xước nhẹ ba-đờ-sốc trước, thân vỏ nguyên bản..." />
+                        </div>
+                    </div>
+
+                    <div class="p-3 bg-light rounded border">
+                        <div class="fw-semibold small mb-2 text-muted">Phân loại dịch vụ (Check chọn nếu áp dụng):</div>
+                        <div class="d-flex gap-4 flex-wrap">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="isWarranty" value="true" id="isWarrantyCheck">
+                                <label class="form-check-label fw-semibold text-primary" for="isWarrantyCheck">
+                                    <i class="bi bi-shield-check me-1"></i>Bảo hành chính hãng HTC
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="isInsurance" value="true" id="isInsuranceCheck">
+                                <label class="form-check-label fw-semibold text-info" for="isInsuranceCheck">
+                                    <i class="bi bi-shield-shaded me-1"></i>Bảo hiểm bồi thường
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="isBackRepair" value="true" id="isBackRepairCheck">
+                                <label class="form-check-label fw-semibold text-danger" for="isBackRepairCheck">
+                                    <i class="bi bi-arrow-repeat me-1"></i>Sửa chữa lại (Làm lại lỗi cũ)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card mb-3">
+                <div class="card-header bg-white fw-bold py-2 d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-info-circle text-primary me-2"></i>Quy định Walk-Around Hyundai</span>
+                    <span class="badge bg-primary-subtle text-primary">Tiêu chuẩn xưởng</span>
+                </div>
+                <div class="card-body small text-muted">
+                    <p class="mb-2"><b>Cố vấn dịch vụ cùng khách hàng</b> đi một vòng quanh xe (Walk-Around Inspection) theo chiều kim đồng hồ để kiểm tra:</p>
+                    <ul class="ps-3 mb-2">
+                        <li><b>Khoang lái:</b> Đồng hồ taplo, còi, điều hòa, gạt mưa, khóa cửa.</li>
+                        <li><b>Ngoại quan:</b> Hệ thống đèn trước/sau, các vết trầy xước vỏ xe.</li>
+                        <li><b>Khoang máy:</b> Mức dầu động cơ, dầu phanh, nước làm mát, lọc gió.</li>
+                        <li><b>Lốp xe:</b> Áp suất &amp; độ mòn 4 bánh xe.</li>
+                        <li><b>Cốp sau:</b> Lốp dự phòng, bộ dụng cụ đồ nghề &amp; kích nâng.</li>
+                    </ul>
+                    <div class="p-2 bg-warning-subtle text-dark rounded border border-warning small">
+                        <i class="bi bi-lightbulb me-1"></i>Mọi hạng mục không đạt chuẩn sẽ được cảnh báo để CVDV tư vấn phương án khắc phục cho khách.
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-primary">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-2">Hoàn tất tiếp nhận xe</h6>
+                    <p class="small text-muted mb-3">
+                        Sau khi lập phiếu tiếp nhận và kiểm tra quanh xe, hệ thống sẽ lưu biên bản và cho phép in phiếu tiếp nhận hoặc tạo ngay Lệnh sửa chữa (RO) đưa xe vào xưởng.
+                    </p>
+                    <button type="submit" class="btn btn-primary w-100 fw-bold py-2">
+                        <i class="bi bi-check2-circle me-1"></i>Lưu Phiếu Tiếp Nhận &amp; Kiểm Tra
+                    </button>
+                    <a href="/Reception" class="btn btn-outline-secondary w-100 mt-2">Hủy bỏ</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bảng kiểm tra quanh xe (Walk-Around Inspection Checklist) -->
+    <div class="card mt-3">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h6 class="fw-bold mb-0"><i class="bi bi-card-checklist text-primary me-2"></i>Biên bản kiểm tra quanh xe (@defaultChecklist.Count hạng mục tiêu chuẩn)</h6>
+                <div class="text-muted small">Cố vấn tích chọn kết quả kiểm tra thực tế khi tiếp nhận phương tiện</div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="setAllStatus(0)"><i class="bi bi-check-all me-1"></i>Tất cả Đạt</button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:250px">Hạng mục kiểm tra</th>
+                            <th style="width:340px">Kết quả tiếp nhận</th>
+                            <th>Ghi chú hiện trạng / Triệu chứng sự cố</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @{
+                        string currentGroup = "";
+                        int idx = 0;
+                    }
+                    @foreach (var itm in defaultChecklist)
+                    {
+                        if (itm.Group != currentGroup)
+                        {
+                            currentGroup = itm.Group;
+                            <tr class="table-secondary">
+                                <td colspan="3" class="fw-bold text-dark text-uppercase small py-2">
+                                    <i class="bi bi-folder2-open me-2 text-primary"></i>@currentGroup
+                                </td>
+                            </tr>
+                        }
+                        <tr>
+                            <td>
+                                <input type="hidden" name="groups" value="@itm.Group" />
+                                <input type="hidden" name="codes" value="@itm.Code" />
+                                <input type="hidden" name="names" value="@itm.Name" />
+                                <div class="fw-semibold">@itm.Name</div>
+                                <div class="text-muted small font-monospace" style="font-size:11px">@itm.Code</div>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-2 flex-wrap">
+                                    <div class="form-check form-check-inline mb-0">
+                                        <input class="form-check-input status-radio-@idx" type="radio" name="receptionStatuses[@idx]" id="st_0_@idx" value="0" checked>
+                                        <label class="form-check-label text-success small fw-semibold" for="st_0_@idx">
+                                            <i class="bi bi-check-circle me-1"></i>Đạt / Tốt
+                                        </label>
+                                    </div>
+                                    <div class="form-check form-check-inline mb-0">
+                                        <input class="form-check-input status-radio-@idx" type="radio" name="receptionStatuses[@idx]" id="st_1_@idx" value="1">
+                                        <label class="form-check-label text-warning small fw-semibold" for="st_1_@idx">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>Theo dõi
+                                        </label>
+                                    </div>
+                                    <div class="form-check form-check-inline mb-0">
+                                        <input class="form-check-input status-radio-@idx" type="radio" name="receptionStatuses[@idx]" id="st_2_@idx" value="2">
+                                        <label class="form-check-label text-danger small fw-semibold" for="st_2_@idx">
+                                            <i class="bi bi-x-circle me-1"></i>Cần thay
+                                        </label>
+                                    </div>
+                                    <div class="form-check form-check-inline mb-0">
+                                        <input class="form-check-input status-radio-@idx" type="radio" name="receptionStatuses[@idx]" id="st_3_@idx" value="3">
+                                        <label class="form-check-label text-secondary small" for="st_3_@idx">
+                                            K/A
+                                        </label>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <input type="text" name="notes" class="form-control form-control-sm" placeholder="Ghi chú thêm nếu phát hiện bất thường..." />
+                            </td>
+                        </tr>
+                        idx++;
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    function setAllStatus(val) {
+        var count = @defaultChecklist.Count;
+        for (var i = 0; i < count; i++) {
+            var el = document.getElementById('st_' + val + '_' + i);
+            if (el) el.checked = true;
+        }
+    }
+</script>
+}

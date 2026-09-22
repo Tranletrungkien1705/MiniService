@@ -105,6 +105,45 @@ public static class Ui
         _ => (s.ToString(), "", "secondary")
     };
 
+    public static (string text, string code, string css) ReceptionStatus(ReceptionStatus s) => s switch
+    {
+        Models.ReceptionStatus.Pending => ("Tiếp nhận xe", "PEND", "warning"),
+        Models.ReceptionStatus.InService => ("Đang sửa chữa", "INSC", "primary"),
+        Models.ReceptionStatus.Delivered => ("Đã bàn giao xe", "DELV", "success"),
+        Models.ReceptionStatus.Cancelled => ("Đã hủy phiếu", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static string FuelLevelText(int level) => level switch
+    {
+        1 => "1/4 bình (E)",
+        2 => "1/2 bình",
+        3 => "3/4 bình",
+        4 => "Đầy bình (F)",
+        _ => $"{level}/4 bình"
+    };
+
+    public static (string text, string css, string icon) AuditStatus(AuditStatus s) => s switch
+    {
+        Models.AuditStatus.Good => ("Đạt / Tốt", "success", "bi-check-circle-fill"),
+        Models.AuditStatus.Attention => ("Cần theo dõi", "warning", "bi-exclamation-triangle-fill"),
+        Models.AuditStatus.Replace => ("Cần sửa / Thay", "danger", "bi-x-circle-fill"),
+        Models.AuditStatus.NA => ("Không có (K/A)", "secondary", "bi-dash-circle"),
+        _ => (s.ToString(), "secondary", "bi-question-circle")
+    };
+
+    public static readonly string[] InspectionLevels =
+    [
+        "Bảo dưỡng cấp 1 (5.000 km)",
+        "Bảo dưỡng cấp 2 (10.000 km)",
+        "Bảo dưỡng cấp 3 (20.000 km)",
+        "Bảo dưỡng cấp 4 (40.000 km / 80.000 km)",
+        "Kiểm tra & Sửa chữa chung",
+        "Đồng sơn & Thân vỏ",
+        "Kiểm tra bảo hành hãng",
+        "Chăm sóc & Làm đẹp xe"
+    ];
+
     public static (string text, string code, string icon, string css) CavityType(CavityType t) => t switch
     {
         Models.CavityType.EM => ("Bảo dưỡng nhanh (EM)", "EM", "bi-lightning-charge", "info"),
