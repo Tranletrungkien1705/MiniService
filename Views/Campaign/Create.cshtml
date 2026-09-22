@@ -1,0 +1,181 @@
+@{
+    ViewData["Title"] = "Tạo Chiến dịch Khuyến mãi Dịch vụ";
+    var parts = (List<Part>?)ViewBag.Parts ?? [];
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-megaphone me-2"></i>Tạo Chiến dịch Khuyến mãi CSKH (Ser_CampaignMarketing)</h5>
+                <a href="/Campaign" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="Create" method="post" id="campaignForm">
+                    @Html.AntiForgeryToken()
+                    
+                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="bi bi-info-circle me-1"></i>Thông tin cơ bản chiến dịch</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Mã chiến dịch <span class="text-muted small">(Để trống tự sinh)</span></label>
+                            <input name="camMarketingNo" class="form-control font-monospace" placeholder="VD: KM-HE2026, KM-ACCENT" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Tên chiến dịch khuyến mãi <span class="text-danger">*</span></label>
+                            <input name="camMarketingName" class="form-control" placeholder="VD: Chiến dịch Chăm sóc xe Đón hè 2026 - Giảm 15% Dầu nhớt & Lọc dầu" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ngày bắt đầu hiệu lực <span class="text-danger">*</span></label>
+                            <input name="effDateStart" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" class="form-control" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ngày kết thúc hiệu lực <span class="text-danger">*</span></label>
+                            <input name="effDateEnd" type="date" value="@DateTime.Today.AddMonths(1).ToString("yyyy-MM-dd")" class="form-control" required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Nội dung &amp; Thể lệ chương trình</label>
+                            <textarea name="camMarketingDesc" rows="3" class="form-control" placeholder="Mô tả quyền lợi, thể lệ áp dụng, điều kiện miễn giảm chi phí bảo dưỡng cho khách hàng..."></textarea>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="bi bi-funnel me-1"></i>Phạm vi &amp; Điều kiện áp dụng cho xe</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Dòng xe áp dụng (Model)</label>
+                            <input name="conditionModel" class="form-control" placeholder="VD: Accent, Tucson, Santa Fe (để trống: tất cả)" />
+                            <div class="form-text small">Chỉ áp dụng cho các xe có model chứa từ khóa này.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Đầu biển số áp dụng</label>
+                            <input name="conditionPlateNo" class="form-control" placeholder="VD: 30A, 51G, 29 (để trống: tất cả)" />
+                            <div class="form-text small">Áp dụng theo khu vực địa bàn biển số xe.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Điều kiện chuỗi VIN</label>
+                            <input name="conditionVIN" class="form-control font-monospace" placeholder="VD: RLH, KMH... (để trống: tất cả)" />
+                            <div class="form-text small">Lọc theo số khung xe chuẩn nhà máy.</div>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-3"><i class="bi bi-percent me-1"></i>Chính sách ưu đãi chung</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Chiết khấu tiền công chung (%)</label>
+                            <div class="input-group">
+                                <input name="discountLaborPercent" type="number" step="0.5" min="0" max="100" value="10" class="form-control" />
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <div class="form-text small">Giảm trừ trên toàn bộ các dòng tiền công sửa chữa.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Chiết khấu phụ tùng chung (%)</label>
+                            <div class="input-group">
+                                <input name="discountPartPercent" type="number" step="0.5" min="0" max="100" value="5" class="form-control" />
+                                <span class="input-group-text">%</span>
+                            </div>
+                            <div class="form-text small">Áp dụng cho phụ tùng không nằm trong danh mục ưu đãi riêng.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Người lập chiến dịch</label>
+                            <input name="createdBy" value="Cố vấn dịch vụ" class="form-control" />
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-3 d-flex justify-content-between align-items-center">
+                        <span><i class="bi bi-box-seam me-1"></i>Danh mục phụ tùng ưu đãi đặc biệt (Ser_CampaignMarketingPart)</span>
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="addPartRow()">
+                            <i class="bi bi-plus-lg me-1"></i>Thêm phụ tùng ưu đãi
+                        </button>
+                    </h6>
+                    <p class="text-muted small">Cấu hình chiết khấu % riêng cho từng mã phụ tùng / vật tư tiêu hao chủ lực trong chiến dịch.</p>
+
+                    <div class="table-responsive mb-4">
+                        <table class="table table-bordered align-middle" id="partsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:40%">Phụ tùng trong kho</th>
+                                    <th style="width:20%">Chiết khấu (%)</th>
+                                    <th style="width:15%">SL tối đa</th>
+                                    <th>Ghi chú</th>
+                                    <th style="width:50px"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="partsTableBody">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                        <a href="/Campaign" class="btn btn-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i>Lưu chiến dịch</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+var availableParts = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(parts.Select(p => new { p.Id, p.Code, p.Name, p.SalePrice, p.InStock, p.Unit })));
+
+function addPartRow(defaultPartId, defaultDiscount) {
+    var tbody = document.getElementById('partsTableBody');
+    var tr = document.createElement('tr');
+    
+    var selectHtml = '<select name="partIds" class="form-select form-select-sm part-picker" onchange="onPartSelect(this)" required><option value="">-- Chọn phụ tùng --</option>';
+    for (var i = 0; i < availableParts.length; i++) {
+        var p = availableParts[i];
+        var sel = (defaultPartId && defaultPartId === p.Id) ? ' selected' : '';
+        selectHtml += '<option value="' + p.Id + '" data-code="' + p.Code + '" data-name="' + p.Name + '"' + sel + '>[' + p.Code + '] ' + p.Name + ' (' + p.SalePrice.toLocaleString() + 'đ)</option>';
+    }
+    selectHtml += '</select>';
+
+    var initialCode = '';
+    var initialName = '';
+    if (defaultPartId) {
+        var match = availableParts.find(function(x) { return x.Id === defaultPartId; });
+        if (match) { initialCode = match.Code; initialName = match.Name; }
+    }
+
+    tr.innerHTML = 
+        '<td>' + selectHtml + 
+            '<input type="hidden" name="partCodes" class="part-code-input" value="' + initialCode + '" />' +
+            '<input type="hidden" name="partNames" class="part-name-input" value="' + initialName + '" />' +
+        '</td>' +
+        '<td><div class="input-group input-group-sm"><input type="number" name="percentDiscounts" class="form-control" value="' + (defaultDiscount || 15) + '" step="0.5" min="0" max="100" required /><span class="input-group-text">%</span></div></td>' +
+        '<td><input type="number" name="maxQuantities" class="form-control form-control-sm" value="10" step="1" min="1" /></td>' +
+        '<td><input type="text" name="notes" class="form-control form-control-sm" placeholder="Ghi chú ưu đãi" /></td>' +
+        '<td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removePartRow(this)"><i class="bi bi-trash"></i></button></td>';
+
+    tbody.appendChild(tr);
+}
+
+function onPartSelect(sel) {
+    var tr = sel.closest('tr');
+    var opt = sel.options[sel.selectedIndex];
+    var codeInput = tr.querySelector('.part-code-input');
+    var nameInput = tr.querySelector('.part-name-input');
+    if (opt && opt.value) {
+        codeInput.value = opt.getAttribute('data-code') || '';
+        nameInput.value = opt.getAttribute('data-name') || '';
+    } else {
+        codeInput.value = '';
+        nameInput.value = '';
+    }
+}
+
+function removePartRow(btn) {
+    var tr = btn.closest('tr');
+    tr.remove();
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Thêm sẵn 1 dòng gợi ý nếu có phụ tùng
+    if (availableParts.length > 0) {
+        addPartRow(availableParts[0].Id, 15);
+    }
+});
+</script>
+}

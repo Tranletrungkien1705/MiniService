@@ -114,6 +114,7 @@ public class ROController(IRoService svc) : Controller
         ViewBag.Next = RoService.AllowedNext(ro.Status);
         ViewBag.Parts = await svc.PartsForSelectAsync();
         ViewBag.ServicePackages = await svc.ServicePackagesForSelectAsync();
+        ViewBag.EligibleCampaigns = await svc.GetEligibleCampaignsForCarAsync(ro.CarId);
         return View(ro);
     }
 
@@ -121,6 +122,22 @@ public class ROController(IRoService svc) : Controller
     public async Task<IActionResult> ApplyPackage(int id, int packageId)
     {
         var (ok, msg, _) = await svc.ApplyServicePackageToROAsync(packageId, id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyCampaign(int id, int campaignId)
+    {
+        var (ok, msg, _) = await svc.ApplyCampaignToROAsync(campaignId, id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveCampaign(int id)
+    {
+        var (ok, msg) = await svc.RemoveCampaignFromROAsync(id);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }
@@ -1904,6 +1921,135 @@ public class InsuranceController(IRoService svc) : Controller
         }
 
         return RedirectToAction(nameof(Companies));
+    }
+}
+
+public class CampaignController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(CampaignMarketingStatus? status, string? q, bool? currentOnly)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.CurrentOnly = currentOnly;
+        var list = await svc.CampaignMarketingsAsync(status, q, currentOnly);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        string? camMarketingNo, string camMarketingName, string? camMarketingDesc,
+        DateTime effDateStart, DateTime effDateEnd,
+        string? conditionModel, string? conditionPlateNo, string? conditionVIN,
+        decimal discountLaborPercent, decimal discountPartPercent,
+        string? createdBy,
+        int[]? partIds, string[]? partCodes, string[]? partNames, decimal[]? percentDiscounts, decimal[]? maxQuantities, string[]? notes)
+    {
+        if (string.IsNullOrWhiteSpace(camMarketingName))
+        {
+            TempData["Error"] = "Vui lòng nhập tên chiến dịch khuyến mãi.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+
+        try
+        {
+            var campaign = new CampaignMarketing
+            {
+                CamMarketingNo = camMarketingNo?.Trim() ?? "",
+                CamMarketingName = camMarketingName.Trim(),
+                CamMarketingDesc = camMarketingDesc?.Trim(),
+                EffDateStart = effDateStart != default ? effDateStart : DateTime.Today,
+                EffDateEnd = effDateEnd != default ? effDateEnd : DateTime.Today.AddMonths(1),
+                ConditionModel = conditionModel?.Trim(),
+                ConditionPlateNo = conditionPlateNo?.Trim(),
+                ConditionVIN = conditionVIN?.Trim(),
+                DiscountLaborPercent = discountLaborPercent,
+                DiscountPartPercent = discountPartPercent,
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Cố vấn dịch vụ" : createdBy.Trim(),
+                Status = CampaignMarketingStatus.Active
+            };
+
+            var items = new List<CampaignMarketingItem>();
+            if (partIds != null && partIds.Length > 0)
+            {
+                for (int i = 0; i < partIds.Length; i++)
+                {
+                    if (partIds[i] <= 0) continue;
+                    var code = (partCodes != null && i < partCodes.Length) ? partCodes[i] : "";
+                    var name = (partNames != null && i < partNames.Length) ? partNames[i] : "";
+                    var disc = (percentDiscounts != null && i < percentDiscounts.Length) ? percentDiscounts[i] : 10;
+                    var maxQ = (maxQuantities != null && i < maxQuantities.Length && maxQuantities[i] > 0) ? maxQuantities[i] : 999;
+                    var note = (notes != null && i < notes.Length) ? notes[i] : null;
+
+                    items.Add(new CampaignMarketingItem
+                    {
+                        PartId = partIds[i],
+                        PartCode = code.Trim(),
+                        PartName = name.Trim(),
+                        PercentDiscount = disc,
+                        MaxQuantity = maxQ,
+                        Note = note?.Trim()
+                    });
+                }
+            }
+
+            var id = await svc.CreateCampaignMarketingAsync(campaign, items);
+            TempData["Success"] = $"Đã tạo chiến dịch khuyến mãi '{campaign.CamMarketingNo} - {campaign.CamMarketingName}' thành công!";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var campaign = await svc.GetCampaignMarketingAsync(id);
+        if (campaign == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextCampaign(campaign.Status);
+        ViewBag.EligibleROs = await svc.ROsEligibleForCampaignAsync(id);
+        return View(campaign);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, CampaignMarketingStatus to, string? approvedBy)
+    {
+        var (ok, msg) = await svc.TransitionCampaignStatusAsync(id, to, approvedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyToRO(int campaignId, int roId)
+    {
+        var (ok, msg, _) = await svc.ApplyCampaignToROAsync(campaignId, roId);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id = campaignId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveFromRO(int roId, int returnCampaignId)
+    {
+        var (ok, msg) = await svc.RemoveCampaignFromROAsync(roId);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id = returnCampaignId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCampaignMarketingAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
     }
 }
 

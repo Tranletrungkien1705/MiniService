@@ -1,0 +1,159 @@
+@model List<CampaignMarketing>
+@{
+    ViewData["Title"] = "Chiến dịch Khuyến mãi Dịch vụ (Service Campaign)";
+    var curStatus = (CampaignMarketingStatus?)ViewBag.Status;
+    bool currentOnly = ViewBag.CurrentOnly == true;
+
+    var activeCount = Model.Count(c => c.IsActiveNow);
+    var appliedRoCount = Model.Sum(c => c.ROAppliedCount);
+    var totalDiscountGranted = Model.Sum(c => c.TotalDiscountGranted);
+    var totalRevenue = Model.Sum(c => c.TotalRevenueGenerated);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số chiến dịch</div>
+            <div class="stat-num text-primary">@Model.Count</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chiến dịch đang chạy</div>
+            <div class="stat-num text-success">@activeCount <span style="font-size:13px;font-weight:normal" class="text-muted">(@(Model.Count(c => c.Status == CampaignMarketingStatus.Draft)) dự thảo)</span></div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Lệnh RO hưởng ưu đãi</div>
+            <div class="stat-num text-warning">@appliedRoCount <span style="font-size:13px;font-weight:normal" class="text-muted">xe tham gia</span></div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng giá trị ưu đãi chiết khấu</div>
+            <div class="stat-num" style="font-size:20px;color:#d97706">@totalDiscountGranted.ToString("N0")đ</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã KM / Tên chiến dịch / Model..." style="max-width:260px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (CampaignMarketingStatus s in Enum.GetValues(typeof(CampaignMarketingStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.CampaignStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <div class="form-check form-check-inline mb-0 ms-1">
+                    <input class="form-check-input" type="checkbox" name="currentOnly" value="true" id="currentOnlyCheck" @(currentOnly ? "checked" : "") onchange="this.form.submit()">
+                    <label class="form-check-label small" for="currentOnlyCheck">Chỉ đang hiệu lực</label>
+                </div>
+                <button class="btn btn-sm btn-primary"><i class="bi bi-funnel me-1"></i>Lọc</button>
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/Campaign/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Tạo chiến dịch mới</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã chiến dịch</th>
+                        <th>Tên &amp; Thể lệ chương trình</th>
+                        <th>Thời gian hiệu lực</th>
+                        <th>Phạm vi áp dụng</th>
+                        <th>Mức chiết khấu</th>
+                        <th class="text-end">RO tham gia</th>
+                        <th class="text-end">Tổng ưu đãi</th>
+                        <th>Trạng thái</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var c in Model)
+                    {
+                        var (stTxt, stCode, stCss) = Ui.CampaignStatus(c.Status);
+                        var (scopeTxt, scopeCss) = Ui.CampaignScope(c.ConditionModel, c.ConditionPlateNo, c.ConditionVIN);
+                        <tr>
+                            <td>
+                                <a href="/Campaign/Detail/@c.Id" class="fw-bold font-monospace text-decoration-none">@c.CamMarketingNo</a>
+                                <div class="text-muted" style="font-size:11px">Tạo: @c.CreatedAt.ToString("dd/MM/yyyy")</div>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@c.CamMarketingName</div>
+                                @if (!string.IsNullOrWhiteSpace(c.CamMarketingDesc))
+                                {
+                                    <div class="text-muted small text-truncate" style="max-width:320px" title="@c.CamMarketingDesc">
+                                        @c.CamMarketingDesc
+                                    </div>
+                                }
+                            </td>
+                            <td>
+                                <div class="small">@c.EffDateStart.ToString("dd/MM/yyyy") <i class="bi bi-arrow-right text-muted mx-1"></i> @c.EffDateEnd.ToString("dd/MM/yyyy")</div>
+                                @if (c.IsActiveNow)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size:10.5px"><i class="bi bi-clock me-1"></i>Còn hiệu lực</span>
+                                }
+                                else if (c.Status == CampaignMarketingStatus.Active && DateTime.Today > c.EffDateEnd.Date)
+                                {
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size:10.5px">Đã quá hạn</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-@scopeCss-subtle text-@scopeCss border border-@scopeCss-subtle" style="font-size:11px">@scopeTxt</span>
+                            </td>
+                            <td>
+                                <div class="small">
+                                    @if (c.DiscountLaborPercent > 0)
+                                    {
+                                        <div><i class="bi bi-wrench me-1 text-primary"></i>Công: <b class="text-primary">-@c.DiscountLaborPercent%</b></div>
+                                    }
+                                    @if (c.DiscountPartPercent > 0)
+                                    {
+                                        <div><i class="bi bi-box-seam me-1 text-success"></i>Phụ tùng: <b class="text-success">-@c.DiscountPartPercent%</b></div>
+                                    }
+                                    @if (c.ItemCount > 0)
+                                    {
+                                        <div><i class="bi bi-list-check me-1 text-info"></i>@c.ItemCount phụ tùng ưu đãi</div>
+                                    }
+                                    @if (c.DiscountLaborPercent == 0 && c.DiscountPartPercent == 0 && c.ItemCount == 0)
+                                    {
+                                        <span class="text-muted">Ưu đãi tổng hợp</span>
+                                    }
+                                </div>
+                            </td>
+                            <td class="text-end fw-semibold">
+                                @c.ROAppliedCount
+                            </td>
+                            <td class="text-end fw-bold text-success">
+                                @(c.TotalDiscountGranted > 0 ? c.TotalDiscountGranted.ToString("N0") + "đ" : "0đ")
+                            </td>
+                            <td>
+                                <span class="badge bg-@stCss">@stTxt</span>
+                            </td>
+                            <td class="text-end">
+                                <a href="/Campaign/Detail/@c.Id" class="btn btn-sm btn-outline-primary" title="Xem chi tiết"><i class="bi bi-eye"></i></a>
+                            </td>
+                        </tr>
+                    }
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="bi bi-megaphone fs-2 d-block mb-2 text-secondary"></i>
+                                Chưa có chiến dịch khuyến mãi nào. Hãy tạo chiến dịch mới!
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

@@ -1469,13 +1469,103 @@ public static class Seeder
 
             await db.SaveChangesAsync();
         }
+
+        if (!await db.CampaignMarketings.AnyAsync())
+        {
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+            var pFilter = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pAir = await db.Parts.FirstOrDefaultAsync(p => p.Code == "28113-1R100");
+            var pCabin = await db.Parts.FirstOrDefaultAsync(p => p.Code == "97133-D3000");
+
+            var cam1 = new CampaignMarketing
+            {
+                CamMarketingNo = "KM-HE2026",
+                CamMarketingName = "Chiến dịch Chăm sóc xe Đón hè 2026",
+                CamMarketingDesc = "Chương trình ưu đãi dịch vụ lớn nhất hè 2026: Giảm 15% Dầu nhớt & Lọc dầu chính hãng, giảm 10% tiền công bảo dưỡng cho tất cả khách hàng làm dịch vụ tại xưởng.",
+                EffDateStart = DateTime.Today.AddDays(-15),
+                EffDateEnd = DateTime.Today.AddDays(45),
+                DiscountLaborPercent = 10,
+                DiscountPartPercent = 5,
+                Status = CampaignMarketingStatus.Active,
+                CreatedBy = "Ban Marketing",
+                ApprovedBy = "Giám đốc dịch vụ",
+                ApprovedAt = DateTime.Today.AddDays(-15),
+                Items = [
+                    new CampaignMarketingItem { PartId = pOil?.Id ?? 3, PartCode = pOil?.Code ?? "05100-00441", PartName = pOil?.Name ?? "Dầu nhớt 5W-30", PercentDiscount = 15, MaxQuantity = 2, Note = "Dầu nhờn động cơ giảm 15%" },
+                    new CampaignMarketingItem { PartId = pFilter?.Id ?? 1, PartCode = pFilter?.Code ?? "26300-35505", PartName = pFilter?.Name ?? "Lọc dầu chính hãng", PercentDiscount = 20, MaxQuantity = 1, Note = "Lọc nhớt giảm 20%" },
+                    new CampaignMarketingItem { PartId = pCabin?.Id ?? 6, PartCode = pCabin?.Code ?? "97133-D3000", PartName = pCabin?.Name ?? "Lọc gió điều hòa than hoạt tính", PercentDiscount = 15, MaxQuantity = 1, Note = "Lọc máy lạnh đón hè giảm 15%" }
+                ]
+            };
+
+            var cam2 = new CampaignMarketing
+            {
+                CamMarketingNo = "KM-ACCENT-01",
+                CamMarketingName = "Tri ân Khách hàng Hyundai Accent",
+                CamMarketingDesc = "Ưu đãi chuyên biệt cho các chủ xe Hyundai Accent: Giảm 20% lọc gió động cơ và má phanh, giảm 15% tiền công bảo dưỡng định kỳ.",
+                EffDateStart = DateTime.Today.AddDays(-10),
+                EffDateEnd = DateTime.Today.AddDays(20),
+                ConditionModel = "Accent",
+                DiscountLaborPercent = 15,
+                DiscountPartPercent = 10,
+                Status = CampaignMarketingStatus.Active,
+                CreatedBy = "CVDV Tuấn",
+                ApprovedBy = "Giám đốc dịch vụ",
+                ApprovedAt = DateTime.Today.AddDays(-10),
+                Items = [
+                    new CampaignMarketingItem { PartId = pAir?.Id ?? 2, PartCode = pAir?.Code ?? "28113-1R100", PartName = pAir?.Name ?? "Lọc gió động cơ Hyundai Accent", PercentDiscount = 20, MaxQuantity = 1, Note = "Lọc gió Accent giảm 20%" },
+                    new CampaignMarketingItem { PartId = pFilter?.Id ?? 1, PartCode = pFilter?.Code ?? "26300-35505", PartName = pFilter?.Name ?? "Lọc dầu động cơ Hyundai", PercentDiscount = 15, MaxQuantity = 1, Note = "Lọc dầu Accent giảm 15%" }
+                ]
+            };
+
+            var cam3 = new CampaignMarketing
+            {
+                CamMarketingNo = "KM-KTTQ-FREE",
+                CamMarketingName = "Miễn phí 100% Tiền công kiểm tra xe 20 hạng mục",
+                CamMarketingDesc = "Kiểm tra toàn diện khoang động cơ, hệ thống phanh, gầm xe và lốp xe theo tiêu chuẩn Hyundai toàn cầu.",
+                EffDateStart = DateTime.Today.AddDays(-5),
+                EffDateEnd = DateTime.Today.AddDays(25),
+                DiscountLaborPercent = 100,
+                DiscountPartPercent = 0,
+                Status = CampaignMarketingStatus.Active,
+                CreatedBy = "CVDV Hương",
+                ApprovedBy = "Giám đốc dịch vụ",
+                ApprovedAt = DateTime.Today.AddDays(-5)
+            };
+
+            var cam4 = new CampaignMarketing
+            {
+                CamMarketingNo = "KM-XUAN2026",
+                CamMarketingName = "Chiến dịch Du xuân An toàn 2026",
+                CamMarketingDesc = "Chương trình bảo dưỡng đầu xuân, tặng voucher thay dầu nhớt và kiểm tra ắc quy xe.",
+                EffDateStart = DateTime.Today.AddDays(-75),
+                EffDateEnd = DateTime.Today.AddDays(-15),
+                DiscountLaborPercent = 10,
+                DiscountPartPercent = 10,
+                Status = CampaignMarketingStatus.Finished,
+                CreatedBy = "Ban Marketing",
+                ApprovedBy = "Giám đốc đại lý",
+                ApprovedAt = DateTime.Today.AddDays(-75)
+            };
+
+            db.CampaignMarketings.AddRange(cam1, cam2, cam3, cam4);
+            await db.SaveChangesAsync();
+
+            // Gắn chiến dịch khuyến mãi cam2 cho RO demo ROSEED-FNS-001 (Accent)
+            var roFns1 = await db.ROs.FirstOrDefaultAsync(r => r.Code == "ROSEED-FNS-001");
+            if (roFns1 != null)
+            {
+                roFns1.CampaignMarketingId = cam2.Id;
+                roFns1.CampaignDiscountAmount = 145000m;
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -1483,6 +1573,8 @@ public static class Seeder
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"AppointmentId\" integer NULL",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CavityId\" integer NULL",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"ReceptionSheetId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CampaignMarketingId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CampaignDiscountAmount\" numeric(18,2) NOT NULL DEFAULT 0",
             "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"ReceptionSheetId\" integer NULL",
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartId\" integer NULL",
@@ -2025,6 +2117,44 @@ public static class Seeder
                 ""IsApproved"" INTEGER NOT NULL,
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""InsuranceClaimId"") REFERENCES ""InsuranceClaims"" (""Id"") ON DELETE CASCADE
+            );",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""CampaignMarketingId"" INTEGER NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""CampaignDiscountAmount"" TEXT NULL;",
+            @"UPDATE ""ROs"" SET ""CampaignDiscountAmount"" = '0' WHERE ""CampaignDiscountAmount"" IS NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""CampaignMarketings"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""CamMarketingNo"" TEXT NOT NULL,
+                ""CamMarketingName"" TEXT NOT NULL,
+                ""CamMarketingDesc"" TEXT NULL,
+                ""EffDateStart"" TEXT NOT NULL,
+                ""EffDateEnd"" TEXT NOT NULL,
+                ""WarrantyDateStart"" TEXT NULL,
+                ""WarrantyDateEnd"" TEXT NULL,
+                ""ConditionModel"" TEXT NULL,
+                ""ConditionPlateNo"" TEXT NULL,
+                ""ConditionVIN"" TEXT NULL,
+                ""DiscountLaborPercent"" TEXT NOT NULL,
+                ""DiscountPartPercent"" TEXT NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ApprovedAt"" TEXT NULL,
+                ""ApprovedBy"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CampaignMarketings_OrgId_CamMarketingNo"" ON ""CampaignMarketings"" (""OrgId"", ""CamMarketingNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""CampaignMarketingItems"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""CampaignMarketingId"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""PartCode"" TEXT NOT NULL,
+                ""PartName"" TEXT NOT NULL,
+                ""PercentDiscount"" TEXT NOT NULL,
+                ""MaxQuantity"" TEXT NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""CampaignMarketingId"") REFERENCES ""CampaignMarketings"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
             );"
         };
 

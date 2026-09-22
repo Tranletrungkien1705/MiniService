@@ -1997,6 +1997,175 @@ app.MapDelete("/api/insurance/claims/{id:int}", async (int id, IRoService svc) =
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Chiến dịch Khuyến mãi CSKH (Ser_CampaignMarketing, Ser_CampaignMarketingPart)
+app.MapGet("/api/campaigns", async (CampaignMarketingStatus? status, string? q, bool? currentOnly, IRoService svc) =>
+{
+    var list = await svc.CampaignMarketingsAsync(status, q, currentOnly);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.CamMarketingNo,
+        c.CamMarketingName,
+        c.CamMarketingDesc,
+        c.EffDateStart,
+        c.EffDateEnd,
+        c.ConditionModel,
+        c.ConditionPlateNo,
+        c.ConditionVIN,
+        c.DiscountLaborPercent,
+        c.DiscountPartPercent,
+        status = Ui.CampaignStatus(c.Status).text,
+        statusCode = Ui.CampaignStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.IsActiveNow,
+        c.ItemCount,
+        c.ROAppliedCount,
+        c.TotalDiscountGranted,
+        c.TotalRevenueGenerated,
+        c.CreatedBy,
+        c.CreatedAt,
+        c.ApprovedBy,
+        c.ApprovedAt
+    }));
+});
+
+app.MapGet("/api/campaigns/{id:int}", async (int id, IRoService svc) =>
+{
+    var c = await svc.GetCampaignMarketingAsync(id);
+    if (c == null) return Results.NotFound(new { error = "Không tìm thấy chiến dịch khuyến mãi." });
+    return Results.Ok(new
+    {
+        c.Id,
+        c.CamMarketingNo,
+        c.CamMarketingName,
+        c.CamMarketingDesc,
+        c.EffDateStart,
+        c.EffDateEnd,
+        c.ConditionModel,
+        c.ConditionPlateNo,
+        c.ConditionVIN,
+        c.DiscountLaborPercent,
+        c.DiscountPartPercent,
+        status = Ui.CampaignStatus(c.Status).text,
+        statusCode = Ui.CampaignStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.IsActiveNow,
+        items = c.Items.Select(i => new
+        {
+            i.Id,
+            i.PartId,
+            i.PartCode,
+            i.PartName,
+            salePrice = i.Part?.SalePrice ?? 0,
+            i.PercentDiscount,
+            discountedPrice = (i.Part?.SalePrice ?? 0) * (1 - (i.PercentDiscount / 100m)),
+            i.MaxQuantity,
+            i.Note
+        }),
+        appliedROs = c.AppliedROs.Select(r => new
+        {
+            r.Id,
+            r.Code,
+            plate = r.Car?.Plate,
+            model = r.Car?.Model,
+            customer = r.Customer?.Name,
+            status = Ui.Status(r.Status).text,
+            discountAmount = r.CampaignDiscountAmount,
+            total = r.Total
+        }),
+        c.TotalDiscountGranted,
+        c.TotalRevenueGenerated,
+        c.CreatedBy,
+        c.CreatedAt,
+        c.ApprovedBy,
+        c.ApprovedAt
+    });
+});
+
+app.MapPost("/api/campaigns", async (CreateCampaignDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.CamMarketingName))
+            return Results.BadRequest(new { error = "Vui lòng nhập tên chiến dịch khuyến mãi." });
+
+        var campaign = new CampaignMarketing
+        {
+            CamMarketingNo = dto.CamMarketingNo?.Trim() ?? "",
+            CamMarketingName = dto.CamMarketingName.Trim(),
+            CamMarketingDesc = dto.CamMarketingDesc?.Trim(),
+            EffDateStart = dto.EffDateStart ?? DateTime.Today,
+            EffDateEnd = dto.EffDateEnd ?? DateTime.Today.AddMonths(1),
+            ConditionModel = dto.ConditionModel?.Trim(),
+            ConditionPlateNo = dto.ConditionPlateNo?.Trim(),
+            ConditionVIN = dto.ConditionVIN?.Trim(),
+            DiscountLaborPercent = dto.DiscountLaborPercent ?? 0,
+            DiscountPartPercent = dto.DiscountPartPercent ?? 0,
+            CreatedBy = dto.CreatedBy ?? "api",
+            Status = CampaignMarketingStatus.Active
+        };
+
+        var items = dto.Items?.Select(i => new CampaignMarketingItem
+        {
+            PartId = i.PartId,
+            PartCode = i.PartCode?.Trim() ?? "",
+            PartName = i.PartName?.Trim() ?? "",
+            PercentDiscount = i.PercentDiscount ?? 15,
+            MaxQuantity = i.MaxQuantity ?? 999,
+            Note = i.Note?.Trim()
+        }).ToList() ?? [];
+
+        var id = await svc.CreateCampaignMarketingAsync(campaign, items);
+        return Results.Ok(new { campaignId = id, camMarketingNo = campaign.CamMarketingNo, message = "Đã tạo chiến dịch khuyến mãi thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/campaigns/{id:int}/transition", async (int id, TransitionCampaignDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionCampaignStatusAsync(id, dto.ToStatus, dto.ApprovedBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/campaigns/{id:int}/apply-to-ro/{roId:int}", async (int id, int roId, IRoService svc) =>
+{
+    var (ok, msg, discount) = await svc.ApplyCampaignToROAsync(id, roId);
+    return ok ? Results.Ok(new { message = msg, discountAmount = discount }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/campaigns/ro/{roId:int}/remove-campaign", async (int roId, IRoService svc) =>
+{
+    var (ok, msg) = await svc.RemoveCampaignFromROAsync(roId);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapGet("/api/campaigns/active-for-car/{carId:int}", async (int carId, IRoService svc) =>
+{
+    var list = await svc.GetEligibleCampaignsForCarAsync(carId);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.CamMarketingNo,
+        c.CamMarketingName,
+        c.DiscountLaborPercent,
+        c.DiscountPartPercent,
+        c.EffDateStart,
+        c.EffDateEnd,
+        c.ConditionModel,
+        c.ConditionPlateNo,
+        c.ConditionVIN
+    }));
+});
+
+app.MapDelete("/api/campaigns/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCampaignMarketingAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -2060,3 +2229,6 @@ record CreateInsuranceClaimDto(int RoId, int CompanyId, int? ContractId, string 
 record CreateInsuranceClaimItemDto(LineType Type, string Code, string Name, decimal Quantity, decimal UnitPrice, decimal? EstimatedAmount, decimal? ApprovedAmount, bool? IsApproved, string? Note);
 record CreateInsuranceClaimFromRoDto(int RoId, int CompanyId, int? ContractId, string PolicyNo, string? ClaimFileNo, string? SurveyorName, string? SurveyorPhone, string? AccidentDescription, decimal? DeductibleAmount, decimal? PenaltyAmount, string? CreatedBy);
 record TransitionInsuranceClaimDto(InsuranceClaimStatus ToStatus, decimal? ApprovedAmount, string? Note);
+record CreateCampaignDto(string? CamMarketingNo, string CamMarketingName, string? CamMarketingDesc, DateTime? EffDateStart, DateTime? EffDateEnd, string? ConditionModel, string? ConditionPlateNo, string? ConditionVIN, decimal? DiscountLaborPercent, decimal? DiscountPartPercent, string? CreatedBy, List<CreateCampaignItemDto>? Items);
+record CreateCampaignItemDto(int PartId, string? PartCode, string? PartName, decimal? PercentDiscount, decimal? MaxQuantity, string? Note);
+record TransitionCampaignDto(CampaignMarketingStatus ToStatus, string? ApprovedBy);

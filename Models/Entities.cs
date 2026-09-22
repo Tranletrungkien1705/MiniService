@@ -228,6 +228,15 @@ public enum InsurancePaymentType
     CustomerReimburse = 1  // Khách tự trả trước, bảo hiểm bồi hoàn sau cho khách
 }
 
+/// <summary>Trạng thái Chiến dịch khuyến mãi dịch vụ — theo CamMarketingStatus idn.CarService.</summary>
+public enum CampaignMarketingStatus
+{
+    Draft = 0,     // DRAFT     — Dự thảo / Lập kế hoạch
+    Active = 1,    // ACTIVE    — Đang triển khai / Có hiệu lực
+    Finished = 2,  // FINISHED  — Đã kết thúc chiến dịch
+    Cancelled = 3  // CANCELLED — Đã hủy bỏ
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -277,6 +286,9 @@ public class RepairOrder : IOrgOwned
     public Cavity? Cavity { get; set; }
     public int? ReceptionSheetId { get; set; }
     public ReceptionSheet? ReceptionSheet { get; set; }
+    public int? CampaignMarketingId { get; set; }
+    public CampaignMarketing? CampaignMarketing { get; set; }
+    public decimal CampaignDiscountAmount { get; set; } = 0;
     public List<RepairLine> Lines { get; set; } = [];
     public List<WarrantyReport> WarrantyReports { get; set; } = [];
     public List<StockOut> StockOuts { get; set; } = [];
@@ -288,10 +300,11 @@ public class RepairOrder : IOrgOwned
     public List<AssignmentWork> AssignmentWorks { get; set; } = [];
     public List<InsuranceClaim> InsuranceClaims { get; set; } = [];
 
-    public decimal Total => Lines.Sum(l => l.Amount);
+    public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount);
+    public decimal GrossTotal => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
     public decimal PartTotal => Lines.Where(l => l.Type == LineType.Part).Sum(l => l.Amount);
-    public decimal CustomerTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount);
+    public decimal CustomerTotal => Math.Max(0, Lines.Where(l => l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount) - CampaignDiscountAmount);
     public decimal WarrantyTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Warranty).Sum(l => l.Amount);
     public decimal InsuranceTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Insurance).Sum(l => l.Amount);
     public decimal PaidAmount => Payments.Where(p => p.Status == PaymentStatus.Completed).Sum(p => p.PaymentAmount);
@@ -1055,6 +1068,56 @@ public class InsuranceClaimItem : IOrgOwned
     public string? Note { get; set; }                    // Diễn giải / Đánh giá giám định
 
     public InsuranceClaim InsuranceClaim { get; set; } = null!;
+}
+
+/// <summary>Chiến dịch Khuyến mãi & Tiếp thị Dịch vụ xe — Ser_CampaignMarketing trong idn.CarService.</summary>
+public class CampaignMarketing : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CamMarketingNo { get; set; } = "";             // Mã chiến dịch (VD: KM-HE2026, KM-ACCENT-01)
+    public string CamMarketingName { get; set; } = "";           // Tên chiến dịch
+    public string? CamMarketingDesc { get; set; }                // Nội dung & Thể lệ chương trình
+    public DateTime EffDateStart { get; set; } = DateTime.Today; // Ngày bắt đầu hiệu lực
+    public DateTime EffDateEnd { get; set; } = DateTime.Today.AddMonths(1); // Ngày kết thúc hiệu lực
+    public DateTime? WarrantyDateStart { get; set; }             // Đk: Ngày kích hoạt bảo hành từ (áp dụng đời xe)
+    public DateTime? WarrantyDateEnd { get; set; }               // Đk: Ngày kích hoạt bảo hành đến
+    public string? ConditionModel { get; set; }                  // Đk dòng xe (VD: Accent, Tucson, Santa Fe...)
+    public string? ConditionPlateNo { get; set; }                // Đk đầu biển số xe (VD: 29, 30, 51...)
+    public string? ConditionVIN { get; set; }                    // Đk chuỗi ký tự trong VIN (VD: RLH...)
+    public decimal DiscountLaborPercent { get; set; } = 0;       // % Giảm giá tiền công chung
+    public decimal DiscountPartPercent { get; set; } = 0;        // % Giảm giá phụ tùng chung
+    public CampaignMarketingStatus Status { get; set; } = CampaignMarketingStatus.Active; // Trạng thái
+    public string CreatedBy { get; set; } = "Cố vấn dịch vụ";   // Người tạo chiến dịch
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ApprovedAt { get; set; }                    // Ngày duyệt áp dụng
+    public string? ApprovedBy { get; set; }                      // Người phê duyệt
+
+    public List<CampaignMarketingItem> Items { get; set; } = [];
+    public List<RepairOrder> AppliedROs { get; set; } = [];
+
+    public int ItemCount => Items.Count;
+    public int ROAppliedCount => AppliedROs.Count;
+    public bool IsActiveNow => Status == CampaignMarketingStatus.Active && DateTime.Today >= EffDateStart.Date && DateTime.Today <= EffDateEnd.Date;
+    public decimal TotalDiscountGranted => AppliedROs.Sum(r => r.CampaignDiscountAmount);
+    public decimal TotalRevenueGenerated => AppliedROs.Sum(r => r.Total);
+}
+
+/// <summary>Chi tiết phụ tùng áp dụng ưu đãi trong chiến dịch — Ser_CampaignMarketingPart trong idn.CarService.</summary>
+public class CampaignMarketingItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int CampaignMarketingId { get; set; }
+    public int PartId { get; set; }                              // ID Phụ tùng trong kho
+    public string PartCode { get; set; } = "";                   // Mã phụ tùng (PartCode)
+    public string PartName { get; set; } = "";                   // Tên phụ tùng (VieName)
+    public decimal PercentDiscount { get; set; } = 15;           // % Chiết khấu giảm giá dòng phụ tùng này
+    public decimal MaxQuantity { get; set; } = 999;              // Số lượng tối đa áp dụng mỗi xe
+    public string? Note { get; set; }                            // Ghi chú hạng mục
+
+    public CampaignMarketing CampaignMarketing { get; set; } = null!;
+    public Part Part { get; set; } = null!;
 }
 
 

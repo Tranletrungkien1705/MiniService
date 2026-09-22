@@ -18,6 +18,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingReceptions, int TodayReceptions,
     int ActiveAssignments, int TotalEngineers, int TotalGroups,
     int PendingInsuranceClaims, decimal ApprovedInsuranceAmount,
+    int ActiveCampaigns, decimal MonthCampaignDiscount,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -165,12 +166,31 @@ public interface IRoService
     Task<(bool ok, string msg)> TransitionInsuranceClaimAsync(int id, InsuranceClaimStatus toStatus, decimal? approvedAmount = null, string? note = null);
     Task<(bool ok, string msg)> DeleteInsuranceClaimAsync(int id);
     Task<List<RepairOrder>> ROsEligibleForInsuranceAsync();
+    // service marketing campaigns (Ser_CampaignMarketing, Ser_CampaignMarketingPart)
+    Task<List<CampaignMarketing>> CampaignMarketingsAsync(CampaignMarketingStatus? status, string? q, bool? currentOnly);
+    Task<CampaignMarketing?> GetCampaignMarketingAsync(int id);
+    Task<int> CreateCampaignMarketingAsync(CampaignMarketing campaign, List<CampaignMarketingItem> items);
+    Task<(bool ok, string msg)> TransitionCampaignStatusAsync(int id, CampaignMarketingStatus to, string? approvedBy = null);
+    Task<(bool ok, string msg)> DeleteCampaignMarketingAsync(int id);
+    Task<List<CampaignMarketing>> GetEligibleCampaignsForCarAsync(int carId);
+    Task<(bool ok, string msg, decimal discountTotal)> ApplyCampaignToROAsync(int campaignId, int roId);
+    Task<(bool ok, string msg)> RemoveCampaignFromROAsync(int roId);
+    Task<List<RepairOrder>> ROsEligibleForCampaignAsync(int campaignId);
+    Task<List<CampaignMarketing>> ActiveCampaignsForSelectAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
 
 public class RoService(AppDbContext db) : IRoService
 {
+    /// <summary>Chuyển trạng thái Chiến dịch Marketing theo Ser_CampaignMarketing idn.CarService.</summary>
+    public static CampaignMarketingStatus[] AllowedNextCampaign(CampaignMarketingStatus s) => s switch
+    {
+        CampaignMarketingStatus.Draft => [CampaignMarketingStatus.Active, CampaignMarketingStatus.Cancelled],
+        CampaignMarketingStatus.Active => [CampaignMarketingStatus.Finished, CampaignMarketingStatus.Cancelled],
+        _ => []
+    };
+
     /// <summary>Chuyển trạng thái hợp lệ theo state machine idn.CarService.</summary>
     public static ROStatus[] AllowedNext(ROStatus s) => s switch
     {
@@ -516,6 +536,11 @@ public class RoService(AppDbContext db) : IRoService
             .Select(c => (decimal?)c.ApprovedAmount).ToListAsync();
         var approvedInsuranceAmount = approvedInsuranceClaims.Sum() ?? 0;
 
+        var activeCampaigns = await db.CampaignMarketings.CountAsync(c => c.Status == CampaignMarketingStatus.Active);
+        var monthCampaignDiscount = await db.ROs
+            .Where(r => r.CampaignMarketingId.HasValue && r.CreatedAt >= monthStart)
+            .SumAsync(r => (decimal?)r.CampaignDiscountAmount) ?? 0;
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -551,6 +576,8 @@ public class RoService(AppDbContext db) : IRoService
             totalGroups,
             pendingInsuranceClaims,
             approvedInsuranceAmount,
+            activeCampaigns,
+            monthCampaignDiscount,
             byStatus);
     }
 
@@ -3138,5 +3165,250 @@ public class RoService(AppDbContext db) : IRoService
             .Include(r => r.InsuranceClaims)
             .Where(r => r.Status != ROStatus.Rejected && r.Status != ROStatus.NotResponding)
             .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+    // --- Service Marketing Campaign Management (Ser_CampaignMarketing, Ser_CampaignMarketingPart) ---
+    public async Task<List<CampaignMarketing>> CampaignMarketingsAsync(CampaignMarketingStatus? status, string? q, bool? currentOnly)
+    {
+        var query = db.CampaignMarketings
+            .Include(c => c.Items).ThenInclude(i => i.Part)
+            .Include(c => c.AppliedROs)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(c => c.Status == status.Value);
+        if (currentOnly == true)
+        {
+            var today = DateTime.Today;
+            query = query.Where(c => c.Status == CampaignMarketingStatus.Active && c.EffDateStart.Date <= today && c.EffDateEnd.Date >= today);
+        }
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(c => c.CamMarketingNo.ToLower().Contains(kw)
+                || c.CamMarketingName.ToLower().Contains(kw)
+                || (c.CamMarketingDesc != null && c.CamMarketingDesc.ToLower().Contains(kw))
+                || (c.ConditionModel != null && c.ConditionModel.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(c => c.CreatedAt).ToList();
+    }
+
+    public Task<CampaignMarketing?> GetCampaignMarketingAsync(int id) =>
+        db.CampaignMarketings
+            .Include(c => c.Items).ThenInclude(i => i.Part)
+            .Include(c => c.AppliedROs).ThenInclude(r => r.Car)
+            .Include(c => c.AppliedROs).ThenInclude(r => r.Customer)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<int> CreateCampaignMarketingAsync(CampaignMarketing campaign, List<CampaignMarketingItem> items)
+    {
+        if (string.IsNullOrWhiteSpace(campaign.CamMarketingName))
+            throw new InvalidOperationException("Vui lòng nhập tên chiến dịch khuyến mãi.");
+
+        if (campaign.EffDateEnd < campaign.EffDateStart)
+            throw new InvalidOperationException("Ngày kết thúc không được nhỏ hơn ngày bắt đầu.");
+
+        if (string.IsNullOrWhiteSpace(campaign.CamMarketingNo))
+        {
+            var count = await db.CampaignMarketings.CountAsync();
+            campaign.CamMarketingNo = $"KM{DateTime.Now:yyMMdd}-{count + 1:D3}";
+        }
+
+        campaign.CreatedAt = DateTime.Now;
+        if (campaign.Status == CampaignMarketingStatus.Active && !campaign.ApprovedAt.HasValue)
+        {
+            campaign.ApprovedAt = DateTime.Now;
+            campaign.ApprovedBy ??= campaign.CreatedBy;
+        }
+
+        db.CampaignMarketings.Add(campaign);
+        await db.SaveChangesAsync();
+
+        if (items != null && items.Count > 0)
+        {
+            foreach (var it in items)
+            {
+                it.CampaignMarketingId = campaign.Id;
+                db.CampaignMarketingItems.Add(it);
+            }
+            await db.SaveChangesAsync();
+        }
+
+        return campaign.Id;
+    }
+
+    public async Task<(bool ok, string msg)> TransitionCampaignStatusAsync(int id, CampaignMarketingStatus to, string? approvedBy = null)
+    {
+        var campaign = await db.CampaignMarketings.FirstOrDefaultAsync(c => c.Id == id);
+        if (campaign == null) return (false, "Không tìm thấy chiến dịch khuyến mãi.");
+
+        var allowed = AllowedNextCampaign(campaign.Status);
+        if (!allowed.Contains(to))
+            return (false, $"Không thể chuyển từ '{Ui.CampaignStatus(campaign.Status).text}' sang '{Ui.CampaignStatus(to).text}'.");
+
+        campaign.Status = to;
+        if (to == CampaignMarketingStatus.Active)
+        {
+            campaign.ApprovedAt = DateTime.Now;
+            campaign.ApprovedBy = string.IsNullOrWhiteSpace(approvedBy) ? "Ban Giám đốc" : approvedBy.Trim();
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trạng thái chiến dịch sang '{Ui.CampaignStatus(to).text}'.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCampaignMarketingAsync(int id)
+    {
+        var campaign = await db.CampaignMarketings.Include(c => c.Items).Include(c => c.AppliedROs).FirstOrDefaultAsync(c => c.Id == id);
+        if (campaign == null) return (false, "Không tìm thấy chiến dịch khuyến mãi.");
+
+        if (campaign.AppliedROs.Count > 0)
+            return (false, $"Không thể xóa chiến dịch đã được áp dụng trên {campaign.AppliedROs.Count} lệnh sửa chữa (RO).");
+
+        if (campaign.Status == CampaignMarketingStatus.Active)
+            return (false, "Không thể xóa chiến dịch đang chạy (Active). Hãy hủy hoặc kết thúc trước.");
+
+        db.CampaignMarketingItems.RemoveRange(campaign.Items);
+        db.CampaignMarketings.Remove(campaign);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa chiến dịch khuyến mãi '{campaign.CamMarketingNo} - {campaign.CamMarketingName}'.");
+    }
+
+    public async Task<List<CampaignMarketing>> GetEligibleCampaignsForCarAsync(int carId)
+    {
+        var car = await db.Cars.FirstOrDefaultAsync(c => c.Id == carId);
+        if (car == null) return [];
+
+        var today = DateTime.Today;
+        var active = await db.CampaignMarketings
+            .Include(c => c.Items).ThenInclude(i => i.Part)
+            .Where(c => c.Status == CampaignMarketingStatus.Active && c.EffDateStart.Date <= today && c.EffDateEnd.Date >= today)
+            .ToListAsync();
+
+        return active.Where(c => IsCarMatchingCampaign(car, c)).ToList();
+    }
+
+    private static bool IsCarMatchingCampaign(Car car, CampaignMarketing c)
+    {
+        if (!string.IsNullOrWhiteSpace(c.ConditionModel))
+        {
+            if (string.IsNullOrWhiteSpace(car.Model) || !car.Model.Contains(c.ConditionModel.Trim(), StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(c.ConditionPlateNo))
+        {
+            var cond = c.ConditionPlateNo.Trim();
+            if (string.IsNullOrWhiteSpace(car.Plate) || !car.Plate.StartsWith(cond, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(c.ConditionVIN))
+        {
+            var condVin = c.ConditionVIN.Trim();
+            if (string.IsNullOrWhiteSpace(car.Vin) || !car.Vin.Contains(condVin, StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        return true;
+    }
+
+    public async Task<(bool ok, string msg, decimal discountTotal)> ApplyCampaignToROAsync(int campaignId, int roId)
+    {
+        var ro = await db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Lines).ThenInclude(l => l.Part)
+            .FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa (RO).", 0);
+
+        if (ro.Status is ROStatus.Paid or ROStatus.Finished or ROStatus.Rejected)
+            return (false, $"Lệnh RO đang ở trạng thái '{Ui.Status(ro.Status).text}', không thể áp dụng khuyến mãi.", 0);
+
+        var campaign = await db.CampaignMarketings
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.Id == campaignId);
+        if (campaign == null) return (false, "Không tìm thấy chiến dịch khuyến mãi.", 0);
+
+        if (campaign.Status != CampaignMarketingStatus.Active)
+            return (false, $"Chiến dịch '{campaign.CamMarketingName}' không còn hoạt động.", 0);
+
+        if (!campaign.IsActiveNow)
+            return (false, $"Chiến dịch '{campaign.CamMarketingName}' đã hết hạn hoặc chưa đến ngày áp dụng.", 0);
+
+        if (!IsCarMatchingCampaign(ro.Car, campaign))
+            return (false, $"Xe '{ro.Car?.Plate} ({ro.Car?.Model})' không thuộc phạm vi áp dụng của chiến dịch này.", 0);
+
+        // Tính toán chiết khấu tự động theo cấu hình Ser_CampaignMarketing / Ser_CampaignMarketingPart
+        decimal discountTotal = 0;
+        foreach (var line in ro.Lines)
+        {
+            if (line.ExpenseType != ExpenseType.Customer) continue; // Chỉ giảm phần khách trả
+
+            if (line.Type == LineType.Labor)
+            {
+                if (campaign.DiscountLaborPercent > 0)
+                {
+                    var laborDisc = line.Amount * (campaign.DiscountLaborPercent / 100m);
+                    discountTotal += laborDisc;
+                }
+            }
+            else if (line.Type == LineType.Part)
+            {
+                // Ưu tiên giảm giá phụ tùng theo bảng CampaignMarketingItem nếu có
+                var specificItem = campaign.Items.FirstOrDefault(i => i.PartId == line.PartId || (line.Part != null && i.PartCode == line.Part.Code));
+                if (specificItem != null && specificItem.PercentDiscount > 0)
+                {
+                    var partDisc = line.Amount * (specificItem.PercentDiscount / 100m);
+                    discountTotal += partDisc;
+                }
+                else if (campaign.DiscountPartPercent > 0)
+                {
+                    var partDisc = line.Amount * (campaign.DiscountPartPercent / 100m);
+                    discountTotal += partDisc;
+                }
+            }
+        }
+
+        discountTotal = Math.Round(discountTotal);
+        ro.CampaignMarketingId = campaign.Id;
+        ro.CampaignDiscountAmount = discountTotal;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã áp dụng chiến dịch '{campaign.CamMarketingName}'. Tổng giá trị ưu đãi chiết khấu: {discountTotal:N0} đ.", discountTotal);
+    }
+
+    public async Task<(bool ok, string msg)> RemoveCampaignFromROAsync(int roId)
+    {
+        var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa.");
+
+        ro.CampaignMarketingId = null;
+        ro.CampaignDiscountAmount = 0;
+        await db.SaveChangesAsync();
+        return (true, "Đã gỡ bỏ chiến dịch khuyến mãi khỏi Lệnh sửa chữa.");
+    }
+
+    public async Task<List<RepairOrder>> ROsEligibleForCampaignAsync(int campaignId)
+    {
+        var campaign = await db.CampaignMarketings.FirstOrDefaultAsync(c => c.Id == campaignId);
+        if (campaign == null) return [];
+
+        var ros = await db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines)
+            .Where(r => r.Status != ROStatus.Finished && r.Status != ROStatus.Paid && r.Status != ROStatus.Rejected)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+        return ros.Where(r => IsCarMatchingCampaign(r.Car, campaign)).ToList();
+    }
+
+    public Task<List<CampaignMarketing>> ActiveCampaignsForSelectAsync() =>
+        db.CampaignMarketings
+            .Where(c => c.Status == CampaignMarketingStatus.Active)
+            .OrderBy(c => c.CamMarketingName)
             .ToListAsync();
 }

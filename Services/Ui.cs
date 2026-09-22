@@ -266,6 +266,25 @@ public static class Ui
         _ => (t.ToString(), "secondary")
     };
 
+    public static (string text, string code, string css) CampaignStatus(CampaignMarketingStatus s) => s switch
+    {
+        Models.CampaignMarketingStatus.Draft => ("Dự thảo", "DRAFT", "secondary"),
+        Models.CampaignMarketingStatus.Active => ("Đang chạy", "ACTIVE", "success"),
+        Models.CampaignMarketingStatus.Finished => ("Kết thúc", "FNS", "info"),
+        Models.CampaignMarketingStatus.Cancelled => ("Đã hủy", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string css) CampaignScope(string? model, string? plate, string? vin)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(model)) parts.Add($"Model: {model}");
+        if (!string.IsNullOrWhiteSpace(plate)) parts.Add($"Biển: {plate}*");
+        if (!string.IsNullOrWhiteSpace(vin)) parts.Add($"VIN: *{vin}*");
+        if (parts.Count == 0) return ("Toàn bộ xe Hyundai", "primary");
+        return (string.Join(" · ", parts), "info");
+    }
+
     public static string MoneyToWords(decimal total)
     {
         if (total <= 0) return "Không đồng";

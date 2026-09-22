@@ -40,6 +40,8 @@ public class AppDbContext : DbContext
     public DbSet<InsuranceContract> InsuranceContracts => Set<InsuranceContract>();
     public DbSet<InsuranceClaim> InsuranceClaims => Set<InsuranceClaim>();
     public DbSet<InsuranceClaimItem> InsuranceClaimItems => Set<InsuranceClaimItem>();
+    public DbSet<CampaignMarketing> CampaignMarketings => Set<CampaignMarketing>();
+    public DbSet<CampaignMarketingItem> CampaignMarketingItems => Set<CampaignMarketingItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -65,12 +67,14 @@ public class AppDbContext : DbContext
         b.Entity<RepairOrder>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
-            e.Ignore(x => x.Total); e.Ignore(x => x.LaborTotal); e.Ignore(x => x.PartTotal);
+            e.Ignore(x => x.Total); e.Ignore(x => x.GrossTotal); e.Ignore(x => x.LaborTotal); e.Ignore(x => x.PartTotal);
             e.Ignore(x => x.CustomerTotal); e.Ignore(x => x.WarrantyTotal); e.Ignore(x => x.InsuranceTotal);
             e.Ignore(x => x.PaidAmount); e.Ignore(x => x.RemainingBalance);
+            e.Property(x => x.CampaignDiscountAmount).HasPrecision(18, 2);
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.CampaignMarketing).WithMany(x => x.AppliedROs).HasForeignKey(x => x.CampaignMarketingId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.WarrantyReports).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.StockOuts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.CustomerCares).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
@@ -336,6 +340,27 @@ public class AppDbContext : DbContext
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.Property(x => x.EstimatedAmount).HasPrecision(18, 2);
             e.Property(x => x.ApprovedAmount).HasPrecision(18, 2);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CampaignMarketing>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CamMarketingNo }).IsUnique();
+            e.Property(x => x.DiscountLaborPercent).HasPrecision(5, 2);
+            e.Property(x => x.DiscountPartPercent).HasPrecision(5, 2);
+            e.Ignore(x => x.ItemCount);
+            e.Ignore(x => x.ROAppliedCount);
+            e.Ignore(x => x.IsActiveNow);
+            e.Ignore(x => x.TotalDiscountGranted);
+            e.Ignore(x => x.TotalRevenueGenerated);
+            e.HasMany(x => x.Items).WithOne(x => x.CampaignMarketing).HasForeignKey(x => x.CampaignMarketingId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.AppliedROs).WithOne(x => x.CampaignMarketing).HasForeignKey(x => x.CampaignMarketingId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CampaignMarketingItem>(e =>
+        {
+            e.Property(x => x.PercentDiscount).HasPrecision(5, 2);
+            e.Property(x => x.MaxQuantity).HasPrecision(18, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

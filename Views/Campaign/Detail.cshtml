@@ -1,0 +1,311 @@
+@model CampaignMarketing
+@{
+    ViewData["Title"] = $"Chiến dịch {Model.CamMarketingNo}";
+    var (stTxt, stCode, stCss) = Ui.CampaignStatus(Model.Status);
+    var (scopeTxt, scopeCss) = Ui.CampaignScope(Model.ConditionModel, Model.ConditionPlateNo, Model.ConditionVIN);
+    var next = (CampaignMarketingStatus[])ViewBag.Next;
+    var eligibleROs = (List<RepairOrder>?)ViewBag.EligibleROs ?? [];
+    bool canDelete = Model.ROAppliedCount == 0 && Model.Status != CampaignMarketingStatus.Active;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="fw-bold mb-0 text-dark">@Model.CamMarketingName</h4>
+            <span class="badge bg-@stCss fs-6">@stTxt</span>
+            @if (Model.IsActiveNow)
+            {
+                <span class="badge bg-success"><i class="bi bi-clock-history me-1"></i>Đang hiệu lực</span>
+            }
+        </div>
+        <div class="text-muted small mt-1 font-monospace">
+            Mã chiến dịch: <b>@Model.CamMarketingNo</b> · Thời hạn: <b>@Model.EffDateStart.ToString("dd/MM/yyyy")</b> đến <b>@Model.EffDateEnd.ToString("dd/MM/yyyy")</b>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Campaign" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <!-- Card Thông tin & Điều kiện áp dụng -->
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-info-circle me-1"></i>Nội dung thể lệ &amp; Điều kiện áp dụng xe</h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="text-muted small">Phạm vi áp dụng xe:</div>
+                        <span class="badge bg-@scopeCss-subtle text-@scopeCss border border-@scopeCss-subtle fs-6 mt-1">@scopeTxt</span>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">Chính sách giảm giá chung:</div>
+                        <div class="mt-1">
+                            <span class="badge bg-primary me-2"><i class="bi bi-wrench me-1"></i>Công: -@Model.DiscountLaborPercent%</span>
+                            <span class="badge bg-success"><i class="bi bi-box-seam me-1"></i>Phụ tùng: -@Model.DiscountPartPercent%</span>
+                        </div>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(Model.CamMarketingDesc))
+                {
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="fw-semibold text-secondary small mb-1">Mô tả thể lệ &amp; quyền lợi khách hàng:</div>
+                        <div class="text-dark" style="white-space:pre-line">@Model.CamMarketingDesc</div>
+                    </div>
+                }
+
+                <div class="row g-2 text-muted small border-top pt-2">
+                    <div class="col-md-4">
+                        <i class="bi bi-person me-1"></i>Người lập: <b>@Model.CreatedBy</b> (@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm"))
+                    </div>
+                    <div class="col-md-4">
+                        <i class="bi bi-check2-circle me-1"></i>Phê duyệt: <b>@(Model.ApprovedBy ?? "—")</b>
+                        @if (Model.ApprovedAt.HasValue) { <span>(@Model.ApprovedAt.Value.ToString("dd/MM/yyyy"))</span> }
+                    </div>
+                    <div class="col-md-4 text-md-end">
+                        <i class="bi bi-calendar-event me-1"></i>Hiệu lực: @((Model.EffDateEnd - Model.EffDateStart).Days + 1) ngày
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Danh mục phụ tùng ưu đãi -->
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-success"><i class="bi bi-box-seam me-1"></i>Danh mục phụ tùng ưu đãi (Ser_CampaignMarketingPart) (@Model.Items.Count)</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mã phụ tùng</th>
+                                <th>Tên phụ tùng</th>
+                                <th class="text-end">Giá niêm yết</th>
+                                <th class="text-end">Ưu đãi (%)</th>
+                                <th class="text-end">Giá sau giảm</th>
+                                <th class="text-end">Tồn kho</th>
+                                <th>Ghi chú</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var it in Model.Items)
+                            {
+                                var salePrice = it.Part?.SalePrice ?? 0;
+                                var discountedPrice = salePrice * (1 - (it.PercentDiscount / 100m));
+                                <tr>
+                                    <td class="font-monospace fw-semibold">@it.PartCode</td>
+                                    <td>
+                                        <div class="fw-semibold">@it.PartName</div>
+                                        <div class="text-muted small">SL tối đa/xe: @it.MaxQuantity.ToString("0.##")</div>
+                                    </td>
+                                    <td class="text-end text-muted">@salePrice.ToString("N0")đ</td>
+                                    <td class="text-end">
+                                        <span class="badge bg-danger">-@it.PercentDiscount%</span>
+                                    </td>
+                                    <td class="text-end fw-bold text-success">@discountedPrice.ToString("N0")đ</td>
+                                    <td class="text-end">
+                                        <span class="badge @((it.Part != null && it.Part.InStock <= it.Part.MinStock) ? "bg-danger" : "bg-light text-dark border")">
+                                            @(it.Part?.InStock.ToString("0.##") ?? "—")
+                                        </span>
+                                    </td>
+                                    <td class="small text-muted">@(it.Note ?? "—")</td>
+                                </tr>
+                            }
+                            @if (Model.Items.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-3">
+                                        Chiến dịch áp dụng chiết khấu chung (-@Model.DiscountLaborPercent% công, -@Model.DiscountPartPercent% phụ tùng) trên toàn danh mục dịch vụ.
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Danh sách Lệnh sửa chữa đã hưởng ưu đãi -->
+        <div class="card">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-clipboard2-pulse me-1"></i>Lệnh sửa chữa (RO) đã áp dụng khuyến mãi (@Model.AppliedROs.Count)</h6>
+                <span class="badge bg-success">Tổng ưu đãi đã trao: @Model.TotalDiscountGranted.ToString("N0")đ</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mã RO</th>
+                                <th>Biển số xe</th>
+                                <th>Chủ xe / SĐT</th>
+                                <th>Ngày lập</th>
+                                <th class="text-end">Ưu đãi giảm</th>
+                                <th class="text-end">Tổng tiền KH trả</th>
+                                <th>Trạng thái RO</th>
+                                <th class="text-end">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var r in Model.AppliedROs)
+                            {
+                                var (roTxt, roCode, roCss) = Ui.Status(r.Status);
+                                <tr>
+                                    <td>
+                                        <a href="/RO/Detail/@r.Id" class="fw-bold font-monospace text-decoration-none">@r.Code</a>
+                                    </td>
+                                    <td>
+                                        <div class="fw-semibold">@r.Car?.Plate</div>
+                                        <div class="text-muted small">@r.Car?.Model</div>
+                                    </td>
+                                    <td>
+                                        <div>@r.Customer?.Name</div>
+                                        <div class="text-muted small">@r.Customer?.Phone</div>
+                                    </td>
+                                    <td class="small">@r.CreatedAt.ToString("dd/MM/yyyy")</td>
+                                    <td class="text-end fw-bold text-success">
+                                        -@r.CampaignDiscountAmount.ToString("N0")đ
+                                    </td>
+                                    <td class="text-end fw-bold text-primary">
+                                        @r.CustomerTotal.ToString("N0")đ
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@roCss">@roTxt</span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="/RO/Detail/@r.Id" class="btn btn-outline-primary" title="Xem RO"><i class="bi bi-eye"></i></a>
+                                            @if (r.Status is not (ROStatus.Paid or ROStatus.Finished or ROStatus.Rejected))
+                                            {
+                                                <form asp-action="RemoveFromRO" method="post" class="d-inline" onsubmit="return confirm('Hủy ưu đãi chiến dịch khỏi RO này?')">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="roId" value="@r.Id" />
+                                                    <input type="hidden" name="returnCampaignId" value="@Model.Id" />
+                                                    <button type="submit" class="btn btn-outline-danger" title="Gỡ ưu đãi khỏi RO"><i class="bi bi-x-circle"></i></button>
+                                                </form>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                            @if (Model.AppliedROs.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        Chưa có lệnh sửa chữa nào áp dụng chiến dịch này.
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột bên phải: State machine + Hiệu quả + Gợi ý RO -->
+    <div class="col-lg-4">
+        <!-- Chuyển trạng thái -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-sliders me-1"></i>Điều hành trạng thái chiến dịch</h6>
+                @if (next.Length == 0)
+                {
+                    <div class="alert alert-secondary small mb-0">Chiến dịch đã ở trạng thái kết thúc (@stTxt).</div>
+                }
+                @foreach (var n in next)
+                {
+                    var (nt, nc, ncss) = Ui.CampaignStatus(n);
+                    <form asp-action="Transition" method="post" class="mb-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <input type="hidden" name="to" value="@((int)n)" />
+                        <button type="submit" class="btn btn-outline-@ncss w-100 text-start d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-arrow-right-circle me-1"></i>Chuyển: <b>@nt</b></span>
+                            <span class="badge bg-@ncss">@nc</span>
+                        </button>
+                    </form>
+                }
+
+                @if (canDelete)
+                {
+                    <form asp-action="Delete" method="post" onsubmit="return confirm('Xác nhận xóa hoàn toàn chiến dịch khuyến mãi này?')" class="mt-3 border-top pt-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-outline-danger btn-sm w-100">
+                            <i class="bi bi-trash me-1"></i>Xóa chiến dịch
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+
+        <!-- Thống kê KPI chiến dịch -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3 text-warning"><i class="bi bi-bar-chart-fill me-1"></i>Hiệu quả chiến dịch (KPI)</h6>
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted small">Tổng giá trị ưu đãi đã trao:</span>
+                    <span class="fw-bold text-success fs-6">@Model.TotalDiscountGranted.ToString("N0")đ</span>
+                </div>
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted small">Doanh thu xưởng tạo ra:</span>
+                    <span class="fw-bold text-primary fs-6">@Model.TotalRevenueGenerated.ToString("N0")đ</span>
+                </div>
+                <div class="d-flex justify-content-between py-1 border-bottom">
+                    <span class="text-muted small">Số xe đã hưởng ưu đãi:</span>
+                    <span class="fw-semibold">@Model.ROAppliedCount xe</span>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span class="text-muted small">Phụ tùng trong danh mục:</span>
+                    <span class="fw-semibold">@Model.ItemCount phụ tùng</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- RO đủ điều kiện trong xưởng -->
+        @if (Model.IsActiveNow)
+        {
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-magic me-1"></i>Xe trong xưởng đủ điều kiện (@eligibleROs.Count)</h6>
+                    </div>
+                    <p class="text-muted small">Các lệnh RO đang mở phù hợp với điều kiện chiến dịch (chưa nhận ưu đãi):</p>
+                    @if (eligibleROs.Count > 0)
+                    {
+                        <div class="list-group list-group-flush small">
+                            @foreach (var ero in eligibleROs.Take(5))
+                            {
+                                <div class="list-group-item px-0 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <div class="fw-bold">@ero.Car.Plate <span class="badge bg-light text-secondary border">@ero.Car.Model</span></div>
+                                        <div class="text-muted">RO: @ero.Code · @ero.Customer.Name</div>
+                                    </div>
+                                    <form asp-action="ApplyToRO" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="campaignId" value="@Model.Id" />
+                                        <input type="hidden" name="roId" value="@ero.Id" />
+                                        <button type="submit" class="btn btn-sm btn-outline-warning" title="Áp dụng ưu đãi cho xe này">
+                                            <i class="bi bi-check-lg"></i> Tặng KM
+                                        </button>
+                                    </form>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-muted small text-center py-2">
+                            Hiện không có xe nào đang mở trong xưởng đủ điều kiện cần áp dụng.
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>

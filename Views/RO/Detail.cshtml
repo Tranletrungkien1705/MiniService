@@ -5,6 +5,7 @@
     var next = (ROStatus[])ViewBag.Next;
     var parts = (List<Part>?)ViewBag.Parts ?? [];
     var servicePackages = (List<ServicePackage>?)ViewBag.ServicePackages ?? [];
+    var eligibleCampaigns = (List<CampaignMarketing>?)ViewBag.EligibleCampaigns ?? [];
     bool editable = Model.Status is not (ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding);
     bool deletable = Model.Status is ROStatus.Created or ROStatus.Printed or ROStatus.Rejected or ROStatus.NotResponding;
 }
@@ -33,6 +34,28 @@
             </div>
         </div></div>
 
+        @if (Model.CampaignMarketing != null)
+        {
+            <div class="alert alert-warning d-flex justify-content-between align-items-center mb-3 border-warning">
+                <div>
+                    <i class="bi bi-megaphone-fill me-2 fs-5 text-warning"></i>
+                    <strong>Chiến dịch KM áp dụng: @Model.CampaignMarketing.CamMarketingName (@Model.CampaignMarketing.CamMarketingNo)</strong>
+                    <div class="small text-muted mt-1">
+                        Ưu đãi giảm giá: <b class="text-success fs-6">-@Model.CampaignDiscountAmount.ToString("N0")đ</b> trực tiếp vào chi phí thanh toán của khách hàng!
+                    </div>
+                </div>
+                @if (editable)
+                {
+                    <form asp-action="RemoveCampaign" method="post" class="d-inline">
+                        @Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-outline-danger btn-sm" onclick="return confirm('Hủy áp dụng chiến dịch khuyến mãi này?')" title="Gỡ ưu đãi chiến dịch">
+                            <i class="bi bi-x-circle me-1"></i>Gỡ KM
+                        </button>
+                    </form>
+                }
+            </div>
+        }
+
         @if (Model.Status == ROStatus.Wait4Part)
         {
             <div class="alert alert-warning d-flex justify-content-between align-items-center mb-3">
@@ -49,12 +72,20 @@
         <div class="card"><div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="fw-bold mb-0">Chi tiết công &amp; phụ tùng</h6>
-                @if (editable && servicePackages.Count > 0)
-                {
-                    <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#applyPackageModal">
-                        <i class="bi bi-collection me-1"></i>Áp dụng gói bảo dưỡng
-                    </button>
-                }
+                <div class="d-flex gap-2">
+                    @if (editable && eligibleCampaigns.Count > 0 && Model.CampaignMarketing == null)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#applyCampaignModal">
+                            <i class="bi bi-megaphone me-1"></i>Áp dụng khuyến mãi (@eligibleCampaigns.Count)
+                        </button>
+                    }
+                    @if (editable && servicePackages.Count > 0)
+                    {
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#applyPackageModal">
+                            <i class="bi bi-collection me-1"></i>Áp dụng gói bảo dưỡng
+                        </button>
+                    }
+                </div>
             </div>
             <table class="table align-middle">
                 <thead><tr><th>Loại</th><th>Đối tượng TT</th><th>Nội dung</th><th class="text-end">SL</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th><th></th></tr></thead>
@@ -91,6 +122,10 @@
                     @if (Model.InsuranceTotal > 0)
                     {
                         <tr><td colspan="5" class="text-end text-info fw-semibold"><i class="bi bi-shield-shaded me-1"></i>Bảo hiểm bồi thường bảo lãnh</td><td class="text-end text-info fw-semibold">@Model.InsuranceTotal.ToString("N0")đ</td><td></td></tr>
+                    }
+                    @if (Model.CampaignDiscountAmount > 0)
+                    {
+                        <tr><td colspan="5" class="text-end text-warning fw-semibold"><i class="bi bi-megaphone me-1"></i>Ưu đãi Chiến dịch (@(Model.CampaignMarketing?.CamMarketingName ?? "Khuyến mãi"))</td><td class="text-end fw-semibold text-danger">-@Model.CampaignDiscountAmount.ToString("N0")đ</td><td></td></tr>
                     }
                     <tr class="fw-bold"><td colspan="5" class="text-end">TỔNG LỆNH SC</td><td class="text-end" style="color:#1d4ed8">@Model.Total.ToString("N0")đ</td><td></td></tr>
                 </tfoot>
@@ -402,6 +437,43 @@
         </div></div>
     </div>
 </div>
+
+@if (editable && eligibleCampaigns.Count > 0)
+{
+    <div class="modal fade" id="applyCampaignModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form asp-action="ApplyCampaign" method="post">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold"><i class="bi bi-megaphone text-warning me-2"></i>Áp dụng Chiến dịch Khuyến mãi vào RO</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small">Hệ thống tìm thấy <b>@eligibleCampaigns.Count</b> chiến dịch CSKH đang chạy phù hợp với dòng xe <b>@Model.Car.Model (@Model.Car.Plate)</b>. Chọn chiến dịch để tính toán giảm giá ưu đãi:</p>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Chiến dịch khả dụng</label>
+                            <select name="campaignId" class="form-select" required>
+                                <option value="">-- Chọn chiến dịch khuyến mãi --</option>
+                                @foreach (var c in eligibleCampaigns)
+                                {
+                                    <option value="@c.Id">
+                                        [@c.CamMarketingNo] @c.CamMarketingName (Công: -@c.DiscountLaborPercent% · Phụ tùng: -@c.DiscountPartPercent%)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                        <button type="submit" class="btn btn-warning"><i class="bi bi-check-lg me-1"></i>Áp dụng ưu đãi</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+}
 
 @if (editable && servicePackages.Count > 0)
 {
