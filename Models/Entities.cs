@@ -255,6 +255,23 @@ public enum CustomerCareMaceStatus
     Cancelled = 4      // 4: Khách từ chối / Hủy (Cancelled)
 }
 
+/// <summary>Hình thức kiểm kê / điều chuyển kho phụ tùng — theo Ser_Inv_StockAdj idn.CarService.</summary>
+public enum StockAdjType
+{
+    CountBalance = 0,     // 0: Kiểm kê cân đối kho (Discrepancy count adjustment)
+    LocationTransfer = 1, // 1: Điều chuyển vị trí kệ kho (Rack / Bin location transfer)
+    DamageScrap = 2       // 2: Hao hụt / Hư hỏng / Thanh lý phụ tùng (Damage / Scrap)
+}
+
+/// <summary>Trạng thái Phiếu kiểm kê / điều chuyển kho — theo Ser_StockAdj idn.CarService.</summary>
+public enum StockAdjStatus
+{
+    Pending = 0,    // 0: DRAFT / PENDING — Mới tạo / Chờ kiểm kê (Create = "0")
+    Executing = 1,  // 1: EXECUTING — Đang kiểm đếm / Đang xử lý
+    Finished = 2,   // 2: FINISHED — Đã duyệt hoàn tất / Đã cập nhật tồn kho (Finished = "1")
+    Rejected = 3    // 3: REJECTED — Hủy phiếu kiểm kê
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -1171,6 +1188,57 @@ public class CustomerCareMace : IOrgOwned
 
     public bool IsOverdue => Status == CustomerCareMaceStatus.Pending && DateTime.Today > MaceRecomentDate.Date;
     public bool IsDueSoon => Status == CustomerCareMaceStatus.Pending && DateTime.Today <= MaceRecomentDate.Date && MaceRecomentDate.Date <= DateTime.Today.AddDays(7);
+}
+
+/// <summary>Phiếu kiểm kê & Điều chuyển / Điều chỉnh kho phụ tùng — Ser_Inv_StockAdj trong idn.CarService.</summary>
+public class StockAdj : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string StockAdjNo { get; set; } = "";             // Số phiếu điều chỉnh (VD: KK260427-001, DC260427-001)
+    public DateTime StockAdjDate { get; set; } = DateTime.Today; // Ngày kiểm kê / điều chuyển
+    public StockAdjType Type { get; set; } = StockAdjType.CountBalance; // Loại kiểm kê / điều chuyển
+    public StockAdjStatus Status { get; set; } = StockAdjStatus.Pending; // Trạng thái phiếu
+    public string StorageCode { get; set; } = "KHO-CHINH";  // Mã kho phụ tùng
+    public string? Remark { get; set; }                     // Diễn giải / Mục đích kiểm kê
+    public string CreatedBy { get; set; } = "Thủ kho";      // Người tạo phiếu
+    public DateTime CreatedAt { get; set; } = DateTime.Now; // Ngày tạo phiếu
+    public string? ApprovedBy { get; set; }                 // Người phê duyệt điều chỉnh
+    public DateTime? FinishedAt { get; set; }               // Ngày hoàn tất cập nhật kho
+
+    public List<StockAdjDetail> Items { get; set; } = [];
+
+    public int TotalItems => Items.Count;
+    public decimal TotalSystemQty => Items.Sum(i => i.SystemQuantity);
+    public decimal TotalActualQty => Items.Sum(i => i.ActualQuantity);
+    public decimal TotalDiffQty => Items.Sum(i => i.DiffQuantity);
+    public decimal TotalDiffAmount => Items.Sum(i => i.DiffAmount);
+    public bool HasDiscrepancy => Items.Any(i => i.DiffQuantity != 0);
+    public int DiscrepancyCount => Items.Count(i => i.DiffQuantity != 0);
+}
+
+/// <summary>Chi tiết phụ tùng kiểm kê & điều chuyển kho — Ser_Inv_StockAdjDetail trong idn.CarService.</summary>
+public class StockAdjDetail : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int StockAdjId { get; set; }
+    public int PartId { get; set; }                         // Phụ tùng trong danh mục
+    public string PartCode { get; set; } = "";              // Mã phụ tùng (PartCode)
+    public string PartName { get; set; } = "";              // Tên phụ tùng (VieName)
+    public string Unit { get; set; } = "Cái";               // Đơn vị tính (Unit)
+    public decimal CostPrice { get; set; }                  // Giá vốn tại thời điểm kiểm kê
+    public decimal SystemQuantity { get; set; }             // Số lượng tồn sổ sách (BalanceQuantity)
+    public decimal ActualQuantity { get; set; }             // Số lượng thực tế kiểm đếm / chuyển (Quantity)
+    public string? FromLocation { get; set; }               // Vị trí lưu kho hiện tại (BalanceLocationID)
+    public string? ToLocation { get; set; }                 // Vị trí kệ kho chuyển đến (InStockLocationId)
+    public string? Note { get; set; }                       // Nguyên nhân chênh lệch / Ghi chú
+
+    public StockAdj StockAdj { get; set; } = null!;
+    public Part Part { get; set; } = null!;
+
+    public decimal DiffQuantity => ActualQuantity - SystemQuantity;
+    public decimal DiffAmount => (ActualQuantity - SystemQuantity) * CostPrice;
 }
 
 

@@ -1644,13 +1644,145 @@ public static class Seeder
             db.CustomerCareMaces.AddRange(mace1, mace2, mace3, mace4);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.StockAdjs.AnyAsync())
+        {
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+            var pFilter = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pAir = await db.Parts.FirstOrDefaultAsync(p => p.Code == "28113-1R100");
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+            var pSpark = await db.Parts.FirstOrDefaultAsync(p => p.Code == "18846-11070");
+            var pCabin = await db.Parts.FirstOrDefaultAsync(p => p.Code == "97133-D3000");
+
+            // 1. Phiếu kiểm kê cân đối kho tháng 4 (Finished) - Phát hiện thừa 1 lọc dầu do trả lại xưởng
+            var adj1 = new StockAdj
+            {
+                StockAdjNo = "KK260420-001",
+                StockAdjDate = DateTime.Today.AddDays(-7),
+                Type = StockAdjType.CountBalance,
+                Status = StockAdjStatus.Finished,
+                StorageCode = "KHO-CHINH",
+                Remark = "Kiểm kê định kỳ tháng 4 kho phụ tùng chính và cân đối chênh lệch thực tế.",
+                CreatedBy = "Thủ kho Tuấn",
+                CreatedAt = DateTime.Today.AddDays(-7).AddHours(-4),
+                ApprovedBy = "Kế toán trưởng",
+                FinishedAt = DateTime.Today.AddDays(-7).AddHours(-1),
+                Items = [
+                    new StockAdjDetail {
+                        PartId = pOil?.Id ?? 3,
+                        PartCode = pOil?.Code ?? "05100-00441",
+                        PartName = pOil?.Name ?? "Dầu nhờn động cơ Hyundai 5W-30 (Can 4L)",
+                        Unit = pOil?.Unit ?? "Can",
+                        CostPrice = pOil?.CostPrice ?? 420000,
+                        SystemQuantity = 35,
+                        ActualQuantity = 35,
+                        FromLocation = pOil?.Location ?? "K-DAU-01",
+                        ToLocation = pOil?.Location ?? "K-DAU-01",
+                        Note = "Khớp số lượng sổ sách"
+                    },
+                    new StockAdjDetail {
+                        PartId = pFilter?.Id ?? 1,
+                        PartCode = pFilter?.Code ?? "26300-35505",
+                        PartName = pFilter?.Name ?? "Lọc dầu động cơ chính hãng Hyundai",
+                        Unit = pFilter?.Unit ?? "Cái",
+                        CostPrice = pFilter?.CostPrice ?? 90000,
+                        SystemQuantity = 27,
+                        ActualQuantity = 28,
+                        FromLocation = pFilter?.Location ?? "K1-A01",
+                        ToLocation = pFilter?.Location ?? "K1-A01",
+                        Note = "Thừa 1 cái do hoàn trả từ lệnh RO chưa nhập kịp"
+                    },
+                    new StockAdjDetail {
+                        PartId = pAir?.Id ?? 2,
+                        PartCode = pAir?.Code ?? "28113-1R100",
+                        PartName = pAir?.Name ?? "Lọc gió động cơ Hyundai Accent",
+                        Unit = pAir?.Unit ?? "Cái",
+                        CostPrice = pAir?.CostPrice ?? 120000,
+                        SystemQuantity = 14,
+                        ActualQuantity = 14,
+                        FromLocation = pAir?.Location ?? "K1-A04",
+                        ToLocation = pAir?.Location ?? "K1-A04",
+                        Note = "Khớp số lượng"
+                    }
+                ]
+            };
+
+            // 2. Phiếu điều chuyển kệ kho (Executing) - Chuyển bugi và má phanh sang kệ A gần xưởng bảo dưỡng
+            var adj2 = new StockAdj
+            {
+                StockAdjNo = "DC260427-001",
+                StockAdjDate = DateTime.Today,
+                Type = StockAdjType.LocationTransfer,
+                Status = StockAdjStatus.Executing,
+                StorageCode = "KHO-CHINH",
+                Remark = "Quy hoạch lại vị trí kệ kho: điều chuyển phụ tùng thay nhanh sang kệ K1-A gần cửa xuất xưởng.",
+                CreatedBy = "Thủ kho Tuấn",
+                CreatedAt = DateTime.Now.AddHours(-2),
+                Items = [
+                    new StockAdjDetail {
+                        PartId = pSpark?.Id ?? 5,
+                        PartCode = pSpark?.Code ?? "18846-11070",
+                        PartName = pSpark?.Name ?? "Bugi đánh lửa Iridium cao cấp",
+                        Unit = pSpark?.Unit ?? "Cái",
+                        CostPrice = pSpark?.CostPrice ?? 110000,
+                        SystemQuantity = pSpark?.InStock ?? 3,
+                        ActualQuantity = pSpark?.InStock ?? 3,
+                        FromLocation = "K1-C03",
+                        ToLocation = "K1-A02",
+                        Note = "Chuyển sang kệ bảo dưỡng nhanh"
+                    },
+                    new StockAdjDetail {
+                        PartId = pBrake?.Id ?? 4,
+                        PartCode = pBrake?.Code ?? "58101-C1A00",
+                        PartName = pBrake?.Name ?? "Bộ má phanh đĩa trước",
+                        Unit = pBrake?.Unit ?? "Bộ",
+                        CostPrice = pBrake?.CostPrice ?? 850000,
+                        SystemQuantity = pBrake?.InStock ?? 6,
+                        ActualQuantity = pBrake?.InStock ?? 6,
+                        FromLocation = "K2-B02",
+                        ToLocation = "K1-A03",
+                        Note = "Chuyển từ tầng 2 xuống tầng 1"
+                    }
+                ]
+            };
+
+            // 3. Phiếu kiểm kê đột xuất vật tư lọc máy lạnh (Pending)
+            var adj3 = new StockAdj
+            {
+                StockAdjNo = "KK260427-002",
+                StockAdjDate = DateTime.Today,
+                Type = StockAdjType.CountBalance,
+                Status = StockAdjStatus.Pending,
+                StorageCode = "KHO-CHINH",
+                Remark = "Kiểm tra đối chiếu tồn thực tế lọc gió điều hòa chuẩn bị cho chiến dịch khuyến mãi mùa hè.",
+                CreatedBy = "Thủ kho Tuấn",
+                CreatedAt = DateTime.Now.AddMinutes(-30),
+                Items = [
+                    new StockAdjDetail {
+                        PartId = pCabin?.Id ?? 6,
+                        PartCode = pCabin?.Code ?? "97133-D3000",
+                        PartName = pCabin?.Name ?? "Lọc gió điều hòa than hoạt tính",
+                        Unit = pCabin?.Unit ?? "Cái",
+                        CostPrice = pCabin?.CostPrice ?? 140000,
+                        SystemQuantity = pCabin?.InStock ?? 19,
+                        ActualQuantity = pCabin?.InStock ?? 19,
+                        FromLocation = pCabin?.Location ?? "K1-A08",
+                        ToLocation = pCabin?.Location ?? "K1-A08",
+                        Note = "Chuẩn bị đếm thực tế"
+                    }
+                ]
+            };
+
+            db.StockAdjs.AddRange(adj1, adj2, adj3);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -2268,7 +2400,39 @@ public static class Seeder
                 FOREIGN KEY (""AppointmentId"") REFERENCES ""Appointments"" (""Id"") ON DELETE SET NULL
             );",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerCareMaces_OrgId_MaceNo"" ON ""CustomerCareMaces"" (""OrgId"", ""MaceNo"");",
-            @"ALTER TABLE ""Appointments"" ADD COLUMN ""CustomerCareMaceId"" INTEGER NULL;"
+            @"ALTER TABLE ""Appointments"" ADD COLUMN ""CustomerCareMaceId"" INTEGER NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""StockAdjs"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""StockAdjNo"" TEXT NOT NULL,
+                ""StockAdjDate"" TEXT NOT NULL,
+                ""Type"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""StorageCode"" TEXT NOT NULL,
+                ""Remark"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ApprovedBy"" TEXT NULL,
+                ""FinishedAt"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_StockAdjs_OrgId_StockAdjNo"" ON ""StockAdjs"" (""OrgId"", ""StockAdjNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""StockAdjDetails"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""StockAdjId"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""PartCode"" TEXT NOT NULL,
+                ""PartName"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""CostPrice"" TEXT NOT NULL,
+                ""SystemQuantity"" TEXT NOT NULL,
+                ""ActualQuantity"" TEXT NOT NULL,
+                ""FromLocation"" TEXT NULL,
+                ""ToLocation"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""StockAdjId"") REFERENCES ""StockAdjs"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
+            );"
         };
 
         foreach (var sql in sqls)

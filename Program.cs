@@ -2280,6 +2280,141 @@ app.MapDelete("/api/caremaces/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Kiểm kê & Điều chuyển / Cân đối kho phụ tùng (Ser_Inv_StockAdj & Ser_Inv_StockAdjDetail)
+app.MapGet("/api/stockadjs", async (StockAdjStatus? status, StockAdjType? type, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.StockAdjsAsync(status, type, q, fromDate, toDate);
+    return Results.Ok(list.Select(s => new
+    {
+        s.Id,
+        s.StockAdjNo,
+        s.StockAdjDate,
+        type = Ui.StockAdjType(s.Type).text,
+        typeCode = Ui.StockAdjType(s.Type).code,
+        typeValue = (int)s.Type,
+        status = Ui.StockAdjStatus(s.Status).text,
+        statusCode = Ui.StockAdjStatus(s.Status).code,
+        statusValue = (int)s.Status,
+        s.StorageCode,
+        s.Remark,
+        s.CreatedBy,
+        s.CreatedAt,
+        s.ApprovedBy,
+        s.FinishedAt,
+        s.TotalItems,
+        s.TotalSystemQty,
+        s.TotalActualQty,
+        s.TotalDiffQty,
+        s.TotalDiffAmount,
+        s.HasDiscrepancy,
+        s.DiscrepancyCount
+    }));
+});
+
+app.MapGet("/api/stockadjs/{id:int}", async (int id, IRoService svc) =>
+{
+    var s = await svc.GetStockAdjAsync(id);
+    if (s == null) return Results.NotFound(new { error = "Không tìm thấy phiếu kiểm kê kho." });
+    return Results.Ok(new
+    {
+        s.Id,
+        s.StockAdjNo,
+        s.StockAdjDate,
+        type = Ui.StockAdjType(s.Type).text,
+        typeCode = Ui.StockAdjType(s.Type).code,
+        typeValue = (int)s.Type,
+        status = Ui.StockAdjStatus(s.Status).text,
+        statusCode = Ui.StockAdjStatus(s.Status).code,
+        statusValue = (int)s.Status,
+        s.StorageCode,
+        s.Remark,
+        s.CreatedBy,
+        s.CreatedAt,
+        s.ApprovedBy,
+        s.FinishedAt,
+        s.TotalItems,
+        s.TotalSystemQty,
+        s.TotalActualQty,
+        s.TotalDiffQty,
+        s.TotalDiffAmount,
+        s.HasDiscrepancy,
+        s.DiscrepancyCount,
+        items = s.Items.Select(i => new
+        {
+            i.Id,
+            i.PartId,
+            i.PartCode,
+            i.PartName,
+            i.Unit,
+            i.CostPrice,
+            i.SystemQuantity,
+            i.ActualQuantity,
+            i.DiffQuantity,
+            i.DiffAmount,
+            i.FromLocation,
+            i.ToLocation,
+            i.Note
+        })
+    });
+});
+
+app.MapPost("/api/stockadjs", async (CreateStockAdjDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.Items == null || dto.Items.Count == 0)
+            return Results.BadRequest(new { error = "Vui lòng chọn danh sách phụ tùng kiểm kê (Items)." });
+
+        var adj = new StockAdj
+        {
+            StockAdjNo = dto.StockAdjNo?.Trim() ?? "",
+            Type = dto.Type ?? StockAdjType.CountBalance,
+            StorageCode = string.IsNullOrWhiteSpace(dto.StorageCode) ? "KHO-CHINH" : dto.StorageCode.Trim().ToUpperInvariant(),
+            StockAdjDate = dto.StockAdjDate ?? DateTime.Today,
+            Remark = dto.Remark?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api",
+            Status = StockAdjStatus.Pending
+        };
+
+        var details = dto.Items.Select(i => new StockAdjDetail
+        {
+            PartId = i.PartId,
+            ActualQuantity = i.ActualQuantity,
+            ToLocation = i.ToLocation?.Trim(),
+            Note = i.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateStockAdjAsync(adj, details);
+        return Results.Ok(new { stockAdjId = id, stockAdjNo = adj.StockAdjNo, message = "Đã lập phiếu kiểm kê / điều chuyển kho thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/stockadjs/{id:int}/transition", async (int id, TransitionStockAdjDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionStockAdjStatusAsync(id, dto.ToStatus, dto.ApprovedBy, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/stockadjs/{id:int}/update-items", async (int id, UpdateStockAdjItemsDto dto, IRoService svc) =>
+{
+    if (dto.Items == null || dto.Items.Count == 0)
+        return Results.BadRequest(new { error = "Không có danh sách phụ tùng để cập nhật." });
+
+    var updates = dto.Items.Select(i => (i.ItemId, i.ActualQuantity, i.ToLocation, i.Note)).ToList();
+    var (ok, msg) = await svc.UpdateStockAdjItemsAsync(id, updates);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/stockadjs/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteStockAdjAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -2349,3 +2484,8 @@ record TransitionCampaignDto(CampaignMarketingStatus ToStatus, string? ApprovedB
 record CreateCareMaceDto(int CarId, MaceType? MaceType, int? LastKm, int? NextKm, DateTime? MaceRecomentDate, string? Remark, string? CreatedBy);
 record UpdateCareMaceCallDto(CustomerCareMaceStatus Status, DateTime? ContactDate, DateTime? ApointDate, string? Remark, string? ContactBy);
 record ConvertMaceToAppointmentDto(string? Advisor, string? Cavity, string? Note);
+record CreateStockAdjDto(string? StockAdjNo, StockAdjType? Type, string? StorageCode, DateTime? StockAdjDate, string? Remark, string? CreatedBy, List<CreateStockAdjItemDto> Items);
+record CreateStockAdjItemDto(int PartId, decimal ActualQuantity, string? ToLocation, string? Note);
+record TransitionStockAdjDto(StockAdjStatus ToStatus, string? ApprovedBy, string? Note);
+record UpdateStockAdjItemsDto(List<UpdateStockAdjItemLineDto> Items);
+record UpdateStockAdjItemLineDto(int ItemId, decimal ActualQuantity, string? ToLocation, string? Note);

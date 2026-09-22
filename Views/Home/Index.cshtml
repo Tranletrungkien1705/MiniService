@@ -62,6 +62,12 @@
     </div>
     <div class="col-6 col-lg">
         <div class="card"><div class="card-body">
+            <div class="text-muted small">Kiểm kê / Điều chuyển</div>
+            <div class="stat-num" style="font-size:18px;color:#7c3aed"><a href="/StockAdj" class="text-decoration-none" style="color:#7c3aed"><span class="text-warning">@d.PendingStockAdjs phiếu</span> @if(d.DiscrepancyStockAdjs > 0){<span class="text-danger" style="font-size:13px;font-weight:normal">(@d.DiscrepancyStockAdjs lệch tồn)</span>}</a></div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
             <div class="text-muted small">Bảo hành duyệt</div>
             <div class="stat-num" style="font-size:18px;color:#059669"><span class="text-warning">@d.PendingWarranty chờ</span> · @d.ApprovedWarrantyAmount.ToString("N0")đ</div>
         </div></div>

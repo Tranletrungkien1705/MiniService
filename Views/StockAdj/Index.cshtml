@@ -1,0 +1,197 @@
+@model List<StockAdj>
+@{
+    ViewData["Title"] = "Quản lý Kiểm kê & Điều chuyển kho (Stock Adjustment)";
+    var curStatus = (StockAdjStatus?)ViewBag.Status;
+    var curType = (StockAdjType?)ViewBag.Type;
+    var totalCount = Model.Count;
+    var pendingCount = Model.Count(s => s.Status == StockAdjStatus.Pending);
+    var executingCount = Model.Count(s => s.Status == StockAdjStatus.Executing);
+    var finishedCount = Model.Count(s => s.Status == StockAdjStatus.Finished);
+    var discrepancyCount = Model.Count(s => s.HasDiscrepancy);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số phiếu</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ kiểm kê</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đang kiểm đếm</div>
+            <div class="stat-num text-info">@executingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã cân đối kho</div>
+            <div class="stat-num text-success">@finishedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Phát hiện lệch tồn</div>
+            <div class="stat-num text-danger">@discrepancyCount</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã phiếu / Diễn giải / Phụ tùng / Kho..." style="max-width:260px" />
+                <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" title="Từ ngày" style="max-width:145px" />
+                <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" title="Đến ngày" style="max-width:145px" />
+                <select name="type" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả hình thức —</option>
+                    @foreach (StockAdjType t in Enum.GetValues(typeof(StockAdjType)))
+                    {
+                        var (tName, tCode, _) = Ui.StockAdjType(t);
+                        <option value="@((int)t)" selected="@(curType == t)">[@tCode] @tName</option>
+                    }
+                </select>
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (StockAdjStatus s in Enum.GetValues(typeof(StockAdjStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.StockAdjStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curStatus.HasValue || curType.HasValue || !string.IsNullOrEmpty(ViewBag.Q) || !string.IsNullOrEmpty(ViewBag.FromDate) || !string.IsNullOrEmpty(ViewBag.ToDate))
+                {
+                    <a href="/StockAdj" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/Part" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Tồn kho phụ tùng</a>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-plus-lg me-1"></i>Lập phiếu điều chỉnh
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow">
+                        <li><a class="dropdown-item" href="/StockAdj/Create?type=0"><i class="bi bi-clipboard-check text-primary me-2"></i>Kiểm kê cân đối kho (CountBalance)</a></li>
+                        <li><a class="dropdown-item" href="/StockAdj/Create?type=1"><i class="bi bi-arrow-left-right text-info me-2"></i>Điều chuyển vị trí kệ (LocationTransfer)</a></li>
+                        <li><a class="dropdown-item" href="/StockAdj/Create?type=2"><i class="bi bi-trash text-danger me-2"></i>Xuất hủy hao hụt hư hỏng (DamageScrap)</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="/StockAdj/Create?type=0&lowStockOnly=true"><i class="bi bi-exclamation-triangle text-warning me-2"></i>Kiểm kê phụ tùng sắp hết tồn kho</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã phiếu</th>
+                        <th>Ngày lập</th>
+                        <th>Hình thức điều chỉnh</th>
+                        <th>Kho</th>
+                        <th class="text-center">Số phụ tùng</th>
+                        <th class="text-end">Tồn sổ sách</th>
+                        <th class="text-end">Thực tế</th>
+                        <th class="text-end">Chênh lệch</th>
+                        <th class="text-center">Trạng thái</th>
+                        <th>Người thực hiện</th>
+                        <th class="text-end" style="min-width:130px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="11" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-2 d-block mb-1"></i>
+                                Không có phiếu kiểm kê / điều chuyển kho nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var a in Model)
+                    {
+                        var (stText, stCode, stCss) = Ui.StockAdjStatus(a.Status);
+                        var (tText, tCode, tCss) = Ui.StockAdjType(a.Type);
+                        <tr>
+                            <td>
+                                <a href="/StockAdj/Detail/@a.Id" class="fw-bold text-decoration-none">
+                                    @a.StockAdjNo
+                                </a>
+                                @if (a.HasDiscrepancy)
+                                {
+                                    <span class="badge bg-danger-subtle text-danger border border-danger ms-1" title="Có chênh lệch số lượng thực tế vs sổ sách">
+                                        <i class="bi bi-exclamation-diamond me-1"></i>Lệch @a.DiscrepancyCount món
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                <div>@a.StockAdjDate.ToString("dd/MM/yyyy")</div>
+                                <div class="text-muted small">@a.CreatedAt.ToString("HH:mm")</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-@tCss">@tText</span>
+                                @if (!string.IsNullOrWhiteSpace(a.Remark))
+                                {
+                                    <div class="text-muted small text-truncate" style="max-width:220px;" title="@a.Remark">@a.Remark</div>
+                                }
+                            </td>
+                            <td><span class="badge bg-light text-dark border">@a.StorageCode</span></td>
+                            <td class="text-center fw-semibold">@a.TotalItems</td>
+                            <td class="text-end">@a.TotalSystemQty.ToString("N0")</td>
+                            <td class="text-end fw-semibold">@a.TotalActualQty.ToString("N0")</td>
+                            <td class="text-end">
+                                @if (a.TotalDiffQty > 0)
+                                {
+                                    <span class="text-success fw-bold">+@a.TotalDiffQty.ToString("N0")</span>
+                                    <div class="text-muted small">+@a.TotalDiffAmount.ToString("N0")đ</div>
+                                }
+                                else if (a.TotalDiffQty < 0)
+                                {
+                                    <span class="text-danger fw-bold">@a.TotalDiffQty.ToString("N0")</span>
+                                    <div class="text-muted small">@a.TotalDiffAmount.ToString("N0")đ</div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">0 (Khớp)</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-@stCss">@stCode — @stText</span>
+                            </td>
+                            <td>
+                                <div>@a.CreatedBy</div>
+                                @if (!string.IsNullOrEmpty(a.ApprovedBy))
+                                {
+                                    <div class="text-muted small">Duyệt: @a.ApprovedBy</div>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <a href="/StockAdj/Detail/@a.Id" class="btn btn-sm btn-outline-primary" title="Xem chi tiết">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="/StockAdj/Print/@a.Id" class="btn btn-sm btn-outline-dark" target="_blank" title="In biên bản">
+                                    <i class="bi bi-printer"></i>
+                                </a>
+                                @if (a.Status != StockAdjStatus.Finished)
+                                {
+                                    <form method="post" action="/StockAdj/Delete/@a.Id" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa phiếu kiểm kê này?')">
+                                        @Html.AntiForgeryToken()
+                                        <button class="btn btn-sm btn-outline-danger" title="Xóa phiếu"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

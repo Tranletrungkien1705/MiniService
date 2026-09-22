@@ -337,4 +337,21 @@ public static class Ui
         var str = string.Join(" ", result).Trim() + " đồng chẵn";
         return char.ToUpper(str[0]) + str.Substring(1);
     }
+
+    public static (string text, string code, string css) StockAdjStatus(StockAdjStatus s) => s switch
+    {
+        Models.StockAdjStatus.Pending => ("Chờ kiểm kê", "PEND", "warning"),
+        Models.StockAdjStatus.Executing => ("Đang kiểm đếm", "EXEC", "info"),
+        Models.StockAdjStatus.Finished => ("Đã hoàn tất", "FNS", "success"),
+        Models.StockAdjStatus.Rejected => ("Đã hủy", "REJ", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string code, string css) StockAdjType(StockAdjType t) => t switch
+    {
+        Models.StockAdjType.CountBalance => ("Kiểm kê cân đối kho", "KK", "primary"),
+        Models.StockAdjType.LocationTransfer => ("Điều chuyển vị trí kệ", "DC", "info"),
+        Models.StockAdjType.DamageScrap => ("Hao hụt / Hư hỏng", "HH", "danger"),
+        _ => (t.ToString(), "", "secondary")
+    };
 }

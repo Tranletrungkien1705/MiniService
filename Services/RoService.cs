@@ -20,7 +20,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingInsuranceClaims, decimal ApprovedInsuranceAmount,
     int ActiveCampaigns, decimal MonthCampaignDiscount,
     int PendingCareMaces, int OverdueCareMaces, int BookedCareMaces,
-    List<(ROStatus Status, int Count)> ByStatus);
+    List<(ROStatus Status, int Count)> ByStatus,
+    int PendingStockAdjs = 0, int DiscrepancyStockAdjs = 0);
 
 public interface IRoService
 {
@@ -186,12 +187,28 @@ public interface IRoService
     Task<(bool ok, string msg, int? appointmentId)> ConvertMaceToAppointmentAsync(int id, string? advisor = null, string? cavity = null, string? note = null);
     Task<(bool ok, string msg)> DeleteCustomerCareMaceAsync(int id);
     Task<(DateTime recommendDate, MaceType maceType, int nextKm)> CalculateNextMaintenanceAsync(int carId, DateTime? referenceDate = null, int? currentOdometer = null);
+    // stock adjustments & inventory transfer (Ser_Inv_StockAdj & Ser_Inv_StockAdjDetail)
+    Task<List<StockAdj>> StockAdjsAsync(StockAdjStatus? status, StockAdjType? type, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<StockAdj?> GetStockAdjAsync(int id);
+    Task<int> CreateStockAdjAsync(StockAdj adj, List<StockAdjDetail> items);
+    Task<(bool ok, string msg)> TransitionStockAdjStatusAsync(int id, StockAdjStatus to, string? approvedBy = null, string? note = null);
+    Task<(bool ok, string msg)> UpdateStockAdjItemsAsync(int id, List<(int itemId, decimal actualQty, string? toLoc, string? note)> updates);
+    Task<(bool ok, string msg)> DeleteStockAdjAsync(int id);
+    Task<List<Part>> PartsForStockAdjAsync(string? q = null);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
 
 public class RoService(AppDbContext db) : IRoService
 {
+    /// <summary>Chuyển trạng thái Kiểm kê kho theo Ser_Inv_StockAdj idn.CarService.</summary>
+    public static StockAdjStatus[] AllowedNextStockAdj(StockAdjStatus s) => s switch
+    {
+        StockAdjStatus.Pending => [StockAdjStatus.Executing, StockAdjStatus.Rejected],
+        StockAdjStatus.Executing => [StockAdjStatus.Finished, StockAdjStatus.Rejected, StockAdjStatus.Pending],
+        _ => []
+    };
+
     /// <summary>Chuyển trạng thái Chiến dịch Marketing theo Ser_CampaignMarketing idn.CarService.</summary>
     public static CampaignMarketingStatus[] AllowedNextCampaign(CampaignMarketingStatus s) => s switch
     {
@@ -574,6 +591,10 @@ public class RoService(AppDbContext db) : IRoService
         var overdueCareMaces = await db.CustomerCareMaces.CountAsync(m => m.Status == CustomerCareMaceStatus.Pending && m.MaceRecomentDate.Date < today);
         var bookedCareMaces = await db.CustomerCareMaces.CountAsync(m => m.Status == CustomerCareMaceStatus.Booked && m.CreatedAt >= monthStart);
 
+        var pendingStockAdjs = await db.StockAdjs.CountAsync(s => s.Status == StockAdjStatus.Pending || s.Status == StockAdjStatus.Executing);
+        var discrepancyStockAdjs = await db.StockAdjs.Include(s => s.Items)
+            .CountAsync(s => s.Status == StockAdjStatus.Executing && s.Items.Any(i => i.ActualQuantity != i.SystemQuantity));
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -614,7 +635,9 @@ public class RoService(AppDbContext db) : IRoService
             pendingCareMaces,
             overdueCareMaces,
             bookedCareMaces,
-            byStatus);
+            byStatus,
+            pendingStockAdjs,
+            discrepancyStockAdjs);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -3642,5 +3665,186 @@ public class RoService(AppDbContext db) : IRoService
         if (nextKm <= lastKm) nextKm = lastKm + 5000;
 
         return (recDate, mType, nextKm);
+    }
+
+    // --- Stock Adjustments & Transfer (Ser_Inv_StockAdj & Ser_Inv_StockAdjDetail) ---
+    public async Task<List<StockAdj>> StockAdjsAsync(StockAdjStatus? status, StockAdjType? type, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.StockAdjs
+            .Include(s => s.Items).ThenInclude(i => i.Part)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(s => s.Status == status.Value);
+        if (type.HasValue) query = query.Where(s => s.Type == type.Value);
+        if (fromDate.HasValue) query = query.Where(s => s.StockAdjDate >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(s => s.StockAdjDate <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(s => s.StockAdjNo.ToLower().Contains(term)
+                || (s.Remark != null && s.Remark.ToLower().Contains(term))
+                || s.StorageCode.ToLower().Contains(term)
+                || s.CreatedBy.ToLower().Contains(term)
+                || s.Items.Any(i => i.PartCode.ToLower().Contains(term) || i.PartName.ToLower().Contains(term)));
+        }
+
+        return await query.OrderByDescending(s => s.StockAdjDate).ThenByDescending(s => s.CreatedAt).ToListAsync();
+    }
+
+    public Task<StockAdj?> GetStockAdjAsync(int id) =>
+        db.StockAdjs
+            .Include(s => s.Items).ThenInclude(i => i.Part)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+    public async Task<int> CreateStockAdjAsync(StockAdj adj, List<StockAdjDetail> items)
+    {
+        if (items == null || items.Count == 0)
+            throw new InvalidOperationException("Vui lòng chọn ít nhất một phụ tùng để kiểm kê / điều chuyển.");
+
+        if (string.IsNullOrWhiteSpace(adj.StockAdjNo))
+        {
+            var count = await db.StockAdjs.CountAsync() + 1;
+            var prefix = adj.Type switch
+            {
+                StockAdjType.LocationTransfer => "DC",
+                StockAdjType.DamageScrap => "HH",
+                _ => "KK"
+            };
+            adj.StockAdjNo = $"{prefix}{DateTime.Today:yyMMdd}-{count:D3}";
+        }
+        else
+        {
+            adj.StockAdjNo = adj.StockAdjNo.Trim().ToUpperInvariant();
+        }
+
+        var partIds = items.Select(i => i.PartId).Distinct().ToList();
+        var parts = await db.Parts.Where(p => partIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
+
+        foreach (var itm in items)
+        {
+            if (parts.TryGetValue(itm.PartId, out var part))
+            {
+                itm.PartCode = part.Code;
+                itm.PartName = part.Name;
+                itm.Unit = part.Unit;
+                itm.CostPrice = part.CostPrice;
+                itm.SystemQuantity = part.InStock;
+                itm.FromLocation = part.Location;
+                if (string.IsNullOrWhiteSpace(itm.ToLocation)) itm.ToLocation = part.Location;
+            }
+            adj.Items.Add(itm);
+        }
+
+        adj.CreatedAt = DateTime.Now;
+        db.StockAdjs.Add(adj);
+        await db.SaveChangesAsync();
+        return adj.Id;
+    }
+
+    public async Task<(bool ok, string msg)> TransitionStockAdjStatusAsync(int id, StockAdjStatus to, string? approvedBy = null, string? note = null)
+    {
+        var adj = await db.StockAdjs.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);
+        if (adj == null) return (false, "Không tìm thấy phiếu kiểm kê kho.");
+
+        var allowed = AllowedNextStockAdj(adj.Status);
+        if (!allowed.Contains(to))
+            return (false, $"Không thể chuyển trạng thái từ '{Ui.StockAdjStatus(adj.Status).text}' sang '{Ui.StockAdjStatus(to).text}'.");
+
+        adj.Status = to;
+        if (!string.IsNullOrWhiteSpace(note))
+        {
+            adj.Remark = string.IsNullOrWhiteSpace(adj.Remark) ? note.Trim() : $"{adj.Remark} | {note.Trim()}";
+        }
+
+        if (to == StockAdjStatus.Executing)
+        {
+            // Bắt đầu quá trình kiểm đếm
+        }
+        else if (to == StockAdjStatus.Finished)
+        {
+            adj.FinishedAt = DateTime.Now;
+            adj.ApprovedBy = !string.IsNullOrWhiteSpace(approvedBy) ? approvedBy.Trim() : "Thủ kho trưởng";
+
+            // Cập nhật tồn kho hoặc vị trí theo loại điều chỉnh (Luật Ser_Inv_StockAdj idn.CarService)
+            var partIds = adj.Items.Select(i => i.PartId).Distinct().ToList();
+            var parts = await db.Parts.Where(p => partIds.Contains(p.Id)).ToListAsync();
+
+            foreach (var item in adj.Items)
+            {
+                var part = parts.FirstOrDefault(p => p.Id == item.PartId);
+                if (part == null) continue;
+
+                if (adj.Type == StockAdjType.CountBalance)
+                {
+                    // Cân đối kho: Cập nhật tồn kho hệ thống bằng số kiểm đếm thực tế
+                    part.InStock = Math.Max(0, item.ActualQuantity);
+                }
+                else if (adj.Type == StockAdjType.LocationTransfer)
+                {
+                    // Điều chuyển vị trí lưu kho kệ A -> kệ B
+                    if (!string.IsNullOrWhiteSpace(item.ToLocation))
+                        part.Location = item.ToLocation.Trim();
+                }
+                else if (adj.Type == StockAdjType.DamageScrap)
+                {
+                    // Xuất hủy hàng hao hụt / hư hỏng: Giảm số lượng thực tế trong kho
+                    part.InStock = Math.Max(0, part.InStock - item.ActualQuantity);
+                }
+            }
+        }
+        else if (to == StockAdjStatus.Rejected)
+        {
+            // Phiếu bị hủy, không làm thay đổi tồn kho
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã chuyển trạng thái phiếu '{adj.StockAdjNo}' sang '{Ui.StockAdjStatus(to).text}'.");
+    }
+
+    public async Task<(bool ok, string msg)> UpdateStockAdjItemsAsync(int id, List<(int itemId, decimal actualQty, string? toLoc, string? note)> updates)
+    {
+        var adj = await db.StockAdjs.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);
+        if (adj == null) return (false, "Không tìm thấy phiếu kiểm kê kho.");
+        if (adj.Status == StockAdjStatus.Finished || adj.Status == StockAdjStatus.Rejected)
+            return (false, "Không thể cập nhật phiếu kiểm kê đã hoàn tất hoặc đã hủy.");
+
+        foreach (var (itemId, actualQty, toLoc, note) in updates)
+        {
+            var item = adj.Items.FirstOrDefault(i => i.Id == itemId);
+            if (item != null)
+            {
+                item.ActualQuantity = Math.Max(0, actualQty);
+                if (!string.IsNullOrWhiteSpace(toLoc)) item.ToLocation = toLoc.Trim();
+                if (note != null) item.Note = note.Trim();
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return (true, "Đã lưu cập nhật kết quả kiểm đếm thực tế.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteStockAdjAsync(int id)
+    {
+        var adj = await db.StockAdjs.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);
+        if (adj == null) return (false, "Không tìm thấy phiếu kiểm kê kho.");
+        if (adj.Status == StockAdjStatus.Finished)
+            return (false, "Không thể xóa phiếu kiểm kê đã hoàn tất và chốt tồn kho.");
+
+        db.StockAdjDetails.RemoveRange(adj.Items);
+        db.StockAdjs.Remove(adj);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu kiểm kê {adj.StockAdjNo}.");
+    }
+
+    public Task<List<Part>> PartsForStockAdjAsync(string? q = null)
+    {
+        var query = db.Parts.Where(p => p.IsActive).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(p => p.Code.ToLower().Contains(term) || p.Name.ToLower().Contains(term));
+        }
+        return query.OrderBy(p => p.Code).ToListAsync();
     }
 }

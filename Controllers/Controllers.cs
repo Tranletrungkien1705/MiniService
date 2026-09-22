@@ -2155,6 +2155,151 @@ public class CareMaceController(IRoService svc) : Controller
     }
 }
 
+public class StockAdjController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(StockAdjStatus? status, StockAdjType? type, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Status = status;
+        ViewBag.Type = type;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+
+        var list = await svc.StockAdjsAsync(status, type, q, fromDate, toDate);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(StockAdjType? type, bool? lowStockOnly)
+    {
+        ViewBag.Type = type ?? StockAdjType.CountBalance;
+        ViewBag.LowStockOnly = lowStockOnly ?? false;
+        var parts = await svc.PartsAsync(null, lowStockOnly);
+        ViewBag.Parts = parts;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        StockAdjType type,
+        string? storageCode,
+        DateTime? stockAdjDate,
+        string? remark,
+        string? createdBy,
+        int[]? partIds,
+        decimal[]? actualQtys,
+        string[]? toLocations,
+        string[]? notes)
+    {
+        if (partIds == null || partIds.Length == 0)
+        {
+            TempData["Error"] = "Vui lòng chọn ít nhất một phụ tùng cần kiểm kê / điều chuyển.";
+            return RedirectToAction(nameof(Create), new { type });
+        }
+
+        try
+        {
+            var adj = new StockAdj
+            {
+                Type = type,
+                StorageCode = string.IsNullOrWhiteSpace(storageCode) ? "KHO-CHINH" : storageCode.Trim().ToUpperInvariant(),
+                StockAdjDate = stockAdjDate ?? DateTime.Today,
+                Remark = remark?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Thủ kho" : createdBy.Trim(),
+                Status = StockAdjStatus.Pending
+            };
+
+            var items = new List<StockAdjDetail>();
+            for (int i = 0; i < partIds.Length; i++)
+            {
+                var pid = partIds[i];
+                if (pid <= 0) continue;
+
+                var actQty = (actualQtys != null && actualQtys.Length > i) ? actualQtys[i] : 0;
+                var toLoc = (toLocations != null && toLocations.Length > i) ? toLocations[i]?.Trim() : null;
+                var n = (notes != null && notes.Length > i) ? notes[i]?.Trim() : null;
+
+                items.Add(new StockAdjDetail
+                {
+                    PartId = pid,
+                    ActualQuantity = Math.Max(0, actQty),
+                    ToLocation = toLoc,
+                    Note = n
+                });
+            }
+
+            if (items.Count == 0)
+            {
+                TempData["Error"] = "Vui lòng chọn phụ tùng hợp lệ.";
+                return RedirectToAction(nameof(Create), new { type });
+            }
+
+            var id = await svc.CreateStockAdjAsync(adj, items);
+            TempData["Success"] = $"Đã lập phiếu {adj.StockAdjNo} thành công ({items.Count} phụ tùng)!";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { type });
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var item = await svc.GetStockAdjAsync(id);
+        if (item == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextStockAdj(item.Status);
+        return View(item);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, StockAdjStatus to, string? approvedBy, string? note)
+    {
+        var (ok, msg) = await svc.TransitionStockAdjStatusAsync(id, to, approvedBy, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateItems(int id, int[]? itemIds, decimal[]? actualQtys, string[]? toLocations, string[]? notes)
+    {
+        if (itemIds == null || itemIds.Length == 0)
+        {
+            TempData["Error"] = "Không có danh sách phụ tùng để cập nhật.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var updates = new List<(int itemId, decimal actualQty, string? toLoc, string? note)>();
+        for (int i = 0; i < itemIds.Length; i++)
+        {
+            var iid = itemIds[i];
+            var qty = (actualQtys != null && actualQtys.Length > i) ? actualQtys[i] : 0;
+            var loc = (toLocations != null && toLocations.Length > i) ? toLocations[i] : null;
+            var n = (notes != null && notes.Length > i) ? notes[i] : null;
+            updates.Add((iid, qty, loc, n));
+        }
+
+        var (ok, msg) = await svc.UpdateStockAdjItemsAsync(id, updates);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var item = await svc.GetStockAdjAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteStockAdjAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

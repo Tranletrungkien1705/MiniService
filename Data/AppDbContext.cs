@@ -43,6 +43,8 @@ public class AppDbContext : DbContext
     public DbSet<CampaignMarketing> CampaignMarketings => Set<CampaignMarketing>();
     public DbSet<CampaignMarketingItem> CampaignMarketingItems => Set<CampaignMarketingItem>();
     public DbSet<CustomerCareMace> CustomerCareMaces => Set<CustomerCareMace>();
+    public DbSet<StockAdj> StockAdjs => Set<StockAdj>();
+    public DbSet<StockAdjDetail> StockAdjDetails => Set<StockAdjDetail>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -373,6 +375,29 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.RO).WithMany(x => x.CustomerCareMaces).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Appointment).WithOne(x => x.CustomerCareMace).HasForeignKey<CustomerCareMace>(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StockAdj>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.StockAdjNo }).IsUnique();
+            e.Ignore(x => x.TotalItems);
+            e.Ignore(x => x.TotalSystemQty);
+            e.Ignore(x => x.TotalActualQty);
+            e.Ignore(x => x.TotalDiffQty);
+            e.Ignore(x => x.TotalDiffAmount);
+            e.Ignore(x => x.HasDiscrepancy);
+            e.Ignore(x => x.DiscrepancyCount);
+            e.HasMany(x => x.Items).WithOne(x => x.StockAdj).HasForeignKey(x => x.StockAdjId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StockAdjDetail>(e =>
+        {
+            e.Ignore(x => x.DiffQuantity);
+            e.Ignore(x => x.DiffAmount);
+            e.Property(x => x.CostPrice).HasPrecision(18, 2);
+            e.Property(x => x.SystemQuantity).HasPrecision(18, 2);
+            e.Property(x => x.ActualQuantity).HasPrecision(18, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

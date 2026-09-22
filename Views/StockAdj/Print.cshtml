@@ -1,0 +1,154 @@
+@model StockAdj
+@{
+    Layout = null;
+    var (stText, stCode, _) = Ui.StockAdjStatus(Model.Status);
+    var (tText, tCode, _) = Ui.StockAdjType(Model.Type);
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>In biên bản kiểm kê kho - @Model.StockAdjNo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet" />
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #1f2937; background: #f3f4f6; padding: 20px 0; }
+        .print-container { max-width: 900px; margin: 0 auto; background: #fff; padding: 36px 44px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 4px; }
+        .table-print th { background-color: #f8fafc !important; font-size: 11.5px; text-transform: uppercase; font-weight: 700; border: 1px solid #cbd5e1; }
+        .table-print td { border: 1px solid #cbd5e1; font-size: 12px; padding: 6px 8px; }
+        .border-bottom-dots { border-bottom: 1px dashed #9ca3af; min-height: 22px; display: inline-block; }
+        .sign-title { font-weight: 700; font-size: 12.5px; text-transform: uppercase; margin-bottom: 60px; }
+        @@media print {
+            body { background: #fff; padding: 0; font-size: 12px; }
+            .print-container { box-shadow: none; padding: 0; max-width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print text-center mb-3">
+        <button type="button" class="btn btn-primary px-4 me-2" onclick="window.print()"><i class="bi bi-printer me-1"></i>In biên bản</button>
+        <button type="button" class="btn btn-outline-secondary" onclick="window.close()"><i class="bi bi-x-lg me-1"></i>Đóng</button>
+    </div>
+
+    <div class="print-container">
+        <!-- Header -->
+        <div class="row align-items-center mb-3 pb-3 border-bottom">
+            <div class="col-7">
+                <div class="fw-bold fs-6 text-uppercase text-primary">TRUNG TÂM DỊCH VỤ Ô TÔ TIÊU CHUẨN HYUNDAI</div>
+                <div class="small text-muted">Hệ thống Quản lý Dịch vụ &amp; Kho Phụ tùng Car Service</div>
+                <div class="small text-muted">Địa chỉ: Khu dịch vụ kỹ thuật ô tô, Quốc lộ 1A</div>
+                <div class="small text-muted">Hotline kỹ thuật: 1900 6868 · Bộ phận phụ tùng: (024) 3826 2614</div>
+            </div>
+            <div class="col-5 text-end">
+                <div class="fw-bold fs-5 text-dark">Mã phiếu: @Model.StockAdjNo</div>
+                <div class="small text-muted">Ngày lập: <b>@Model.StockAdjDate.ToString("dd/MM/yyyy")</b></div>
+                <div class="small text-muted">Kho lưu trữ: <b>@Model.StorageCode</b></div>
+                <div class="small">Trạng thái: <b>[@stCode] @stText</b></div>
+            </div>
+        </div>
+
+        <!-- Document Title -->
+        <div class="text-center my-4">
+            <h4 class="fw-bold text-uppercase mb-1">BIÊN BẢN KIỂM KÊ VÀ ĐIỀU CHỈNH KHO PHỤ TÙNG</h4>
+            <div class="text-muted fst-italic">(Theo tiêu chuẩn quy trình kho Ser_Inv_StockAdj — Hyundai Car Services)</div>
+            <div class="badge bg-secondary mt-2 fs-6">Hình thức: @tText</div>
+        </div>
+
+        <!-- Summary info -->
+        <div class="row g-2 mb-3 bg-light p-3 rounded border">
+            <div class="col-6"><b>Người lập phiếu:</b> @Model.CreatedBy (@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm"))</div>
+            <div class="col-6"><b>Người duyệt hoàn tất:</b> @(Model.ApprovedBy ?? "Chưa duyệt") @(Model.FinishedAt.HasValue ? $"({Model.FinishedAt.Value:dd/MM/yyyy HH:mm})" : "")</div>
+            <div class="col-12"><b>Mục đích / Ghi chú kiểm kê:</b> @(string.IsNullOrWhiteSpace(Model.Remark) ? "Kiểm kê cân đối tồn kho định kỳ theo quy chuẩn." : Model.Remark)</div>
+        </div>
+
+        <!-- Table -->
+        <table class="table table-print align-middle mb-3">
+            <thead>
+                <tr>
+                    <th style="width:30px" class="text-center">STT</th>
+                    <th style="width:120px">Mã phụ tùng</th>
+                    <th>Tên phụ tùng</th>
+                    <th style="width:50px" class="text-center">ĐVT</th>
+                    <th style="width:90px" class="text-end">Đơn giá vốn</th>
+                    <th style="width:80px" class="text-center">Kệ hiện tại</th>
+                    <th style="width:80px" class="text-center">Kệ chuyển</th>
+                    <th style="width:75px" class="text-end">Sổ sách</th>
+                    <th style="width:75px" class="text-end">Thực tế</th>
+                    <th style="width:75px" class="text-end">Lệch SL</th>
+                    <th style="width:95px" class="text-end">Giá trị lệch</th>
+                    <th style="width:120px">Ghi chú</th>
+                </tr>
+            </thead>
+            <tbody>
+                @for (int i = 0; i < Model.Items.Count; i++)
+                {
+                    var itm = Model.Items[i];
+                    var diff = itm.DiffQuantity;
+                    var diffAmt = itm.DiffAmount;
+                    <tr>
+                        <td class="text-center">@(i + 1)</td>
+                        <td class="fw-semibold">@itm.PartCode</td>
+                        <td>@itm.PartName</td>
+                        <td class="text-center">@itm.Unit</td>
+                        <td class="text-end">@itm.CostPrice.ToString("N0")</td>
+                        <td class="text-center">@(itm.FromLocation ?? "-")</td>
+                        <td class="text-center">@(itm.ToLocation ?? itm.FromLocation ?? "-")</td>
+                        <td class="text-end">@itm.SystemQuantity.ToString("N0")</td>
+                        <td class="text-end fw-bold">@itm.ActualQuantity.ToString("N0")</td>
+                        <td class="text-end fw-bold @(diff > 0 ? "text-success" : diff < 0 ? "text-danger" : "text-muted")">
+                            @(diff > 0 ? "+" : "")@diff.ToString("N0")
+                        </td>
+                        <td class="text-end @(diffAmt > 0 ? "text-success" : diffAmt < 0 ? "text-danger" : "text-muted")">
+                            @(diffAmt != 0 ? $"{(diffAmt > 0 ? "+" : "")}{diffAmt:N0}" : "-")
+                        </td>
+                        <td class="small">@(itm.Note ?? "-")</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot>
+                <tr class="fw-bold bg-light">
+                    <td colspan="7" class="text-end">TỔNG CỘNG (@Model.TotalItems mặt hàng):</td>
+                    <td class="text-end">@Model.TotalSystemQty.ToString("N0")</td>
+                    <td class="text-end text-success">@Model.TotalActualQty.ToString("N0")</td>
+                    <td class="text-end @(Model.TotalDiffQty > 0 ? "text-success" : Model.TotalDiffQty < 0 ? "text-danger" : "")">
+                        @(Model.TotalDiffQty > 0 ? "+" : "")@Model.TotalDiffQty.ToString("N0")
+                    </td>
+                    <td class="text-end @(Model.TotalDiffAmount > 0 ? "text-success" : Model.TotalDiffAmount < 0 ? "text-danger" : "")">
+                        @(Model.TotalDiffAmount > 0 ? "+" : "")@Model.TotalDiffAmount.ToString("N0") đ
+                    </td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <!-- Signatures -->
+        <div class="row text-center mt-5 pt-3">
+            <div class="col-3">
+                <div class="sign-title">Người lập phiếu</div>
+                <div class="fw-bold">@Model.CreatedBy</div>
+                <div class="text-muted small">Ký và ghi rõ họ tên</div>
+            </div>
+            <div class="col-3">
+                <div class="sign-title">Thủ kho kiểm kê</div>
+                <div class="fw-bold">Thủ kho Tuấn</div>
+                <div class="text-muted small">Ký và ghi rõ họ tên</div>
+            </div>
+            <div class="col-3">
+                <div class="sign-title">Kế toán kho</div>
+                <div class="fw-bold">@(Model.ApprovedBy ?? "Kế toán trưởng")</div>
+                <div class="text-muted small">Ký và ghi rõ họ tên</div>
+            </div>
+            <div class="col-3">
+                <div class="sign-title">Quản đốc xưởng duyệt</div>
+                <div class="fw-bold">Giám đốc dịch vụ</div>
+                <div class="text-muted small">Ký và đóng dấu</div>
+            </div>
+        </div>
+
+        <div class="text-center text-muted small mt-5 pt-4 border-top">
+            Biên bản kiểm kê &amp; điều chuyển phụ tùng in từ MiniService (Ported from 2023.H.CarServices) · Thời gian in: @DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")
+        </div>
+    </div>
+</body>
+</html>

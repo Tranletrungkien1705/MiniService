@@ -1,0 +1,236 @@
+@{
+    ViewData["Title"] = "Lập phiếu Kiểm kê / Điều chuyển kho";
+    var parts = (List<Part>)ViewBag.Parts;
+    var initType = (StockAdjType)ViewBag.Type;
+    var lowStockOnly = (bool)ViewBag.LowStockOnly;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-11">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-clipboard-check me-2 text-primary"></i>Lập phiếu Kiểm kê &amp; Điều chuyển / Cân đối kho phụ tùng</h5>
+                        <div class="text-muted small">Quy trình Ser_Inv_StockAdj chuẩn đại lý ô tô Hyundai</div>
+                    </div>
+                    <a href="/StockAdj" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Sổ phiếu kiểm kê</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/StockAdj/Create" id="adjForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Hình thức điều chỉnh <span class="text-danger">*</span></label>
+                            <select name="type" id="typeSelect" class="form-select" onchange="updateTypeMode(this.value)">
+                                <option value="@((int)StockAdjType.CountBalance)" selected="@(initType == StockAdjType.CountBalance)">Kiểm kê cân đối kho (CountBalance)</option>
+                                <option value="@((int)StockAdjType.LocationTransfer)" selected="@(initType == StockAdjType.LocationTransfer)">Điều chuyển vị trí kệ (LocationTransfer)</option>
+                                <option value="@((int)StockAdjType.DamageScrap)" selected="@(initType == StockAdjType.DamageScrap)">Hao hụt / Xuất hủy hư hỏng (DamageScrap)</option>
+                            </select>
+                            <div class="form-text small" id="typeHelp">Cập nhật tồn kho theo kết quả kiểm đếm thực tế.</div>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Kho phụ tùng <span class="text-danger">*</span></label>
+                            <input name="storageCode" class="form-control" value="KHO-CHINH" required />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Ngày thực hiện <span class="text-danger">*</span></label>
+                            <input type="date" name="stockAdjDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Người lập phiếu</label>
+                            <input name="createdBy" class="form-control" value="Thủ kho Tuấn" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Ghi chú / Mục đích kiểm kê</label>
+                            <input name="remark" class="form-control" placeholder="VD: Kiểm kê định kỳ cuối tháng, sắp xếp lại kệ kho..." />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                        <div>
+                            <h6 class="fw-bold mb-0"><i class="bi bi-box-seam me-1 text-primary"></i>Chọn danh mục phụ tùng kiểm kê / điều chuyển</h6>
+                            <span class="text-muted small">Tích chọn các phụ tùng cần kiểm đếm hoặc điều chuyển kệ kho</span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAll(true)">Chọn tất cả</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="selectAll(false)">Bỏ chọn</button>
+                            <a href="/StockAdj/Create?type=@((int)initType)&lowStockOnly=@(!lowStockOnly)" class="btn btn-sm @(lowStockOnly ? "btn-warning" : "btn-outline-warning")">
+                                <i class="bi bi-funnel me-1"></i>@(lowStockOnly ? "Hiện toàn bộ kho" : "Chỉ lọc phụ tùng tồn thấp")
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive mb-3 border rounded">
+                        <table class="table table-hover table-bordered align-middle mb-0" id="partsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:40px" class="text-center">
+                                        <input type="checkbox" id="checkAll" class="form-check-input" onchange="toggleAll(this)" />
+                                    </th>
+                                    <th>Mã &amp; Tên phụ tùng</th>
+                                    <th style="width:70px" class="text-center">ĐVT</th>
+                                    <th style="width:110px" class="text-end">Giá vốn</th>
+                                    <th style="width:110px" class="text-center">Vị trí hiện tại</th>
+                                    <th style="width:110px" class="text-end">Tồn sổ sách</th>
+                                    <th style="width:130px" class="text-center"><span id="colActualHeader">SL thực tế</span> <span class="text-danger">*</span></th>
+                                    <th style="width:130px" class="text-center" id="colToLocHeader">Kệ chuyển đến</th>
+                                    <th style="width:160px">Ghi chú dòng</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (int i = 0; i < parts.Count; i++)
+                                {
+                                    var p = parts[i];
+                                    <tr class="part-row @(p.IsLowStock ? "table-warning-subtle" : "")" id="row-@p.Id">
+                                        <td class="text-center">
+                                            <input type="checkbox" name="partIds" value="@p.Id" class="form-check-input part-check" onchange="toggleRow(@p.Id, this)" />
+                                        </td>
+                                        <td>
+                                            <div class="fw-semibold">@p.Code</div>
+                                            <div class="text-muted small">@p.Name</div>
+                                            @if (p.IsLowStock)
+                                            {
+                                                <span class="badge bg-danger-subtle text-danger border border-danger small">Tồn thấp (&le; @p.MinStock)</span>
+                                            }
+                                        </td>
+                                        <td class="text-center text-muted">@p.Unit</td>
+                                        <td class="text-end">@p.CostPrice.ToString("N0")đ</td>
+                                        <td class="text-center"><span class="badge bg-light text-dark border">@(p.Location ?? "Chưa có")</span></td>
+                                        <td class="text-end fw-bold system-qty" data-sys="@p.InStock">@p.InStock.ToString("N0")</td>
+                                        <td>
+                                            <input type="number" step="1" min="0" name="actualQtys" class="form-control form-control-sm text-end actual-qty-input" value="@p.InStock" disabled oninput="calcSummary()" />
+                                        </td>
+                                        <td>
+                                            <input type="text" name="toLocations" class="form-control form-control-sm text-center to-loc-input" value="@p.Location" placeholder="Kệ mới..." disabled />
+                                        </td>
+                                        <td>
+                                            <input type="text" name="notes" class="form-control form-control-sm note-input" placeholder="Ghi chú..." disabled />
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Summary card -->
+                    <div class="card bg-light mb-4">
+                        <div class="card-body">
+                            <div class="row text-center">
+                                <div class="col-md-3">
+                                    <div class="text-muted small">Số phụ tùng đã chọn</div>
+                                    <div class="fs-5 fw-bold text-primary" id="sumSelected">0</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-muted small">Tổng tồn sổ sách</div>
+                                    <div class="fs-5 fw-bold" id="sumSystem">0</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-muted small">Tổng thực tế kiểm đếm</div>
+                                    <div class="fs-5 fw-bold text-success" id="sumActual">0</div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="text-muted small">Tổng chênh lệch</div>
+                                    <div class="fs-5 fw-bold" id="sumDiff">0</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="/StockAdj" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary px-4" id="btnSubmit" disabled>
+                            <i class="bi bi-check-lg me-1"></i>Tạo phiếu kiểm kê kho
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function updateTypeMode(typeVal) {
+        var help = document.getElementById('typeHelp');
+        var colActual = document.getElementById('colActualHeader');
+        var colToLoc = document.getElementById('colToLocHeader');
+
+        if (typeVal === "0") {
+            help.innerText = "Kiểm kê cân đối: Cập nhật lại số lượng tồn kho theo số kiểm đếm thực tế.";
+            colActual.innerText = "SL kiểm đếm";
+        } else if (typeVal === "1") {
+            help.innerText = "Điều chuyển vị trí: Cập nhật vị trí kệ lưu kho mới (Kệ hiện tại -> Kệ chuyển đến).";
+            colActual.innerText = "SL chuyển";
+        } else {
+            help.innerText = "Xuất hủy hao hụt: Trừ giảm số lượng tồn kho do hư hỏng / móp méo / bể vỡ.";
+            colActual.innerText = "SL xuất hủy";
+        }
+    }
+
+    function toggleRow(id, chk) {
+        var row = document.getElementById('row-' + id);
+        var inputs = row.querySelectorAll('.actual-qty-input, .to-loc-input, .note-input');
+        inputs.forEach(inp => inp.disabled = !chk.checked);
+        calcSummary();
+    }
+
+    function toggleAll(chkAll) {
+        selectAll(chkAll.checked);
+    }
+
+    function selectAll(state) {
+        var checks = document.querySelectorAll('.part-check');
+        checks.forEach(chk => {
+            chk.checked = state;
+            var tr = chk.closest('tr');
+            var inputs = tr.querySelectorAll('.actual-qty-input, .to-loc-input, .note-input');
+            inputs.forEach(inp => inp.disabled = !state);
+        });
+        document.getElementById('checkAll').checked = state;
+        calcSummary();
+    }
+
+    function calcSummary() {
+        var checked = document.querySelectorAll('.part-check:checked');
+        var selectedCount = checked.length;
+        var totalSys = 0;
+        var totalAct = 0;
+
+        checked.forEach(chk => {
+            var tr = chk.closest('tr');
+            var sys = parseFloat(tr.querySelector('.system-qty').getAttribute('data-sys')) || 0;
+            var act = parseFloat(tr.querySelector('.actual-qty-input').value) || 0;
+            totalSys += sys;
+            totalAct += act;
+        });
+
+        var diff = totalAct - totalSys;
+
+        document.getElementById('sumSelected').innerText = selectedCount;
+        document.getElementById('sumSystem').innerText = totalSys.toLocaleString('vi-VN');
+        document.getElementById('sumActual').innerText = totalAct.toLocaleString('vi-VN');
+
+        var diffEl = document.getElementById('sumDiff');
+        if (diff > 0) {
+            diffEl.innerText = '+' + diff.toLocaleString('vi-VN') + ' (Thừa)';
+            diffEl.className = 'fs-5 fw-bold text-success';
+        } else if (diff < 0) {
+            diffEl.innerText = diff.toLocaleString('vi-VN') + ' (Thiếu)';
+            diffEl.className = 'fs-5 fw-bold text-danger';
+        } else {
+            diffEl.innerText = '0 (Khớp)';
+            diffEl.className = 'fs-5 fw-bold text-muted';
+        }
+
+        document.getElementById('btnSubmit').disabled = (selectedCount === 0);
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        updateTypeMode(document.getElementById('typeSelect').value);
+        calcSummary();
+    });
+</script>
+}
