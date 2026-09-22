@@ -14,6 +14,8 @@ public class AppDbContext : DbContext
     public DbSet<RepairOrder> ROs => Set<RepairOrder>();
     public DbSet<RepairLine> Lines => Set<RepairLine>();
     public DbSet<Part> Parts => Set<Part>();
+    public DbSet<WarrantyReport> WarrantyReports => Set<WarrantyReport>();
+    public DbSet<WarrantyReportItem> WarrantyReportItems => Set<WarrantyReportItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -40,8 +42,10 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
             e.Ignore(x => x.Total); e.Ignore(x => x.LaborTotal); e.Ignore(x => x.PartTotal);
+            e.Ignore(x => x.CustomerTotal); e.Ignore(x => x.WarrantyTotal);
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasMany(x => x.WarrantyReports).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -50,6 +54,26 @@ public class AppDbContext : DbContext
             e.Property(x => x.Quantity).HasPrecision(18, 2);
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.HasOne(x => x.RO).WithMany(x => x.Lines).HasForeignKey(x => x.ROId);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<WarrantyReport>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ReportNo }).IsUnique();
+            e.Property(x => x.ClaimAmount).HasPrecision(18, 2);
+            e.Property(x => x.ApprovedAmount).HasPrecision(18, 2);
+            e.Ignore(x => x.LaborClaimTotal); e.Ignore(x => x.PartClaimTotal);
+            e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.PartError).WithMany().HasForeignKey(x => x.PartIDError).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Items).WithOne(x => x.WarrantyReport).HasForeignKey(x => x.WarrantyReportId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<WarrantyReportItem>(e =>
+        {
+            e.Ignore(x => x.Amount);
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });

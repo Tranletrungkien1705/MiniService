@@ -1,0 +1,109 @@
+@model List<WarrantyReport>
+@{
+    ViewData["Title"] = "Báo cáo bảo hành (Warranty Report)";
+    var curStatus = (WarrantyStatus?)ViewBag.Status;
+    var totalCount = Model.Count;
+    var pendingCount = Model.Count(w => w.Status is WarrantyStatus.Pending or WarrantyStatus.Sent or WarrantyStatus.Confirmed);
+    var acceptedCount = Model.Count(w => w.Status == WarrantyStatus.Accepted);
+    var totalApprovedAmount = Model.Where(w => w.Status == WarrantyStatus.Accepted).Sum(w => w.ApprovedAmount ?? w.ClaimAmount);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số báo cáo BH</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ HTC xử lý / Duyệt</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Hãng đã chấp thuận</div>
+            <div class="stat-num text-success">@acceptedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng tiền bồi hoàn đã duyệt</div>
+            <div class="stat-num" style="font-size:20px;color:#059669">@totalApprovedAmount.ToString("N0")đ</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã BCBH / RO / Biển số..." style="max-width:240px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:190px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (WarrantyStatus s in Enum.GetValues(typeof(WarrantyStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.WarrantyStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+            </form>
+            <a href="/Warranty/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập báo cáo bảo hành</a>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã BCBH</th>
+                        <th>Lệnh SC (RO)</th>
+                        <th>Biển số xe</th>
+                        <th>Khách hàng</th>
+                        <th>Mã lỗi kỹ thuật</th>
+                        <th class="text-end">Tiền đề nghị</th>
+                        <th class="text-end">Tiền duyệt</th>
+                        <th>Trạng thái</th>
+                        <th>Ngày lập</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var w in Model)
+                {
+                    var (txt, code, css) = Ui.WarrantyStatus(w.Status);
+                    <tr style="cursor:pointer" onclick="location.href='/Warranty/Detail/@w.Id'">
+                        <td class="fw-semibold text-primary">@w.ReportNo</td>
+                        <td><span class="badge bg-light text-dark border">@w.RO.Code</span></td>
+                        <td>
+                            <b>@w.Car.Plate</b>
+                            <div class="text-muted small">@w.Car.Model (@w.Odometer.ToString("N0") km)</div>
+                        </td>
+                        <td>
+                            @w.Customer.Name
+                            <div class="text-muted small">@(w.Customer.Phone ?? "—")</div>
+                        </td>
+                        <td>
+                            <code>@w.ErrorCodeCD</code>
+                            @if (!string.IsNullOrEmpty(w.ErrorCodePN))
+                            {
+                                <span class="badge bg-light text-secondary border ms-1">@w.ErrorCodePN</span>
+                            }
+                        </td>
+                        <td class="text-end fw-semibold">@w.ClaimAmount.ToString("N0")đ</td>
+                        <td class="text-end fw-bold @(w.ApprovedAmount > 0 ? "text-success" : "text-muted")">
+                            @(w.ApprovedAmount.HasValue ? w.ApprovedAmount.Value.ToString("N0") + "đ" : "—")
+                        </td>
+                        <td><span class="badge bg-@css" title="@txt">@code — @txt</span></td>
+                        <td class="small text-muted">@w.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr><td colspan="9" class="text-center text-muted py-4">Chưa có Báo cáo bảo hành nào phù hợp điều kiện tìm kiếm.</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

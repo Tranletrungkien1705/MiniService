@@ -117,7 +117,7 @@ public class ROController(IRoService svc) : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddLine(int id, LineType type, string name, decimal quantity, decimal unitPrice, int? partId = null)
+    public async Task<IActionResult> AddLine(int id, LineType type, string name, decimal quantity, decimal unitPrice, int? partId = null, ExpenseType expenseType = ExpenseType.Customer)
     {
         if (string.IsNullOrWhiteSpace(name) && (!partId.HasValue || partId.Value <= 0))
         {
@@ -126,7 +126,7 @@ public class ROController(IRoService svc) : Controller
         }
         try
         {
-            await svc.AddLineAsync(id, type, name, quantity, unitPrice, partId);
+            await svc.AddLineAsync(id, type, name, quantity, unitPrice, partId, expenseType);
             TempData["Success"] = "Đã thêm dòng.";
         }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
@@ -152,6 +152,70 @@ public class ROController(IRoService svc) : Controller
     public async Task<IActionResult> Delete(int id)
     {
         var (ok, msg) = await svc.DeleteROAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
+public class WarrantyController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(WarrantyStatus? status, string? q)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        var list = await svc.WarrantyReportsAsync(status, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.ROs = await svc.ROsEligibleForWarrantyAsync();
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.SelectedRoId = roId;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int roId, string issueDesc, string diagResult, string? errCodeCD, string? errCodePN, int? partIdError)
+    {
+        if (roId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn lệnh sửa chữa (RO).";
+            return RedirectToAction(nameof(Create));
+        }
+        try
+        {
+            var id = await svc.CreateWarrantyReportFromROAsync(roId, issueDesc, diagResult, errCodeCD, errCodePN, partIdError, "web");
+            TempData["Success"] = "Đã lập Báo cáo bảo hành xe.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var report = await svc.GetWarrantyReportAsync(id);
+        if (report == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextWarranty(report.Status);
+        return View(report);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, WarrantyStatus to, decimal? approvedAmount, string? note)
+    {
+        var (ok, msg) = await svc.TransitionWarrantyAsync(id, to, approvedAmount, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteWarrantyReportAsync(id);
         TempData[ok ? "Success" : "Error"] = msg;
         return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
     }

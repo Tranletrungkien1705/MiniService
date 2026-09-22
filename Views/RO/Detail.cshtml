@@ -23,12 +23,14 @@
         <div class="card"><div class="card-body">
             <h6 class="fw-bold mb-3">Chi tiết công &amp; phụ tùng</h6>
             <table class="table align-middle">
-                <thead><tr><th>Loại</th><th>Nội dung</th><th class="text-end">SL</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th><th></th></tr></thead>
+                <thead><tr><th>Loại</th><th>Đối tượng TT</th><th>Nội dung</th><th class="text-end">SL</th><th class="text-end">Đơn giá</th><th class="text-end">Thành tiền</th><th></th></tr></thead>
                 <tbody>
                 @foreach (var l in Model.Lines)
                 {
+                    var (expTxt, expCss) = Ui.Expense(l.ExpenseType);
                     <tr>
                         <td>@if (l.Type == LineType.Labor) { <span class="badge bg-info">Công</span> } else { <span class="badge bg-secondary">Phụ tùng</span> }</td>
+                        <td><span class="badge bg-@expCss" style="font-size:11px">@expTxt</span></td>
                         <td>
                             @l.Name
                             @if (l.Part != null)
@@ -42,12 +44,17 @@
                         <td>@if (editable) { <form asp-action="RemoveLine" method="post" class="d-inline">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="lineId" value="@l.Id" /><button class="btn btn-sm btn-link text-danger p-0"><i class="bi bi-x-lg"></i></button></form> }</td>
                     </tr>
                 }
-                @if (Model.Lines.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-3">Chưa có dòng nào.</td></tr> }
+                @if (Model.Lines.Count == 0) { <tr><td colspan="7" class="text-center text-muted py-3">Chưa có dòng nào.</td></tr> }
                 </tbody>
                 <tfoot>
-                    <tr><td colspan="4" class="text-end text-muted">Tiền công</td><td class="text-end">@Model.LaborTotal.ToString("N0")</td><td></td></tr>
-                    <tr><td colspan="4" class="text-end text-muted">Tiền phụ tùng</td><td class="text-end">@Model.PartTotal.ToString("N0")</td><td></td></tr>
-                    <tr class="fw-bold"><td colspan="4" class="text-end">TỔNG</td><td class="text-end" style="color:#1d4ed8">@Model.Total.ToString("N0")đ</td><td></td></tr>
+                    <tr><td colspan="5" class="text-end text-muted">Tiền công</td><td class="text-end">@Model.LaborTotal.ToString("N0")</td><td></td></tr>
+                    <tr><td colspan="5" class="text-end text-muted">Tiền phụ tùng</td><td class="text-end">@Model.PartTotal.ToString("N0")</td><td></td></tr>
+                    @if (Model.WarrantyTotal > 0)
+                    {
+                        <tr><td colspan="5" class="text-end text-primary fw-semibold"><i class="bi bi-shield-check me-1"></i>Hãng bảo hành chi trả</td><td class="text-end text-primary fw-semibold">@Model.WarrantyTotal.ToString("N0")đ</td><td></td></tr>
+                        <tr><td colspan="5" class="text-end text-muted">Khách hàng thanh toán thực tế</td><td class="text-end fw-semibold">@Model.CustomerTotal.ToString("N0")đ</td><td></td></tr>
+                    }
+                    <tr class="fw-bold"><td colspan="5" class="text-end">TỔNG LỆNH SC</td><td class="text-end" style="color:#1d4ed8">@Model.Total.ToString("N0")đ</td><td></td></tr>
                 </tfoot>
             </table>
             @if (editable)
@@ -77,10 +84,18 @@
                                 <option value="1">Phụ tùng</option>
                             </select>
                         </div>
-                        <div class="col-md-5">
+                        <div class="col-md-2">
+                            <select name="expenseType" class="form-select form-select-sm" title="Đối tượng thanh toán">
+                                <option value="0">Khách trả</option>
+                                <option value="1">Bảo hành</option>
+                                <option value="2">Bảo hiểm</option>
+                                <option value="3">Nội bộ</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
                             <input id="lineNameInput" name="name" class="form-control form-control-sm" placeholder="Nội dung công / tên phụ tùng" required />
                         </div>
-                        <div class="col-md-2">
+                        <div class="col-md-1">
                             <input id="lineQtyInput" name="quantity" type="number" step="0.01" value="1" class="form-control form-control-sm" placeholder="SL" />
                         </div>
                         <div class="col-md-2">
@@ -113,6 +128,33 @@
                     @Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
                     <button class="btn btn-outline-danger w-100"><i class="bi bi-trash me-1"></i>Xóa RO</button>
                 </form>
+            }
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-shield-check text-success me-1"></i>Bảo hành hãng</h6>
+                <a href="/Warranty/Create?roId=@Model.Id" class="btn btn-sm btn-outline-success"><i class="bi bi-plus-lg me-1"></i>Lập BCBH</a>
+            </div>
+            @if (Model.WarrantyReports.Count > 0)
+            {
+                <div class="list-group list-group-flush small">
+                    @foreach (var w in Model.WarrantyReports)
+                    {
+                        var (wtxt, wcode, wcss) = Ui.WarrantyStatus(w.Status);
+                        <a href="/Warranty/Detail/@w.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold">@w.ReportNo</div>
+                                <div class="text-muted" style="font-size:11px">@w.ClaimAmount.ToString("N0")đ · @w.CreatedAt.ToString("dd/MM/yyyy")</div>
+                            </div>
+                            <span class="badge bg-@wcss">@wcode</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small">Chưa có Báo cáo bảo hành cho lệnh này. Nhấn "Lập BCBH" để tạo đề nghị bồi hoàn gửi HTC.</div>
             }
         </div></div>
         <div class="card"><div class="card-body">

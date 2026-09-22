@@ -28,6 +28,26 @@ public enum ROStatus
 
 public enum LineType { Labor = 0, Part = 1 }   // Công / Phụ tùng
 
+/// <summary>Đối tượng chịu chi phí cho từng hạng mục dịch vụ — theo Ser_ROType idn.CarService.</summary>
+public enum ExpenseType
+{
+    Customer = 0,    // ROREPAIR  — Khách hàng thanh toán
+    Warranty = 1,    // ROWARRANTY — Bảo hành hãng (HTC/HMC chi trả)
+    Insurance = 2,   // ROINSURANCE — Bảo hiểm bồi thường
+    Internal = 3     // LOCAL — Nội bộ đại lý hỗ trợ
+}
+
+/// <summary>Trạng thái Báo cáo bảo hành (Warranty Report) — theo Ser_WarrantyReport_Status idn.CarService.</summary>
+public enum WarrantyStatus
+{
+    Pending = 0,     // PEND   — Lập báo cáo / Chưa gửi
+    Sent = 1,        // SENT   — Đã gửi HTC xem xét
+    Confirmed = 2,   // CONF   — HTC đã xác nhận / Chờ duyệt bồi hoàn
+    Accepted = 3,    // ACCE   — Hãng chấp thuận bồi hoàn
+    Rejected = 4,    // REJ    — Hãng từ chối bồi hoàn
+    Reverted = 5     // REVERT — Yêu cầu đại lý bổ sung hồ sơ
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -71,10 +91,13 @@ public class RepairOrder : IOrgOwned
     public Car Car { get; set; } = null!;
     public Customer Customer { get; set; } = null!;
     public List<RepairLine> Lines { get; set; } = [];
+    public List<WarrantyReport> WarrantyReports { get; set; } = [];
 
     public decimal Total => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
     public decimal PartTotal => Lines.Where(l => l.Type == LineType.Part).Sum(l => l.Amount);
+    public decimal CustomerTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount);
+    public decimal WarrantyTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Warranty).Sum(l => l.Amount);
 }
 
 public class Part : IOrgOwned
@@ -102,11 +125,72 @@ public class RepairLine : IOrgOwned
     public Guid OrgId { get; set; }
     public int ROId { get; set; }
     public LineType Type { get; set; }
+    public ExpenseType ExpenseType { get; set; } = ExpenseType.Customer;
     public int? PartId { get; set; }                // Liên kết danh mục phụ tùng nếu có
     public string Name { get; set; } = "";
     public decimal Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }
     public decimal Amount => Quantity * UnitPrice;
     public RepairOrder RO { get; set; } = null!;
+    public Part? Part { get; set; }
+}
+
+/// <summary>Báo cáo bảo hành (Warranty Report) — Ser_ROWarrantyReport trong idn.CarService.</summary>
+public class WarrantyReport : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ReportNo { get; set; } = "";          // Số BCBH (VD: WAR260427-001)
+    public int ROId { get; set; }                       // Lệnh sửa chữa gốc
+    public int CarId { get; set; }                      // Xe được bảo hành
+    public int CustomerId { get; set; }                 // Khách hàng
+    public int Odometer { get; set; }                   // Số km ghi nhận
+    public WarrantyStatus Status { get; set; } = WarrantyStatus.Pending;
+
+    // Kỹ thuật & Hiện tượng sự cố (CusRequest, CarStatus, ErrorCode...)
+    public string IssueDescription { get; set; } = "";  // Triệu chứng hư hỏng / phàn nàn của KH
+    public string DiagnosticResult { get; set; } = "";  // Kết quả chẩn đoán kỹ thuật viên
+    public string ErrorCodeCD { get; set; } = "";       // Mã chẩn đoán kỹ thuật (DTC)
+    public string ErrorCodePN { get; set; } = "";       // Mã hiện tượng hư hỏng
+    public int? PartIDError { get; set; }               // Phụ tùng hỏng hóc gây sự cố
+
+    // Bồi hoàn & Phê duyệt hãng
+    public decimal ClaimAmount { get; set; }            // Tổng tiền đề nghị bồi hoàn (VNĐ)
+    public decimal? ApprovedAmount { get; set; }        // Số tiền hãng duyệt thanh toán
+    public string? RejectionReason { get; set; }        // Lý do từ chối / lý do yêu cầu bổ sung
+    public string? DecisionNote { get; set; }           // Ý kiến phản hồi của nhà phân phối HTC
+
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? SubmittedAt { get; set; }          // Ngày gửi HTC
+    public DateTime? DecidedAt { get; set; }            // Ngày duyệt / từ chối
+
+    public RepairOrder RO { get; set; } = null!;
+    public Car Car { get; set; } = null!;
+    public Customer Customer { get; set; } = null!;
+    public Part? PartError { get; set; }
+    public List<WarrantyReportItem> Items { get; set; } = [];
+
+    public decimal LaborClaimTotal => Items.Where(i => i.Type == LineType.Labor).Sum(i => i.Amount);
+    public decimal PartClaimTotal => Items.Where(i => i.Type == LineType.Part).Sum(i => i.Amount);
+}
+
+/// <summary>Hạng mục công / phụ tùng trong BCBH — Ser_ROWarrantyReportServiceItems / PartItems.</summary>
+public class WarrantyReportItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int WarrantyReportId { get; set; }
+    public LineType Type { get; set; }
+    public int? PartId { get; set; }                    // Phụ tùng bảo hành (nếu là Part)
+    public string Code { get; set; } = "";              // Mã công hoặc mã phụ tùng
+    public string Name { get; set; } = "";              // Tên hạng mục
+    public decimal Quantity { get; set; } = 1;
+    public decimal UnitPrice { get; set; }
+    public decimal Amount => Quantity * UnitPrice;
+    public bool IsAccepted { get; set; } = true;        // Trạng thái chấp thuận hạng mục này
+    public string? Note { get; set; }
+
+    public WarrantyReport WarrantyReport { get; set; } = null!;
     public Part? Part { get; set; }
 }
