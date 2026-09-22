@@ -162,6 +162,102 @@ app.MapPost("/api/warranty/{id:int}/transition", async (int id, TransitionWarran
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Đặt lịch hẹn dịch vụ (Ser_App / Ser_Appointment)
+app.MapGet("/api/appointments", async (AppointmentStatus? status, string? q, DateTime? date, IRoService svc) =>
+{
+    var list = await svc.AppointmentsAsync(status, q, date);
+    return Results.Ok(list.Select(a => new
+    {
+        a.Id,
+        a.AppNo,
+        plate = a.Car.Plate,
+        model = a.Car.Model,
+        customer = a.Customer.Name,
+        phone = a.Customer.Phone,
+        appointmentDate = a.AppointmentDate,
+        serviceType = Ui.AppServiceType(a.ServiceType),
+        serviceTypeValue = (int)a.ServiceType,
+        status = Ui.AppointmentStatus(a.Status).text,
+        statusCode = Ui.AppointmentStatus(a.Status).code,
+        statusValue = (int)a.Status,
+        a.Advisor,
+        a.Cavity,
+        a.CustomerRequest,
+        a.Note,
+        a.Source,
+        roId = a.ROId,
+        roCode = a.RO?.Code,
+        a.CreatedAt,
+        a.ConfirmedAt,
+        a.CheckedInAt
+    }));
+});
+
+app.MapGet("/api/appointments/{id:int}", async (int id, IRoService svc) =>
+{
+    var a = await svc.GetAppointmentAsync(id);
+    if (a == null) return Results.NotFound(new { error = "Không tìm thấy lịch hẹn dịch vụ." });
+    return Results.Ok(new
+    {
+        a.Id,
+        a.AppNo,
+        car = new { a.Car.Id, a.Car.Plate, a.Car.Model, a.Car.Vin, a.Car.Year },
+        customer = new { a.Customer.Id, a.Customer.Name, a.Customer.Phone, a.Customer.Email },
+        appointmentDate = a.AppointmentDate,
+        serviceType = Ui.AppServiceType(a.ServiceType),
+        serviceTypeValue = (int)a.ServiceType,
+        status = Ui.AppointmentStatus(a.Status).text,
+        statusCode = Ui.AppointmentStatus(a.Status).code,
+        statusValue = (int)a.Status,
+        a.Advisor,
+        a.Cavity,
+        a.CustomerRequest,
+        a.Note,
+        a.CancelReason,
+        a.Source,
+        ro = a.RO != null ? new { a.RO.Id, a.RO.Code, a.RO.Status } : null,
+        a.CreatedAt,
+        a.ConfirmedAt,
+        a.CheckedInAt
+    });
+});
+
+app.MapPost("/api/appointments", async (CreateAppointmentDto dto, IRoService svc) =>
+{
+    try
+    {
+        var appItem = new Appointment
+        {
+            CarId = dto.CarId,
+            AppointmentDate = dto.AppointmentDate != default ? dto.AppointmentDate : DateTime.Today.AddHours(9),
+            ServiceType = dto.ServiceType,
+            Advisor = dto.Advisor,
+            Cavity = dto.Cavity,
+            CustomerRequest = dto.CustomerRequest ?? "",
+            Note = dto.Note,
+            Source = dto.Source ?? "Hotline"
+        };
+        var id = await svc.CreateAppointmentAsync(appItem);
+        return Results.Ok(new { appointmentId = id, appNo = appItem.AppNo, message = "Đã đặt lịch hẹn thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/appointments/{id:int}/status", async (int id, TransitionAppointmentDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionAppointmentStatusAsync(id, dto.ToStatus, dto.Reason);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/appointments/{id:int}/checkin", async (int id, CheckInAppointmentDto dto, IRoService svc) =>
+{
+    var (ok, msg, roId) = await svc.CheckInAppointmentAsync(id, dto.Odometer, dto.Technician);
+    return ok ? Results.Ok(new { message = msg, roId }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -177,3 +273,6 @@ record RegisterOrgDto(string Name);
 record AdjustStockDto(decimal Quantity, string? Mode, string? Note);
 record CreateWarrantyDto(int RoId, string IssueDesc, string DiagResult, string? ErrorCodeCD, string? ErrorCodePN, int? PartIdError, string? CreatedBy);
 record TransitionWarrantyDto(WarrantyStatus ToStatus, decimal? ApprovedAmount, string? Note);
+record CreateAppointmentDto(int CarId, DateTime AppointmentDate, AppointmentServiceType ServiceType, string? Advisor, string? Cavity, string? CustomerRequest, string? Note, string? Source);
+record TransitionAppointmentDto(AppointmentStatus ToStatus, string? Reason);
+record CheckInAppointmentDto(int Odometer, string? Technician);

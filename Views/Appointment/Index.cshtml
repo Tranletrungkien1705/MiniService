@@ -1,0 +1,138 @@
+@model List<Appointment>
+@{
+    ViewData["Title"] = "Lịch hẹn dịch vụ (Service Appointment)";
+    var curStatus = (AppointmentStatus?)ViewBag.Status;
+    var totalCount = Model.Count;
+    var pendingCount = Model.Count(a => a.Status is AppointmentStatus.Pending or AppointmentStatus.Contacted);
+    var confirmedCount = Model.Count(a => a.Status == AppointmentStatus.Confirmed);
+    var checkedInCount = Model.Count(a => a.Status == AppointmentStatus.CheckedIn);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số lịch hẹn</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ xử lý / Đã liên hệ</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã xác nhận hẹn</div>
+            <div class="stat-num text-info">@confirmedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã tiếp nhận vào xưởng</div>
+            <div class="stat-num text-success">@checkedInCount</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã hẹn / Biển số / KH / SĐT..." style="max-width:240px" />
+                <input type="date" name="date" value="@ViewBag.Date" class="form-control form-control-sm" style="max-width:150px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (AppointmentStatus s in Enum.GetValues(typeof(AppointmentStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.AppointmentStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curStatus.HasValue || !string.IsNullOrEmpty(ViewBag.Q) || !string.IsNullOrEmpty(ViewBag.Date))
+                {
+                    <a href="/Appointment" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <a href="/Appointment/Create" class="btn btn-sm btn-primary"><i class="bi bi-calendar-plus me-1"></i>Đặt lịch hẹn mới</a>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã hẹn</th>
+                        <th>Ngày giờ hẹn</th>
+                        <th>Biển số xe</th>
+                        <th>Khách hàng</th>
+                        <th>Loại dịch vụ &amp; Khoang</th>
+                        <th>CVDV phụ trách</th>
+                        <th>Yêu cầu / Triệu chứng</th>
+                        <th>Trạng thái</th>
+                        <th>Lệnh SC (RO)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var a in Model)
+                {
+                    var (txt, code, css) = Ui.AppointmentStatus(a.Status);
+                    var svcType = Ui.AppServiceType(a.ServiceType);
+                    <tr style="cursor:pointer" onclick="location.href='/Appointment/Detail/@a.Id'">
+                        <td class="fw-semibold text-primary">@a.AppNo</td>
+                        <td>
+                            <b>@a.AppointmentDate.ToString("dd/MM/yyyy")</b>
+                            <div class="text-muted small"><i class="bi bi-clock me-1"></i>@a.AppointmentDate.ToString("HH:mm")</div>
+                        </td>
+                        <td>
+                            <b>@a.Car.Plate</b>
+                            <div class="text-muted small">@a.Car.Model</div>
+                        </td>
+                        <td>
+                            @a.Customer.Name
+                            <div class="text-muted small">@(a.Customer.Phone ?? "—")</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">@svcType</span>
+                            @if (!string.IsNullOrEmpty(a.Cavity))
+                            {
+                                <div class="text-muted small mt-1"><i class="bi bi-geo-alt me-1"></i>@a.Cavity</div>
+                            }
+                        </td>
+                        <td>
+                            @(a.Advisor ?? "—")
+                            <div class="text-muted small">Nguồn: @a.Source</div>
+                        </td>
+                        <td>
+                            <div class="text-truncate" style="max-width:200px" title="@a.CustomerRequest">
+                                @(string.IsNullOrWhiteSpace(a.CustomerRequest) ? "—" : a.CustomerRequest)
+                            </div>
+                        </td>
+                        <td><span class="badge bg-@css" title="@txt">@code — @txt</span></td>
+                        <td>
+                            @if (a.RO != null)
+                            {
+                                <a href="/RO/Detail/@a.RO.Id" class="badge bg-primary text-decoration-none" onclick="event.stopPropagation()">
+                                    <i class="bi bi-clipboard2-pulse me-1"></i>@a.RO.Code
+                                </a>
+                            }
+                            else if (a.Status == AppointmentStatus.Confirmed)
+                            {
+                                <span class="badge bg-outline-primary border text-primary">Sẵn sàng nhận xe</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">—</span>
+                            }
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr><td colspan="9" class="text-center text-muted py-4">Chưa có lịch hẹn dịch vụ nào phù hợp điều kiện tìm kiếm.</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

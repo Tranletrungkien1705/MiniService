@@ -134,17 +134,107 @@ public static class Seeder
             db.WarrantyReports.AddRange(w1, w2);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.Appointments.AnyAsync())
+        {
+            var car1 = await db.Cars.FirstAsync();
+            var car2 = await db.Cars.OrderByDescending(c => c.Id).FirstAsync();
+            var ro1 = await db.ROs.FirstAsync();
+
+            // 1. Cuộc hẹn đã tiếp nhận vào xưởng & liên kết với RO1 (Status = CheckedIn)
+            var app1 = new Appointment
+            {
+                AppNo = "APP260427-001",
+                CarId = car1.Id,
+                CustomerId = car1.CustomerId,
+                AppointmentDate = DateTime.Today.AddHours(8).AddMinutes(30),
+                ServiceType = AppointmentServiceType.Maintenance,
+                Status = AppointmentStatus.CheckedIn,
+                Advisor = "CVDV Tuấn",
+                Cavity = "K01 - Khoang bảo dưỡng nhanh",
+                CustomerRequest = "Bảo dưỡng định kỳ 20.000km, thay dầu nhớt và lọc dầu chính hãng.",
+                Note = "Khách hàng thân thiết, ưu tiên khoang nhanh.",
+                Source = "Hyundai Me",
+                ROId = ro1.Id,
+                CreatedBy = "seed",
+                CreatedAt = DateTime.Now.AddDays(-1),
+                ConfirmedAt = DateTime.Now.AddHours(-4),
+                CheckedInAt = DateTime.Now.AddHours(-3)
+            };
+            db.Appointments.Add(app1);
+            await db.SaveChangesAsync();
+
+            ro1.AppointmentId = app1.Id;
+
+            // 2. Cuộc hẹn hôm nay đã xác nhận, sẵn sàng đón tiếp (Status = Confirmed)
+            var app2 = new Appointment
+            {
+                AppNo = "APP260427-002",
+                CarId = car2.Id,
+                CustomerId = car2.CustomerId,
+                AppointmentDate = DateTime.Today.AddHours(14),
+                ServiceType = AppointmentServiceType.Repair,
+                Status = AppointmentStatus.Confirmed,
+                Advisor = "CVDV Hương",
+                Cavity = "K02 - Khoang gầm máy số 1",
+                CustomerRequest = "Kiểm tra hệ thống phanh trước, thỉnh thoảng có tiếng kêu rít khi đạp phanh ở tốc độ chậm.",
+                Note = "Chuẩn bị sẵn má phanh 58101-C1A00 trong kho.",
+                Source = "Hotline",
+                CreatedBy = "seed",
+                CreatedAt = DateTime.Now.AddDays(-1),
+                ConfirmedAt = DateTime.Now.AddHours(-2)
+            };
+
+            // 3. Cuộc hẹn mới tạo chờ liên hệ xác nhận (Status = Pending)
+            var app3 = new Appointment
+            {
+                AppNo = "APP260428-003",
+                CarId = car1.Id,
+                CustomerId = car1.CustomerId,
+                AppointmentDate = DateTime.Today.AddDays(1).AddHours(9).AddMinutes(30),
+                ServiceType = AppointmentServiceType.Care,
+                Status = AppointmentStatus.Pending,
+                Advisor = "CVDV Tuấn",
+                Cavity = "K05 - Phòng sơn sấy tiêu chuẩn",
+                CustomerRequest = "Đánh bóng toàn thân xe và vệ sinh nội thất khử mùi diệt khuẩn.",
+                Note = "Khách yêu cầu hoàn thành trước 17h cùng ngày.",
+                Source = "Website",
+                CreatedBy = "web",
+                CreatedAt = DateTime.Now.AddHours(-1)
+            };
+
+            // 4. Cuộc hẹn đã bị hủy do khách bận (Status = Cancelled)
+            var app4 = new Appointment
+            {
+                AppNo = "APP260426-004",
+                CarId = car2.Id,
+                CustomerId = car2.CustomerId,
+                AppointmentDate = DateTime.Today.AddDays(-1).AddHours(10),
+                ServiceType = AppointmentServiceType.WarrantyCheck,
+                Status = AppointmentStatus.Cancelled,
+                Advisor = "CVDV Hương",
+                CustomerRequest = "Kiểm tra đèn cảnh báo túi khí thỉnh thoảng chớp sáng.",
+                CancelReason = "Khách hàng bận đi công tác đột xuất, xin dời sang tuần sau.",
+                Source = "Hotline",
+                CreatedBy = "seed",
+                CreatedAt = DateTime.Now.AddDays(-2)
+            };
+
+            db.Appointments.AddRange(app2, app3, app4);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON miniservice.\"Orgs\" (\"ApiKey\")",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"AppointmentId\" integer NULL",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -198,7 +288,33 @@ public static class Seeder
                 FOREIGN KEY (""WarrantyReportId"") REFERENCES ""WarrantyReports"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE SET NULL
             );",
-            @"ALTER TABLE ""Lines"" ADD COLUMN ""ExpenseType"" INTEGER NOT NULL DEFAULT 0;"
+            @"ALTER TABLE ""Lines"" ADD COLUMN ""ExpenseType"" INTEGER NOT NULL DEFAULT 0;",
+            @"CREATE TABLE IF NOT EXISTS ""Appointments"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""AppNo"" TEXT NOT NULL,
+                ""CarId"" INTEGER NOT NULL,
+                ""CustomerId"" INTEGER NOT NULL,
+                ""AppointmentDate"" TEXT NOT NULL,
+                ""ServiceType"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""Advisor"" TEXT NULL,
+                ""Cavity"" TEXT NULL,
+                ""CustomerRequest"" TEXT NOT NULL,
+                ""Note"" TEXT NULL,
+                ""CancelReason"" TEXT NULL,
+                ""Source"" TEXT NOT NULL,
+                ""ROId"" INTEGER NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ConfirmedAt"" TEXT NULL,
+                ""CheckedInAt"" TEXT NULL,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Appointments_OrgId_AppNo"" ON ""Appointments"" (""OrgId"", ""AppNo"");",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""AppointmentId"" INTEGER NULL;"
         };
 
         foreach (var sql in sqls)

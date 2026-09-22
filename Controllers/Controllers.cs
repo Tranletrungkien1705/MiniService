@@ -221,6 +221,104 @@ public class WarrantyController(IRoService svc) : Controller
     }
 }
 
+public class AppointmentController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(AppointmentStatus? status, string? q, DateTime? date)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.Date = date?.ToString("yyyy-MM-dd");
+        var list = await svc.AppointmentsAsync(status, q, date);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? carId)
+    {
+        ViewBag.Cars = await svc.CarsForSelectAsync();
+        ViewBag.SelectedCarId = carId;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int carId, DateTime appointmentDate, AppointmentServiceType serviceType, string? advisor, string? cavity, string customerRequest, string? note, string? source)
+    {
+        if (carId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn thông tin xe.";
+            ViewBag.Cars = await svc.CarsForSelectAsync();
+            return View();
+        }
+        if (string.IsNullOrWhiteSpace(customerRequest))
+        {
+            TempData["Error"] = "Vui lòng nhập yêu cầu của khách hàng hoặc lý do đặt hẹn.";
+            ViewBag.Cars = await svc.CarsForSelectAsync();
+            return View();
+        }
+
+        try
+        {
+            var app = new Appointment
+            {
+                CarId = carId,
+                AppointmentDate = appointmentDate != default ? appointmentDate : DateTime.Today.AddHours(9),
+                ServiceType = serviceType,
+                Advisor = advisor?.Trim(),
+                Cavity = cavity?.Trim(),
+                CustomerRequest = customerRequest.Trim(),
+                Note = note?.Trim(),
+                Source = string.IsNullOrWhiteSpace(source) ? "Hotline" : source.Trim(),
+                CreatedBy = "web"
+            };
+
+            var id = await svc.CreateAppointmentAsync(app);
+            TempData["Success"] = $"Đã đặt lịch hẹn {app.AppNo} thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Cars = await svc.CarsForSelectAsync();
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var app = await svc.GetAppointmentAsync(id);
+        if (app == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextAppointment(app.Status);
+        return View(app);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateStatus(int id, AppointmentStatus toStatus, string? cancelReason)
+    {
+        var (ok, msg) = await svc.TransitionAppointmentStatusAsync(id, toStatus, cancelReason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CheckIn(int id, int odometer, string? technician)
+    {
+        var (ok, msg, roId) = await svc.CheckInAppointmentAsync(id, odometer, technician);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok && roId.HasValue)
+        {
+            return RedirectToAction("Detail", "RO", new { id = roId.Value });
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteAppointmentAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

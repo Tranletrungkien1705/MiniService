@@ -15,6 +15,12 @@
                     <h5 class="fw-bold mb-1">@Model.Code <span class="badge bg-@stCss ms-1" title="@stCode">@stTxt</span></h5>
                     <div class="text-muted small"><i class="bi bi-car-front me-1"></i>@Model.Car.Plate · @Model.Car.Model · @Model.Car.Year — <b>@Model.Customer.Name</b> (@Model.Customer.Phone)</div>
                     <div class="small mt-1">Odo: <b>@Model.Odometer.ToString("N0")</b> km · Thợ: <b>@(Model.Technician ?? "—")</b></div>
+                    @if (Model.Appointment != null)
+                    {
+                        <div class="small mt-1 text-primary">
+                            <i class="bi bi-calendar2-check me-1"></i>Từ lịch hẹn: <a href="/Appointment/Detail/@Model.Appointment.Id" class="fw-semibold">@Model.Appointment.AppNo</a> (@Model.Appointment.AppointmentDate.ToString("dd/MM/yyyy HH:mm"))
+                        </div>
+                    }
                     @if (!string.IsNullOrEmpty(Model.IntakeNote)) { <div class="small mt-1 text-muted">Tình trạng: @Model.IntakeNote</div> }
                 </div>
             </div>

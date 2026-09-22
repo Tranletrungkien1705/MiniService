@@ -41,4 +41,24 @@ public static class Ui
         ExpenseType.Internal => ("Nội bộ", "dark"),
         _ => (t.ToString(), "secondary")
     };
+
+    public static (string text, string code, string css) AppointmentStatus(AppointmentStatus s) => s switch
+    {
+        Models.AppointmentStatus.Pending => ("Mới tạo", "PEND", "secondary"),
+        Models.AppointmentStatus.Contacted => ("Đã liên hệ", "CONT", "info"),
+        Models.AppointmentStatus.Confirmed => ("Đã xác nhận", "CONF", "primary"),
+        Models.AppointmentStatus.CheckedIn => ("Đã tiếp nhận", "RECV", "success"),
+        Models.AppointmentStatus.Cancelled => ("Đã hủy", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static string AppServiceType(AppointmentServiceType t) => t switch
+    {
+        AppointmentServiceType.Maintenance => "Bảo dưỡng định kỳ",
+        AppointmentServiceType.Repair => "Sửa chữa chung",
+        AppointmentServiceType.BodyPaint => "Đồng sơn",
+        AppointmentServiceType.WarrantyCheck => "Kiểm tra bảo hành",
+        AppointmentServiceType.Care => "Chăm sóc làm đẹp",
+        _ => t.ToString()
+    };
 }

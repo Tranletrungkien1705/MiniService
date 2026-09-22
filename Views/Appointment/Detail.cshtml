@@ -1,0 +1,211 @@
+@model Appointment
+@{
+    ViewData["Title"] = $"Lịch hẹn {Model.AppNo}";
+    var (stTxt, stCode, stCss) = Ui.AppointmentStatus(Model.Status);
+    var svcType = Ui.AppServiceType(Model.ServiceType);
+    var next = (AppointmentStatus[])ViewBag.Next;
+    bool canDelete = Model.Status is AppointmentStatus.Pending or AppointmentStatus.Cancelled && !Model.ROId.HasValue;
+    bool canCheckIn = Model.Status is AppointmentStatus.Confirmed or AppointmentStatus.Pending or AppointmentStatus.Contacted && !Model.ROId.HasValue;
+}
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+                    <div>
+                        <h5 class="fw-bold mb-1">
+                            @Model.AppNo
+                            <span class="badge bg-@stCss ms-1" title="@stCode">@stTxt</span>
+                            <span class="badge bg-light text-dark border ms-1">@svcType</span>
+                        </h5>
+                        <div class="text-muted small">
+                            <i class="bi bi-calendar-event me-1"></i>Hẹn lúc: <b class="text-dark">@Model.AppointmentDate.ToString("dd/MM/yyyy HH:mm")</b>
+                            · Nguồn: <b>@Model.Source</b>
+                            @if (!string.IsNullOrEmpty(Model.Advisor))
+                            {
+                                <span> · CVDV: <b>@Model.Advisor</b></span>
+                            }
+                            @if (!string.IsNullOrEmpty(Model.Cavity))
+                            {
+                                <span> · Khoang: <b>@Model.Cavity</b></span>
+                            }
+                        </div>
+                    </div>
+                    <a href="/Appointment" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+                </div>
+
+                @if (Model.RO != null)
+                {
+                    <div class="alert alert-success d-flex justify-content-between align-items-center mt-3 mb-0">
+                        <div>
+                            <i class="bi bi-check-circle-fill me-2 fs-5 text-success"></i>
+                            Xe đã được tiếp nhận vào xưởng theo <b>Lệnh sửa chữa @Model.RO.Code</b>
+                            <span class="badge bg-@Ui.Status(Model.RO.Status).css ms-1">@Ui.Status(Model.RO.Status).text</span>
+                        </div>
+                        <a href="/RO/Detail/@Model.RO.Id" class="btn btn-sm btn-primary">
+                            <i class="bi bi-clipboard2-pulse me-1"></i>Xem Lệnh SC (RO)
+                        </a>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3 border-bottom pb-2"><i class="bi bi-car-front text-primary me-2"></i>Thông tin phương tiện &amp; Khách hàng</h6>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="p-2 border rounded bg-light">
+                            <div class="text-muted small">Phương tiện</div>
+                            <div class="fw-bold fs-5 text-primary">@Model.Car.Plate</div>
+                            <div>@Model.Car.Model (@Model.Car.Year)</div>
+                            <div class="small text-muted">Số khung (VIN): @(Model.Car.Vin ?? "—")</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-2 border rounded bg-light">
+                            <div class="text-muted small">Khách hàng / Chủ xe</div>
+                            <div class="fw-bold fs-5">@Model.Customer.Name</div>
+                            <div><i class="bi bi-telephone me-1 text-muted"></i>@(Model.Customer.Phone ?? "—")</div>
+                            <div class="small text-muted"><i class="bi bi-envelope me-1"></i>@(Model.Customer.Email ?? "—")</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2 border-bottom pb-2"><i class="bi bi-chat-left-text text-primary me-2"></i>Nội dung yêu cầu &amp; Hiện tượng xe</h6>
+                <div class="p-3 bg-light rounded mb-3">
+                    <p class="mb-0 fw-semibold" style="white-space:pre-wrap">@Model.CustomerRequest</p>
+                </div>
+
+                @if (!string.IsNullOrEmpty(Model.Note))
+                {
+                    <h6 class="fw-bold mb-1 small text-muted">Ghi chú điều phối nội bộ:</h6>
+                    <div class="p-2 border rounded mb-3 small text-secondary">@Model.Note</div>
+                }
+
+                @if (!string.IsNullOrEmpty(Model.CancelReason))
+                {
+                    <div class="alert alert-danger mb-0">
+                        <i class="bi bi-x-circle me-1"></i><b>Lý do hủy hẹn:</b> @Model.CancelReason
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2 border-bottom pb-2 small text-muted"><i class="bi bi-clock-history me-1"></i>Lịch sử &amp; Dòng thời gian</h6>
+                <div class="row text-muted small g-2">
+                    <div class="col-sm-4">Tạo lúc: <b>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</b> (@Model.CreatedBy)</div>
+                    <div class="col-sm-4">Xác nhận lúc: <b>@(Model.ConfirmedAt.HasValue ? Model.ConfirmedAt.Value.ToString("dd/MM/yyyy HH:mm") : "—")</b></div>
+                    <div class="col-sm-4">Tiếp nhận lúc: <b>@(Model.CheckedInAt.HasValue ? Model.CheckedInAt.Value.ToString("dd/MM/yyyy HH:mm") : "—")</b></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        @if (canCheckIn)
+        {
+            <div class="card mb-3 border-primary">
+                <div class="card-header bg-primary text-white fw-bold">
+                    <i class="bi bi-box-arrow-in-right me-1"></i>Tiếp nhận xe vào xưởng (Tạo RO)
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        Khi khách mang xe đến đúng hẹn, thực hiện kiểm tra tiếp nhận và tạo ngay Lệnh sửa chữa (RO) đưa xe vào khu vực sửa chữa.
+                    </p>
+                    <form asp-action="CheckIn" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-2">
+                            <label class="form-label small fw-semibold">Số công-tơ-mét (Km hiện tại)</label>
+                            <input type="number" name="odometer" class="form-control form-control-sm" placeholder="VD: 25400" min="0" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Kỹ thuật viên / Thợ phụ trách</label>
+                            <input type="text" name="technician" class="form-control form-control-sm" value="@(Model.Advisor ?? "Thợ máy")" placeholder="Tên thợ tiếp nhận" />
+                        </div>
+                        <button type="submit" class="btn btn-success w-100 fw-bold">
+                            <i class="bi bi-check2-circle me-1"></i>Tiếp nhận &amp; Lập Lệnh SC (RO)
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3 border-bottom pb-2">Chuyển trạng thái cuộc hẹn</h6>
+
+                @if (next.Length > 0)
+                {
+                    <div class="d-grid gap-2">
+                        @if (next.Contains(AppointmentStatus.Confirmed))
+                        {
+                            <form asp-action="UpdateStatus" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@Model.Id" />
+                                <input type="hidden" name="toStatus" value="@((int)AppointmentStatus.Confirmed)" />
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="bi bi-check-lg me-1"></i>Xác nhận lịch hẹn (CONF)
+                                </button>
+                            </form>
+                        }
+
+                        @if (next.Contains(AppointmentStatus.Contacted))
+                        {
+                            <form asp-action="UpdateStatus" method="post">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@Model.Id" />
+                                <input type="hidden" name="toStatus" value="@((int)AppointmentStatus.Contacted)" />
+                                <button type="submit" class="btn btn-outline-info w-100">
+                                    <i class="bi bi-telephone-outbound me-1"></i>Đã liên hệ khách (CONT)
+                                </button>
+                            </form>
+                        }
+
+                        @if (next.Contains(AppointmentStatus.Cancelled))
+                        {
+                            <button type="button" class="btn btn-outline-danger w-100" data-bs-toggle="collapse" data-bs-target="#cancelBox">
+                                <i class="bi bi-x-lg me-1"></i>Hủy lịch hẹn...
+                            </button>
+
+                            <div class="collapse mt-2" id="cancelBox">
+                                <form asp-action="UpdateStatus" method="post" class="p-2 border rounded bg-light">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@Model.Id" />
+                                    <input type="hidden" name="toStatus" value="@((int)AppointmentStatus.Cancelled)" />
+                                    <label class="form-label small fw-semibold">Lý do hủy hẹn:</label>
+                                    <textarea name="cancelReason" class="form-control form-control-sm mb-2" rows="2" placeholder="Khách bận, hoãn lịch..." required></textarea>
+                                    <button type="submit" class="btn btn-sm btn-danger w-100">Xác nhận hủy hẹn</button>
+                                </form>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted small">Cuộc hẹn đã ở trạng thái kết thúc (không thể chuyển tiếp).</div>
+                }
+
+                @if (canDelete)
+                {
+                    <hr />
+                    <form asp-action="Delete" method="post" onsubmit="return confirm('Bạn có chắc chắn muốn xóa lịch hẹn này?');">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                            <i class="bi bi-trash me-1"></i>Xóa cuộc hẹn
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</div>

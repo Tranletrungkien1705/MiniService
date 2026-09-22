@@ -48,6 +48,26 @@ public enum WarrantyStatus
     Reverted = 5     // REVERT — Yêu cầu đại lý bổ sung hồ sơ
 }
 
+/// <summary>Trạng thái Cuộc hẹn dịch vụ — theo SerAppStatus idn.CarService.</summary>
+public enum AppointmentStatus
+{
+    Pending = 0,     // PEND   — 1: Mới tạo / Chờ xác nhận
+    Contacted = 1,   // CONT   — 5: Đã liên hệ & Chưa xác nhận
+    Confirmed = 2,   // CONF   — 2: Đã xác nhận hẹn
+    CheckedIn = 3,   // RECV   — 3: Tiếp nhận vào xưởng / Lập RO
+    Cancelled = 4    // CANC   — 4: Hủy hẹn
+}
+
+/// <summary>Loại dịch vụ đặt hẹn — theo Mst_Ser_AppType idn.CarService.</summary>
+public enum AppointmentServiceType
+{
+    Maintenance = 0,    // Bảo dưỡng định kỳ
+    Repair = 1,         // Sửa chữa chung
+    BodyPaint = 2,      // Đồng sơn
+    WarrantyCheck = 3,  // Kiểm tra & Bảo hành
+    Care = 4            // Chăm sóc & Làm đẹp xe
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -90,6 +110,8 @@ public class RepairOrder : IOrgOwned
 
     public Car Car { get; set; } = null!;
     public Customer Customer { get; set; } = null!;
+    public int? AppointmentId { get; set; }
+    public Appointment? Appointment { get; set; }
     public List<RepairLine> Lines { get; set; } = [];
     public List<WarrantyReport> WarrantyReports { get; set; } = [];
 
@@ -193,4 +215,32 @@ public class WarrantyReportItem : IOrgOwned
 
     public WarrantyReport WarrantyReport { get; set; } = null!;
     public Part? Part { get; set; }
+}
+
+/// <summary>Cuộc hẹn dịch vụ (Service Appointment) — Ser_App trong idn.CarService.</summary>
+public class Appointment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string AppNo { get; set; } = "";             // Số cuộc hẹn (VD: APP260427-001)
+    public int CarId { get; set; }                      // Xe hẹn
+    public int CustomerId { get; set; }                 // Khách hàng
+    public DateTime AppointmentDate { get; set; } = DateTime.Today.AddHours(9); // Ngày giờ hẹn
+    public AppointmentServiceType ServiceType { get; set; } = AppointmentServiceType.Maintenance; // Loại hẹn
+    public AppointmentStatus Status { get; set; } = AppointmentStatus.Pending; // Trạng thái
+    public string? Advisor { get; set; }                // Cố vấn dịch vụ (CVDV tiếp nhận)
+    public string? Cavity { get; set; }                 // Khoang sửa chữa dự kiến (VD: Khoang bảo dưỡng nhanh)
+    public string CustomerRequest { get; set; } = "";   // Yêu cầu của khách / Triệu chứng xe
+    public string? Note { get; set; }                   // Ghi chú nội bộ
+    public string? CancelReason { get; set; }           // Lý do hủy hẹn
+    public string Source { get; set; } = "Hotline";     // Nguồn đặt: Hotline / App / Website / Trực tiếp
+    public int? ROId { get; set; }                      // Lệnh sửa chữa sinh ra khi tiếp nhận xe (CheckedIn)
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ConfirmedAt { get; set; }          // Thời điểm xác nhận
+    public DateTime? CheckedInAt { get; set; }          // Thời điểm xe vào xưởng tiếp nhận (tạo RO)
+
+    public Car Car { get; set; } = null!;
+    public Customer Customer { get; set; } = null!;
+    public RepairOrder? RO { get; set; }
 }

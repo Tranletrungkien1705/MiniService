@@ -1,0 +1,97 @@
+@{
+    ViewData["Title"] = "Đặt lịch hẹn dịch vụ mới";
+    var cars = (List<Car>?)ViewBag.Cars ?? [];
+    var selectedCarId = (int?)ViewBag.SelectedCarId;
+    var defaultDate = DateTime.Today.AddDays(1).AddHours(9);
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="fw-bold mb-0"><i class="bi bi-calendar-plus text-primary me-2"></i>Đặt lịch hẹn dịch vụ (Ser_App)</h5>
+                    <a href="/Appointment" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+                </div>
+
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">1. Chọn phương tiện &amp; Khách hàng <span class="text-danger">*</span></label>
+                        <select name="carId" class="form-select" required>
+                            <option value="">— Chọn xe đến làm dịch vụ —</option>
+                            @foreach (var c in cars)
+                            {
+                                <option value="@c.Id" selected="@(selectedCarId == c.Id)">
+                                    @c.Plate — @c.Model (@c.Year) · Chủ xe: @c.Customer.Name (@(c.Customer.Phone ?? "Không có SĐT"))
+                                </option>
+                            }
+                        </select>
+                        <div class="form-text">Khách hàng chưa có trong danh mục? <a href="/Customer" target="_blank">Thêm khách &amp; xe mới</a></div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">2. Ngày giờ hẹn đến xưởng <span class="text-danger">*</span></label>
+                            <input type="datetime-local" name="appointmentDate" class="form-control" value="@defaultDate.ToString("yyyy-MM-ddTHH:mm")" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">3. Loại dịch vụ đặt hẹn <span class="text-danger">*</span></label>
+                            <select name="serviceType" class="form-select" required>
+                                <option value="0">Bảo dưỡng định kỳ (Periodic Maintenance)</option>
+                                <option value="1">Sửa chữa chung (General Repair)</option>
+                                <option value="2">Đồng sơn &amp; Thân vỏ (Body &amp; Paint)</option>
+                                <option value="3">Kiểm tra bảo hành (Warranty Inspection)</option>
+                                <option value="4">Chăm sóc &amp; Làm đẹp xe (Car Detailing / Care)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">4. Cố vấn dịch vụ (CVDV) đón tiếp</label>
+                            <input type="text" name="advisor" class="form-control" placeholder="VD: CVDV Tuấn, CVDV Hương..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">5. Khoang sửa chữa dự kiến (Cavity)</label>
+                            <select name="cavity" class="form-select">
+                                <option value="">— Phân bổ tự động —</option>
+                                <option value="K01 - Khoang bảo dưỡng nhanh">K01 - Khoang bảo dưỡng nhanh (Quick Service)</option>
+                                <option value="K02 - Khoang gầm máy số 1">K02 - Khoang gầm máy số 1</option>
+                                <option value="K03 - Khoang gầm máy số 2">K03 - Khoang gầm máy số 2</option>
+                                <option value="K04 - Khoang điện &amp; chẩn đoán">K04 - Khoang điện &amp; chẩn đoán DTC</option>
+                                <option value="K05 - Phòng sơn sấy tiêu chuẩn">K05 - Phòng sơn sấy tiêu chuẩn</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">6. Nguồn đặt hẹn (Source)</label>
+                            <select name="source" class="form-select">
+                                <option value="Hotline">Hotline đại lý (1900...)</option>
+                                <option value="Hyundai Me">Ứng dụng Hyundai Me</option>
+                                <option value="Website">Website / Cổng dịch vụ</option>
+                                <option value="Trực tiếp">Đặt trực tiếp tại xưởng</option>
+                                <option value="CSKH gọi nhắc">CSKH gọi nhắc bảo dưỡng</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">7. Yêu cầu của khách hàng / Hiện tượng xe <span class="text-danger">*</span></label>
+                        <textarea name="customerRequest" rows="3" class="form-control" placeholder="VD: Bảo dưỡng cấp 20.000km, kiểm tra phanh trước có tiếng kêu lạ khi rà phanh, thay dầu động cơ..." required></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">8. Ghi chú nội bộ</label>
+                        <input type="text" name="note" class="form-control" placeholder="Ghi chú điều phối xe, lưu ý phụ tùng cần chuẩn bị trước..." />
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 pt-2 border-top">
+                        <a href="/Appointment" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu &amp; Tạo lịch hẹn</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

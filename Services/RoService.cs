@@ -6,6 +6,7 @@ namespace MiniService.Services;
 
 public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMonth, int Cars, int Parts, int LowStockParts,
     int PendingWarranty, decimal ApprovedWarrantyAmount,
+    int TodayAppointments, int PendingAppointments,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -37,6 +38,13 @@ public interface IRoService
     Task<(bool ok, string msg)> TransitionWarrantyAsync(int reportId, WarrantyStatus to, decimal? approvedAmount, string? note);
     Task<(bool ok, string msg)> DeleteWarrantyReportAsync(int reportId);
     Task<List<RepairOrder>> ROsEligibleForWarrantyAsync();
+    // appointments (Ser_App)
+    Task<List<Appointment>> AppointmentsAsync(AppointmentStatus? status, string? q, DateTime? date);
+    Task<Appointment?> GetAppointmentAsync(int id);
+    Task<int> CreateAppointmentAsync(Appointment app);
+    Task<(bool ok, string msg)> TransitionAppointmentStatusAsync(int id, AppointmentStatus to, string? cancelReason = null);
+    Task<(bool ok, string msg, int? roId)> CheckInAppointmentAsync(int id, int odometer, string? technician);
+    Task<(bool ok, string msg)> DeleteAppointmentAsync(int id);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -65,6 +73,15 @@ public class RoService(AppDbContext db) : IRoService
         WarrantyStatus.Sent => [WarrantyStatus.Confirmed, WarrantyStatus.Reverted],
         WarrantyStatus.Confirmed => [WarrantyStatus.Accepted, WarrantyStatus.Rejected, WarrantyStatus.Reverted],
         WarrantyStatus.Reverted => [WarrantyStatus.Sent],
+        _ => []
+    };
+
+    /// <summary>Chuyển trạng thái cuộc hẹn dịch vụ theo SerAppStatus.</summary>
+    public static AppointmentStatus[] AllowedNextAppointment(AppointmentStatus s) => s switch
+    {
+        AppointmentStatus.Pending => [AppointmentStatus.Contacted, AppointmentStatus.Confirmed, AppointmentStatus.Cancelled],
+        AppointmentStatus.Contacted => [AppointmentStatus.Confirmed, AppointmentStatus.Cancelled],
+        AppointmentStatus.Confirmed => [AppointmentStatus.CheckedIn, AppointmentStatus.Cancelled],
         _ => []
     };
 
@@ -134,7 +151,7 @@ public class RoService(AppDbContext db) : IRoService
 
     public async Task<List<RepairOrder>> ROsAsync(ROStatus? status, string? q)
     {
-        var query = db.ROs.Include(r => r.Car).Include(r => r.Customer).Include(r => r.Lines).AsQueryable();
+        var query = db.ROs.Include(r => r.Car).Include(r => r.Customer).Include(r => r.Lines).Include(r => r.Appointment).AsQueryable();
         if (status.HasValue) query = query.Where(r => r.Status == status.Value);
         if (!string.IsNullOrWhiteSpace(q)) query = query.Where(r => r.Code.Contains(q) || r.Car.Plate.Contains(q));
         var list = await query.ToListAsync();
@@ -142,7 +159,7 @@ public class RoService(AppDbContext db) : IRoService
     }
 
     public Task<RepairOrder?> GetROAsync(int id) =>
-        db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer).Include(r => r.Lines)
+        db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer).Include(r => r.Lines).Include(r => r.Appointment)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -242,8 +259,13 @@ public class RoService(AppDbContext db) : IRoService
 
         var pendingWarranty = await db.WarrantyReports.CountAsync(w =>
             w.Status == WarrantyStatus.Pending || w.Status == WarrantyStatus.Sent || w.Status == WarrantyStatus.Confirmed);
-        var approvedWarranty = await db.WarrantyReports.Where(w => w.Status == WarrantyStatus.Accepted)
-            .SumAsync(w => (decimal?)(w.ApprovedAmount ?? w.ClaimAmount)) ?? 0;
+        var approvedWarrantyItems = await db.WarrantyReports.Where(w => w.Status == WarrantyStatus.Accepted)
+            .Select(w => (decimal?)(w.ApprovedAmount ?? w.ClaimAmount)).ToListAsync();
+        var approvedWarranty = approvedWarrantyItems.Sum() ?? 0;
+
+        var todayAppointments = await db.Appointments.CountAsync(a => a.AppointmentDate.Date == today);
+        var pendingAppointments = await db.Appointments.CountAsync(a =>
+            a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Contacted || a.Status == AppointmentStatus.Confirmed);
 
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
@@ -255,6 +277,8 @@ public class RoService(AppDbContext db) : IRoService
             lowStockParts,
             pendingWarranty,
             approvedWarranty,
+            todayAppointments,
+            pendingAppointments,
             byStatus);
     }
 
@@ -389,5 +413,144 @@ public class RoService(AppDbContext db) : IRoService
         db.WarrantyReports.Remove(report);
         await db.SaveChangesAsync();
         return (true, "Đã xóa Báo cáo bảo hành.");
+    }
+
+    // --- Service Appointment Management (Ser_App) ---
+    public async Task<List<Appointment>> AppointmentsAsync(AppointmentStatus? status, string? q, DateTime? date)
+    {
+        var query = db.Appointments
+            .Include(a => a.Car)
+            .Include(a => a.Customer)
+            .Include(a => a.RO)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(a => a.Status == status.Value);
+        if (date.HasValue)
+        {
+            var targetDate = date.Value.Date;
+            query = query.Where(a => a.AppointmentDate.Date == targetDate);
+        }
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(a => a.AppNo.ToLower().Contains(kw)
+                || a.Car.Plate.ToLower().Contains(kw)
+                || a.Car.Model.ToLower().Contains(kw)
+                || a.Customer.Name.ToLower().Contains(kw)
+                || (a.Customer.Phone != null && a.Customer.Phone.Contains(kw))
+                || (a.Advisor != null && a.Advisor.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderBy(a => a.AppointmentDate).ToList();
+    }
+
+    public Task<Appointment?> GetAppointmentAsync(int id) =>
+        db.Appointments
+            .Include(a => a.Car)
+            .Include(a => a.Customer)
+            .Include(a => a.RO)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+    public async Task<int> CreateAppointmentAsync(Appointment app)
+    {
+        var car = await db.Cars.FirstOrDefaultAsync(c => c.Id == app.CarId)
+            ?? throw new InvalidOperationException("Không tìm thấy thông tin xe.");
+
+        app.CustomerId = car.CustomerId;
+        if (string.IsNullOrWhiteSpace(app.AppNo))
+        {
+            var countToday = await db.Appointments.CountAsync();
+            app.AppNo = $"APP{DateTime.Today:yyMMdd}-{countToday + 1:D3}";
+        }
+        app.Status = AppointmentStatus.Pending;
+        app.CreatedAt = DateTime.Now;
+
+        db.Appointments.Add(app);
+        await db.SaveChangesAsync();
+        return app.Id;
+    }
+
+    public async Task<(bool ok, string msg)> TransitionAppointmentStatusAsync(int id, AppointmentStatus to, string? cancelReason = null)
+    {
+        var app = await db.Appointments.FirstOrDefaultAsync(a => a.Id == id);
+        if (app == null) return (false, "Không tìm thấy lịch hẹn.");
+
+        if (!AllowedNextAppointment(app.Status).Contains(to))
+            return (false, $"Không thể chuyển từ '{Ui.AppointmentStatus(app.Status).text}' sang '{Ui.AppointmentStatus(to).text}'.");
+
+        app.Status = to;
+        if (to == AppointmentStatus.Confirmed)
+        {
+            app.ConfirmedAt = DateTime.Now;
+        }
+        else if (to == AppointmentStatus.Cancelled)
+        {
+            app.CancelReason = string.IsNullOrWhiteSpace(cancelReason) ? "Khách báo hủy / bận." : cancelReason.Trim();
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trạng thái lịch hẹn sang: {Ui.AppointmentStatus(to).text}.");
+    }
+
+    public async Task<(bool ok, string msg, int? roId)> CheckInAppointmentAsync(int id, int odometer, string? technician)
+    {
+        var app = await db.Appointments.Include(a => a.Car).Include(a => a.Customer).FirstOrDefaultAsync(a => a.Id == id);
+        if (app == null) return (false, "Không tìm thấy lịch hẹn.", null);
+
+        if (app.Status == AppointmentStatus.CheckedIn && app.ROId.HasValue)
+            return (false, "Lịch hẹn này đã được tiếp nhận tạo Lệnh sửa chữa.", app.ROId);
+
+        if (app.Status == AppointmentStatus.Cancelled)
+            return (false, "Lịch hẹn đã bị hủy, không thể tiếp nhận vào xưởng.", null);
+
+        // Sinh mã RO tự động theo quy chuẩn idn.CarService
+        var roCount = await db.ROs.CountAsync();
+        var roCode = $"RO{DateTime.Today:yyMMdd}-{roCount + 1:D3}";
+
+        var intakeNote = $"[Đặt hẹn {app.AppNo} - {Ui.AppServiceType(app.ServiceType)}]";
+        if (!string.IsNullOrWhiteSpace(app.Cavity)) intakeNote += $" [Khoang: {app.Cavity}]";
+        if (!string.IsNullOrWhiteSpace(app.CustomerRequest)) intakeNote += $" {app.CustomerRequest}";
+
+        var ro = new RepairOrder
+        {
+            Code = roCode,
+            CarId = app.CarId,
+            CustomerId = app.CustomerId,
+            Status = ROStatus.InGarage, // Xe vào xưởng
+            Odometer = odometer > 0 ? odometer : 0,
+            IntakeNote = intakeNote,
+            Technician = !string.IsNullOrWhiteSpace(technician) ? technician.Trim() : app.Advisor,
+            AppointmentId = app.Id,
+            CreatedBy = "checkin",
+            CreatedAt = DateTime.Now,
+            IntakeAt = DateTime.Now
+        };
+
+        db.ROs.Add(ro);
+        await db.SaveChangesAsync();
+
+        app.ROId = ro.Id;
+        app.Status = AppointmentStatus.CheckedIn;
+        app.CheckedInAt = DateTime.Now;
+        await db.SaveChangesAsync();
+
+        return (true, $"Tiếp nhận thành công! Đã tạo Lệnh sửa chữa {ro.Code}.", ro.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeleteAppointmentAsync(int id)
+    {
+        var app = await db.Appointments.FirstOrDefaultAsync(a => a.Id == id);
+        if (app == null) return (false, "Không tìm thấy lịch hẹn.");
+
+        if (app.Status is not (AppointmentStatus.Pending or AppointmentStatus.Cancelled))
+            return (false, "Chỉ xóa được lịch hẹn ở trạng thái Mới tạo hoặc Đã hủy.");
+
+        if (app.ROId.HasValue)
+            return (false, "Không thể xóa lịch hẹn đã sinh Lệnh sửa chữa.");
+
+        db.Appointments.Remove(app);
+        await db.SaveChangesAsync();
+        return (true, "Đã xóa lịch hẹn thành công.");
     }
 }
