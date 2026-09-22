@@ -1,0 +1,33 @@
+@model List<RepairOrder>
+@{ ViewData["Title"] = "Lệnh sửa chữa (RO)"; var cur = (ROStatus?)ViewBag.Status; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <form method="get" class="d-flex gap-2">
+            <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã RO / biển số..." style="max-width:220px" />
+            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:170px">
+                <option value="">— Tất cả trạng thái —</option>
+                @foreach (ROStatus s in Enum.GetValues(typeof(ROStatus))) { <option value="@((int)s)" selected="@(cur==s)">@Ui.Status(s).text</option> }
+            </select>
+            <button class="btn btn-sm btn-primary">Lọc</button>
+        </form>
+        <a href="/RO/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Tiếp nhận xe</a>
+    </div>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Mã RO</th><th>Xe</th><th>Khách hàng</th><th class="text-end">Thành tiền</th><th>Thợ</th><th>Trạng thái</th></tr></thead>
+        <tbody>
+        @foreach (var r in Model)
+        {
+            var (txt, code, css) = Ui.Status(r.Status);
+            <tr style="cursor:pointer" onclick="location.href='/RO/Detail/@r.Id'">
+                <td class="fw-semibold">@r.Code</td>
+                <td>@r.Car.Plate <span class="text-muted small">· @r.Car.Model</span></td>
+                <td>@r.Customer.Name</td>
+                <td class="text-end">@r.Total.ToString("N0")</td>
+                <td class="small text-muted">@r.Technician</td>
+                <td><span class="badge bg-@css" title="@code">@txt</span></td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="6" class="text-center text-muted py-4">Không có RO.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
