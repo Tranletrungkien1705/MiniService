@@ -501,6 +501,123 @@ app.MapDelete("/api/stockout/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Chăm sóc Khách hàng 24h sau dịch vụ (Ser_CustomerCare24h)
+app.MapGet("/api/customercare", async (CustomerCareStatus? status, string? q, IRoService svc) =>
+{
+    var list = await svc.CustomerCaresAsync(status, q);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.CareNo,
+        roId = c.ROId,
+        roCode = c.RO?.Code,
+        plate = c.Car?.Plate,
+        model = c.Car?.Model,
+        customer = c.Customer?.Name,
+        phone = c.Customer?.Phone,
+        status = Ui.CustomerCareStatus(c.Status).text,
+        statusCode = Ui.CustomerCareStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.HasCarProblem,
+        c.QualityRating,
+        qualityRatingText = Ui.RatingText(c.QualityRating),
+        c.StaffRating,
+        staffRatingText = Ui.RatingText(c.StaffRating),
+        c.WillingToReturn,
+        c.FacilityRating,
+        facilityRatingText = Ui.FacilityText(c.FacilityRating),
+        c.CustomerFeedback,
+        c.InternalNote,
+        c.ContactedBy,
+        c.ContactedDate,
+        c.CreatedAt
+    }));
+});
+
+app.MapGet("/api/customercare/{id:int}", async (int id, IRoService svc) =>
+{
+    var c = await svc.GetCustomerCareAsync(id);
+    if (c == null) return Results.NotFound(new { error = "Không tìm thấy phiếu CSKH." });
+    return Results.Ok(new
+    {
+        c.Id,
+        c.CareNo,
+        status = Ui.CustomerCareStatus(c.Status).text,
+        statusCode = Ui.CustomerCareStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        ro = new
+        {
+            c.RO.Id,
+            c.RO.Code,
+            status = Ui.Status(c.RO.Status).text,
+            c.RO.Total,
+            c.RO.FinishedAt,
+            lines = c.RO.Lines.Select(l => new { l.Id, l.Name, l.Quantity, l.UnitPrice, l.Amount, type = Ui.Line(l.Type) })
+        },
+        car = new { c.Car.Id, c.Car.Plate, c.Car.Model, c.Car.Vin, c.Car.Year },
+        customer = new { c.Customer.Id, c.Customer.Name, c.Customer.Phone, c.Customer.Email },
+        survey = new
+        {
+            c.HasCarProblem,
+            c.QualityRating,
+            qualityRatingText = Ui.RatingText(c.QualityRating),
+            c.StaffRating,
+            staffRatingText = Ui.RatingText(c.StaffRating),
+            c.WillingToReturn,
+            c.FacilityRating,
+            facilityRatingText = Ui.FacilityText(c.FacilityRating),
+            c.CustomerFeedback,
+            c.InternalNote
+        },
+        c.ContactedBy,
+        c.ContactedDate,
+        c.CreatedBy,
+        c.CreatedAt
+    });
+});
+
+app.MapPost("/api/customercare", async (CreateCustomerCareDto dto, IRoService svc) =>
+{
+    try
+    {
+        var care = new CustomerCare
+        {
+            ROId = dto.RoId,
+            InternalNote = dto.InternalNote?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreateCustomerCareAsync(care);
+        return Results.Ok(new { customerCareId = id, careNo = care.CareNo, message = "Đã lập phiếu CSKH thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/customercare/{id:int}/survey", async (int id, SubmitCareSurveyDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.UpdateCustomerCareSurveyAsync(
+        id,
+        dto.Status,
+        dto.HasCarProblem,
+        dto.QualityRating,
+        dto.StaffRating,
+        dto.WillingToReturn,
+        dto.FacilityRating,
+        dto.CustomerFeedback,
+        dto.InternalNote,
+        dto.ContactedBy);
+
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/customercare/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCustomerCareAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -525,3 +642,5 @@ record TransitionStockInDto(StockInStatus ToStatus, string? ApprovedBy, string? 
 record CreateStockOutDto(StockOutType Type, int? RoId, string? RecipientName, DateTime? StockOutDate, string? Description, List<CreateStockOutItemDto> Items);
 record CreateStockOutItemDto(int PartId, decimal Quantity, decimal? UnitPrice, decimal? VatPercent, string? Note);
 record TransitionStockOutDto(StockOutStatus ToStatus, string? ApprovedBy, string? Note);
+record CreateCustomerCareDto(int RoId, string? InternalNote, string? CreatedBy);
+record SubmitCareSurveyDto(CustomerCareStatus Status, bool HasCarProblem, int? QualityRating, int? StaffRating, bool? WillingToReturn, int? FacilityRating, string? CustomerFeedback, string? InternalNote, string? ContactedBy);

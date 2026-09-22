@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<StockInDetail> StockInDetails => Set<StockInDetail>();
     public DbSet<StockOut> StockOuts => Set<StockOut>();
     public DbSet<StockOutDetail> StockOutDetails => Set<StockOutDetail>();
+    public DbSet<CustomerCare> CustomerCares => Set<CustomerCare>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -53,6 +54,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.WarrantyReports).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.StockOuts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.CustomerCares).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -125,6 +127,14 @@ public class AppDbContext : DbContext
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.Property(x => x.VatPercent).HasPrecision(5, 2);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CustomerCare>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CareNo }).IsUnique();
+            e.HasOne(x => x.RO).WithMany(x => x.CustomerCares).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

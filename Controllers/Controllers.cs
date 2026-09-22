@@ -548,6 +548,83 @@ public class StockOutController(IRoService svc) : Controller
     }
 }
 
+public class CustomerCareController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(CustomerCareStatus? status, string? q)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        var list = await svc.CustomerCaresAsync(status, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.ROs = await svc.ROsEligibleForCustomerCareAsync();
+        ViewBag.SelectedROId = roId;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int roId, string? internalNote)
+    {
+        if (roId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn Lệnh sửa chữa hoàn tất.";
+            ViewBag.ROs = await svc.ROsEligibleForCustomerCareAsync();
+            return View();
+        }
+
+        try
+        {
+            var care = new CustomerCare
+            {
+                ROId = roId,
+                Status = CustomerCareStatus.Pending,
+                InternalNote = internalNote?.Trim(),
+                CreatedBy = "web"
+            };
+
+            var id = await svc.CreateCustomerCareAsync(care);
+            TempData["Success"] = $"Đã tạo phiếu CSKH {care.CareNo} thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.ROs = await svc.ROsEligibleForCustomerCareAsync();
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var care = await svc.GetCustomerCareAsync(id);
+        if (care == null) return NotFound();
+        return View(care);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SubmitSurvey(int id, CustomerCareStatus status, bool hasCarProblem,
+        int? qualityRating, int? staffRating, bool? willingToReturn, int? facilityRating,
+        string? customerFeedback, string? internalNote, string? contactedBy)
+    {
+        var (ok, msg) = await svc.UpdateCustomerCareSurveyAsync(id, status, hasCarProblem,
+            qualityRating, staffRating, willingToReturn, facilityRating,
+            customerFeedback, internalNote, contactedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCustomerCareAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

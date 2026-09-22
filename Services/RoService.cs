@@ -9,6 +9,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int TodayAppointments, int PendingAppointments,
     int PendingStockIns, decimal MonthStockInValue,
     int PendingStockOuts, decimal MonthStockOutValue,
+    int PendingCustomerCares, int FeedbackCustomerCares,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -60,6 +61,13 @@ public interface IRoService
     Task<(bool ok, string msg)> TransitionStockOutStatusAsync(int id, StockOutStatus to, string? approvedBy = null, string? note = null);
     Task<(bool ok, string msg)> DeleteStockOutAsync(int id);
     Task<List<RepairOrder>> ROsForStockOutAsync();
+    // customer care 24h (Ser_CustomerCare24h)
+    Task<List<CustomerCare>> CustomerCaresAsync(CustomerCareStatus? status, string? q);
+    Task<CustomerCare?> GetCustomerCareAsync(int id);
+    Task<int> CreateCustomerCareAsync(CustomerCare care);
+    Task<(bool ok, string msg)> UpdateCustomerCareSurveyAsync(int id, CustomerCareStatus status, bool hasCarProblem, int? qualityRating, int? staffRating, bool? willingToReturn, int? facilityRating, string? feedback, string? internalNote, string? contactedBy);
+    Task<(bool ok, string msg)> DeleteCustomerCareAsync(int id);
+    Task<List<RepairOrder>> ROsEligibleForCustomerCareAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -191,7 +199,7 @@ public class RoService(AppDbContext db) : IRoService
 
     public Task<RepairOrder?> GetROAsync(int id) =>
         db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer).Include(r => r.Lines).Include(r => r.Appointment)
-          .Include(r => r.WarrantyReports).Include(r => r.StockOuts)
+          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -256,7 +264,25 @@ public class RoService(AppDbContext db) : IRoService
         if (!AllowedNext(ro.Status).Contains(to)) return (false, $"Không thể chuyển {Ui.Status(ro.Status).text} → {Ui.Status(to).text}.");
         ro.Status = to;
         if (to == ROStatus.InGarage) ro.IntakeAt ??= DateTime.Now;
-        if (to == ROStatus.Finished) ro.FinishedAt ??= DateTime.Now;
+        if (to == ROStatus.Finished)
+        {
+            ro.FinishedAt ??= DateTime.Now;
+            // Tự động kích hoạt quy trình CSKH 24h theo Ser_CustomerCare24h idn.CarService
+            var hasCare = await db.CustomerCares.AnyAsync(c => c.ROId == roId);
+            if (!hasCare)
+            {
+                var care = new CustomerCare
+                {
+                    CareNo = $"CC{DateTime.Now:yyMMdd}-{await db.CustomerCares.CountAsync() + 1:D3}",
+                    ROId = ro.Id,
+                    CarId = ro.CarId,
+                    CustomerId = ro.CustomerId,
+                    Status = CustomerCareStatus.Pending,
+                    CreatedBy = "system"
+                };
+                db.CustomerCares.Add(care);
+            }
+        }
         await db.SaveChangesAsync();
         return (true, $"Đã chuyển sang: {Ui.Status(to).text}.");
     }
@@ -311,6 +337,9 @@ public class RoService(AppDbContext db) : IRoService
             .ToListAsync();
         var monthStockOutValue = monthStockOutItems.Sum(s => s.Total);
 
+        var pendingCustomerCares = await db.CustomerCares.CountAsync(c => c.Status == CustomerCareStatus.Pending);
+        var feedbackCustomerCares = await db.CustomerCares.CountAsync(c => c.Status == CustomerCareStatus.NeedFeedback);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -327,6 +356,8 @@ public class RoService(AppDbContext db) : IRoService
             monthStockInValue,
             pendingStockOuts,
             monthStockOutValue,
+            pendingCustomerCares,
+            feedbackCustomerCares,
             byStatus);
     }
 
@@ -900,4 +931,93 @@ public class RoService(AppDbContext db) : IRoService
         await db.SaveChangesAsync();
         return (true, "Đã xóa phiếu xuất kho.");
     }
+
+    // --- Customer Care 24h Management (Ser_CustomerCare24h) ---
+    public async Task<List<CustomerCare>> CustomerCaresAsync(CustomerCareStatus? status, string? q)
+    {
+        var query = db.CustomerCares
+            .Include(c => c.RO)
+            .Include(c => c.Car)
+            .Include(c => c.Customer)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(c => c.Status == status.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(c => c.CareNo.ToLower().Contains(kw)
+                || c.Car.Plate.ToLower().Contains(kw)
+                || c.Car.Model.ToLower().Contains(kw)
+                || c.Customer.Name.ToLower().Contains(kw)
+                || (c.Customer.Phone != null && c.Customer.Phone.ToLower().Contains(kw))
+                || (c.RO != null && c.RO.Code.ToLower().Contains(kw))
+                || (c.CustomerFeedback != null && c.CustomerFeedback.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(c => c.CreatedAt).ToList();
+    }
+
+    public Task<CustomerCare?> GetCustomerCareAsync(int id) =>
+        db.CustomerCares
+            .Include(c => c.RO).ThenInclude(r => r.Lines).ThenInclude(l => l.Part)
+            .Include(c => c.Car)
+            .Include(c => c.Customer)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<int> CreateCustomerCareAsync(CustomerCare care)
+    {
+        var ro = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync(r => r.Id == care.ROId)
+            ?? throw new InvalidOperationException("Không tìm thấy Lệnh sửa chữa.");
+
+        care.CarId = ro.CarId;
+        care.CustomerId = ro.CustomerId;
+        care.CareNo = $"CC{DateTime.Now:yyMMdd}-{await db.CustomerCares.CountAsync() + 1:D3}";
+        care.CreatedAt = DateTime.Now;
+
+        db.CustomerCares.Add(care);
+        await db.SaveChangesAsync();
+        return care.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateCustomerCareSurveyAsync(int id, CustomerCareStatus status,
+        bool hasCarProblem, int? qualityRating, int? staffRating, bool? willingToReturn, int? facilityRating,
+        string? feedback, string? internalNote, string? contactedBy)
+    {
+        var care = await db.CustomerCares.FirstOrDefaultAsync(c => c.Id == id);
+        if (care == null) return (false, "Không tìm thấy phiếu CSKH.");
+
+        care.Status = status;
+        care.HasCarProblem = hasCarProblem;
+        care.QualityRating = qualityRating;
+        care.StaffRating = staffRating;
+        care.WillingToReturn = willingToReturn;
+        care.FacilityRating = facilityRating;
+        care.CustomerFeedback = feedback?.Trim();
+        care.InternalNote = internalNote?.Trim();
+        care.ContactedBy = string.IsNullOrWhiteSpace(contactedBy) ? "CSKH" : contactedBy.Trim();
+        care.ContactedDate = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật kết quả khảo sát CSKH ({Ui.CustomerCareStatus(status).text}).");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCustomerCareAsync(int id)
+    {
+        var care = await db.CustomerCares.FirstOrDefaultAsync(c => c.Id == id);
+        if (care == null) return (false, "Không tìm thấy phiếu CSKH.");
+
+        db.CustomerCares.Remove(care);
+        await db.SaveChangesAsync();
+        return (true, "Đã xóa phiếu CSKH.");
+    }
+
+    public Task<List<RepairOrder>> ROsEligibleForCustomerCareAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.CustomerCares)
+            .Where(r => (r.Status == ROStatus.Finished || r.Status == ROStatus.Paid) && !r.CustomerCares.Any())
+            .OrderByDescending(r => r.FinishedAt ?? r.CreatedAt)
+            .ToListAsync();
 }

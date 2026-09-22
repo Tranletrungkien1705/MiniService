@@ -1,0 +1,79 @@
+@{
+    ViewData["Title"] = "Tạo phiếu Chăm sóc khách hàng 24h";
+    var ros = (List<RepairOrder>?)ViewBag.ROs ?? [];
+    var selectedRoId = (int?)ViewBag.SelectedROId;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h4 class="mb-0 fw-bold text-primary"><i class="bi bi-headset me-2"></i>Tạo phiếu Chăm sóc khách hàng 24h</h4>
+        <div class="text-muted small">Quy trình hậu mãi &amp; khảo sát chất lượng dịch vụ theo chuẩn Hyundai Car Service (Ser_CustomerCare24h)</div>
+    </div>
+    <a href="/CustomerCare" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại sổ CSKH</a>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body">
+                <form method="post" action="/CustomerCare/Create">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Chọn Lệnh sửa chữa hoàn tất (Finished RO) <span class="text-danger">*</span></label>
+                        @if (ros.Count > 0)
+                        {
+                            <select name="roId" class="form-select" required>
+                                <option value="">-- Chọn lệnh sửa chữa đã giao xe --</option>
+                                @foreach (var r in ros)
+                                {
+                                    <option value="@r.Id" selected="@(selectedRoId == r.Id)">
+                                        [@r.Code] Xe @r.Car.Plate (@r.Car.Model) — KH: @r.Customer.Name (@(r.Customer.Phone ?? "—")) · Giao lúc: @(r.FinishedAt?.ToString("dd/MM/yyyy HH:mm") ?? r.CreatedAt.ToString("dd/MM/yyyy")) · @r.Total.ToString("N0")đ
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text small">Chỉ hiển thị các lệnh sửa chữa đã hoàn tất giao xe (Finished) chưa có phiếu khảo sát CSKH 24h.</div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-warning small mb-0">
+                                <i class="bi bi-info-circle me-1"></i>Hiện không có Lệnh sửa chữa hoàn tất nào đang chờ lập phiếu CSKH. Khi một RO được giao xe (Finished), hệ thống sẽ tự động kích hoạt phiếu CSKH 24h.
+                            </div>
+                        }
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-muted">Ghi chú tiếp nhận / Yêu cầu theo dõi đặc biệt:</label>
+                        <textarea name="internalNote" class="form-control" rows="3" placeholder="Nhập ghi chú hoặc nhắc nhở trước khi nhân viên CSKH thực hiện cuộc gọi khảo sát..."></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="/CustomerCare" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        @if (ros.Count > 0)
+                        {
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check2-circle me-1"></i>Khởi tạo phiếu CSKH 24h
+                            </button>
+                        }
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2 border-bottom">
+                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-shield-check me-2 text-info"></i>Quy chuẩn CSKH 24h Hyundai</h6>
+            </div>
+            <div class="card-body small text-muted">
+                <ul class="ps-3 mb-0">
+                    <li class="mb-2"><b>Thời hạn khảo sát:</b> Cuộc gọi phải được thực hiện trong vòng 24 giờ kể từ thời điểm giao xe cho khách hàng (FNS).</li>
+                    <li class="mb-2"><b>5 tiêu chí đánh giá:</b> Tình trạng kỹ thuật của xe, chất lượng sửa chữa, thái độ phục vụ của nhân viên, sẵn sàng quay lại và cơ sở vật chất đại lý.</li>
+                    <li class="mb-2"><b>Xử lý khiếu nại (CINFB):</b> Nếu khách phản hồi xe có lỗi hoặc chưa hài lòng, phiếu chuyển sang trạng thái cảnh báo đỏ để CVDV liên hệ xử lý ngay.</li>
+                    <li><b>Đóng góp chỉ số CSI:</b> Khách hàng đánh giá hài lòng (CIFB) sẽ được ghi nhận vào chỉ số CSI tiêu chuẩn của nhà phân phối Hyundai Thành Công.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>

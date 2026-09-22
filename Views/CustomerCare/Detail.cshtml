@@ -1,0 +1,287 @@
+@model CustomerCare
+@{
+    ViewData["Title"] = $"Phiếu CSKH {Model.CareNo}";
+    var (stText, stCode, stCss) = Ui.CustomerCareStatus(Model.Status);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="mb-0 fw-bold text-primary"><i class="bi bi-headset me-2"></i>@Model.CareNo</h4>
+            <span class="badge bg-@stCss fs-6">@stCode — @stText</span>
+            <span class="badge bg-light text-dark border">Quy trình CSKH 24h</span>
+        </div>
+        <div class="text-muted small mt-1">
+            Gắn với Lệnh SC: <a href="/RO/Detail/@Model.ROId" class="fw-semibold text-primary">@Model.RO.Code</a> ·
+            Tạo ngày: <b>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</b> (@Model.CreatedBy)
+            @if (Model.ContactedDate.HasValue)
+            {
+                <span> · Khảo sát lúc: <b>@Model.ContactedDate.Value.ToString("dd/MM/yyyy HH:mm")</b> (@(Model.ContactedBy ?? "CSKH"))</span>
+            }
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/CustomerCare" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Sổ CSKH 24h</a>
+        <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()"><i class="bi bi-printer me-1"></i>In phiếu khảo sát</button>
+    </div>
+</div>
+
+@if (Model.Status == CustomerCareStatus.NeedFeedback)
+{
+    <div class="alert alert-danger d-flex align-items-center mb-3">
+        <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+        <div>
+            <b>Khách hàng có phản ánh / khiếu nại cần hỗ trợ!</b>
+            Vui lòng phối hợp ngay với Cố vấn dịch vụ và Quản đốc xưởng để liên hệ giải quyết thỏa đáng cho khách hàng.
+        </div>
+    </div>
+}
+else if (Model.Status == CustomerCareStatus.ContactedSatisfied)
+{
+    <div class="alert alert-success d-flex align-items-center mb-3">
+        <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+        <div>
+            <b>Khách hàng hài lòng với chất lượng dịch vụ!</b>
+            Khảo sát 24h hoàn tất thành công và được cộng vào chỉ số hài lòng khách hàng (CSI) của đại lý.
+        </div>
+    </div>
+}
+else if (Model.Status == CustomerCareStatus.Pending)
+{
+    <div class="alert alert-warning d-flex align-items-center mb-3">
+        <i class="bi bi-clock-history fs-4 me-3"></i>
+        <div>
+            <b>Phiếu CSKH đang chờ gọi điện khảo sát trong vòng 24h sau khi giao xe.</b>
+            Nhân viên CSKH liên hệ khách hàng theo số điện thoại bên dưới và điền phiếu đánh giá.
+        </div>
+    </div>
+}
+
+<div class="row g-3">
+    <!-- Cột trái: Form khảo sát 5 câu hỏi chuẩn Hyundai DMS -->
+    <div class="col-lg-7">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3 border-bottom">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-ui-checks me-2 text-primary"></i>Nội dung khảo sát CSKH 24h (Ser_CustomerCare24h)</h6>
+                    <span class="badge bg-light text-muted border">Tiêu chuẩn Hyundai Motor</span>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/CustomerCare/SubmitSurvey/@Model.Id">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" id="formStatusInput" name="status" value="@((int)Model.Status)" />
+
+                    <!-- Câu 1: Tình trạng xe -->
+                    <div class="mb-3 pb-3 border-bottom">
+                        <label class="form-label fw-semibold">1. Sau khi nhận xe, xe của Quý khách có phát sinh vấn đề hoặc hư hỏng gì không?</label>
+                        <div class="form-check mb-1">
+                            <input class="form-check-input" type="radio" name="hasCarProblem" id="problemNo" value="false" @(!Model.HasCarProblem ? "checked" : "") />
+                            <label class="form-check-label text-success" for="problemNo">
+                                <i class="bi bi-check-circle me-1"></i>Xe hoạt động bình thường, ổn định
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="hasCarProblem" id="problemYes" value="true" @(Model.HasCarProblem ? "checked" : "") />
+                            <label class="form-check-label text-danger" for="problemYes">
+                                <i class="bi bi-exclamation-triangle me-1"></i>Có vấn đề phát sinh (tiếng kêu, đèn báo, xe giật...)
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Câu 2: Đánh giá chất lượng dịch vụ -->
+                    <div class="mb-3 pb-3 border-bottom">
+                        <label class="form-label fw-semibold">2. Mức độ hài lòng của Quý khách về chất lượng sửa chữa / bảo dưỡng?</label>
+                        <select name="qualityRating" class="form-select form-select-sm">
+                            <option value="">-- Chọn mức đánh giá --</option>
+                            <option value="1" selected="@(Model.QualityRating == 1)">⭐⭐⭐⭐ 1 - Rất hài lòng</option>
+                            <option value="2" selected="@(Model.QualityRating == 2)">⭐⭐⭐ 2 - Hài lòng / Đạt yêu cầu</option>
+                            <option value="3" selected="@(Model.QualityRating == 3)">⭐⭐ 3 - Bình thường</option>
+                            <option value="4" selected="@(Model.QualityRating == 4)">⭐ 4 - Không hài lòng</option>
+                        </select>
+                    </div>
+
+                    <!-- Câu 3: Thái độ nhân viên -->
+                    <div class="mb-3 pb-3 border-bottom">
+                        <label class="form-label fw-semibold">3. Thái độ phục vụ và tư vấn của Cố vấn dịch vụ &amp; nhân viên xưởng?</label>
+                        <select name="staffRating" class="form-select form-select-sm">
+                            <option value="">-- Chọn mức đánh giá --</option>
+                            <option value="1" selected="@(Model.StaffRating == 1)">⭐⭐⭐⭐ 1 - Rất tốt, nhiệt tình &amp; chu đáo</option>
+                            <option value="2" selected="@(Model.StaffRating == 2)">⭐⭐⭐ 2 - Tốt, đúng chuẩn mực</option>
+                            <option value="3" selected="@(Model.StaffRating == 3)">⭐⭐ 3 - Bình thường</option>
+                            <option value="4" selected="@(Model.StaffRating == 4)">⭐ 4 - Chưa tốt / Thái độ không đạt</option>
+                        </select>
+                    </div>
+
+                    <!-- Câu 4: Sẵn sàng quay lại -->
+                    <div class="mb-3 pb-3 border-bottom">
+                        <label class="form-label fw-semibold">4. Quý khách có sẵn sàng quay lại xưởng dịch vụ trong lần bảo dưỡng tiếp theo?</label>
+                        <div class="d-flex gap-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="willingToReturn" id="returnYes" value="true" @(Model.WillingToReturn != false ? "checked" : "") />
+                                <label class="form-check-label text-primary" for="returnYes">Sẵn sàng quay lại</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="willingToReturn" id="returnNo" value="false" @(Model.WillingToReturn == false ? "checked" : "") />
+                                <label class="form-check-label text-muted" for="returnNo">Phân vân / Không quay lại</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Câu 5: Cơ sở vật chất -->
+                    <div class="mb-3 pb-3 border-bottom">
+                        <label class="form-label fw-semibold">5. Cơ sở vật chất và tiện nghi phòng chờ tiếp đón khách hàng?</label>
+                        <select name="facilityRating" class="form-select form-select-sm">
+                            <option value="">-- Chọn mức đánh giá --</option>
+                            <option value="1" selected="@(Model.FacilityRating == 1)">1 - Rất tốt, đầy đủ tiện nghi, sạch sẽ</option>
+                            <option value="2" selected="@(Model.FacilityRating == 2)">2 - Đạt yêu cầu cơ bản</option>
+                            <option value="3" selected="@(Model.FacilityRating == 3)">3 - Cần cải thiện / bổ sung tiện ích</option>
+                        </select>
+                    </div>
+
+                    <!-- Ý kiến phản hồi / khiếu nại của khách -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-danger">Ý kiến phản hồi / Góp ý / Khiếu nại của khách hàng:</label>
+                        <textarea name="customerFeedback" class="form-control form-control-sm" rows="3" placeholder="Ghi nhận nguyên văn ý kiến đóng góp hoặc vấn đề khách phản ánh...">@Model.CustomerFeedback</textarea>
+                    </div>
+
+                    <!-- Ghi chú nội bộ -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold text-muted">Ghi chú nội bộ / Chỉ đạo xử lý của tổ CSKH &amp; Xưởng:</label>
+                        <textarea name="internalNote" class="form-control form-control-sm" rows="2" placeholder="Ghi chú điều phối CVDV kiểm tra, hẹn khách xử lý lại...">@Model.InternalNote</textarea>
+                    </div>
+
+                    <!-- Người thực hiện -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small text-muted">Nhân viên CSKH thực hiện:</label>
+                            <input name="contactedBy" value="@(Model.ContactedBy ?? "CSKH")" class="form-control form-control-sm" required />
+                        </div>
+                    </div>
+
+                    <!-- Nút thao tác lưu khảo sát theo 3 trạng thái -->
+                    <div class="d-flex gap-2 flex-wrap pt-2 border-top">
+                        <button type="submit" onclick="document.getElementById('formStatusInput').value = '@((int)CustomerCareStatus.ContactedSatisfied)'" class="btn btn-sm btn-success">
+                            <i class="bi bi-check-circle me-1"></i>Lưu: Khách hài lòng (CIFB)
+                        </button>
+                        <button type="submit" onclick="document.getElementById('formStatusInput').value = '@((int)CustomerCareStatus.NeedFeedback)'" class="btn btn-sm btn-danger">
+                            <i class="bi bi-exclamation-octagon me-1"></i>Lưu: Cần phản hồi / Khiếu nại (CINFB)
+                        </button>
+                        <button type="submit" onclick="document.getElementById('formStatusInput').value = '@((int)CustomerCareStatus.Rejected)'" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-telephone-x me-1"></i>Không liên lạc được (REJ)
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột phải: Thông tin khách hàng, Xe & Lệnh sửa chữa hoàn tất -->
+    <div class="col-lg-5">
+        <!-- Card Khách & Xe -->
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2 border-bottom">
+                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-person-badge me-2 text-primary"></i>Khách hàng &amp; Phương tiện</h6>
+            </div>
+            <div class="card-body small">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="bi bi-car-front fs-3 text-primary"></i>
+                    <div>
+                        <div class="fs-6 fw-bold">@Model.Car.Plate</div>
+                        <div class="text-muted">@Model.Car.Model · Đời @Model.Car.Year</div>
+                    </div>
+                </div>
+                <div class="border-top pt-2 mt-2">
+                    <div class="d-flex justify-content-between py-1">
+                        <span class="text-muted">Chủ xe:</span>
+                        <b>@Model.Customer.Name</b>
+                    </div>
+                    <div class="d-flex justify-content-between py-1">
+                        <span class="text-muted">Số điện thoại:</span>
+                        <a href="tel:@Model.Customer.Phone" class="fw-bold text-decoration-none">
+                            <i class="bi bi-telephone-outbound me-1"></i>@(Model.Customer.Phone ?? "—")
+                        </a>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.Customer.Email))
+                    {
+                        <div class="d-flex justify-content-between py-1">
+                            <span class="text-muted">Email:</span>
+                            <span>@Model.Customer.Email</span>
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(Model.Car.Vin))
+                    {
+                        <div class="d-flex justify-content-between py-1">
+                            <span class="text-muted">Số khung (VIN):</span>
+                            <code>@Model.Car.Vin</code>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Card Lệnh sửa chữa hoàn tất -->
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2 border-bottom d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-dark"><i class="bi bi-clipboard2-check me-2 text-success"></i>Lệnh sửa chữa (RO)</h6>
+                <a href="/RO/Detail/@Model.ROId" class="badge bg-light text-primary border text-decoration-none">Xem chi tiết RO</a>
+            </div>
+            <div class="card-body small">
+                <div class="d-flex justify-content-between py-1">
+                    <span class="text-muted">Mã lệnh:</span>
+                    <span class="fw-semibold">@Model.RO.Code</span>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span class="text-muted">Số km khi nhận xe:</span>
+                    <b>@Model.RO.Odometer.ToString("N0") km</b>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span class="text-muted">Kỹ thuật viên phụ trách:</span>
+                    <span>@(Model.RO.Technician ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span class="text-muted">Thời điểm giao xe (FNS):</span>
+                    <span>@(Model.RO.FinishedAt.HasValue ? Model.RO.FinishedAt.Value.ToString("dd/MM/yyyy HH:mm") : "—")</span>
+                </div>
+                <div class="d-flex justify-content-between py-1 border-top mt-1 pt-1">
+                    <span class="fw-semibold">Tổng tiền thanh toán:</span>
+                    <b class="text-primary fs-6">@Model.RO.Total.ToString("N0")đ</b>
+                </div>
+
+                <!-- Danh sách hạng mục công việc đã làm -->
+                @if (Model.RO.Lines.Count > 0)
+                {
+                    <div class="mt-2 pt-2 border-top">
+                        <div class="fw-semibold text-muted mb-1" style="font-size:11px">Các hạng mục công việc đã thực hiện:</div>
+                        <ul class="list-unstyled mb-0" style="font-size:12px">
+                            @foreach (var l in Model.RO.Lines)
+                            {
+                                <li class="py-1 border-bottom d-flex justify-content-between">
+                                    <span>
+                                        @if (l.Type == LineType.Labor) { <span class="badge bg-info text-dark" style="font-size:10px">Công</span> }
+                                        else { <span class="badge bg-secondary" style="font-size:10px">Vật tư</span> }
+                                        @l.Name
+                                    </span>
+                                    <span class="text-muted">@l.Amount.ToString("N0")đ</span>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Card Thao tác xóa phiếu CSKH -->
+        <div class="card">
+            <div class="card-body small">
+                <h6 class="fw-bold mb-2">Thao tác chứng từ</h6>
+                <form method="post" action="/CustomerCare/Delete/@Model.Id" onsubmit="return confirm('Bạn có chắc chắn muốn xóa phiếu CSKH 24h này?')">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                        <i class="bi bi-trash me-1"></i>Xóa phiếu chăm sóc khách hàng
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

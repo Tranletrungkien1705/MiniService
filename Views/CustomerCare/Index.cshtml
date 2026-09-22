@@ -1,0 +1,138 @@
+@model List<CustomerCare>
+@{
+    ViewData["Title"] = "Chăm sóc khách hàng sau dịch vụ 24h (Customer Care)";
+    var curStatus = (CustomerCareStatus?)ViewBag.Status;
+    var totalCount = Model.Count;
+    var pendingCount = Model.Count(c => c.Status == CustomerCareStatus.Pending);
+    var satisfiedCount = Model.Count(c => c.Status == CustomerCareStatus.ContactedSatisfied);
+    var feedbackCount = Model.Count(c => c.Status == CustomerCareStatus.NeedFeedback);
+    var surveyedCount = satisfiedCount + feedbackCount;
+    var csiRate = surveyedCount > 0 ? Math.Round((double)satisfiedCount * 100 / surveyedCount, 1) : 100.0;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số phiếu CSKH</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ liên hệ 24h</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Khách hài lòng (CIFB)</div>
+            <div class="stat-num text-success">@satisfiedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Khiếu nại / Cần hỗ trợ (CINFB)</div>
+            <div class="stat-num text-danger">@feedbackCount <span style="font-size:12px;font-weight:normal" class="text-muted">(CSI: @csiRate%)</span></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã CSKH / Biển số / Khách..." style="max-width:240px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:200px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (CustomerCareStatus s in Enum.GetValues(typeof(CustomerCareStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.CustomerCareStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+            </form>
+            <a href="/CustomerCare/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Tạo phiếu CSKH</a>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã CSKH</th>
+                        <th>Lệnh SC (RO)</th>
+                        <th>Biển số xe</th>
+                        <th>Khách hàng</th>
+                        <th>Trạng thái</th>
+                        <th>Tình trạng xe</th>
+                        <th>Đánh giá CLDV</th>
+                        <th>Thái độ PV</th>
+                        <th>Ngày liên hệ</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var c in Model)
+                {
+                    var (txt, code, css) = Ui.CustomerCareStatus(c.Status);
+                    <tr style="cursor:pointer" onclick="location.href='/CustomerCare/Detail/@c.Id'">
+                        <td class="fw-semibold text-primary">@c.CareNo</td>
+                        <td>
+                            <a href="/RO/Detail/@c.ROId" class="badge bg-light text-dark border text-decoration-none" onclick="event.stopPropagation()">@c.RO.Code</a>
+                        </td>
+                        <td>
+                            <b>@c.Car.Plate</b>
+                            <div class="text-muted small">@c.Car.Model</div>
+                        </td>
+                        <td>
+                            @c.Customer.Name
+                            <div class="text-muted small"><i class="bi bi-telephone me-1"></i>@(c.Customer.Phone ?? "—")</div>
+                        </td>
+                        <td><span class="badge bg-@css">@code — @txt</span></td>
+                        <td>
+                            @if (c.Status == CustomerCareStatus.Pending)
+                            {
+                                <span class="text-muted small">Chưa khảo sát</span>
+                            }
+                            else if (c.HasCarProblem)
+                            {
+                                <span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>Có sự cố</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-check2 me-1"></i>Bình thường</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="small">@Ui.RatingText(c.QualityRating)</span>
+                        </td>
+                        <td>
+                            <span class="small">@Ui.RatingText(c.StaffRating)</span>
+                        </td>
+                        <td class="small text-muted">
+                            @if (c.ContactedDate.HasValue)
+                            {
+                                <div>@c.ContactedDate.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                                <div style="font-size:11px">bởi: @(c.ContactedBy ?? "CSKH")</div>
+                            }
+                            else
+                            {
+                                <span>Chờ gọi</span>
+                            }
+                        </td>
+                        <td class="text-end" onclick="event.stopPropagation()">
+                            <a href="/CustomerCare/Detail/@c.Id" class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:12px">
+                                @(c.Status == CustomerCareStatus.Pending ? "Khảo sát" : "Chi tiết")
+                            </a>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr><td colspan="10" class="text-center text-muted py-4">Không tìm thấy phiếu CSKH 24h nào phù hợp.</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

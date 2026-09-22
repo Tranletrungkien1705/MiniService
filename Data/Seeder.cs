@@ -327,13 +327,142 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        if (!await db.CustomerCares.AnyAsync())
+        {
+            var car1 = await db.Cars.FirstAsync();
+            var car2 = await db.Cars.OrderByDescending(c => c.Id).FirstAsync();
+            var oilPart = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+            var filterPart = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var brakePart = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+
+            // Tạo các RO hoàn tất (Finished) để demo quy trình CSKH 24h
+            var roFns1 = new RepairOrder
+            {
+                Code = "ROSEED-FNS-001",
+                CarId = car1.Id,
+                CustomerId = car1.CustomerId,
+                Status = ROStatus.Finished,
+                Odometer = 26000,
+                IntakeNote = "Bảo dưỡng cấp 25.000km, kiểm tra dầu phanh & nước làm mát.",
+                Technician = "Thợ Hùng",
+                CreatedBy = "seed",
+                CreatedAt = DateTime.Now.AddDays(-2),
+                IntakeAt = DateTime.Now.AddDays(-2).AddHours(1),
+                FinishedAt = DateTime.Now.AddDays(-1).AddHours(-4),
+                Lines = [
+                    new RepairLine { Type = LineType.Labor, ExpenseType = ExpenseType.Customer, Name = "Công bảo dưỡng 25.000km", Quantity = 1, UnitPrice = 450000 },
+                    new RepairLine { Type = LineType.Part, ExpenseType = ExpenseType.Customer, PartId = oilPart?.Id, Name = oilPart?.Name ?? "Dầu nhớt động cơ", Quantity = 1, UnitPrice = oilPart?.SalePrice ?? 650000 },
+                    new RepairLine { Type = LineType.Part, ExpenseType = ExpenseType.Customer, PartId = filterPart?.Id, Name = filterPart?.Name ?? "Lọc dầu động cơ", Quantity = 1, UnitPrice = filterPart?.SalePrice ?? 180000 }
+                ]
+            };
+
+            var roFns2 = new RepairOrder
+            {
+                Code = "ROSEED-FNS-002",
+                CarId = car2.Id,
+                CustomerId = car2.CustomerId,
+                Status = ROStatus.Finished,
+                Odometer = 18800,
+                IntakeNote = "Thay má phanh trước & láng đĩa phanh.",
+                Technician = "KTV Quang",
+                CreatedBy = "seed",
+                CreatedAt = DateTime.Now.AddDays(-1),
+                IntakeAt = DateTime.Now.AddDays(-1).AddHours(2),
+                FinishedAt = DateTime.Now.AddHours(-6),
+                Lines = [
+                    new RepairLine { Type = LineType.Labor, ExpenseType = ExpenseType.Customer, Name = "Công thay má phanh & láng đĩa trước", Quantity = 1, UnitPrice = 400000 },
+                    new RepairLine { Type = LineType.Part, ExpenseType = ExpenseType.Customer, PartId = brakePart?.Id, Name = brakePart?.Name ?? "Bộ má phanh đĩa trước", Quantity = 1, UnitPrice = brakePart?.SalePrice ?? 1350000 }
+                ]
+            };
+
+            var roFns3 = new RepairOrder
+            {
+                Code = "ROSEED-FNS-003",
+                CarId = car1.Id,
+                CustomerId = car1.CustomerId,
+                Status = ROStatus.Finished,
+                Odometer = 26200,
+                IntakeNote = "Thay lọc gió điều hòa than hoạt tính và khử mùi dàn lạnh.",
+                Technician = "Thợ Hùng",
+                CreatedBy = "seed",
+                CreatedAt = DateTime.Today.AddHours(-5),
+                IntakeAt = DateTime.Today.AddHours(-4),
+                FinishedAt = DateTime.Today.AddHours(-1),
+                Lines = [
+                    new RepairLine { Type = LineType.Labor, ExpenseType = ExpenseType.Customer, Name = "Công vệ sinh khử mùi điều hòa", Quantity = 1, UnitPrice = 250000 },
+                    new RepairLine { Type = LineType.Part, ExpenseType = ExpenseType.Customer, Name = "Lọc gió điều hòa than hoạt tính", Quantity = 1, UnitPrice = 280000 }
+                ]
+            };
+
+            db.ROs.AddRange(roFns1, roFns2, roFns3);
+            await db.SaveChangesAsync();
+
+            // 1. Phiếu CSKH 24h đã khảo sát - Khách hàng rất hài lòng (CIFB)
+            var c1 = new CustomerCare
+            {
+                CareNo = "CC260426-001",
+                ROId = roFns1.Id,
+                CarId = roFns1.CarId,
+                CustomerId = roFns1.CustomerId,
+                Status = CustomerCareStatus.ContactedSatisfied,
+                HasCarProblem = false,
+                QualityRating = 1, // Rất tốt
+                StaffRating = 1,   // Rất tốt
+                WillingToReturn = true,
+                FacilityRating = 1,// Rất tốt
+                CustomerFeedback = "Xe chạy rất bốc và êm sau bảo dưỡng. Cố vấn dịch vụ tư vấn rõ ràng, xưởng bàn giao xe sạch sẽ.",
+                InternalNote = "Khách hàng hài lòng cao. Gửi thư cảm ơn tự động.",
+                ContactedBy = "CSKH Thu Trang",
+                ContactedDate = DateTime.Now.AddHours(-18),
+                CreatedBy = "system",
+                CreatedAt = DateTime.Now.AddDays(-1).AddHours(-4)
+            };
+
+            // 2. Phiếu CSKH 24h đã liên hệ - Phát sinh khiếu nại kỹ thuật cần xử lý (CINFB)
+            var c2 = new CustomerCare
+            {
+                CareNo = "CC260427-002",
+                ROId = roFns2.Id,
+                CarId = roFns2.CarId,
+                CustomerId = roFns2.CustomerId,
+                Status = CustomerCareStatus.NeedFeedback,
+                HasCarProblem = true,
+                QualityRating = 3, // Bình thường
+                StaffRating = 2,   // Tốt
+                WillingToReturn = true,
+                FacilityRating = 2,// Đạt yêu cầu
+                CustomerFeedback = "Sau khi thay má phanh đi chậm vẫn nghe tiếng ken két nhỏ ở bánh trước bên phụ khi rà phanh nhẹ. Nhờ xưởng kiểm tra lại.",
+                InternalNote = "Đã chuyển thông tin cho KTV Quang & Tổ trưởng sửa chữa. CVDV gọi hẹn khách mang xe vào căn chỉnh miễn phí sáng mai.",
+                ContactedBy = "CSKH Thu Trang",
+                ContactedDate = DateTime.Now.AddHours(-4),
+                CreatedBy = "system",
+                CreatedAt = DateTime.Now.AddHours(-6)
+            };
+
+            // 3. Phiếu CSKH 24h mới sinh ra khi giao xe, đang chờ liên hệ (PEND)
+            var c3 = new CustomerCare
+            {
+                CareNo = "CC260427-003",
+                ROId = roFns3.Id,
+                CarId = roFns3.CarId,
+                CustomerId = roFns3.CustomerId,
+                Status = CustomerCareStatus.Pending,
+                HasCarProblem = false,
+                CreatedBy = "system",
+                CreatedAt = DateTime.Now.AddHours(-1)
+            };
+
+            db.CustomerCares.AddRange(c1, c2, c3);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -487,7 +616,31 @@ public static class Seeder
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""StockOutId"") REFERENCES ""StockOuts"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
-            );"
+            );",
+            @"CREATE TABLE IF NOT EXISTS ""CustomerCares"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""CareNo"" TEXT NOT NULL,
+                ""ROId"" INTEGER NOT NULL,
+                ""CarId"" INTEGER NOT NULL,
+                ""CustomerId"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""HasCarProblem"" INTEGER NOT NULL,
+                ""QualityRating"" INTEGER NULL,
+                ""StaffRating"" INTEGER NULL,
+                ""WillingToReturn"" INTEGER NULL,
+                ""FacilityRating"" INTEGER NULL,
+                ""CustomerFeedback"" TEXT NULL,
+                ""InternalNote"" TEXT NULL,
+                ""ContactedBy"" TEXT NULL,
+                ""ContactedDate"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerCares_OrgId_CareNo"" ON ""CustomerCares"" (""OrgId"", ""CareNo"");"
         };
 
         foreach (var sql in sqls)

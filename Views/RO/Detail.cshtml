@@ -190,6 +190,48 @@
                 <div class="text-muted small">Chưa có Báo cáo bảo hành cho lệnh này. Nhấn "Lập BCBH" để tạo đề nghị bồi hoàn gửi HTC.</div>
             }
         </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-headset text-info me-1"></i>Chăm sóc khách hàng 24h</h6>
+                @if (Model.CustomerCares.Count == 0 && (Model.Status == ROStatus.Finished || Model.Status == ROStatus.Paid))
+                {
+                    <a href="/CustomerCare/Create?roId=@Model.Id" class="btn btn-sm btn-outline-info"><i class="bi bi-plus-lg me-1"></i>Tạo phiếu CSKH</a>
+                }
+            </div>
+            @if (Model.CustomerCares.Count > 0)
+            {
+                <div class="list-group list-group-flush small">
+                    @foreach (var c in Model.CustomerCares)
+                    {
+                        var (ctxt, ccode, ccss) = Ui.CustomerCareStatus(c.Status);
+                        <a href="/CustomerCare/Detail/@c.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold">@c.CareNo</div>
+                                <div class="text-muted" style="font-size:11px">
+                                    @(c.ContactedDate.HasValue ? $"Đã gọi: {c.ContactedDate:dd/MM/yyyy HH:mm}" : "Chưa liên hệ khảo sát")
+                                    @if (!string.IsNullOrWhiteSpace(c.ContactedBy)) { <span> · @c.ContactedBy</span> }
+                                </div>
+                            </div>
+                            <span class="badge bg-@ccss">@ccode</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small">
+                    @if (Model.Status == ROStatus.Finished)
+                    {
+                        <span>Xe đã xuất xưởng. Nhấn "Tạo phiếu CSKH" hoặc hệ thống tự động đưa vào danh sách khảo sát 24h.</span>
+                    }
+                    else
+                    {
+                        <span>Quy trình CSKH 24h sẽ tự động kích hoạt khi xe hoàn tất sửa chữa (Giao xe / Finished).</span>
+                    }
+                </div>
+            }
+        </div></div>
         <div class="card"><div class="card-body">
             <h6 class="fw-bold mb-2">Mốc thời gian</h6>
             <ul class="list-unstyled small mb-0">

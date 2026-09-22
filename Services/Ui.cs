@@ -96,4 +96,30 @@ public static class Ui
         Models.StockOutType.Internal => "Xuất nội bộ",
         _ => t.ToString()
     };
+
+    public static (string text, string code, string css) CustomerCareStatus(CustomerCareStatus s) => s switch
+    {
+        Models.CustomerCareStatus.Pending => ("Chờ gọi CSKH", "PEND", "warning"),
+        Models.CustomerCareStatus.ContactedSatisfied => ("Hài lòng", "CIFB", "success"),
+        Models.CustomerCareStatus.NeedFeedback => ("Cần phản hồi", "CINFB", "danger"),
+        Models.CustomerCareStatus.Rejected => ("Không liên hệ", "REJ", "secondary"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static string RatingText(int? r) => r switch
+    {
+        1 => "⭐⭐⭐⭐ Rất tốt / Rất hài lòng",
+        2 => "⭐⭐⭐ Tốt / Hài lòng",
+        3 => "⭐⭐ Bình thường",
+        4 => "⭐ Chưa tốt / Không hài lòng",
+        _ => "—"
+    };
+
+    public static string FacilityText(int? f) => f switch
+    {
+        1 => "Rất tốt, tiện nghi",
+        2 => "Đạt yêu cầu cơ bản",
+        3 => "Cần nâng cấp / cải thiện",
+        _ => "—"
+    };
 }

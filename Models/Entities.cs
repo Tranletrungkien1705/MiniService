@@ -103,6 +103,15 @@ public enum StockOutType
     Internal = 3     // 4: Xuất sử dụng nội bộ xưởng / tiêu hao
 }
 
+/// <summary>Trạng thái Chăm sóc khách hàng — theo SerCareStatus idn.CarService.</summary>
+public enum CustomerCareStatus
+{
+    Pending = 0,            // PEND  — Chưa liên hệ / Chờ gọi khảo sát
+    ContactedSatisfied = 1, // CIFB  — Đã liên hệ - Đã phản hồi (Hài lòng)
+    NeedFeedback = 2,       // CINFB — Đã liên hệ - Cần phản hồi (Khiếu nại / Xe gặp sự cố)
+    Rejected = 3            // REJ   — Không liên hệ được / Khách bận hoặc từ chối
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -150,6 +159,7 @@ public class RepairOrder : IOrgOwned
     public List<RepairLine> Lines { get; set; } = [];
     public List<WarrantyReport> WarrantyReports { get; set; } = [];
     public List<StockOut> StockOuts { get; set; } = [];
+    public List<CustomerCare> CustomerCares { get; set; } = [];
 
     public decimal Total => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
@@ -382,4 +392,34 @@ public class StockOutDetail : IOrgOwned
     public decimal SubTotal => Quantity * UnitPrice;
     public decimal VatAmount => Math.Round(SubTotal * (VatPercent / 100m), 2);
     public decimal Amount => SubTotal + VatAmount;
+}
+
+/// <summary>Phiếu chăm sóc khách hàng 24h sau dịch vụ — Ser_CustomerCare24h trong idn.CarService.</summary>
+public class CustomerCare : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CareNo { get; set; } = "";             // Số phiếu CSKH (VD: CC260427-001)
+    public int ROId { get; set; }                        // Lệnh sửa chữa gắn liền
+    public int CarId { get; set; }                       // Xe làm dịch vụ
+    public int CustomerId { get; set; }                  // Khách hàng
+    public CustomerCareStatus Status { get; set; } = CustomerCareStatus.Pending;
+
+    // 5 câu hỏi khảo sát chuẩn Hyundai Car Service (Ser_CustomerCare24h)
+    public bool HasCarProblem { get; set; } = false;     // YourCarProblem24: Xe có vấn đề gì sau dịch vụ không?
+    public int? QualityRating { get; set; }              // YourSatisfyQSv24: Hài lòng chất lượng dịch vụ (1: Rất hài lòng, 2: Hài lòng, 3: Bình thường, 4: Không hài lòng)
+    public int? StaffRating { get; set; }                // FyourCSSH24: Thái độ phục vụ của CVDV / kỹ thuật (1: Rất tốt, 2: Tốt, 3: Bình thường, 4: Chưa tốt)
+    public bool? WillingToReturn { get; set; } = true;   // YourRIWN24: Sẵn sàng quay lại xưởng dịch vụ? (true: Sẵn sàng, false: Phân vân / Không)
+    public int? FacilityRating { get; set; }             // WFBasicNeeds24: Đánh giá cơ sở vật chất phòng chờ (1: Rất tốt, 2: Đạt yêu cầu, 3: Cần cải thiện)
+    public string? CustomerFeedback { get; set; }        // Note24: Ý kiến góp ý / chi tiết khiếu nại của khách
+    public string? InternalNote { get; set; }            // Ghi chú nội bộ xử lý khiếu nại
+
+    public string? ContactedBy { get; set; }             // Nhân viên CSKH gọi điện
+    public DateTime? ContactedDate { get; set; }         // Thời điểm liên hệ
+    public string CreatedBy { get; set; } = "system";    // Tự động tạo khi xe FNS hoặc tạo tay
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public RepairOrder RO { get; set; } = null!;
+    public Car Car { get; set; } = null!;
+    public Customer Customer { get; set; } = null!;
 }
