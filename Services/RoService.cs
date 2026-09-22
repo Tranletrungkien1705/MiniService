@@ -4,7 +4,7 @@ using MiniService.Models;
 
 namespace MiniService.Services;
 
-public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMonth, int Cars,
+public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMonth, int Cars, int Parts, int LowStockParts,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -14,11 +14,17 @@ public interface IRoService
     Task<int> CreateCustomerAsync(Customer c);
     Task<List<Car>> CarsAsync(string? q);
     Task<int> CreateCarAsync(Car car);
+    // parts & inventory
+    Task<List<Part>> PartsAsync(string? q, bool? lowStockOnly);
+    Task<Part?> GetPartAsync(int id);
+    Task<int> CreatePartAsync(Part part);
+    Task<(bool ok, string msg)> AdjustStockAsync(int partId, decimal qty, string mode, string? note);
+    Task<List<Part>> PartsForSelectAsync();
     // RO
     Task<List<RepairOrder>> ROsAsync(ROStatus? status, string? q);
     Task<RepairOrder?> GetROAsync(int id);
     Task<int> CreateROAsync(RepairOrder ro);
-    Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price);
+    Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null);
     Task RemoveLineAsync(int lineId);
     Task<(bool ok, string msg)> TransitionAsync(int roId, ROStatus to);
     Task<(bool ok, string msg)> DeleteROAsync(int roId);
@@ -65,6 +71,49 @@ public class RoService(AppDbContext db) : IRoService
     public Task<List<Car>> CarsForSelectAsync() => db.Cars.Include(c => c.Customer).OrderBy(c => c.Plate).ToListAsync();
     public async Task<int> CreateCarAsync(Car car) { db.Cars.Add(car); await db.SaveChangesAsync(); return car.Id; }
 
+    public Task<List<Part>> PartsAsync(string? q, bool? lowStockOnly)
+    {
+        var query = db.Parts.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+            query = query.Where(p => p.Code.Contains(q) || p.Name.Contains(q) || (p.Model != null && p.Model.Contains(q)) || (p.Location != null && p.Location.Contains(q)));
+        if (lowStockOnly == true)
+            query = query.Where(p => p.InStock <= p.MinStock);
+        return query.OrderBy(p => p.Code).ToListAsync();
+    }
+    public Task<Part?> GetPartAsync(int id) => db.Parts.FirstOrDefaultAsync(p => p.Id == id);
+    public async Task<int> CreatePartAsync(Part part)
+    {
+        if (string.IsNullOrWhiteSpace(part.Code))
+            throw new InvalidOperationException("Mã phụ tùng không được để trống.");
+        part.Code = part.Code.Trim().ToUpperInvariant();
+        part.Name = part.Name.Trim();
+        var exists = await db.Parts.AnyAsync(p => p.Code == part.Code);
+        if (exists)
+            throw new InvalidOperationException($"Mã phụ tùng '{part.Code}' đã tồn tại.");
+        db.Parts.Add(part);
+        await db.SaveChangesAsync();
+        return part.Id;
+    }
+    public async Task<(bool ok, string msg)> AdjustStockAsync(int partId, decimal qty, string mode, string? note)
+    {
+        var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == partId);
+        if (part == null) return (false, "Không tìm thấy phụ tùng.");
+        if (mode == "set")
+        {
+            if (qty < 0) return (false, "Số lượng tồn không thể âm.");
+            part.InStock = qty;
+        }
+        else
+        {
+            if (part.InStock + qty < 0) return (false, "Số lượng xuất vượt quá tồn kho hiện có.");
+            part.InStock += qty;
+        }
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật tồn kho '{part.Name}': {part.InStock} {part.Unit}.");
+    }
+    public Task<List<Part>> PartsForSelectAsync() =>
+        db.Parts.Where(p => p.IsActive).OrderBy(p => p.Name).ToListAsync();
+
     public async Task<List<RepairOrder>> ROsAsync(ROStatus? status, string? q)
     {
         var query = db.ROs.Include(r => r.Car).Include(r => r.Customer).Include(r => r.Lines).AsQueryable();
@@ -89,19 +138,47 @@ public class RoService(AppDbContext db) : IRoService
         return ro.Id;
     }
 
-    public async Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price)
+    public async Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null)
     {
         var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == roId) ?? throw new KeyNotFoundException();
         if (ro.Status is ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding)
             throw new InvalidOperationException("RO đã kết thúc — không thêm dòng.");
-        db.Lines.Add(new RepairLine { ROId = roId, Type = type, Name = name.Trim(), Quantity = qty <= 0 ? 1 : qty, UnitPrice = price });
+
+        if (type == LineType.Part && partId.HasValue && partId.Value > 0)
+        {
+            var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == partId.Value);
+            if (part != null)
+            {
+                if (string.IsNullOrWhiteSpace(name)) name = part.Name;
+                if (price <= 0) price = part.SalePrice;
+                if (part.InStock >= qty) part.InStock -= qty;
+            }
+        }
+
+        db.Lines.Add(new RepairLine
+        {
+            ROId = roId,
+            Type = type,
+            PartId = (type == LineType.Part && partId > 0) ? partId : null,
+            Name = name.Trim(),
+            Quantity = qty <= 0 ? 1 : qty,
+            UnitPrice = price
+        });
         await db.SaveChangesAsync();
     }
 
     public async Task RemoveLineAsync(int lineId)
     {
-        var l = await db.Lines.FirstOrDefaultAsync(x => x.Id == lineId);
-        if (l != null) { db.Lines.Remove(l); await db.SaveChangesAsync(); }
+        var l = await db.Lines.Include(x => x.Part).FirstOrDefaultAsync(x => x.Id == lineId);
+        if (l != null)
+        {
+            if (l.Type == LineType.Part && l.PartId.HasValue && l.Part != null)
+            {
+                l.Part.InStock += l.Quantity;
+            }
+            db.Lines.Remove(l);
+            await db.SaveChangesAsync();
+        }
     }
 
     public async Task<(bool ok, string msg)> TransitionAsync(int roId, ROStatus to)
@@ -135,12 +212,16 @@ public class RoService(AppDbContext db) : IRoService
         var monthStart = new DateTime(today.Year, today.Month, 1);
         var byStatus = ros.GroupBy(r => r.Status).Select(g => (g.Key, g.Count())).OrderBy(x => (int)x.Key).ToList();
         var openStatuses = new[] { ROStatus.Created, ROStatus.Printed, ROStatus.Wait4Part, ROStatus.HasPart, ROStatus.HasRO, ROStatus.InGarage, ROStatus.Repaired, ROStatus.CheckEnd };
+        var totalParts = await db.Parts.CountAsync();
+        var lowStockParts = await db.Parts.CountAsync(p => p.InStock <= p.MinStock);
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
             ros.Count(r => r.FinishedAt?.Date == today),
             ros.Where(r => r.Status is ROStatus.Paid or ROStatus.Finished && r.CreatedAt >= monthStart).Sum(r => r.Total),
             await db.Cars.CountAsync(),
+            totalParts,
+            lowStockParts,
             byStatus);
     }
 }

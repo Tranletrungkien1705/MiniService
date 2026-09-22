@@ -3,6 +3,7 @@
     ViewData["Title"] = $"RO {Model.Code}";
     var (stTxt, stCode, stCss) = Ui.Status(Model.Status);
     var next = (ROStatus[])ViewBag.Next;
+    var parts = (List<Part>?)ViewBag.Parts ?? [];
     bool editable = Model.Status is not (ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding);
     bool deletable = Model.Status is ROStatus.Created or ROStatus.Printed or ROStatus.Rejected or ROStatus.NotResponding;
 }
@@ -28,7 +29,13 @@
                 {
                     <tr>
                         <td>@if (l.Type == LineType.Labor) { <span class="badge bg-info">Công</span> } else { <span class="badge bg-secondary">Phụ tùng</span> }</td>
-                        <td>@l.Name</td>
+                        <td>
+                            @l.Name
+                            @if (l.Part != null)
+                            {
+                                <span class="badge bg-light text-secondary border ms-1" style="font-size:11px"><i class="bi bi-tag me-1"></i>@l.Part.Code</span>
+                            }
+                        </td>
                         <td class="text-end">@l.Quantity.ToString("0.##")</td>
                         <td class="text-end">@l.UnitPrice.ToString("N0")</td>
                         <td class="text-end fw-semibold">@l.Amount.ToString("N0")</td>
@@ -45,13 +52,44 @@
             </table>
             @if (editable)
             {
-                <form asp-action="AddLine" method="post" class="row g-2 mt-1">
+                <form asp-action="AddLine" method="post" class="mt-3 p-2 bg-light rounded border">
                     @Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
-                    <div class="col-md-2"><select name="type" class="form-select form-select-sm"><option value="0">Công</option><option value="1">Phụ tùng</option></select></div>
-                    <div class="col-md-5"><input name="name" class="form-control form-control-sm" placeholder="Nội dung công / tên phụ tùng" required /></div>
-                    <div class="col-md-2"><input name="quantity" type="number" step="0.01" value="1" class="form-control form-control-sm" placeholder="SL" /></div>
-                    <div class="col-md-2"><input name="unitPrice" type="number" step="1000" value="0" class="form-control form-control-sm" placeholder="Đơn giá" /></div>
-                    <div class="col-md-1"><button class="btn btn-sm btn-primary w-100"><i class="bi bi-plus"></i></button></div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-7">
+                            <select id="partPicker" name="partId" class="form-select form-select-sm" onchange="onPartChange(this)">
+                                <option value="">-- Chọn phụ tùng từ kho (tùy chọn) --</option>
+                                @foreach (var p in parts)
+                                {
+                                    <option value="@p.Id" data-name="@p.Name" data-price="@p.SalePrice" data-unit="@p.Unit" data-stock="@p.InStock">
+                                        [@p.Code] @p.Name (Tồn: @p.InStock.ToString("0.##") @p.Unit · @p.SalePrice.ToString("N0")đ)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-5 small text-muted d-flex align-items-center">
+                            <span id="partStockInfo">Hoặc nhập tay công việc / phụ tùng bên dưới:</span>
+                        </div>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-2">
+                            <select id="lineTypeSelect" name="type" class="form-select form-select-sm">
+                                <option value="0">Công</option>
+                                <option value="1">Phụ tùng</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5">
+                            <input id="lineNameInput" name="name" class="form-control form-control-sm" placeholder="Nội dung công / tên phụ tùng" required />
+                        </div>
+                        <div class="col-md-2">
+                            <input id="lineQtyInput" name="quantity" type="number" step="0.01" value="1" class="form-control form-control-sm" placeholder="SL" />
+                        </div>
+                        <div class="col-md-2">
+                            <input id="linePriceInput" name="unitPrice" type="number" step="1000" value="0" class="form-control form-control-sm" placeholder="Đơn giá" />
+                        </div>
+                        <div class="col-md-1">
+                            <button class="btn btn-sm btn-primary w-100" title="Thêm dòng"><i class="bi bi-plus-lg"></i></button>
+                        </div>
+                    </div>
                 </form>
             }
         </div></div>
@@ -87,3 +125,29 @@
         </div></div>
     </div>
 </div>
+@section Scripts {
+<script>
+function onPartChange(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    if (sel.value) {
+        var lineTypeSelect = document.getElementById('lineTypeSelect');
+        if (lineTypeSelect) lineTypeSelect.value = "1";
+        var nameInput = document.getElementById('lineNameInput');
+        if (nameInput) nameInput.value = opt.getAttribute('data-name') || '';
+        var priceInput = document.getElementById('linePriceInput');
+        if (priceInput) priceInput.value = opt.getAttribute('data-price') || 0;
+        var stock = opt.getAttribute('data-stock');
+        var unit = opt.getAttribute('data-unit');
+        var stockInfo = document.getElementById('partStockInfo');
+        if (stockInfo) {
+            stockInfo.innerHTML = '<span class="badge bg-success-subtle text-success"><i class="bi bi-box-seam me-1"></i>Kho còn: ' + stock + ' ' + unit + '</span>';
+        }
+    } else {
+        var stockInfo = document.getElementById('partStockInfo');
+        if (stockInfo) {
+            stockInfo.innerText = 'Hoặc nhập tay công việc / phụ tùng bên dưới:';
+        }
+    }
+}
+</script>
+}

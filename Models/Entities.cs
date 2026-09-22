@@ -77,15 +77,36 @@ public class RepairOrder : IOrgOwned
     public decimal PartTotal => Lines.Where(l => l.Type == LineType.Part).Sum(l => l.Amount);
 }
 
+public class Part : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";          // Mã phụ tùng (PartCode, VD: 26300-35505)
+    public string Name { get; set; } = "";          // Tên phụ tùng (VieName)
+    public string Unit { get; set; } = "Cái";       // Đơn vị tính (DVT)
+    public decimal CostPrice { get; set; }          // Giá vốn/nhập (Cost)
+    public decimal SalePrice { get; set; }          // Giá bán niêm yết (Price)
+    public decimal InStock { get; set; }            // Tồn kho hiện tại (InStockQuantity)
+    public decimal MinStock { get; set; }           // Tồn tối thiểu cảnh báo (MinQuantity)
+    public string? Location { get; set; }           // Vị trí kệ/kho
+    public string? Model { get; set; }              // Dòng xe tương thích
+    public bool IsActive { get; set; } = true;
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public bool IsLowStock => InStock <= MinStock;
+}
+
 public class RepairLine : IOrgOwned
 {
     public int Id { get; set; }
     public Guid OrgId { get; set; }
     public int ROId { get; set; }
     public LineType Type { get; set; }
+    public int? PartId { get; set; }                // Liên kết danh mục phụ tùng nếu có
     public string Name { get; set; } = "";
     public decimal Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }
     public decimal Amount => Quantity * UnitPrice;
     public RepairOrder RO { get; set; } = null!;
+    public Part? Part { get; set; }
 }

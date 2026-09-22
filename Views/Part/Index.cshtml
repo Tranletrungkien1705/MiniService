@@ -1,0 +1,247 @@
+@model List<Part>
+@{
+    ViewData["Title"] = "Phụ tùng & Kho";
+    var totalParts = Model.Count;
+    var lowStockCount = Model.Count(p => p.IsLowStock);
+    var totalStockQty = Model.Sum(p => p.InStock);
+    bool isLowStockFilter = ViewBag.LowStock == true;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="text-muted small">Tổng mã phụ tùng</div>
+                <div class="stat-num text-primary">@totalParts</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="text-muted small">Cảnh báo sắp hết hàng</div>
+                <div class="stat-num @(lowStockCount > 0 ? "text-danger" : "text-success")">
+                    @lowStockCount
+                    @if (lowStockCount > 0)
+                    {
+                        <span class="fs-6 fw-normal text-muted">(cần đặt hàng)</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="text-muted small">Tổng số lượng trong kho</div>
+                <div class="stat-num" style="color:#0f766e">@totalStockQty.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:320px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Mã phụ tùng, tên, dòng xe, vị trí..." />
+                </div>
+                <div class="form-check form-check-inline small mb-0 ms-2">
+                    <input class="form-check-input" type="checkbox" name="lowStock" value="true" id="chkLowStock" @(isLowStockFilter ? "checked" : "") onchange="this.form.submit()" />
+                    <label class="form-check-label text-danger fw-semibold" for="chkLowStock">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>Chỉ xem sắp hết
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || isLowStockFilter)
+                {
+                    <a href="/Part" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createPartModal">
+                <i class="bi bi-plus-lg me-1"></i>Thêm phụ tùng
+            </button>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã phụ tùng</th>
+                        <th>Tên phụ tùng</th>
+                        <th>Dòng xe tương thích</th>
+                        <th>Vị trí</th>
+                        <th>ĐVT</th>
+                        <th class="text-end">Giá nhập</th>
+                        <th class="text-end">Giá bán</th>
+                        <th class="text-center">Tồn kho</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var p in Model)
+                {
+                    <tr class="@(p.IsLowStock ? "table-danger-subtle" : "")">
+                        <td>
+                            <code class="fw-bold text-dark">@p.Code</code>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">@p.Name</span>
+                        </td>
+                        <td class="small text-muted">@(p.Model ?? "—")</td>
+                        <td class="small text-muted"><i class="bi bi-geo-alt me-1"></i>@(p.Location ?? "—")</td>
+                        <td><span class="badge bg-light text-dark border">@p.Unit</span></td>
+                        <td class="text-end small text-muted">@p.CostPrice.ToString("N0")đ</td>
+                        <td class="text-end fw-semibold">@p.SalePrice.ToString("N0")đ</td>
+                        <td class="text-center">
+                            @if (p.IsLowStock)
+                            {
+                                <span class="badge bg-danger" title="Tồn kho tối thiểu: @p.MinStock">
+                                    <i class="bi bi-exclamation-circle me-1"></i>@p.InStock.ToString("0.##") (Min @p.MinStock)
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success-subtle text-success">
+                                    @p.InStock.ToString("0.##")
+                                </span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary" onclick="openAdjustModal(@p.Id, '@p.Code', '@p.Name', '@p.Unit', @p.InStock)">
+                                <i class="bi bi-arrow-down-up me-1"></i>Nhập / Xuất
+                            </button>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">
+                            <i class="bi bi-box2 display-6 d-block mb-2 text-secondary"></i>
+                            Không tìm thấy phụ tùng nào.
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Phụ Tùng -->
+<div class="modal fade" id="createPartModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-box-seam me-2"></i>Thêm phụ tùng vào kho</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mã phụ tùng (PartCode) <span class="text-danger">*</span></label>
+                            <input name="code" class="form-control" placeholder="VD: 26300-35505" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Tên phụ tùng <span class="text-danger">*</span></label>
+                            <input name="name" class="form-control" placeholder="VD: Lọc dầu chính hãng Hyundai" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Đơn vị tính</label>
+                            <input name="unit" class="form-control" value="Cái" placeholder="Cái, Lít, Bộ, Can..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Giá nhập (Cost)</label>
+                            <input name="costPrice" type="number" step="1000" class="form-control" value="0" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Giá bán niêm yết</label>
+                            <input name="salePrice" type="number" step="1000" class="form-control" value="0" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Số lượng tồn kho ban đầu</label>
+                            <input name="inStock" type="number" step="0.01" class="form-control" value="0" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Tồn kho tối thiểu (Cảnh báo)</label>
+                            <input name="minStock" type="number" step="0.01" class="form-control" value="5" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Dòng xe tương thích</label>
+                            <input name="model" class="form-control" placeholder="VD: Accent, Tucson, Santa Fe..." />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Vị trí kho/kệ</label>
+                            <input name="location" class="form-control" placeholder="VD: Kệ K1-A02" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu phụ tùng</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Điều chỉnh Tồn kho -->
+<div class="modal fade" id="adjustStockModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form asp-action="AdjustStock" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" id="adjId" name="id" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-arrow-down-up me-2"></i>Nhập / Xuất kho phụ tùng</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div class="small text-muted">Phụ tùng:</div>
+                        <h6 id="adjPartName" class="fw-bold mb-1"></h6>
+                        <div class="small">Tồn kho hiện tại: <b id="adjCurrentStock" class="text-primary"></b> <span id="adjUnit"></span></div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Phương thức điều chỉnh</label>
+                        <select name="mode" class="form-select">
+                            <option value="add">Nhập kho (+) / Xuất kho (-)</option>
+                            <option value="set">Kiểm kê thực tế (Đặt lại số tồn)</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Số lượng</label>
+                        <input name="qty" type="number" step="0.01" class="form-control" required />
+                        <div class="form-text small">Nếu nhập thêm: số dương (VD: 10). Nếu xuất bớt: số âm (VD: -2). Nếu kiểm kê: nhập số tồn thực tế.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Ghi chú / Số phiếu</label>
+                        <input name="note" class="form-control" placeholder="VD: Nhập lô hàng mới từ nhà cung cấp" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Xác nhận</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+function openAdjustModal(id, code, name, unit, currentStock) {
+    document.getElementById('adjId').value = id;
+    document.getElementById('adjPartName').innerText = '[' + code + '] ' + name;
+    document.getElementById('adjCurrentStock').innerText = currentStock;
+    document.getElementById('adjUnit').innerText = unit;
+    var modal = new bootstrap.Modal(document.getElementById('adjustStockModal'));
+    modal.show();
+}
+</script>
+}

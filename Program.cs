@@ -51,6 +51,23 @@ app.MapGet("/api/ro", async (string? plate, IRoService svc) =>
     }));
 });
 
+// API danh mục phụ tùng & tồn kho
+app.MapGet("/api/parts", async (string? q, bool? lowStock, IRoService svc) =>
+{
+    var parts = await svc.PartsAsync(q, lowStock);
+    return Results.Ok(parts.Select(p => new
+    {
+        p.Id, p.Code, p.Name, p.Unit, p.CostPrice, p.SalePrice,
+        p.InStock, p.MinStock, p.IsLowStock, p.Location, p.Model
+    }));
+});
+
+app.MapPost("/api/parts/{id:int}/stock", async (int id, AdjustStockDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.AdjustStockAsync(id, dto.Quantity, dto.Mode ?? "add", dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -63,3 +80,4 @@ app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Inde
 app.Run();
 
 record RegisterOrgDto(string Name);
+record AdjustStockDto(decimal Quantity, string? Mode, string? Note);

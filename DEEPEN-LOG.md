@@ -1,0 +1,1 @@
+- 2026-04-27: Port nghiep vu Quan ly Phu tung & Ton kho (Ser_MST_Part, Ser_Inv_Stock) tu 2023.H.CarServices vao MiniService (Part entity, PartController, Views/Part, Minimal API /api/parts, lien ket RO Line va canh bao ton kho).

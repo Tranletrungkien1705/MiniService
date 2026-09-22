@@ -2,7 +2,7 @@
 <div class="row g-3 mb-3">
     <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">RO đang mở</div><div class="stat-num" style="color:#1d4ed8">@d.OpenRO</div></div></div></div>
     <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Đang sửa</div><div class="stat-num text-primary">@d.InGarage</div></div></div></div>
-    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Giao xe hôm nay</div><div class="stat-num text-success">@d.DoneToday</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Phụ tùng / Cảnh báo kho</div><div class="stat-num text-warning">@d.Parts <span style="font-size:14px;font-weight:normal" class="text-danger">(@d.LowStockParts sắp hết)</span></div></div></div></div>
     <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Doanh thu tháng</div><div class="stat-num" style="font-size:20px">@d.RevenueMonth.ToString("N0")đ</div></div></div></div>
 </div>
 <div class="row g-3">
@@ -22,6 +22,7 @@
         <h6 class="fw-bold mb-2">Tác vụ</h6>
         <a href="/RO/Create" class="btn btn-primary w-100 mb-2"><i class="bi bi-plus-lg me-1"></i>Tiếp nhận xe (tạo RO)</a>
         <a href="/RO?status=5" class="btn btn-outline-primary w-100 mb-2"><i class="bi bi-wrench me-1"></i>Xe đang sửa</a>
-        <div class="text-muted small mt-2">API tra cứu: <code>GET /api/ro?plate=30A</code></div>
+        <a href="/Part" class="btn btn-outline-secondary w-100 mb-2"><i class="bi bi-box-seam me-1"></i>Kho phụ tùng @if(d.LowStockParts > 0){<span class="badge bg-danger ms-1">@d.LowStockParts cảnh báo</span>}</a>
+        <div class="text-muted small mt-2">API tra cứu: <code>GET /api/ro?plate=30A</code> · <code>GET /api/parts</code></div>
     </div></div></div>
 </div>

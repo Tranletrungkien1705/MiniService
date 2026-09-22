@@ -33,6 +33,57 @@ public class CarController(IRoService svc) : Controller
     public async Task<IActionResult> Index(string? q) { ViewBag.Q = q; return View(await svc.CarsAsync(q)); }
 }
 
+public class PartController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? lowStock)
+    {
+        ViewBag.Q = q;
+        ViewBag.LowStock = lowStock ?? false;
+        var parts = await svc.PartsAsync(q, lowStock);
+        return View(parts);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string code, string name, string? unit, decimal costPrice, decimal salePrice, decimal inStock, decimal minStock, string? location, string? model)
+    {
+        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
+        {
+            TempData["Error"] = "Cần mã và tên phụ tùng.";
+            return RedirectToAction(nameof(Index));
+        }
+        try
+        {
+            var part = new Part
+            {
+                Code = code.Trim(),
+                Name = name.Trim(),
+                Unit = string.IsNullOrWhiteSpace(unit) ? "Cái" : unit.Trim(),
+                CostPrice = costPrice,
+                SalePrice = salePrice,
+                InStock = inStock,
+                MinStock = minStock,
+                Location = location?.Trim(),
+                Model = model?.Trim()
+            };
+            await svc.CreatePartAsync(part);
+            TempData["Success"] = $"Đã thêm phụ tùng '{part.Code} - {part.Name}'.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AdjustStock(int id, decimal qty, string mode, string? note)
+    {
+        var (ok, msg) = await svc.AdjustStockAsync(id, qty, mode, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class ROController(IRoService svc) : Controller
 {
     public async Task<IActionResult> Index(ROStatus? status, string? q)
@@ -61,14 +112,23 @@ public class ROController(IRoService svc) : Controller
         var ro = await svc.GetROAsync(id);
         if (ro == null) return NotFound();
         ViewBag.Next = RoService.AllowedNext(ro.Status);
+        ViewBag.Parts = await svc.PartsForSelectAsync();
         return View(ro);
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddLine(int id, LineType type, string name, decimal quantity, decimal unitPrice)
+    public async Task<IActionResult> AddLine(int id, LineType type, string name, decimal quantity, decimal unitPrice, int? partId = null)
     {
-        if (string.IsNullOrWhiteSpace(name)) { TempData["Error"] = "Cần tên dòng."; return RedirectToAction(nameof(Detail), new { id }); }
-        try { await svc.AddLineAsync(id, type, name, quantity, unitPrice); TempData["Success"] = "Đã thêm dòng."; }
+        if (string.IsNullOrWhiteSpace(name) && (!partId.HasValue || partId.Value <= 0))
+        {
+            TempData["Error"] = "Cần tên dòng hoặc chọn phụ tùng.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        try
+        {
+            await svc.AddLineAsync(id, type, name, quantity, unitPrice, partId);
+            TempData["Success"] = "Đã thêm dòng.";
+        }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Detail), new { id });
     }

@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Car> Cars => Set<Car>();
     public DbSet<RepairOrder> ROs => Set<RepairOrder>();
     public DbSet<RepairLine> Lines => Set<RepairLine>();
+    public DbSet<Part> Parts => Set<Part>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -23,6 +24,16 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.Plate }).IsUnique();
             e.HasOne(x => x.Customer).WithMany(x => x.Cars).HasForeignKey(x => x.CustomerId);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Part>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
+            e.Property(x => x.CostPrice).HasPrecision(18, 2);
+            e.Property(x => x.SalePrice).HasPrecision(18, 2);
+            e.Property(x => x.InStock).HasPrecision(18, 2);
+            e.Property(x => x.MinStock).HasPrecision(18, 2);
+            e.Ignore(x => x.IsLowStock);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairOrder>(e =>
@@ -39,6 +50,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.Quantity).HasPrecision(18, 2);
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.HasOne(x => x.RO).WithMany(x => x.Lines).HasForeignKey(x => x.ROId);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
