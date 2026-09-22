@@ -114,6 +114,23 @@ public static class Ui
         _ => (s.ToString(), "", "secondary")
     };
 
+    public static (string text, string code, string css) AssignmentWorkStatus(AssignmentWorkStatus s) => s switch
+    {
+        Models.AssignmentWorkStatus.Assigned => ("Chờ nhận việc", "ASSIGNED", "warning"),
+        Models.AssignmentWorkStatus.InProgress => ("Đang thi công", "IN_PROG", "primary"),
+        Models.AssignmentWorkStatus.Completed => ("Hoàn tất sửa", "COMPLETED", "success"),
+        Models.AssignmentWorkStatus.Cancelled => ("Đã hủy", "CANCELLED", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string code, string css, string icon) WorkType(WorkType t) => t switch
+    {
+        Models.WorkType.SCC => ("Sửa chữa chung", "SCC", "primary", "bi-wrench-adjustable"),
+        Models.WorkType.SCD => ("Sửa chữa đồng", "SCD", "warning", "bi-hammer"),
+        Models.WorkType.SCS => ("Sửa chữa sơn", "SCS", "info", "bi-paint-bucket"),
+        _ => (t.ToString(), "", "secondary", "bi-tools")
+    };
+
     public static string FuelLevelText(int level) => level switch
     {
         1 => "1/4 bình (E)",

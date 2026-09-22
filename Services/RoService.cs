@@ -16,6 +16,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingOrderParts, decimal MonthOrderPartValue,
     int TotalCavities, int OccupiedCavities, int AvailableCavities,
     int PendingReceptions, int TodayReceptions,
+    int ActiveAssignments, int TotalEngineers, int TotalGroups,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -127,6 +128,26 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteReceptionAsync(int id);
     Task<List<Appointment>> AppointmentsEligibleForReceptionAsync();
     List<ReceptionItem> GetDefaultChecklistItems();
+    // assignment of work & technician dispatch (Ser_AssignmentWork, Ser_AssignmentWorkEngineer, Ser_Engineer, Ser_GroupRepair)
+    Task<List<GroupRepair>> GroupRepairsAsync(string? q, bool? isActive);
+    Task<GroupRepair?> GetGroupRepairAsync(int id);
+    Task<int> CreateGroupRepairAsync(GroupRepair group);
+    Task<List<GroupRepair>> GroupRepairsForSelectAsync();
+    Task<(bool ok, string msg)> DeleteGroupRepairAsync(int id);
+    Task<List<Engineer>> EngineersAsync(string? q, int? groupId, bool? isActive);
+    Task<Engineer?> GetEngineerAsync(int id);
+    Task<int> CreateEngineerAsync(Engineer eng);
+    Task<List<Engineer>> EngineersForSelectAsync();
+    Task<(bool ok, string msg)> DeleteEngineerAsync(int id);
+    Task<List<AssignmentWork>> AssignmentWorksAsync(AssignmentWorkStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId = null);
+    Task<AssignmentWork?> GetAssignmentWorkAsync(int id);
+    Task<int> CreateAssignmentWorkAsync(AssignmentWork assignment, List<AssignmentEngineer> engineers);
+    Task<(bool conflict, string? conflictMessage)> CheckCavityConflictAsync(int cavityId, DateTime start, DateTime end, int? excludeAssignmentId = null);
+    Task<(bool ok, string msg)> StartAssignmentWorkAsync(int id, string? startedBy = null);
+    Task<(bool ok, string msg)> CompleteAssignmentWorkAsync(int id, string? completedBy = null);
+    Task<(bool ok, string msg)> CancelAssignmentWorkAsync(int id, string? reason = null);
+    Task<(bool ok, string msg)> DeleteAssignmentWorkAsync(int id);
+    Task<List<RepairOrder>> ROsEligibleForAssignmentAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -216,6 +237,14 @@ public class RoService(AppDbContext db) : IRoService
         _ => []
     };
 
+    /// <summary>Chuyển trạng thái Phân công thợ sửa chữa theo Ser_AssignmentWork idn.CarService.</summary>
+    public static AssignmentWorkStatus[] AllowedNextAssignment(AssignmentWorkStatus s) => s switch
+    {
+        AssignmentWorkStatus.Assigned => [AssignmentWorkStatus.InProgress, AssignmentWorkStatus.Cancelled],
+        AssignmentWorkStatus.InProgress => [AssignmentWorkStatus.Completed, AssignmentWorkStatus.Cancelled],
+        _ => []
+    };
+
     public Task<List<Customer>> CustomersAsync(string? q)
     {
         var query = db.Customers.Include(c => c.Cars).AsQueryable();
@@ -292,6 +321,7 @@ public class RoService(AppDbContext db) : IRoService
     public Task<RepairOrder?> GetROAsync(int id) =>
         db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer).Include(r => r.Lines).Include(r => r.Appointment)
           .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet)
+          .Include(r => r.AssignmentWorks).ThenInclude(a => a.Engineers).ThenInclude(e => e.Engineer)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -458,6 +488,10 @@ public class RoService(AppDbContext db) : IRoService
         var pendingReceptions = await db.ReceptionSheets.CountAsync(s => s.Status == ReceptionStatus.Pending);
         var todayReceptions = await db.ReceptionSheets.CountAsync(s => s.CreatedAt.Date == today);
 
+        var activeAssignments = await db.AssignmentWorks.CountAsync(a => a.Status == AssignmentWorkStatus.Assigned || a.Status == AssignmentWorkStatus.InProgress);
+        var totalEngineers = await db.Engineers.CountAsync(e => e.IsActive);
+        var totalGroups = await db.GroupRepairs.CountAsync(g => g.IsActive);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -488,6 +522,9 @@ public class RoService(AppDbContext db) : IRoService
             availableCavities,
             pendingReceptions,
             todayReceptions,
+            activeAssignments,
+            totalEngineers,
+            totalGroups,
             byStatus);
     }
 
@@ -2425,5 +2462,405 @@ public class RoService(AppDbContext db) : IRoService
             .Where(a => a.Status != AppointmentStatus.Cancelled && a.Status != AppointmentStatus.CheckedIn && !a.ROId.HasValue && !a.ReceptionSheetId.HasValue)
             .OrderByDescending(a => a.AppointmentDate.Date == DateTime.Today)
             .ThenBy(a => a.AppointmentDate)
+            .ToListAsync();
+
+    // --- Assignment of Work & Workshop Dispatch Management (Ser_AssignmentWork, Ser_AssignmentWorkEngineer, Ser_Engineer, Ser_GroupRepair) ---
+    public async Task<List<GroupRepair>> GroupRepairsAsync(string? q, bool? isActive)
+    {
+        var query = db.GroupRepairs.Include(g => g.Engineers).AsQueryable();
+        if (isActive.HasValue) query = query.Where(g => g.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(g => g.GroupRNo.ToLower().Contains(kw) || g.GroupRName.ToLower().Contains(kw) || g.LeaderName.ToLower().Contains(kw));
+        }
+        return await query.OrderBy(g => g.GroupRNo).ToListAsync();
+    }
+
+    public Task<GroupRepair?> GetGroupRepairAsync(int id) =>
+        db.GroupRepairs.Include(g => g.Engineers).FirstOrDefaultAsync(g => g.Id == id);
+
+    public async Task<int> CreateGroupRepairAsync(GroupRepair group)
+    {
+        if (string.IsNullOrWhiteSpace(group.GroupRNo))
+            group.GroupRNo = $"TO-{await db.GroupRepairs.CountAsync() + 1:D2}";
+        group.CreatedAt = DateTime.Now;
+        db.GroupRepairs.Add(group);
+        await db.SaveChangesAsync();
+        return group.Id;
+    }
+
+    public Task<List<GroupRepair>> GroupRepairsForSelectAsync() =>
+        db.GroupRepairs.Where(g => g.IsActive).OrderBy(g => g.GroupRName).ToListAsync();
+
+    public async Task<(bool ok, string msg)> DeleteGroupRepairAsync(int id)
+    {
+        var g = await db.GroupRepairs.Include(x => x.Engineers).FirstOrDefaultAsync(x => x.Id == id);
+        if (g == null) return (false, "Không tìm thấy tổ sửa chữa.");
+        if (g.Engineers.Count > 0) return (false, "Không thể xóa tổ đang có kỹ thuật viên trực thuộc.");
+        db.GroupRepairs.Remove(g);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa tổ thợ {g.GroupRName}.");
+    }
+
+    public async Task<List<Engineer>> EngineersAsync(string? q, int? groupId, bool? isActive)
+    {
+        var query = db.Engineers.Include(e => e.GroupRepair).AsQueryable();
+        if (groupId.HasValue && groupId.Value > 0) query = query.Where(e => e.GroupRId == groupId.Value);
+        if (isActive.HasValue) query = query.Where(e => e.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(e => e.EngineerNo.ToLower().Contains(kw)
+                || e.EngineerName.ToLower().Contains(kw)
+                || (e.Phone != null && e.Phone.Contains(kw))
+                || e.SkillLevel.ToLower().Contains(kw)
+                || e.Specialty.ToLower().Contains(kw));
+        }
+        return await query.OrderBy(e => e.EngineerNo).ToListAsync();
+    }
+
+    public Task<Engineer?> GetEngineerAsync(int id) =>
+        db.Engineers.Include(e => e.GroupRepair).FirstOrDefaultAsync(e => e.Id == id);
+
+    public async Task<int> CreateEngineerAsync(Engineer eng)
+    {
+        if (string.IsNullOrWhiteSpace(eng.EngineerNo))
+            eng.EngineerNo = $"KTV-{await db.Engineers.CountAsync() + 1:D3}";
+        eng.CreatedAt = DateTime.Now;
+        db.Engineers.Add(eng);
+        await db.SaveChangesAsync();
+        return eng.Id;
+    }
+
+    public Task<List<Engineer>> EngineersForSelectAsync() =>
+        db.Engineers.Include(e => e.GroupRepair).Where(e => e.IsActive).OrderBy(e => e.EngineerName).ToListAsync();
+
+    public async Task<(bool ok, string msg)> DeleteEngineerAsync(int id)
+    {
+        var e = await db.Engineers.Include(x => x.Assignments).FirstOrDefaultAsync(x => x.Id == id);
+        if (e == null) return (false, "Không tìm thấy kỹ thuật viên.");
+        if (e.Assignments.Count > 0) return (false, "Không thể xóa KTV đã có lịch sử tham gia phân công sửa chữa.");
+        db.Engineers.Remove(e);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa kỹ thuật viên {e.EngineerName}.");
+    }
+
+    public async Task<List<AssignmentWork>> AssignmentWorksAsync(AssignmentWorkStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId = null)
+    {
+        var query = db.AssignmentWorks
+            .Include(a => a.RO).ThenInclude(r => r.Car)
+            .Include(a => a.RO).ThenInclude(r => r.Customer)
+            .Include(a => a.SCCCavity)
+            .Include(a => a.SCDCavity)
+            .Include(a => a.SCSCavity)
+            .Include(a => a.Engineers).ThenInclude(e => e.Engineer)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(a => a.Status == status.Value);
+        if (roId.HasValue && roId.Value > 0) query = query.Where(a => a.ROId == roId.Value);
+        if (fromDate.HasValue) query = query.Where(a => a.CreatedAt.Date >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(a => a.CreatedAt.Date <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(a => a.AssignmentNo.ToLower().Contains(kw)
+                || a.RO.Code.ToLower().Contains(kw)
+                || a.RO.Car.Plate.ToLower().Contains(kw)
+                || a.RO.Car.Model.ToLower().Contains(kw)
+                || a.RO.Customer.Name.ToLower().Contains(kw)
+                || (a.Note != null && a.Note.ToLower().Contains(kw))
+                || a.Engineers.Any(e => e.Engineer.EngineerName.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(a => a.CreatedAt).ToList();
+    }
+
+    public Task<AssignmentWork?> GetAssignmentWorkAsync(int id) =>
+        db.AssignmentWorks
+            .Include(a => a.RO).ThenInclude(r => r.Car)
+            .Include(a => a.RO).ThenInclude(r => r.Customer)
+            .Include(a => a.RO).ThenInclude(r => r.Lines)
+            .Include(a => a.SCCCavity)
+            .Include(a => a.SCDCavity)
+            .Include(a => a.SCSCavity)
+            .Include(a => a.Engineers).ThenInclude(e => e.Engineer).ThenInclude(eng => eng.GroupRepair)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+    public async Task<(bool conflict, string? conflictMessage)> CheckCavityConflictAsync(int cavityId, DateTime start, DateTime end, int? excludeAssignmentId = null)
+    {
+        if (cavityId <= 0 || start >= end) return (false, null);
+
+        var query = db.AssignmentWorks
+            .Include(a => a.RO).ThenInclude(r => r.Car)
+            .Include(a => a.SCCCavity)
+            .Include(a => a.SCDCavity)
+            .Include(a => a.SCSCavity)
+            .Where(a => a.Status == AssignmentWorkStatus.Assigned || a.Status == AssignmentWorkStatus.InProgress);
+
+        if (excludeAssignmentId.HasValue)
+            query = query.Where(a => a.Id != excludeAssignmentId.Value);
+
+        var activeAssignments = await query.ToListAsync();
+
+        foreach (var a in activeAssignments)
+        {
+            // Kiểm tra khoang SCC
+            if (a.SCCCavityId == cavityId && a.SCCPlanStartDTime.HasValue && a.SCCPlanFinishDTime.HasValue)
+            {
+                if (a.SCCPlanStartDTime.Value < end && a.SCCPlanFinishDTime.Value > start)
+                {
+                    return (true, $"Khoang {a.SCCCavity?.CavityName ?? $"#{cavityId}"} đang có lịch SCC cho RO {a.RO.Code} ({a.RO.Car?.Plate}) từ {a.SCCPlanStartDTime:HH:mm dd/MM} đến {a.SCCPlanFinishDTime:HH:mm dd/MM}.");
+                }
+            }
+            // Kiểm tra khoang SCD
+            if (a.SCDCavityId == cavityId && a.SCDPlanStartDTime.HasValue && a.SCDPlanFinishDTime.HasValue)
+            {
+                if (a.SCDPlanStartDTime.Value < end && a.SCDPlanFinishDTime.Value > start)
+                {
+                    return (true, $"Khoang {a.SCDCavity?.CavityName ?? $"#{cavityId}"} đang có lịch SCD cho RO {a.RO.Code} ({a.RO.Car?.Plate}) từ {a.SCDPlanStartDTime:HH:mm dd/MM} đến {a.SCDPlanFinishDTime:HH:mm dd/MM}.");
+                }
+            }
+            // Kiểm tra khoang SCS
+            if (a.SCSCavityId == cavityId && a.SCSPlanStartDTime.HasValue && a.SCSPlanFinishDTime.HasValue)
+            {
+                if (a.SCSPlanStartDTime.Value < end && a.SCSPlanFinishDTime.Value > start)
+                {
+                    return (true, $"Khoang {a.SCSCavity?.CavityName ?? $"#{cavityId}"} đang có lịch SCS cho RO {a.RO.Code} ({a.RO.Car?.Plate}) từ {a.SCSPlanStartDTime:HH:mm dd/MM} đến {a.SCSPlanFinishDTime:HH:mm dd/MM}.");
+                }
+            }
+        }
+
+        return (false, null);
+    }
+
+    public async Task<int> CreateAssignmentWorkAsync(AssignmentWork assignment, List<AssignmentEngineer> engineers)
+    {
+        var ro = await db.ROs.Include(r => r.Car).FirstOrDefaultAsync(r => r.Id == assignment.ROId);
+        if (ro == null) throw new InvalidOperationException("Không tìm thấy Lệnh sửa chữa (RO).");
+
+        // Quy tắc idn.CarService: RO phải ở trạng thái HasRO (hoặc InGarage) mới được phân công thợ
+        if (ro.Status != ROStatus.HasRO && ro.Status != ROStatus.InGarage)
+            throw new InvalidOperationException($"Lệnh sửa chữa {ro.Code} đang ở trạng thái '{Ui.Status(ro.Status).text}'. Chỉ có thể phân công thợ khi RO ở trạng thái 'Chờ sửa (HasRO)' hoặc 'Đang sửa (InGarage)'.");
+
+        // Kiểm tra xung đột khoang sửa chữa
+        if (assignment.SCCCavityId.HasValue && assignment.SCCPlanStartDTime.HasValue && assignment.SCCPlanFinishDTime.HasValue)
+        {
+            var (conflict, msg) = await CheckCavityConflictAsync(assignment.SCCCavityId.Value, assignment.SCCPlanStartDTime.Value, assignment.SCCPlanFinishDTime.Value);
+            if (conflict) throw new InvalidOperationException(msg);
+        }
+        if (assignment.SCDCavityId.HasValue && assignment.SCDPlanStartDTime.HasValue && assignment.SCDPlanFinishDTime.HasValue)
+        {
+            var (conflict, msg) = await CheckCavityConflictAsync(assignment.SCDCavityId.Value, assignment.SCDPlanStartDTime.Value, assignment.SCDPlanFinishDTime.Value);
+            if (conflict) throw new InvalidOperationException(msg);
+        }
+        if (assignment.SCSCavityId.HasValue && assignment.SCSPlanStartDTime.HasValue && assignment.SCSPlanFinishDTime.HasValue)
+        {
+            var (conflict, msg) = await CheckCavityConflictAsync(assignment.SCSCavityId.Value, assignment.SCSPlanStartDTime.Value, assignment.SCSPlanFinishDTime.Value);
+            if (conflict) throw new InvalidOperationException(msg);
+        }
+
+        if (string.IsNullOrWhiteSpace(assignment.AssignmentNo))
+        {
+            var countTotal = await db.AssignmentWorks.CountAsync();
+            assignment.AssignmentNo = $"PC{DateTime.Today:yyMMdd}-{countTotal + 1:D3}";
+        }
+
+        assignment.CreatedAt = DateTime.Now;
+        db.AssignmentWorks.Add(assignment);
+        await db.SaveChangesAsync();
+
+        if (engineers != null && engineers.Count > 0)
+        {
+            foreach (var eng in engineers)
+            {
+                eng.AssignmentWorkId = assignment.Id;
+                db.AssignmentEngineers.Add(eng);
+            }
+            await db.SaveChangesAsync();
+        }
+
+        // Tự động gán KTV chính cho RO nếu chưa có
+        var primaryEng = engineers?.FirstOrDefault(e => e.IsPrimary);
+        if (primaryEng != null)
+        {
+            var engEntity = await db.Engineers.FirstOrDefaultAsync(e => e.Id == primaryEng.EngineerId);
+            if (engEntity != null && string.IsNullOrWhiteSpace(ro.Technician))
+            {
+                ro.Technician = engEntity.EngineerName;
+                await db.SaveChangesAsync();
+            }
+        }
+
+        return assignment.Id;
+    }
+
+    public async Task<(bool ok, string msg)> StartAssignmentWorkAsync(int id, string? startedBy = null)
+    {
+        var assignment = await db.AssignmentWorks
+            .Include(a => a.RO).ThenInclude(r => r.Car)
+            .Include(a => a.SCCCavity)
+            .Include(a => a.SCDCavity)
+            .Include(a => a.SCSCavity)
+            .Include(a => a.Engineers).ThenInclude(e => e.Engineer)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+        if (assignment == null) return (false, "Không tìm thấy phiếu phân công công việc.");
+        if (assignment.Status != AssignmentWorkStatus.Assigned)
+            return (false, $"Phiếu phân công đang ở trạng thái '{Ui.AssignmentWorkStatus(assignment.Status).text}', không thể bắt đầu.");
+
+        assignment.Status = AssignmentWorkStatus.InProgress;
+        assignment.StartedAt = DateTime.Now;
+
+        if (assignment.HasSCC && !assignment.SCCActualStartDTime.HasValue)
+            assignment.SCCActualStartDTime = DateTime.Now;
+        if (assignment.HasSCD && !assignment.SCDActualStartDTime.HasValue)
+            assignment.SCDActualStartDTime = DateTime.Now;
+        if (assignment.HasSCS && !assignment.SCSActualStartDTime.HasValue)
+            assignment.SCSActualStartDTime = DateTime.Now;
+
+        var techName = assignment.PrimaryTechnician;
+
+        // Cập nhật trạng thái RO sang InGarage nếu đang là HasRO
+        if (assignment.RO.Status == ROStatus.HasRO)
+        {
+            assignment.RO.Status = ROStatus.InGarage;
+            assignment.RO.IntakeAt ??= DateTime.Now;
+            if (!string.IsNullOrWhiteSpace(techName) && techName != "Chưa chỉ định")
+                assignment.RO.Technician = techName;
+        }
+
+        // Cập nhật trạng thái khoang sửa chữa sang Occupied
+        var primaryCavity = assignment.SCCCavity ?? assignment.SCDCavity ?? assignment.SCSCavity;
+        if (primaryCavity != null)
+        {
+            primaryCavity.Status = CavityStatus.Occupied;
+            primaryCavity.CurrentROId = assignment.ROId;
+            primaryCavity.CurrentCarPlate = assignment.RO.Car?.Plate;
+            primaryCavity.CurrentCarModel = assignment.RO.Car?.Model;
+            primaryCavity.CurrentTechnician = techName;
+            primaryCavity.StartUseDate = DateTime.Now;
+            primaryCavity.ExpectedFinishDate = assignment.SCCPlanFinishDTime ?? assignment.SCDPlanFinishDTime ?? assignment.SCSPlanFinishDTime;
+            assignment.RO.CavityId = primaryCavity.Id;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã bắt đầu thi công Lệnh phân công {assignment.AssignmentNo}. Xe đã vào xưởng (RO: {assignment.RO.Code} → Đang sửa INGA).");
+    }
+
+    public async Task<(bool ok, string msg)> CompleteAssignmentWorkAsync(int id, string? completedBy = null)
+    {
+        var assignment = await db.AssignmentWorks
+            .Include(a => a.RO).ThenInclude(r => r.Car)
+            .Include(a => a.SCCCavity)
+            .Include(a => a.SCDCavity)
+            .Include(a => a.SCSCavity)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+        if (assignment == null) return (false, "Không tìm thấy phiếu phân công công việc.");
+        if (assignment.Status != AssignmentWorkStatus.InProgress && assignment.Status != AssignmentWorkStatus.Assigned)
+            return (false, $"Phiếu phân công đang ở trạng thái '{Ui.AssignmentWorkStatus(assignment.Status).text}', không thể hoàn tất.");
+
+        assignment.Status = AssignmentWorkStatus.Completed;
+        assignment.FinishedAt = DateTime.Now;
+
+        if (assignment.HasSCC && !assignment.SCCActualFinishDTime.HasValue)
+            assignment.SCCActualFinishDTime = DateTime.Now;
+        if (assignment.HasSCD && !assignment.SCDActualFinishDTime.HasValue)
+            assignment.SCDActualFinishDTime = DateTime.Now;
+        if (assignment.HasSCS && !assignment.SCSActualFinishDTime.HasValue)
+            assignment.SCSActualFinishDTime = DateTime.Now;
+
+        // Giải phóng các khoang sửa chữa liên quan
+        void ReleaseBay(Cavity? cavity)
+        {
+            if (cavity != null && cavity.CurrentROId == assignment.ROId)
+            {
+                cavity.Status = CavityStatus.Available;
+                cavity.CurrentROId = null;
+                cavity.CurrentCarPlate = null;
+                cavity.CurrentCarModel = null;
+                cavity.CurrentTechnician = null;
+                cavity.FinishUseDate = DateTime.Now;
+            }
+        }
+
+        ReleaseBay(assignment.SCCCavity);
+        ReleaseBay(assignment.SCDCavity);
+        ReleaseBay(assignment.SCSCavity);
+
+        // Kiểm tra xem tất cả phân công của RO này đã hoàn tất chưa
+        var otherActive = await db.AssignmentWorks.AnyAsync(a => a.ROId == assignment.ROId && a.Id != id && (a.Status == AssignmentWorkStatus.Assigned || a.Status == AssignmentWorkStatus.InProgress));
+        if (!otherActive && assignment.RO.Status == ROStatus.InGarage)
+        {
+            assignment.RO.Status = ROStatus.Repaired;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã nghiệm thu hoàn thành phân công {assignment.AssignmentNo}. Lệnh sửa chữa {assignment.RO.Code} chuyển sang 'Sửa xong (RPRD)'.");
+    }
+
+    public async Task<(bool ok, string msg)> CancelAssignmentWorkAsync(int id, string? reason = null)
+    {
+        var assignment = await db.AssignmentWorks
+            .Include(a => a.SCCCavity)
+            .Include(a => a.SCDCavity)
+            .Include(a => a.SCSCavity)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+        if (assignment == null) return (false, "Không tìm thấy phiếu phân công công việc.");
+        if (assignment.Status == AssignmentWorkStatus.Completed)
+            return (false, "Không thể hủy phân công đã hoàn tất nghiệm thu.");
+
+        assignment.Status = AssignmentWorkStatus.Cancelled;
+        if (!string.IsNullOrWhiteSpace(reason))
+            assignment.Note = (string.IsNullOrWhiteSpace(assignment.Note) ? "" : assignment.Note + " | ") + $"[Đã hủy: {reason.Trim()}]";
+
+        // Giải phóng khoang nếu đang chiếm dụng
+        void ReleaseBay(Cavity? cavity)
+        {
+            if (cavity != null && cavity.CurrentROId == assignment.ROId)
+            {
+                cavity.Status = CavityStatus.Available;
+                cavity.CurrentROId = null;
+                cavity.CurrentCarPlate = null;
+                cavity.CurrentCarModel = null;
+                cavity.CurrentTechnician = null;
+                cavity.FinishUseDate = DateTime.Now;
+            }
+        }
+        ReleaseBay(assignment.SCCCavity);
+        ReleaseBay(assignment.SCDCavity);
+        ReleaseBay(assignment.SCSCavity);
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy phiếu phân công {assignment.AssignmentNo}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteAssignmentWorkAsync(int id)
+    {
+        var assignment = await db.AssignmentWorks.Include(a => a.Engineers).FirstOrDefaultAsync(a => a.Id == id);
+        if (assignment == null) return (false, "Không tìm thấy phiếu phân công công việc.");
+        if (assignment.Status is not (AssignmentWorkStatus.Assigned or AssignmentWorkStatus.Cancelled))
+            return (false, "Chỉ có thể xóa phiếu phân công ở trạng thái 'Chờ nhận việc' hoặc 'Đã hủy'.");
+
+        db.AssignmentEngineers.RemoveRange(assignment.Engineers);
+        db.AssignmentWorks.Remove(assignment);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu phân công {assignment.AssignmentNo}.");
+    }
+
+    public Task<List<RepairOrder>> ROsEligibleForAssignmentAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines)
+            .Include(r => r.Cavity)
+            .Include(r => r.AssignmentWorks)
+            .Where(r => r.Status == ROStatus.HasRO || r.Status == ROStatus.InGarage)
+            .OrderByDescending(r => r.Status == ROStatus.HasRO)
+            .ThenByDescending(r => r.CreatedAt)
             .ToListAsync();
 }

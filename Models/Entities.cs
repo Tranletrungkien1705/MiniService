@@ -194,6 +194,23 @@ public enum AuditStatus
     NA = 3          // Không có / Không áp dụng
 }
 
+/// <summary>Trạng thái Phiếu phân công thợ sửa chữa — theo Ser_AssignmentWork idn.CarService.</summary>
+public enum AssignmentWorkStatus
+{
+    Assigned = 0,    // ASSIGNED   — Mới phân công / Chờ KTV nhận việc
+    InProgress = 1,  // IN_PROG    — Đang sửa chữa / Xe trong khoang (tương ứng RO InGarage)
+    Completed = 2,   // COMPLETED  — Đã hoàn tất sửa chữa / Nghiệm thu nội bộ (tương ứng RO Repaired)
+    Cancelled = 3    // CANCELLED  — Hủy phân công
+}
+
+/// <summary>Loại công việc sửa chữa — theo Ser_AssignmentWork WorkType idn.CarService.</summary>
+public enum WorkType
+{
+    SCC = 0,         // Sửa chữa chung & Gầm máy (General Repair)
+    SCD = 1,         // Sửa chữa đồng & Gò hàn thân vỏ (Body Repair)
+    SCS = 2          // Sửa chữa sơn & Sấy hoàn thiện (Paint / Spray Booth)
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -251,6 +268,7 @@ public class RepairOrder : IOrgOwned
     public List<Quote> Quotes { get; set; } = [];
     public List<OrderPart> OrderParts { get; set; } = [];
     public List<ReceptionSheet> ReceptionSheets { get; set; } = [];
+    public List<AssignmentWork> AssignmentWorks { get; set; } = [];
 
     public decimal Total => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
@@ -819,4 +837,106 @@ public class ReceptionItem : IOrgOwned
 
     public ReceptionSheet ReceptionSheet { get; set; } = null!;
 }
+
+/// <summary>Tổ kỹ thuật / Nhóm thợ sửa chữa xưởng dịch vụ — Ser_GroupRepair trong idn.CarService.</summary>
+public class GroupRepair : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string GroupRNo { get; set; } = "";             // Mã tổ thợ (VD: TO-SCC-01, TO-DS-01)
+    public string GroupRName { get; set; } = "";           // Tên tổ kỹ thuật (VD: Tổ Sửa chữa chung & Gầm máy)
+    public string LeaderName { get; set; } = "";           // Tổ trưởng kỹ thuật
+    public string? Note { get; set; }                      // Ghi chú phạm vi nhiệm vụ
+    public bool IsActive { get; set; } = true;             // Đang hoạt động
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public List<Engineer> Engineers { get; set; } = [];
+}
+
+/// <summary>Kỹ thuật viên / Thợ sửa chữa dịch vụ xe — Ser_Engineer trong idn.CarService.</summary>
+public class Engineer : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string EngineerNo { get; set; } = "";           // Mã nhân viên kỹ thuật (VD: KTV-001)
+    public string EngineerName { get; set; } = "";         // Họ tên KTV
+    public string? Phone { get; set; }                     // Số điện thoại liên hệ
+    public string SkillLevel { get; set; } = "Bậc 3/7";   // Bậc thợ / Trình độ tay nghề
+    public string Specialty { get; set; } = "Sửa chữa chung"; // Chuyên môn chính (SCC, Đồng sơn, Điện tử...)
+    public int? GroupRId { get; set; }                     // Tổ nhóm thợ trực thuộc
+    public bool IsActive { get; set; } = true;             // Đang công tác
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public GroupRepair? GroupRepair { get; set; }
+    public List<AssignmentEngineer> Assignments { get; set; } = [];
+}
+
+/// <summary>Phiếu phân công công việc & Điều phối lệnh sửa chữa — Ser_AssignmentWork trong idn.CarService.</summary>
+public class AssignmentWork : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string AssignmentNo { get; set; } = "";         // Mã phiếu phân công (VD: PC260427-001)
+    public int ROId { get; set; }                          // Lệnh sửa chữa gốc
+    public AssignmentWorkStatus Status { get; set; } = AssignmentWorkStatus.Assigned; // Trạng thái phân công
+
+    // Phân công Sửa chữa chung (SCC)
+    public DateTime? SCCPlanStartDTime { get; set; }       // Giờ kế hoạch bắt đầu SCC
+    public DateTime? SCCPlanFinishDTime { get; set; }      // Giờ kế hoạch hoàn tất SCC
+    public DateTime? SCCActualStartDTime { get; set; }     // Giờ thực tế bắt đầu SCC
+    public DateTime? SCCActualFinishDTime { get; set; }    // Giờ thực tế kết thúc SCC
+    public int? SCCCavityId { get; set; }                  // Khoang sửa chữa chung
+
+    // Phân công Sửa chữa đồng (SCD)
+    public DateTime? SCDPlanStartDTime { get; set; }       // Giờ kế hoạch bắt đầu SCD
+    public DateTime? SCDPlanFinishDTime { get; set; }      // Giờ kế hoạch hoàn tất SCD
+    public DateTime? SCDActualStartDTime { get; set; }     // Giờ thực tế bắt đầu SCD
+    public DateTime? SCDActualFinishDTime { get; set; }    // Giờ thực tế kết thúc SCD
+    public int? SCDCavityId { get; set; }                  // Khoang gò hàn / kéo nắn thân vỏ
+
+    // Phân công Sửa chữa sơn (SCS)
+    public DateTime? SCSPlanStartDTime { get; set; }       // Giờ kế hoạch bắt đầu SCS
+    public DateTime? SCSPlanFinishDTime { get; set; }      // Giờ kế hoạch hoàn tất SCS
+    public DateTime? SCSActualStartDTime { get; set; }     // Giờ thực tế bắt đầu SCS
+    public DateTime? SCSActualFinishDTime { get; set; }    // Giờ thực tế kết thúc SCS
+    public int? SCSCavityId { get; set; }                  // Buồng sơn sấy / Khoang pha sơn
+
+    public string? Note { get; set; }                      // Ý kiến chỉ đạo kỹ thuật của Quản đốc
+    public string CreatedBy { get; set; } = "Quản đốc xưởng"; // Người lập phiếu phân công
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? StartedAt { get; set; }               // Thời điểm bắt đầu công việc
+    public DateTime? FinishedAt { get; set; }              // Thời điểm hoàn tất công việc
+
+    public RepairOrder RO { get; set; } = null!;
+    public Cavity? SCCCavity { get; set; }
+    public Cavity? SCDCavity { get; set; }
+    public Cavity? SCSCavity { get; set; }
+    public List<AssignmentEngineer> Engineers { get; set; } = [];
+
+    public string PrimaryTechnician => Engineers.FirstOrDefault(e => e.IsPrimary)?.Engineer?.EngineerName
+        ?? Engineers.FirstOrDefault()?.Engineer?.EngineerName ?? "Chưa chỉ định";
+
+    public bool HasSCC => SCCPlanStartDTime.HasValue || SCCCavityId.HasValue;
+    public bool HasSCD => SCDPlanStartDTime.HasValue || SCDCavityId.HasValue;
+    public bool HasSCS => SCSPlanStartDTime.HasValue || SCSCavityId.HasValue;
+    public int EngineerCount => Engineers.Count;
+    public decimal TotalAssignedHours => Engineers.Sum(e => e.AssignedHours);
+}
+
+/// <summary>Chi tiết kỹ thuật viên tham gia phân công công việc — Ser_AssignmentWorkEngineer trong idn.CarService.</summary>
+public class AssignmentEngineer : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int AssignmentWorkId { get; set; }
+    public int EngineerId { get; set; }
+    public WorkType WorkType { get; set; } = WorkType.SCC; // Công đoạn sửa chữa (SCC, SCD, SCS)
+    public bool IsPrimary { get; set; } = true;            // Cờ kỹ thuật viên chính chịu trách nhiệm
+    public decimal AssignedHours { get; set; } = 1.0m;     // Định mức giờ công giao cho KTV
+    public string? Note { get; set; }                      // Nhiệm vụ cụ thể
+
+    public AssignmentWork AssignmentWork { get; set; } = null!;
+    public Engineer Engineer { get; set; } = null!;
+}
+
 

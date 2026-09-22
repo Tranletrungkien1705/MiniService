@@ -1,0 +1,291 @@
+@model List<MiniService.Models.Engineer>
+@{
+    ViewData["Title"] = "Đội ngũ Kỹ thuật viên & Tổ thợ xưởng";
+    var groups = (List<MiniService.Models.GroupRepair>)(ViewBag.AllGroups ?? new List<MiniService.Models.GroupRepair>());
+    var selectGroups = (List<MiniService.Models.GroupRepair>)(ViewBag.Groups ?? new List<MiniService.Models.GroupRepair>());
+    int? currentGroupId = ViewBag.GroupId;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/AssignmentWork" class="text-decoration-none text-muted small"><i class="bi bi-arrow-left me-1"></i>Quay lại danh sách phân công</a>
+        <h5 class="fw-bold mt-1 mb-0"><i class="bi bi-people me-2 text-primary"></i>Đội ngũ Kỹ thuật viên &amp; Tổ nhóm thợ sửa chữa</h5>
+        <div class="text-muted small">Quản trị nhân sự kỹ thuật, bậc thợ, chuyên môn và phân bổ tổ đội xưởng dịch vụ (Ser_Engineer / Ser_GroupRepair)</div>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+            <i class="bi bi-diagram-3 me-1"></i>Thêm tổ thợ mới
+        </button>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createEngineerModal">
+            <i class="bi bi-person-plus me-1"></i>Thêm kỹ thuật viên
+        </button>
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm bg-white"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Tổng số kỹ thuật viên</div>
+                    <div class="stat-num text-primary">@Model.Count</div>
+                </div>
+                <div class="p-3 bg-primary-subtle text-primary rounded-circle"><i class="bi bi-person-badge fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">@Model.Count(e => e.IsActive) KTV đang sẵn sàng nhận việc</div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm bg-white"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Số tổ kỹ thuật xưởng</div>
+                    <div class="stat-num text-dark">@groups.Count</div>
+                </div>
+                <div class="p-3 bg-light text-dark rounded-circle"><i class="bi bi-diagram-3 fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Tổ SCC, Đồng sơn, Bảo dưỡng nhanh EM</div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm bg-white"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Trình độ tay nghề cao</div>
+                    <div class="stat-num text-success">@Model.Count(e => e.SkillLevel.Contains("Kỹ thuật viên trưởng") || e.SkillLevel.Contains("Bậc 5") || e.SkillLevel.Contains("Bậc 6"))</div>
+                </div>
+                <div class="p-3 bg-success-subtle text-success rounded-circle"><i class="bi bi-award fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Đạt chứng chỉ kỹ thuật viên xuất sắc</div>
+        </div></div>
+    </div>
+</div>
+
+<!-- Bảng Kỹ thuật viên -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white py-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-person-lines-fill me-2"></i>Danh sách Kỹ thuật viên (Engineers)</h6>
+            <form method="get" class="d-flex gap-2">
+                <input type="text" name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Tìm theo tên, mã, SĐT, chuyên môn..." style="width:260px" />
+                <select name="groupId" class="form-select form-select-sm" style="width:200px">
+                    <option value="">-- Tất cả tổ thợ --</option>
+                    @foreach (var g in selectGroups)
+                    {
+                        <option value="@g.Id" selected="@(currentGroupId == g.Id)">@g.GroupRName</option>
+                    }
+                </select>
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i></button>
+            </form>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:100px">Mã KTV</th>
+                        <th>Họ và tên</th>
+                        <th>Số điện thoại</th>
+                        <th>Bậc thợ / Trình độ</th>
+                        <th>Chuyên môn kỹ thuật</th>
+                        <th>Tổ thợ trực thuộc</th>
+                        <th style="width:100px" class="text-center">Trạng thái</th>
+                        <th style="width:80px" class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var eng in Model)
+                {
+                    <tr>
+                        <td class="font-monospace fw-bold text-primary">@eng.EngineerNo</td>
+                        <td>
+                            <div class="fw-bold">@eng.EngineerName</div>
+                        </td>
+                        <td>@(eng.Phone ?? "—")</td>
+                        <td>
+                            <span class="badge bg-light text-dark border">@eng.SkillLevel</span>
+                        </td>
+                        <td>@eng.Specialty</td>
+                        <td>
+                            @(eng.GroupRepair != null ? eng.GroupRepair.GroupRName : "Chưa phân tổ")
+                        </td>
+                        <td class="text-center">
+                            @if (eng.IsActive)
+                            {
+                                <span class="badge bg-success">Đang công tác</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Tạm nghỉ</span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <form asp-action="DeleteEngineer" method="post" class="d-inline" onsubmit="return confirm('Xóa kỹ thuật viên này?')">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@eng.Id" />
+                                <button class="btn btn-sm btn-link text-danger p-0" title="Xóa"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr><td colspan="8" class="text-center py-4 text-muted">Không tìm thấy kỹ thuật viên nào.</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Bảng Tổ nhóm thợ sửa chữa -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white py-3">
+        <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-diagram-3 me-2"></i>Danh sách Tổ kỹ thuật xưởng (Repair Groups)</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:120px">Mã tổ</th>
+                        <th>Tên tổ kỹ thuật</th>
+                        <th>Tổ trưởng</th>
+                        <th class="text-center" style="width:120px">Số thành viên</th>
+                        <th>Ghi chú nhiệm vụ</th>
+                        <th style="width:80px" class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var g in groups)
+                {
+                    <tr>
+                        <td class="font-monospace fw-bold">@g.GroupRNo</td>
+                        <td class="fw-semibold">@g.GroupRName</td>
+                        <td><b>@g.LeaderName</b></td>
+                        <td class="text-center">
+                            <span class="badge bg-primary-subtle text-primary">@g.Engineers.Count KTV</span>
+                        </td>
+                        <td class="text-muted small">@(string.IsNullOrWhiteSpace(g.Note) ? "—" : g.Note)</td>
+                        <td class="text-end">
+                            <form asp-action="DeleteGroup" method="post" class="d-inline" onsubmit="return confirm('Xóa tổ kỹ thuật này?')">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="id" value="@g.Id" />
+                                <button class="btn btn-sm btn-link text-danger p-0" title="Xóa"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                    </tr>
+                }
+                @if (groups.Count == 0)
+                {
+                    <tr><td colspan="6" class="text-center py-4 text-muted">Chưa có tổ thợ nào.</td></tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Kỹ Thuật Viên -->
+<div class="modal fade" id="createEngineerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="CreateEngineer" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold">Thêm Kỹ thuật viên mới</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold">Mã KTV (Tùy chọn)</label>
+                            <input type="text" name="code" class="form-control form-control-sm" placeholder="VD: KTV-006" />
+                        </div>
+                        <div class="col-md-7">
+                            <label class="form-label small fw-semibold">Họ và tên KTV <span class="text-danger">*</span></label>
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Nguyễn Văn A" required />
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Số điện thoại</label>
+                            <input type="text" name="phone" class="form-control form-control-sm" placeholder="0912..." />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Bậc thợ</label>
+                            <select name="skillLevel" class="form-select form-select-sm">
+                                <option value="Bậc 1/7">Bậc 1/7 (Học việc)</option>
+                                <option value="Bậc 2/7">Bậc 2/7</option>
+                                <option value="Bậc 3/7" selected>Bậc 3/7 (Thợ chuẩn)</option>
+                                <option value="Bậc 4/7">Bậc 4/7 (Thợ lành nghề)</option>
+                                <option value="Bậc 5/7">Bậc 5/7 (Chuyên gia)</option>
+                                <option value="Bậc 6/7">Bậc 6/7 (Bậc cao)</option>
+                                <option value="Kỹ thuật viên trưởng">Kỹ thuật viên trưởng (Master)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Chuyên môn chính</label>
+                        <input type="text" name="specialty" class="form-control form-control-sm" placeholder="Sửa chữa chung, Gò hàn, Sơn hấp, Điện xe..." />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Tổ thợ trực thuộc</label>
+                        <select name="groupId" class="form-select form-select-sm">
+                            <option value="">-- Chưa phân tổ --</option>
+                            @foreach (var g in selectGroups)
+                            {
+                                <option value="@g.Id">@g.GroupRNo — @g.GroupRName</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Thêm KTV</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm Tổ Thợ -->
+<div class="modal fade" id="createGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="CreateGroup" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold">Thêm Tổ kỹ thuật xưởng mới</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-5">
+                            <label class="form-label small fw-semibold">Mã tổ (Tùy chọn)</label>
+                            <input type="text" name="code" class="form-control form-control-sm" placeholder="VD: TO-SCC-02" />
+                        </div>
+                        <div class="col-md-7">
+                            <label class="form-label small fw-semibold">Tên tổ thợ <span class="text-danger">*</span></label>
+                            <input type="text" name="name" class="form-control form-control-sm" placeholder="Tổ Sửa chữa chung #2" required />
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Tổ trưởng kỹ thuật</label>
+                        <input type="text" name="leader" class="form-control form-control-sm" placeholder="Họ và tên tổ trưởng" />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Ghi chú nhiệm vụ</label>
+                        <textarea name="note" class="form-control form-control-sm" rows="2" placeholder="Phạm vi công việc phụ trách..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Thêm tổ thợ</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

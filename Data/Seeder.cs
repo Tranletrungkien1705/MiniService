@@ -1100,13 +1100,220 @@ public static class Seeder
             }
             await db.SaveChangesAsync();
         }
+
+        if (!await db.GroupRepairs.AnyAsync())
+        {
+            var grp1 = new GroupRepair
+            {
+                GroupRNo = "TO-SCC-01",
+                GroupRName = "Tổ Sửa chữa chung & Gầm máy #1",
+                LeaderName = "Nguyễn Văn Hùng",
+                Note = "Phụ trách bảo dưỡng định kỳ cấp trung bình/lớn, sửa chữa gầm phanh, động cơ và hộp số tiêu chuẩn Hyundai.",
+                IsActive = true,
+                CreatedAt = DateTime.Now.AddDays(-60)
+            };
+            var grp2 = new GroupRepair
+            {
+                GroupRNo = "TO-DS-01",
+                GroupRName = "Tổ Đồng sơn & Phục hồi va chạm",
+                LeaderName = "Trần Đình Trọng",
+                Note = "Chuyên phục hồi xe va chạm, kéo nắn khung thân vỏ, gò hàn và sơn sấy phòng hấp nhiệt cao.",
+                IsActive = true,
+                CreatedAt = DateTime.Now.AddDays(-60)
+            };
+            var grp3 = new GroupRepair
+            {
+                GroupRNo = "TO-EM-01",
+                GroupRName = "Tổ Bảo dưỡng nhanh (Express Maintenance)",
+                LeaderName = "Lê Văn Tuấn",
+                Note = "Quy trình bảo dưỡng 60 phút 2 kỹ thuật viên song hành theo chuẩn Hyundai Global.",
+                IsActive = true,
+                CreatedAt = DateTime.Now.AddDays(-60)
+            };
+
+            db.GroupRepairs.AddRange(grp1, grp2, grp3);
+            await db.SaveChangesAsync();
+
+            var eng1 = new Engineer
+            {
+                EngineerNo = "KTV-001",
+                EngineerName = "Nguyễn Văn Hùng",
+                Phone = "0912345601",
+                SkillLevel = "Kỹ thuật viên trưởng (Bậc 6/7)",
+                Specialty = "Sửa chữa chung, Gầm máy & Động cơ",
+                GroupRId = grp1.Id,
+                IsActive = true,
+                CreatedAt = DateTime.Now.AddDays(-60)
+            };
+            var eng2 = new Engineer
+            {
+                EngineerNo = "KTV-002",
+                EngineerName = "Lê Văn Tuấn",
+                Phone = "0912345602",
+                SkillLevel = "Bậc 4/7",
+                Specialty = "Bảo dưỡng định kỳ EM & Hệ thống phanh",
+                GroupRId = grp3.Id,
+                IsActive = true,
+                CreatedAt = DateTime.Now.AddDays(-50)
+            };
+            var eng3 = new Engineer
+            {
+                EngineerNo = "KTV-003",
+                EngineerName = "Trần Đình Trọng",
+                Phone = "0912345603",
+                SkillLevel = "Kỹ thuật viên trưởng Đồng Sơn (Bậc 5/7)",
+                Specialty = "Gò hàn, Kéo nắn khung vỏ (SCD)",
+                GroupRId = grp2.Id,
+                IsActive = true,
+                CreatedAt = DateTime.Now.AddDays(-45)
+            };
+            var eng4 = new Engineer
+            {
+                EngineerNo = "KTV-004",
+                EngineerName = "Phạm Văn Quang",
+                Phone = "0912345604",
+                SkillLevel = "Thợ sơn chuyên gia (Bậc 5/7)",
+                Specialty = "Pha màu vi tính & Sơn hấp gốc nước (SCS)",
+                GroupRId = grp2.Id,
+                IsActive = true,
+                CreatedAt = DateTime.Now.AddDays(-40)
+            };
+            var eng5 = new Engineer
+            {
+                EngineerNo = "KTV-005",
+                EngineerName = "Vũ Thành Đạt",
+                Phone = "0912345605",
+                SkillLevel = "Bậc 3/7",
+                Specialty = "Chẩn đoán điện - điện tử & Hộp điều khiển ECU",
+                GroupRId = grp1.Id,
+                IsActive = true,
+                CreatedAt = DateTime.Now.AddDays(-30)
+            };
+
+            db.Engineers.AddRange(eng1, eng2, eng3, eng4, eng5);
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.AssignmentWorks.AnyAsync())
+        {
+            var ro1 = await db.ROs.FirstOrDefaultAsync(r => r.Code == "ROSEED-001");
+            var roWar = await db.ROs.FirstOrDefaultAsync(r => r.Code == "ROSEED-WAR-001");
+            var roFns1 = await db.ROs.FirstOrDefaultAsync(r => r.Code == "ROSEED-FNS-001");
+
+            var cavEm1 = await db.Cavities.FirstOrDefaultAsync(c => c.CavityNo == "KH-EM-01");
+            var cavGr2 = await db.Cavities.FirstOrDefaultAsync(c => c.CavityNo == "KH-GR-02");
+
+            var engHung = await db.Engineers.FirstOrDefaultAsync(e => e.EngineerNo == "KTV-001");
+            var engTuan = await db.Engineers.FirstOrDefaultAsync(e => e.EngineerNo == "KTV-002");
+            var engDat = await db.Engineers.FirstOrDefaultAsync(e => e.EngineerNo == "KTV-005");
+
+            // 1. Phân công đã hoàn tất (Completed)
+            if (roFns1 != null)
+            {
+                var assign1 = new AssignmentWork
+                {
+                    AssignmentNo = "PC260426-001",
+                    ROId = roFns1.Id,
+                    Status = AssignmentWorkStatus.Completed,
+                    SCCCavityId = cavEm1?.Id,
+                    SCCPlanStartDTime = DateTime.Today.AddDays(-1).AddHours(8),
+                    SCCPlanFinishDTime = DateTime.Today.AddDays(-1).AddHours(10),
+                    SCCActualStartDTime = DateTime.Today.AddDays(-1).AddHours(8).AddMinutes(10),
+                    SCCActualFinishDTime = DateTime.Today.AddDays(-1).AddHours(9).AddMinutes(50),
+                    Note = "Bảo dưỡng 5.000km xe Accent, hoàn tất đúng giờ, bàn giao xe sạch sẽ.",
+                    CreatedBy = "Quản đốc xưởng",
+                    CreatedAt = DateTime.Today.AddDays(-1).AddHours(7).AddMinutes(45),
+                    StartedAt = DateTime.Today.AddDays(-1).AddHours(8).AddMinutes(10),
+                    FinishedAt = DateTime.Today.AddDays(-1).AddHours(9).AddMinutes(50),
+                    Engineers = [
+                        new AssignmentEngineer
+                        {
+                            EngineerId = engTuan?.Id ?? 2,
+                            WorkType = WorkType.SCC,
+                            IsPrimary = true,
+                            AssignedHours = 1.0m,
+                            Note = "Thực hiện kiểm tra 20 hạng mục và thay dầu máy"
+                        }
+                    ]
+                };
+                db.AssignmentWorks.Add(assign1);
+            }
+
+            // 2. Phân công đang thi công trong xưởng (InProgress)
+            if (ro1 != null)
+            {
+                var assign2 = new AssignmentWork
+                {
+                    AssignmentNo = "PC260427-002",
+                    ROId = ro1.Id,
+                    Status = AssignmentWorkStatus.InProgress,
+                    SCCCavityId = cavEm1?.Id,
+                    SCCPlanStartDTime = DateTime.Now.AddHours(-3),
+                    SCCPlanFinishDTime = DateTime.Now.AddHours(1),
+                    SCCActualStartDTime = DateTime.Now.AddHours(-3),
+                    Note = "Xe bảo dưỡng cấp 20.000km + thay dầu và lọc dầu chính hãng. Cần siết lực ốc bánh xe 120Nm.",
+                    CreatedBy = "Quản đốc xưởng",
+                    CreatedAt = DateTime.Now.AddHours(-3).AddMinutes(-30),
+                    StartedAt = DateTime.Now.AddHours(-3),
+                    Engineers = [
+                        new AssignmentEngineer
+                        {
+                            EngineerId = engHung?.Id ?? 1,
+                            WorkType = WorkType.SCC,
+                            IsPrimary = true,
+                            AssignedHours = 1.5m,
+                            Note = "Chịu trách nhiệm chính kiểm tra toàn diện và ký biên bản KCS"
+                        },
+                        new AssignmentEngineer
+                        {
+                            EngineerId = engTuan?.Id ?? 2,
+                            WorkType = WorkType.SCC,
+                            IsPrimary = false,
+                            AssignedHours = 1.0m,
+                            Note = "Hỗ trợ thay lọc dầu và vệ sinh lọc gió"
+                        }
+                    ]
+                };
+                db.AssignmentWorks.Add(assign2);
+            }
+
+            // 3. Phân công mới lập chờ thợ nhận việc (Assigned)
+            if (roWar != null)
+            {
+                var assign3 = new AssignmentWork
+                {
+                    AssignmentNo = "PC260427-003",
+                    ROId = roWar.Id,
+                    Status = AssignmentWorkStatus.Assigned,
+                    SCCCavityId = cavGr2?.Id,
+                    SCCPlanStartDTime = DateTime.Now.AddHours(1),
+                    SCCPlanFinishDTime = DateTime.Now.AddHours(3),
+                    Note = "Kiểm tra chẩn đoán lỗi bỏ lửa P0302 và thay thế 4 bugi đánh lửa Iridium theo diện bảo hành hãng.",
+                    CreatedBy = "Quản đốc xưởng",
+                    CreatedAt = DateTime.Now.AddMinutes(-40),
+                    Engineers = [
+                        new AssignmentEngineer
+                        {
+                            EngineerId = engDat?.Id ?? 5,
+                            WorkType = WorkType.SCC,
+                            IsPrimary = true,
+                            AssignedHours = 1.8m,
+                            Note = "Kiểm tra tín hiệu mô-bin đánh lửa và đo khe hở bugi mới"
+                        }
+                    ]
+                };
+                db.AssignmentWorks.Add(assign3);
+            }
+
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -1507,6 +1714,75 @@ public static class Seeder
                 ""DeliveryStatus"" INTEGER NOT NULL,
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""ReceptionSheetId"") REFERENCES ""ReceptionSheets"" (""Id"") ON DELETE CASCADE
+            );",
+            @"CREATE TABLE IF NOT EXISTS ""GroupRepairs"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""GroupRNo"" TEXT NOT NULL,
+                ""GroupRName"" TEXT NOT NULL,
+                ""LeaderName"" TEXT NOT NULL,
+                ""Note"" TEXT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_GroupRepairs_OrgId_GroupRNo"" ON ""GroupRepairs"" (""OrgId"", ""GroupRNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""Engineers"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""EngineerNo"" TEXT NOT NULL,
+                ""EngineerName"" TEXT NOT NULL,
+                ""Phone"" TEXT NULL,
+                ""SkillLevel"" TEXT NOT NULL,
+                ""Specialty"" TEXT NOT NULL,
+                ""GroupRId"" INTEGER NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""GroupRId"") REFERENCES ""GroupRepairs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Engineers_OrgId_EngineerNo"" ON ""Engineers"" (""OrgId"", ""EngineerNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""AssignmentWorks"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""AssignmentNo"" TEXT NOT NULL,
+                ""ROId"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""SCCPlanStartDTime"" TEXT NULL,
+                ""SCCPlanFinishDTime"" TEXT NULL,
+                ""SCCActualStartDTime"" TEXT NULL,
+                ""SCCActualFinishDTime"" TEXT NULL,
+                ""SCCCavityId"" INTEGER NULL,
+                ""SCDPlanStartDTime"" TEXT NULL,
+                ""SCDPlanFinishDTime"" TEXT NULL,
+                ""SCDActualStartDTime"" TEXT NULL,
+                ""SCDActualFinishDTime"" TEXT NULL,
+                ""SCDCavityId"" INTEGER NULL,
+                ""SCSPlanStartDTime"" TEXT NULL,
+                ""SCSPlanFinishDTime"" TEXT NULL,
+                ""SCSActualStartDTime"" TEXT NULL,
+                ""SCSActualFinishDTime"" TEXT NULL,
+                ""SCSCavityId"" INTEGER NULL,
+                ""Note"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""StartedAt"" TEXT NULL,
+                ""FinishedAt"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""SCCCavityId"") REFERENCES ""Cavities"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""SCDCavityId"") REFERENCES ""Cavities"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""SCSCavityId"") REFERENCES ""Cavities"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_AssignmentWorks_OrgId_AssignmentNo"" ON ""AssignmentWorks"" (""OrgId"", ""AssignmentNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""AssignmentEngineers"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""AssignmentWorkId"" INTEGER NOT NULL,
+                ""EngineerId"" INTEGER NOT NULL,
+                ""WorkType"" INTEGER NOT NULL,
+                ""IsPrimary"" INTEGER NOT NULL,
+                ""AssignedHours"" TEXT NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""AssignmentWorkId"") REFERENCES ""AssignmentWorks"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""EngineerId"") REFERENCES ""Engineers"" (""Id"") ON DELETE RESTRICT
             );"
         };
 

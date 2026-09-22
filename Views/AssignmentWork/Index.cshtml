@@ -1,0 +1,264 @@
+@model List<MiniService.Models.AssignmentWork>
+@{
+    ViewData["Title"] = "Phân công thợ & Điều phối xưởng (Assignments)";
+    var totalCount = Model.Count;
+    var assignedCount = Model.Count(a => a.Status == MiniService.Models.AssignmentWorkStatus.Assigned);
+    var inProgCount = Model.Count(a => a.Status == MiniService.Models.AssignmentWorkStatus.InProgress);
+    var completedCount = Model.Count(a => a.Status == MiniService.Models.AssignmentWorkStatus.Completed);
+    var cancelledCount = Model.Count(a => a.Status == MiniService.Models.AssignmentWorkStatus.Cancelled);
+    var currentStatus = ViewBag.Status as MiniService.Models.AssignmentWorkStatus?;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-1"><i class="bi bi-person-gear me-2 text-primary"></i>Phân công công việc &amp; Điều phối kỹ thuật viên xưởng</h5>
+        <div class="text-muted small">Phân bổ thợ kỹ thuật, khoang cầu nâng và điều độ tiến độ sửa chữa xe (Ser_AssignmentWork / Ser_AssignmentWorkEngineer)</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/AssignmentWork/Engineers" class="btn btn-outline-primary">
+            <i class="bi bi-people me-1"></i>Đội ngũ KTV &amp; Tổ thợ
+        </a>
+        <a href="/AssignmentWork/Create" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i>Lập phân công mới
+        </a>
+    </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card bg-white border-0 shadow-sm"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Tổng số phân công</div>
+                    <div class="stat-num text-dark">@totalCount</div>
+                </div>
+                <div class="p-3 bg-light rounded-circle text-primary"><i class="bi bi-clipboard-check fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Toàn bộ phiếu giao việc xưởng</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-white border-0 shadow-sm"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Đang sửa chữa (In Garage)</div>
+                    <div class="stat-num text-primary">@inProgCount</div>
+                </div>
+                <div class="p-3 bg-primary-subtle rounded-circle text-primary"><i class="bi bi-wrench-adjustable fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Kỹ thuật viên đang thi công trên khoang</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-white border-0 shadow-sm"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Chờ nhận việc (Assigned)</div>
+                    <div class="stat-num text-warning">@assignedCount</div>
+                </div>
+                <div class="p-3 bg-warning-subtle rounded-circle text-warning"><i class="bi bi-hourglass-split fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Đã phân công, chờ xe vào khoang</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-white border-0 shadow-sm"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Đã nghiệm thu hoàn tất</div>
+                    <div class="stat-num text-success">@completedCount</div>
+                </div>
+                <div class="p-3 bg-success-subtle rounded-circle text-success"><i class="bi bi-check-circle-fill fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Sửa xong, chờ KCS kiểm tra</div>
+        </div></div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="row g-2 align-items-center">
+            <div class="col-md-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" name="q" value="@ViewBag.Q" class="form-control" placeholder="Mã PC, biển số, mã RO, tên KTV..." />
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">-- Tất cả trạng thái --</option>
+                    <option value="0" selected="@(currentStatus == MiniService.Models.AssignmentWorkStatus.Assigned)">Chờ nhận việc (ASSIGNED)</option>
+                    <option value="1" selected="@(currentStatus == MiniService.Models.AssignmentWorkStatus.InProgress)">Đang thi công (IN_PROG)</option>
+                    <option value="2" selected="@(currentStatus == MiniService.Models.AssignmentWorkStatus.Completed)">Hoàn tất sửa (COMPLETED)</option>
+                    <option value="3" selected="@(currentStatus == MiniService.Models.AssignmentWorkStatus.Cancelled)">Đã hủy (CANCELLED)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" title="Từ ngày" />
+            </div>
+            <div class="col-md-2">
+                <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" title="Đến ngày" />
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-sm btn-primary flex-fill"><i class="bi bi-funnel me-1"></i>Lọc dữ liệu</button>
+                <a href="/AssignmentWork" class="btn btn-sm btn-outline-secondary" title="Xóa bộ lọc"><i class="bi bi-arrow-counterclockwise"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Data Table -->
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:130px">Mã phiếu PC</th>
+                        <th style="width:180px">Lệnh sửa chữa (RO)</th>
+                        <th>Kỹ thuật viên chính</th>
+                        <th>Công đoạn &amp; Khoang xưởng</th>
+                        <th>Kế hoạch thi công</th>
+                        <th style="width:120px">Trạng thái</th>
+                        <th style="width:160px" class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var item in Model)
+                {
+                    var (stTxt, stCode, stCss) = Ui.AssignmentWorkStatus(item.Status);
+                    <tr>
+                        <td>
+                            <a href="/AssignmentWork/Detail/@item.Id" class="fw-bold text-decoration-none">
+                                @item.AssignmentNo
+                            </a>
+                            <div class="text-muted small" style="font-size:11px">@item.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                        </td>
+                        <td>
+                            <div>
+                                <a href="/RO/Detail/@item.ROId" class="badge bg-light text-primary border text-decoration-none">
+                                    <i class="bi bi-clipboard me-1"></i>@item.RO.Code
+                                </a>
+                            </div>
+                            <div class="fw-semibold mt-1">@item.RO.Car.Plate</div>
+                            <div class="text-muted small" style="font-size:11px">@item.RO.Car.Model · @item.RO.Customer.Name</div>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center gap-2">
+                                <div class="bg-primary-subtle text-primary rounded-circle d-flex align-items-center justify-content-center" style="width:32px;height:32px;font-weight:bold">
+                                    <i class="bi bi-person-fill"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-bold">@item.PrimaryTechnician</div>
+                                    <div class="text-muted small" style="font-size:11px">
+                                        @item.EngineerCount thợ tham gia · @item.TotalAssignedHours.ToString("0.##") giờ định mức
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="d-flex flex-wrap gap-1">
+                                @if (item.HasSCC)
+                                {
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="Sửa chữa chung">
+                                        <i class="bi bi-wrench-adjustable me-1"></i>SCC: @(item.SCCCavity?.CavityName ?? "Chưa gán khoang")
+                                    </span>
+                                }
+                                @if (item.HasSCD)
+                                {
+                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle" title="Sửa chữa đồng">
+                                        <i class="bi bi-hammer me-1"></i>SCD: @(item.SCDCavity?.CavityName ?? "Chưa gán khoang")
+                                    </span>
+                                }
+                                @if (item.HasSCS)
+                                {
+                                    <span class="badge bg-info-subtle text-info border border-info-subtle" title="Sửa chữa sơn">
+                                        <i class="bi bi-paint-bucket me-1"></i>SCS: @(item.SCSCavity?.CavityName ?? "Chưa gán buồng sơn")
+                                    </span>
+                                }
+                                @if (!item.HasSCC && !item.HasSCD && !item.HasSCS)
+                                {
+                                    <span class="text-muted small">Chưa chỉ định khoang</span>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <div class="small">
+                                @if (item.SCCPlanStartDTime.HasValue)
+                                {
+                                    <div><i class="bi bi-clock me-1 text-muted"></i>@item.SCCPlanStartDTime.Value.ToString("dd/MM HH:mm") → @item.SCCPlanFinishDTime?.ToString("HH:mm")</div>
+                                }
+                                else if (item.SCDPlanStartDTime.HasValue)
+                                {
+                                    <div><i class="bi bi-clock me-1 text-muted"></i>@item.SCDPlanStartDTime.Value.ToString("dd/MM HH:mm") → @item.SCDPlanFinishDTime?.ToString("HH:mm")</div>
+                                }
+                                else if (item.SCSPlanStartDTime.HasValue)
+                                {
+                                    <div><i class="bi bi-clock me-1 text-muted"></i>@item.SCSPlanStartDTime.Value.ToString("dd/MM HH:mm") → @item.SCSPlanFinishDTime?.ToString("HH:mm")</div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">Chưa lên lịch</span>
+                                }
+                                @if (item.StartedAt.HasValue)
+                                {
+                                    <div class="text-success" style="font-size:11px"><i class="bi bi-play-circle-fill me-1"></i>Bắt đầu: @item.StartedAt.Value.ToString("HH:mm dd/MM")</div>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-@stCss">@stTxt</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/AssignmentWork/Detail/@item.Id" class="btn btn-outline-primary" title="Xem chi tiết">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="/AssignmentWork/Print/@item.Id" class="btn btn-outline-secondary" title="In phiếu giao việc" target="_blank">
+                                    <i class="bi bi-printer"></i>
+                                </a>
+                                @if (item.Status == MiniService.Models.AssignmentWorkStatus.Assigned)
+                                {
+                                    <form asp-action="Start" method="post" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@item.Id" />
+                                        <button class="btn btn-outline-success" title="Bắt đầu thi công (Xe vào xưởng INGA)">
+                                            <i class="bi bi-play-fill"></i>
+                                        </button>
+                                    </form>
+                                }
+                                @if (item.Status == MiniService.Models.AssignmentWorkStatus.InProgress)
+                                {
+                                    <form asp-action="Complete" method="post" class="d-inline" onsubmit="return confirm('Nghiệm thu hoàn tất công việc?')">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="id" value="@item.Id" />
+                                        <button class="btn btn-outline-primary" title="Hoàn thành sửa chữa (RPRD)">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                    </form>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                            Không có phiếu phân công công việc nào phù hợp với bộ lọc.
+                            <div class="mt-2">
+                                <a href="/AssignmentWork/Create" class="btn btn-sm btn-primary">
+                                    <i class="bi bi-plus-lg me-1"></i>Lập phân công mới ngay
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

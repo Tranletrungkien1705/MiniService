@@ -1,0 +1,316 @@
+@{
+    ViewData["Title"] = "Lập phiếu phân công thợ sửa chữa";
+    var eligibleROs = (List<MiniService.Models.RepairOrder>)(ViewBag.EligibleROs ?? new List<MiniService.Models.RepairOrder>());
+    var cavities = (List<MiniService.Models.Cavity>)(ViewBag.Cavities ?? new List<MiniService.Models.Cavity>());
+    var engineers = (List<MiniService.Models.Engineer>)(ViewBag.Engineers ?? new List<MiniService.Models.Engineer>());
+    int? selectedRoId = ViewBag.SelectedROId;
+}
+
+<div class="mb-3">
+    <a href="/AssignmentWork" class="text-decoration-none text-muted small"><i class="bi bi-arrow-left me-1"></i>Quay lại danh sách phân công</a>
+    <h5 class="fw-bold mt-1"><i class="bi bi-person-gear me-2 text-primary"></i>Lập phiếu phân công công việc &amp; Điều phối thợ kỹ thuật</h5>
+    <div class="text-muted small">Quy trình điều phối lệnh sửa chữa chính thức (HRO → INGA) theo tiêu chuẩn Hyundai Car Service (Ser_AssignmentWork)</div>
+</div>
+
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+
+    <div class="row g-3">
+        <!-- Cột trái: Chọn RO & Tiến độ công đoạn -->
+        <div class="col-lg-7">
+            <!-- Chọn Lệnh RO -->
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body">
+                    <h6 class="fw-bold text-primary mb-3"><i class="bi bi-clipboard2-pulse me-2"></i>1. Chọn Lệnh sửa chữa (RO)</h6>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lệnh sửa chữa (Chờ sửa HasRO hoặc Đang sửa InGarage) <span class="text-danger">*</span></label>
+                        <select name="roId" id="roSelect" class="form-select" required onchange="onRoChanged(this)">
+                            <option value="">-- Chọn lệnh RO cần phân công công việc --</option>
+                            @foreach (var ro in eligibleROs)
+                            {
+                                var (stTxt, stCode, stCss) = Ui.Status(ro.Status);
+                                var isSel = selectedRoId.HasValue && selectedRoId.Value == ro.Id;
+                                <option value="@ro.Id" selected="@isSel"
+                                        data-plate="@ro.Car.Plate"
+                                        data-model="@ro.Car.Model"
+                                        data-customer="@ro.Customer.Name"
+                                        data-phone="@(ro.Customer.Phone ?? "")"
+                                        data-status="@stTxt"
+                                        data-technician="@(ro.Technician ?? "")"
+                                        data-odometer="@ro.Odometer"
+                                        data-total="@ro.Total.ToString("N0")"
+                                        data-note="@(ro.IntakeNote ?? "")">
+                                    [@ro.Code] @ro.Car.Plate — @ro.Car.Model (@ro.Customer.Name) — [@stCode: @stTxt]
+                                </option>
+                            }
+                        </select>
+                        <div class="form-text small">Chỉ hiển thị các RO ở trạng thái Chờ sửa (HasRO) hoặc Đang trong xưởng (InGarage).</div>
+                    </div>
+
+                    <!-- RO Info Preview Box -->
+                    <div id="roPreviewBox" class="p-3 bg-light rounded border small @(selectedRoId.HasValue ? "" : "d-none")">
+                        <div class="row g-2">
+                            <div class="col-6"><span class="text-muted">Biển số xe:</span> <strong id="pvPlate">—</strong></div>
+                            <div class="col-6"><span class="text-muted">Dòng xe:</span> <strong id="pvModel">—</strong></div>
+                            <div class="col-6"><span class="text-muted">Khách hàng:</span> <strong id="pvCustomer">—</strong></div>
+                            <div class="col-6"><span class="text-muted">SĐT:</span> <strong id="pvPhone">—</strong></div>
+                            <div class="col-6"><span class="text-muted">Số km:</span> <strong id="pvOdo">—</strong> km</div>
+                            <div class="col-6"><span class="text-muted">Tổng dự kiến:</span> <strong id="pvTotal" class="text-primary">—</strong> đ</div>
+                            <div class="col-12"><span class="text-muted">Yêu cầu KH:</span> <span id="pvNote">—</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Phân công các công đoạn sửa chữa SCC, SCD, SCS -->
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body">
+                    <h6 class="fw-bold text-primary mb-3"><i class="bi bi-clock-history me-2"></i>2. Kế hoạch thời gian &amp; Khoang sửa chữa (Cavity)</h6>
+
+                    <!-- 2.1 Sửa chữa chung & Gầm máy (SCC) -->
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="fw-bold text-dark mb-2">
+                            <i class="bi bi-wrench-adjustable me-1 text-primary"></i>Công đoạn Sửa chữa chung &amp; Gầm máy (SCC)
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Giờ bắt đầu kế hoạch</label>
+                                <input type="datetime-local" name="sccPlanStart" class="form-control form-control-sm" value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Giờ hoàn tất kế hoạch</label>
+                                <input type="datetime-local" name="sccPlanFinish" class="form-control form-control-sm" value="@DateTime.Now.AddHours(2).ToString("yyyy-MM-ddTHH:mm")" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Khoang sửa chữa (Cầu nâng)</label>
+                                <select name="sccCavityId" class="form-select form-select-sm">
+                                    <option value="">-- Chọn khoang xưởng --</option>
+                                    @foreach (var cav in cavities.Where(c => c.CavityType == MiniService.Models.CavityType.EM || c.CavityType == MiniService.Models.CavityType.GR))
+                                    {
+                                        var isAvail = cav.Status == MiniService.Models.CavityStatus.Available;
+                                        <option value="@cav.Id">
+                                            @cav.CavityNo - @cav.CavityName (@(isAvail ? "Trống" : "Đang có xe"))
+                                        </option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2.2 Sửa chữa đồng & Gò hàn (SCD) -->
+                    <div class="p-3 bg-light rounded border mb-3">
+                        <div class="fw-bold text-dark mb-2">
+                            <i class="bi bi-hammer me-1 text-warning"></i>Công đoạn Sửa chữa đồng &amp; Thân vỏ (SCD - Tùy chọn)
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Giờ bắt đầu kế hoạch</label>
+                                <input type="datetime-local" name="scdPlanStart" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Giờ hoàn tất kế hoạch</label>
+                                <input type="datetime-local" name="scdPlanFinish" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Khoang gò hàn / kéo nắn</label>
+                                <select name="scdCavityId" class="form-select form-select-sm">
+                                    <option value="">-- Chọn khoang gò hàn --</option>
+                                    @foreach (var cav in cavities.Where(c => c.CavityType == MiniService.Models.CavityType.BP))
+                                    {
+                                        <option value="@cav.Id">@cav.CavityNo - @cav.CavityName</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2.3 Sửa chữa sơn (SCS) -->
+                    <div class="p-3 bg-light rounded border">
+                        <div class="fw-bold text-dark mb-2">
+                            <i class="bi bi-paint-bucket me-1 text-info"></i>Công đoạn Sửa chữa sơn &amp; Sấy nhiệt (SCS - Tùy chọn)
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Giờ bắt đầu kế hoạch</label>
+                                <input type="datetime-local" name="scsPlanStart" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Giờ hoàn tất kế hoạch</label>
+                                <input type="datetime-local" name="scsPlanFinish" class="form-control form-control-sm" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted mb-1">Buồng sơn sấy nhiệt</label>
+                                <select name="scsCavityId" class="form-select form-select-sm">
+                                    <option value="">-- Chọn buồng sơn hấp --</option>
+                                    @foreach (var cav in cavities.Where(c => c.CavityType == MiniService.Models.CavityType.BP))
+                                    {
+                                        <option value="@cav.Id">@cav.CavityNo - @cav.CavityName</option>
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cột phải: Phân công Kỹ thuật viên & Xác nhận -->
+        <div class="col-lg-5">
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="fw-bold text-primary mb-0"><i class="bi bi-people me-2"></i>3. Phân công Kỹ thuật viên (KTV)</h6>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addEngineerRow()">
+                            <i class="bi bi-person-plus me-1"></i>Thêm KTV
+                        </button>
+                    </div>
+
+                    <div id="engineersContainer">
+                        <!-- Default 1st Engineer Row -->
+                        <div class="eng-row p-3 bg-light rounded border mb-2">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="fw-bold small text-dark"><i class="bi bi-person-badge me-1"></i>Kỹ thuật viên #1</span>
+                                <div class="form-check form-check-inline m-0">
+                                    <input class="form-check-input primary-radio" type="radio" name="primaryEngineerId" id="prim1" value="" checked />
+                                    <label class="form-check-label small fw-semibold" for="prim1">Thợ chính</label>
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-12">
+                                    <select name="engineerIds" class="form-select form-select-sm eng-select" required onchange="syncPrimaryRadio(this)">
+                                        <option value="">-- Chọn kỹ thuật viên --</option>
+                                        @foreach (var eng in engineers)
+                                        {
+                                            <option value="@eng.Id" data-skill="@eng.SkillLevel" data-group="@(eng.GroupRepair?.GroupRName ?? "")">
+                                                @eng.EngineerNo — @eng.EngineerName (@eng.SkillLevel · @(eng.GroupRepair?.GroupRName ?? "Độc lập"))
+                                            </option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <select name="workTypes" class="form-select form-select-sm">
+                                        <option value="0">SCC: Sửa chữa chung</option>
+                                        <option value="1">SCD: Gò hàn đồng</option>
+                                        <option value="2">SCS: Sơn sấy nhiệt</option>
+                                    </select>
+                                </div>
+                                <div class="col-6">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">Định mức</span>
+                                        <input type="number" step="0.1" name="assignedHours" class="form-control" value="1.0" min="0.1" />
+                                        <span class="input-group-text">giờ</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ghi chú chỉ đạo kỹ thuật -->
+                    <div class="mb-3 mt-3">
+                        <label class="form-label small fw-semibold">Chỉ đạo kỹ thuật của Quản đốc xưởng</label>
+                        <textarea name="note" class="form-control form-control-sm" rows="3" placeholder="Yêu cầu kiểm tra kỹ lưỡng, siết lực bu lông, quy trình an toàn..."></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Người lập phiếu phân công</label>
+                        <input type="text" name="createdBy" class="form-control form-control-sm" value="Quản đốc xưởng" />
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle me-1"></i>Xác nhận &amp; Lưu phiếu phân công
+                        </button>
+                        <a href="/AssignmentWork" class="btn btn-outline-secondary">Hủy bỏ</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+function onRoChanged(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    var box = document.getElementById("roPreviewBox");
+    if (!sel.value) {
+        box.classList.add("d-none");
+        return;
+    }
+    box.classList.remove("d-none");
+    document.getElementById("pvPlate").innerText = opt.getAttribute("data-plate") || "—";
+    document.getElementById("pvModel").innerText = opt.getAttribute("data-model") || "—";
+    document.getElementById("pvCustomer").innerText = opt.getAttribute("data-customer") || "—";
+    document.getElementById("pvPhone").innerText = opt.getAttribute("data-phone") || "—";
+    document.getElementById("pvOdo").innerText = opt.getAttribute("data-odometer") || "—";
+    document.getElementById("pvTotal").innerText = opt.getAttribute("data-total") || "—";
+    document.getElementById("pvNote").innerText = opt.getAttribute("data-note") || "Không có ghi chú";
+}
+
+function syncPrimaryRadio(sel) {
+    var parent = sel.closest(".eng-row");
+    var radio = parent.querySelector(".primary-radio");
+    if (radio) {
+        radio.value = sel.value;
+    }
+}
+
+var engCounter = 1;
+function addEngineerRow() {
+    engCounter++;
+    var container = document.getElementById("engineersContainer");
+    var div = document.createElement("div");
+    div.className = "eng-row p-3 bg-light rounded border mb-2 position-relative";
+    div.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="fw-bold small text-dark"><i class="bi bi-person-badge me-1"></i>Kỹ thuật viên #${engCounter}</span>
+            <div class="d-flex align-items-center gap-2">
+                <div class="form-check form-check-inline m-0">
+                    <input class="form-check-input primary-radio" type="radio" name="primaryEngineerId" id="prim${engCounter}" value="" />
+                    <label class="form-check-label small fw-semibold" for="prim${engCounter}">Thợ chính</label>
+                </div>
+                <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="this.closest('.eng-row').remove()">
+                    <i class="bi bi-x-circle-fill"></i>
+                </button>
+            </div>
+        </div>
+        <div class="row g-2 mb-2">
+            <div class="col-12">
+                <select name="engineerIds" class="form-select form-select-sm eng-select" required onchange="syncPrimaryRadio(this)">
+                    <option value="">-- Chọn kỹ thuật viên --</option>
+                    @foreach (var eng in engineers)
+                    {
+                        <option value="@eng.Id">
+                            @eng.EngineerNo — @eng.EngineerName (@eng.SkillLevel · @(eng.GroupRepair?.GroupRName ?? "Độc lập"))
+                        </option>
+                    }
+                </select>
+            </div>
+            <div class="col-6">
+                <select name="workTypes" class="form-select form-select-sm">
+                    <option value="0">SCC: Sửa chữa chung</option>
+                    <option value="1">SCD: Gò hàn đồng</option>
+                    <option value="2">SCS: Sơn sấy nhiệt</option>
+                </select>
+            </div>
+            <div class="col-6">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text">Định mức</span>
+                    <input type="number" step="0.1" name="assignedHours" class="form-control" value="1.0" min="0.1" />
+                    <span class="input-group-text">giờ</span>
+                </div>
+            </div>
+        </div>
+    `;
+    container.appendChild(div);
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    var roSel = document.getElementById("roSelect");
+    if (roSel && roSel.value) onRoChanged(roSel);
+    var firstEngSel = document.querySelector(".eng-select");
+    if (firstEngSel) syncPrimaryRadio(firstEngSel);
+});
+</script>
+}

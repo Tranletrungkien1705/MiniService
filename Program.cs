@@ -1469,6 +1469,247 @@ app.MapDelete("/api/receptions/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Phân công thợ sửa chữa & Điều phối xưởng (Ser_AssignmentWork, Ser_AssignmentWorkEngineer, Ser_Engineer, Ser_GroupRepair)
+app.MapGet("/api/assignments", async (AssignmentWorkStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId, IRoService svc) =>
+{
+    var list = await svc.AssignmentWorksAsync(status, q, fromDate, toDate, roId);
+    return Results.Ok(list.Select(a => new
+    {
+        a.Id,
+        a.AssignmentNo,
+        roId = a.ROId,
+        roCode = a.RO.Code,
+        plate = a.RO.Car.Plate,
+        model = a.RO.Car.Model,
+        customer = a.RO.Customer.Name,
+        phone = a.RO.Customer.Phone,
+        status = Ui.AssignmentWorkStatus(a.Status).text,
+        statusCode = Ui.AssignmentWorkStatus(a.Status).code,
+        statusValue = (int)a.Status,
+        primaryTechnician = a.PrimaryTechnician,
+        engineerCount = a.EngineerCount,
+        totalAssignedHours = a.TotalAssignedHours,
+        a.SCCPlanStartDTime,
+        a.SCCPlanFinishDTime,
+        sccCavity = a.SCCCavity?.CavityName,
+        a.SCDPlanStartDTime,
+        a.SCDPlanFinishDTime,
+        scdCavity = a.SCDCavity?.CavityName,
+        a.SCSPlanStartDTime,
+        a.SCSPlanFinishDTime,
+        scsCavity = a.SCSCavity?.CavityName,
+        a.Note,
+        a.CreatedBy,
+        a.CreatedAt,
+        a.StartedAt,
+        a.FinishedAt
+    }));
+});
+
+app.MapGet("/api/assignments/{id:int}", async (int id, IRoService svc) =>
+{
+    var a = await svc.GetAssignmentWorkAsync(id);
+    if (a == null) return Results.NotFound(new { error = "Không tìm thấy phiếu phân công công việc." });
+    return Results.Ok(new
+    {
+        a.Id,
+        a.AssignmentNo,
+        ro = new { a.RO.Id, a.RO.Code, status = Ui.Status(a.RO.Status).text, a.RO.Total, a.RO.IntakeNote },
+        car = new { a.RO.Car.Id, a.RO.Car.Plate, a.RO.Car.Model, a.RO.Car.Vin, a.RO.Car.Year },
+        customer = new { a.RO.Customer.Id, a.RO.Customer.Name, a.RO.Customer.Phone, a.RO.Customer.Email },
+        status = Ui.AssignmentWorkStatus(a.Status).text,
+        statusCode = Ui.AssignmentWorkStatus(a.Status).code,
+        statusValue = (int)a.Status,
+        primaryTechnician = a.PrimaryTechnician,
+        scc = new
+        {
+            a.SCCPlanStartDTime,
+            a.SCCPlanFinishDTime,
+            a.SCCActualStartDTime,
+            a.SCCActualFinishDTime,
+            cavity = a.SCCCavity != null ? new { a.SCCCavity.Id, a.SCCCavity.CavityNo, a.SCCCavity.CavityName } : null
+        },
+        scd = new
+        {
+            a.SCDPlanStartDTime,
+            a.SCDPlanFinishDTime,
+            a.SCDActualStartDTime,
+            a.SCDActualFinishDTime,
+            cavity = a.SCDCavity != null ? new { a.SCDCavity.Id, a.SCDCavity.CavityNo, a.SCDCavity.CavityName } : null
+        },
+        scs = new
+        {
+            a.SCSPlanStartDTime,
+            a.SCSPlanFinishDTime,
+            a.SCSActualStartDTime,
+            a.SCSActualFinishDTime,
+            cavity = a.SCSCavity != null ? new { a.SCSCavity.Id, a.SCSCavity.CavityNo, a.SCSCavity.CavityName } : null
+        },
+        engineers = a.Engineers.Select(e => new
+        {
+            e.Id,
+            e.EngineerId,
+            engineerNo = e.Engineer.EngineerNo,
+            engineerName = e.Engineer.EngineerName,
+            group = e.Engineer.GroupRepair?.GroupRName,
+            skillLevel = e.Engineer.SkillLevel,
+            workType = Ui.WorkType(e.WorkType).text,
+            workTypeCode = Ui.WorkType(e.WorkType).code,
+            workTypeValue = (int)e.WorkType,
+            e.IsPrimary,
+            e.AssignedHours,
+            e.Note
+        }),
+        a.Note,
+        a.CreatedBy,
+        a.CreatedAt,
+        a.StartedAt,
+        a.FinishedAt
+    });
+});
+
+app.MapPost("/api/assignments", async (CreateAssignmentDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.RoId <= 0) return Results.BadRequest(new { error = "Vui lòng chọn RoId hợp lệ." });
+
+        var assignment = new AssignmentWork
+        {
+            ROId = dto.RoId,
+            SCCPlanStartDTime = dto.SccPlanStart,
+            SCCPlanFinishDTime = dto.SccPlanFinish,
+            SCCCavityId = dto.SccCavityId,
+            SCDPlanStartDTime = dto.ScdPlanStart,
+            SCDPlanFinishDTime = dto.ScdPlanFinish,
+            SCDCavityId = dto.ScdCavityId,
+            SCSPlanStartDTime = dto.ScsPlanStart,
+            SCSPlanFinishDTime = dto.ScsPlanFinish,
+            SCSCavityId = dto.ScsCavityId,
+            Note = dto.Note?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+
+        var engineers = dto.Engineers?.Select(e => new AssignmentEngineer
+        {
+            EngineerId = e.EngineerId,
+            WorkType = e.WorkType,
+            AssignedHours = e.AssignedHours ?? 1.0m,
+            IsPrimary = e.IsPrimary ?? false,
+            Note = e.Note?.Trim()
+        }).ToList() ?? [];
+
+        var id = await svc.CreateAssignmentWorkAsync(assignment, engineers);
+        return Results.Ok(new { assignmentId = id, assignmentNo = assignment.AssignmentNo, message = "Đã lập phiếu phân công sửa chữa thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/assignments/{id:int}/start", async (int id, StartAssignmentDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.StartAssignmentWorkAsync(id, dto?.StartedBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/assignments/{id:int}/complete", async (int id, CompleteAssignmentDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.CompleteAssignmentWorkAsync(id, dto?.CompletedBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/assignments/{id:int}/cancel", async (int id, CancelAssignmentDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.CancelAssignmentWorkAsync(id, dto?.Reason);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/assignments/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteAssignmentWorkAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapGet("/api/engineers", async (string? q, int? groupId, bool? isActive, IRoService svc) =>
+{
+    var list = await svc.EngineersAsync(q, groupId, isActive);
+    return Results.Ok(list.Select(e => new
+    {
+        e.Id,
+        e.EngineerNo,
+        e.EngineerName,
+        e.Phone,
+        e.SkillLevel,
+        e.Specialty,
+        groupId = e.GroupRId,
+        groupName = e.GroupRepair?.GroupRName,
+        e.IsActive,
+        e.CreatedAt
+    }));
+});
+
+app.MapPost("/api/engineers", async (CreateEngineerDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Vui lòng nhập tên kỹ thuật viên." });
+        var eng = new Engineer
+        {
+            EngineerNo = dto.Code?.Trim() ?? "",
+            EngineerName = dto.Name.Trim(),
+            Phone = dto.Phone?.Trim(),
+            SkillLevel = string.IsNullOrWhiteSpace(dto.SkillLevel) ? "Bậc 3/7" : dto.SkillLevel.Trim(),
+            Specialty = string.IsNullOrWhiteSpace(dto.Specialty) ? "Sửa chữa chung" : dto.Specialty.Trim(),
+            GroupRId = dto.GroupId
+        };
+        var id = await svc.CreateEngineerAsync(eng);
+        return Results.Ok(new { engineerId = id, engineerNo = eng.EngineerNo, message = "Đã thêm kỹ thuật viên thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/groups", async (string? q, bool? isActive, IRoService svc) =>
+{
+    var list = await svc.GroupRepairsAsync(q, isActive);
+    return Results.Ok(list.Select(g => new
+    {
+        g.Id,
+        g.GroupRNo,
+        g.GroupRName,
+        g.LeaderName,
+        engineerCount = g.Engineers.Count,
+        g.Note,
+        g.IsActive,
+        g.CreatedAt
+    }));
+});
+
+app.MapPost("/api/groups", async (CreateGroupDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Vui lòng nhập tên tổ sửa chữa." });
+        var grp = new GroupRepair
+        {
+            GroupRNo = dto.Code?.Trim() ?? "",
+            GroupRName = dto.Name.Trim(),
+            LeaderName = dto.Leader?.Trim() ?? "",
+            Note = dto.Note?.Trim()
+        };
+        var id = await svc.CreateGroupRepairAsync(grp);
+        return Results.Ok(new { groupId = id, groupRNo = grp.GroupRNo, message = "Đã thêm tổ sửa chữa thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -1519,3 +1760,10 @@ record CreateReceptionItemDto(string Group, string Code, string Name, AuditStatu
 record CreateRoFromReceptionDto(string? Technician);
 record DeliverReceptionDto(string? DeliveryBy, string? Note, List<DeliverReceptionItemDto>? Items);
 record DeliverReceptionItemDto(int ItemId, AuditStatus DeliveryStatus);
+record CreateAssignmentDto(int RoId, DateTime? SccPlanStart, DateTime? SccPlanFinish, int? SccCavityId, DateTime? ScdPlanStart, DateTime? ScdPlanFinish, int? ScdCavityId, DateTime? ScsPlanStart, DateTime? ScsPlanFinish, int? ScsCavityId, string? Note, string? CreatedBy, List<CreateAssignmentEngineerDto>? Engineers);
+record CreateAssignmentEngineerDto(int EngineerId, WorkType WorkType, decimal? AssignedHours, bool? IsPrimary, string? Note);
+record StartAssignmentDto(string? StartedBy);
+record CompleteAssignmentDto(string? CompletedBy);
+record CancelAssignmentDto(string? Reason);
+record CreateEngineerDto(string? Code, string Name, string? Phone, string? SkillLevel, string? Specialty, int? GroupId);
+record CreateGroupDto(string? Code, string Name, string? Leader, string? Note);

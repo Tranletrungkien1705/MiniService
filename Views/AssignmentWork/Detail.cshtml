@@ -1,0 +1,419 @@
+@model MiniService.Models.AssignmentWork
+@{
+    ViewData["Title"] = $"Phiếu phân công {Model.AssignmentNo}";
+    var (stTxt, stCode, stCss) = Ui.AssignmentWorkStatus(Model.Status);
+    var next = (MiniService.Models.AssignmentWorkStatus[])(ViewBag.Next ?? Array.Empty<MiniService.Models.AssignmentWorkStatus>());
+    var (roTxt, roCode, roCss) = Ui.Status(Model.RO.Status);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/AssignmentWork" class="text-decoration-none text-muted small"><i class="bi bi-arrow-left me-1"></i>Quay lại danh sách phân công</a>
+        <h5 class="fw-bold mt-1 mb-0">
+            <i class="bi bi-person-gear me-2 text-primary"></i>Phiếu phân công thợ: <span class="text-primary">@Model.AssignmentNo</span>
+            <span class="badge bg-@stCss ms-2">@stCode: @stTxt</span>
+        </h5>
+        <div class="text-muted small">Thời điểm lập: @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm") bởi <strong>@Model.CreatedBy</strong></div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/AssignmentWork/Print/@Model.Id" class="btn btn-outline-secondary" target="_blank">
+            <i class="bi bi-printer me-1"></i>In phiếu giao việc
+        </a>
+        @if (Model.Status == MiniService.Models.AssignmentWorkStatus.Assigned)
+        {
+            <form asp-action="Start" method="post" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button class="btn btn-success">
+                    <i class="bi bi-play-fill me-1"></i>Bắt đầu thi công (Xe vào khoang INGA)
+                </button>
+            </form>
+        }
+        @if (Model.Status == MiniService.Models.AssignmentWorkStatus.InProgress)
+        {
+            <form asp-action="Complete" method="post" class="d-inline" onsubmit="return confirm('Xác nhận nghiệm thu hoàn tất công việc?')">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button class="btn btn-primary">
+                    <i class="bi bi-check2-circle me-1"></i>Nghiệm thu hoàn tất (Sửa xong RPRD)
+                </button>
+            </form>
+        }
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Cột trái: Thông tin Lệnh RO & Tiến độ các công đoạn -->
+    <div class="col-lg-7">
+        <!-- Thông tin xe & RO -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold text-primary mb-0"><i class="bi bi-clipboard2-pulse me-2"></i>Lệnh sửa chữa liên kết</h6>
+                    <a href="/RO/Detail/@Model.ROId" class="badge bg-light text-primary border text-decoration-none">
+                        <i class="bi bi-arrow-up-right-square me-1"></i>Xem RO @Model.RO.Code
+                    </a>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-4">
+                        <div class="text-muted small">Biển số xe</div>
+                        <div class="fw-bold fs-6">@Model.RO.Car.Plate</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Dòng xe</div>
+                        <div class="fw-semibold">@Model.RO.Car.Model</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Trạng thái RO</div>
+                        <div><span class="badge bg-@roCss">@roCode: @roTxt</span></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Khách hàng</div>
+                        <div class="fw-semibold">@Model.RO.Customer.Name</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Số điện thoại</div>
+                        <div>@(Model.RO.Customer.Phone ?? "—")</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-muted small">Số km tiếp nhận</div>
+                        <div>@Model.RO.Odometer.ToString("N0") km</div>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(Model.RO.IntakeNote))
+                {
+                    <div class="p-2 bg-light rounded border small">
+                        <strong><i class="bi bi-chat-left-text me-1"></i>Yêu cầu khách hàng:</strong>
+                        <span>@Model.RO.IntakeNote</span>
+                    </div>
+                }
+
+                <!-- Chi tiết hạng mục cần làm trên RO -->
+                @if (Model.RO.Lines.Count > 0)
+                {
+                    <h6 class="fw-bold mt-3 mb-2 small text-muted text-uppercase">Hạng mục công việc trên lệnh RO:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle mb-0 small">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Loại</th>
+                                    <th>Tên hạng mục dịch vụ / phụ tùng</th>
+                                    <th class="text-center">Số lượng</th>
+                                    <th class="text-end">Đơn giá</th>
+                                    <th class="text-end">Thành tiền</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            @foreach (var line in Model.RO.Lines)
+                            {
+                                <tr>
+                                    <td>
+                                        @if (line.Type == MiniService.Models.LineType.Labor)
+                                        {
+                                            <span class="badge bg-info-subtle text-info border">Công</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary-subtle text-secondary border">Phụ tùng</span>
+                                        }
+                                    </td>
+                                    <td>@line.Name</td>
+                                    <td class="text-center">@line.Quantity.ToString("0.##")</td>
+                                    <td class="text-end">@line.UnitPrice.ToString("N0")đ</td>
+                                    <td class="text-end fw-semibold">@line.Amount.ToString("N0")đ</td>
+                                </tr>
+                            }
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-bold">
+                                    <td colspan="4" class="text-end">Tổng giá trị RO:</td>
+                                    <td class="text-end text-primary">@Model.RO.Total.ToString("N0")đ</td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Tiến độ theo từng công đoạn -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-grid-3x3 me-2"></i>Tiến độ công đoạn &amp; Khoang sửa chữa</h6>
+
+                <!-- Công đoạn SCC -->
+                <div class="p-3 bg-light rounded border mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold text-dark">
+                            <i class="bi bi-wrench-adjustable me-1 text-primary"></i>1. Sửa chữa chung &amp; Gầm máy (SCC)
+                        </span>
+                        @if (Model.HasSCC)
+                        {
+                            <span class="badge bg-primary">Có phân công</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Không áp dụng</span>
+                        }
+                    </div>
+                    @if (Model.HasSCC)
+                    {
+                        <div class="row g-2 small">
+                            <div class="col-md-6">
+                                <span class="text-muted">Khoang sửa chữa:</span>
+                                <strong>@(Model.SCCCavity != null ? $"{Model.SCCCavity.CavityNo} — {Model.SCCCavity.CavityName}" : "Chưa gán khoang")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Kế hoạch:</span>
+                                <strong>@(Model.SCCPlanStartDTime?.ToString("HH:mm dd/MM") ?? "—") → @(Model.SCCPlanFinishDTime?.ToString("HH:mm dd/MM") ?? "—")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Thực tế bắt đầu:</span>
+                                <strong class="text-success">@(Model.SCCActualStartDTime?.ToString("HH:mm dd/MM") ?? "Chưa bắt đầu")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Thực tế kết thúc:</span>
+                                <strong class="text-primary">@(Model.SCCActualFinishDTime?.ToString("HH:mm dd/MM") ?? "Chưa kết thúc")</strong>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Công đoạn SCD -->
+                <div class="p-3 bg-light rounded border mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold text-dark">
+                            <i class="bi bi-hammer me-1 text-warning"></i>2. Sửa chữa đồng &amp; Thân vỏ (SCD)
+                        </span>
+                        @if (Model.HasSCD)
+                        {
+                            <span class="badge bg-warning text-dark">Có phân công</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Không áp dụng</span>
+                        }
+                    </div>
+                    @if (Model.HasSCD)
+                    {
+                        <div class="row g-2 small">
+                            <div class="col-md-6">
+                                <span class="text-muted">Khoang kéo nắn / gò hàn:</span>
+                                <strong>@(Model.SCDCavity != null ? $"{Model.SCDCavity.CavityNo} — {Model.SCDCavity.CavityName}" : "Chưa gán khoang")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Kế hoạch:</span>
+                                <strong>@(Model.SCDPlanStartDTime?.ToString("HH:mm dd/MM") ?? "—") → @(Model.SCDPlanFinishDTime?.ToString("HH:mm dd/MM") ?? "—")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Thực tế bắt đầu:</span>
+                                <strong class="text-success">@(Model.SCDActualStartDTime?.ToString("HH:mm dd/MM") ?? "Chưa bắt đầu")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Thực tế kết thúc:</span>
+                                <strong class="text-primary">@(Model.SCDActualFinishDTime?.ToString("HH:mm dd/MM") ?? "Chưa kết thúc")</strong>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <!-- Công đoạn SCS -->
+                <div class="p-3 bg-light rounded border">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold text-dark">
+                            <i class="bi bi-paint-bucket me-1 text-info"></i>3. Sửa chữa sơn &amp; Sấy nhiệt (SCS)
+                        </span>
+                        @if (Model.HasSCS)
+                        {
+                            <span class="badge bg-info">Có phân công</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Không áp dụng</span>
+                        }
+                    </div>
+                    @if (Model.HasSCS)
+                    {
+                        <div class="row g-2 small">
+                            <div class="col-md-6">
+                                <span class="text-muted">Buồng sơn sấy:</span>
+                                <strong>@(Model.SCSCavity != null ? $"{Model.SCSCavity.CavityNo} — {Model.SCSCavity.CavityName}" : "Chưa gán buồng")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Kế hoạch:</span>
+                                <strong>@(Model.SCSPlanStartDTime?.ToString("HH:mm dd/MM") ?? "—") → @(Model.SCSPlanFinishDTime?.ToString("HH:mm dd/MM") ?? "—")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Thực tế bắt đầu:</span>
+                                <strong class="text-success">@(Model.SCSActualStartDTime?.ToString("HH:mm dd/MM") ?? "Chưa bắt đầu")</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <span class="text-muted">Thực tế kết thúc:</span>
+                                <strong class="text-primary">@(Model.SCSActualFinishDTime?.ToString("HH:mm dd/MM") ?? "Chưa kết thúc")</strong>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột phải: Kỹ thuật viên & Quản đốc chỉ đạo -->
+    <div class="col-lg-5">
+        <!-- Danh sách Kỹ thuật viên -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold text-primary mb-3">
+                    <i class="bi bi-people me-2"></i>Đội ngũ Kỹ thuật viên phân công (@Model.EngineerCount)
+                </h6>
+
+                @if (Model.Engineers.Count == 0)
+                {
+                    <div class="text-muted small">Chưa phân công kỹ thuật viên nào.</div>
+                }
+
+                @foreach (var eng in Model.Engineers)
+                {
+                    var (wtTxt, wtCode, wtCss, wtIcon) = Ui.WorkType(eng.WorkType);
+                    <div class="p-3 bg-light rounded border mb-2 @(eng.IsPrimary ? "border-primary-subtle" : "")">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <div>
+                                <div class="fw-bold fs-6">
+                                    @eng.Engineer.EngineerName
+                                    @if (eng.IsPrimary)
+                                    {
+                                        <span class="badge bg-primary ms-1" style="font-size:10px">Thợ chính</span>
+                                    }
+                                </div>
+                                <div class="text-muted small" style="font-size:11px">
+                                    @eng.Engineer.EngineerNo · @eng.Engineer.SkillLevel · @(eng.Engineer.GroupRepair?.GroupRName ?? "Không phân tổ")
+                                </div>
+                            </div>
+                            <span class="badge bg-@wtCss">
+                                <i class="bi @wtIcon me-1"></i>@wtTxt
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top small">
+                            <span class="text-muted">Định mức giờ công:</span>
+                            <strong class="text-dark">@eng.AssignedHours.ToString("0.##") giờ</strong>
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(eng.Note))
+                        {
+                            <div class="text-muted small mt-1">
+                                <i class="bi bi-info-circle me-1"></i>@eng.Note
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="d-flex justify-content-between align-items-center p-2 bg-primary-subtle rounded text-primary fw-bold small mt-3">
+                    <span>Tổng định mức công thợ:</span>
+                    <span>@Model.TotalAssignedHours.ToString("0.##") giờ</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chỉ đạo kỹ thuật & Nhật ký -->
+        <div class="card border-0 shadow-sm mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold text-primary mb-3"><i class="bi bi-card-text me-2"></i>Chỉ đạo kỹ thuật của Quản đốc</h6>
+                <div class="p-3 bg-light rounded border small mb-3">
+                    @(string.IsNullOrWhiteSpace(Model.Note) ? "Không có ghi chú chỉ đạo đặc biệt." : Model.Note)
+                </div>
+
+                <div class="small">
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Người phân công:</span>
+                        <span class="fw-semibold">@Model.CreatedBy</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Thời điểm tạo:</span>
+                        <span>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Thời điểm bắt đầu:</span>
+                        <span class="text-success fw-semibold">@(Model.StartedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Chưa bắt đầu")</span>
+                    </div>
+                    <div class="d-flex justify-content-between py-1">
+                        <span class="text-muted">Thời điểm hoàn tất:</span>
+                        <span class="text-primary fw-semibold">@(Model.FinishedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Chưa hoàn tất")</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Thao tác chuyển đổi trạng thái & Quản trị -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-toggles me-2"></i>Thao tác xử lý</h6>
+
+                @if (Model.Status == MiniService.Models.AssignmentWorkStatus.Assigned)
+                {
+                    <form asp-action="Start" method="post" class="mb-2">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button class="btn btn-success w-100 mb-2">
+                            <i class="bi bi-play-circle me-1"></i>Bắt đầu thi công (Xe vào xưởng INGA)
+                        </button>
+                    </form>
+                }
+
+                @if (Model.Status == MiniService.Models.AssignmentWorkStatus.InProgress)
+                {
+                    <form asp-action="Complete" method="post" class="mb-2" onsubmit="return confirm('Nghiệm thu hoàn thành sửa chữa?')">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button class="btn btn-primary w-100 mb-2">
+                            <i class="bi bi-check2-circle me-1"></i>Nghiệm thu hoàn tất (Sửa xong RPRD)
+                        </button>
+                    </form>
+                }
+
+                @if (Model.Status != MiniService.Models.AssignmentWorkStatus.Completed && Model.Status != MiniService.Models.AssignmentWorkStatus.Cancelled)
+                {
+                    <button type="button" class="btn btn-outline-warning w-100 mb-2" data-bs-toggle="modal" data-bs-target="#cancelModal">
+                        <i class="bi bi-x-circle me-1"></i>Hủy phiếu phân công
+                    </button>
+                }
+
+                @if (Model.Status == MiniService.Models.AssignmentWorkStatus.Assigned || Model.Status == MiniService.Models.AssignmentWorkStatus.Cancelled)
+                {
+                    <form asp-action="Delete" method="post" onsubmit="return confirm('Bạn có chắc chắn muốn xóa phiếu phân công này?')">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <button class="btn btn-outline-danger w-100">
+                            <i class="bi bi-trash me-1"></i>Xóa phiếu phân công
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Hủy Phân Công -->
+<div class="modal fade" id="cancelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Cancel" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold">Hủy phiếu phân công @Model.AssignmentNo</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Lý do hủy phân công</label>
+                        <textarea name="reason" class="form-control form-control-sm" rows="3" placeholder="Khách hoãn sửa, điều phối lại sang thợ khác..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-warning">Xác nhận hủy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

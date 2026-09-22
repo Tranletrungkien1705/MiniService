@@ -1453,6 +1453,230 @@ public class ReceptionController(IRoService svc) : Controller
     }
 }
 
+public class AssignmentWorkController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(AssignmentWorkStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+        ViewBag.ROId = roId;
+
+        var list = await svc.AssignmentWorksAsync(status, q, fromDate, toDate, roId);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.SelectedROId = roId;
+        ViewBag.EligibleROs = await svc.ROsEligibleForAssignmentAsync();
+        ViewBag.Cavities = await svc.CavitiesForSelectAsync();
+        ViewBag.Engineers = await svc.EngineersForSelectAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        int roId,
+        DateTime? sccPlanStart, DateTime? sccPlanFinish, int? sccCavityId,
+        DateTime? scdPlanStart, DateTime? scdPlanFinish, int? scdCavityId,
+        DateTime? scsPlanStart, DateTime? scsPlanFinish, int? scsCavityId,
+        string? note, string? createdBy,
+        int[]? engineerIds, int[]? workTypes, decimal[]? assignedHours, int? primaryEngineerId)
+    {
+        if (roId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn Lệnh sửa chữa (RO) cần phân công.";
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+
+        try
+        {
+            var assignment = new AssignmentWork
+            {
+                ROId = roId,
+                Status = AssignmentWorkStatus.Assigned,
+                SCCPlanStartDTime = sccPlanStart,
+                SCCPlanFinishDTime = sccPlanFinish,
+                SCCCavityId = (sccCavityId.HasValue && sccCavityId.Value > 0) ? sccCavityId : null,
+                SCDPlanStartDTime = scdPlanStart,
+                SCDPlanFinishDTime = scdPlanFinish,
+                SCDCavityId = (scdCavityId.HasValue && scdCavityId.Value > 0) ? scdCavityId : null,
+                SCSPlanStartDTime = scsPlanStart,
+                SCSPlanFinishDTime = scsPlanFinish,
+                SCSCavityId = (scsCavityId.HasValue && scsCavityId.Value > 0) ? scsCavityId : null,
+                Note = note?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Quản đốc xưởng" : createdBy.Trim()
+            };
+
+            var engineers = new List<AssignmentEngineer>();
+            if (engineerIds != null && engineerIds.Length > 0)
+            {
+                for (int i = 0; i < engineerIds.Length; i++)
+                {
+                    var engId = engineerIds[i];
+                    if (engId <= 0) continue;
+                    var wt = (workTypes != null && workTypes.Length > i) ? (WorkType)workTypes[i] : WorkType.SCC;
+                    var hrs = (assignedHours != null && assignedHours.Length > i && assignedHours[i] > 0) ? assignedHours[i] : 1.0m;
+                    var isPrim = primaryEngineerId.HasValue ? (engId == primaryEngineerId.Value) : (i == 0);
+
+                    engineers.Add(new AssignmentEngineer
+                    {
+                        EngineerId = engId,
+                        WorkType = wt,
+                        AssignedHours = hrs,
+                        IsPrimary = isPrim
+                    });
+                }
+            }
+
+            var id = await svc.CreateAssignmentWorkAsync(assignment, engineers);
+            TempData["Success"] = $"Đã lập phiếu phân công sửa chữa {assignment.AssignmentNo} thành công!";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var item = await svc.GetAssignmentWorkAsync(id);
+        if (item == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextAssignment(item.Status);
+        return View(item);
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var item = await svc.GetAssignmentWorkAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Start(int id, string? startedBy)
+    {
+        var (ok, msg) = await svc.StartAssignmentWorkAsync(id, startedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Complete(int id, string? completedBy)
+    {
+        var (ok, msg) = await svc.CompleteAssignmentWorkAsync(id, completedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? reason)
+    {
+        var (ok, msg) = await svc.CancelAssignmentWorkAsync(id, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteAssignmentWorkAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Engineers(string? q, int? groupId)
+    {
+        ViewBag.Q = q;
+        ViewBag.GroupId = groupId;
+        ViewBag.Groups = await svc.GroupRepairsForSelectAsync();
+        var engineers = await svc.EngineersAsync(q, groupId, null);
+        var groups = await svc.GroupRepairsAsync(null, null);
+        ViewBag.AllGroups = groups;
+        return View(engineers);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateEngineer(string? code, string name, string? phone, string? skillLevel, string? specialty, int? groupId)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            TempData["Error"] = "Vui lòng nhập họ tên kỹ thuật viên.";
+            return RedirectToAction(nameof(Engineers));
+        }
+
+        try
+        {
+            var eng = new Engineer
+            {
+                EngineerNo = code?.Trim() ?? "",
+                EngineerName = name.Trim(),
+                Phone = phone?.Trim(),
+                SkillLevel = string.IsNullOrWhiteSpace(skillLevel) ? "Bậc 3/7" : skillLevel.Trim(),
+                Specialty = string.IsNullOrWhiteSpace(specialty) ? "Sửa chữa chung" : specialty.Trim(),
+                GroupRId = (groupId.HasValue && groupId.Value > 0) ? groupId : null
+            };
+            await svc.CreateEngineerAsync(eng);
+            TempData["Success"] = $"Đã thêm kỹ thuật viên '{eng.EngineerNo} - {eng.EngineerName}'.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Engineers));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateGroup(string? code, string name, string? leader, string? note)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            TempData["Error"] = "Vui lòng nhập tên tổ sửa chữa.";
+            return RedirectToAction(nameof(Engineers));
+        }
+
+        try
+        {
+            var grp = new GroupRepair
+            {
+                GroupRNo = code?.Trim() ?? "",
+                GroupRName = name.Trim(),
+                LeaderName = leader?.Trim() ?? "",
+                Note = note?.Trim()
+            };
+            await svc.CreateGroupRepairAsync(grp);
+            TempData["Success"] = $"Đã thêm tổ thợ '{grp.GroupRNo} - {grp.GroupRName}'.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Engineers));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteEngineer(int id)
+    {
+        var (ok, msg) = await svc.DeleteEngineerAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Engineers));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteGroup(int id)
+    {
+        var (ok, msg) = await svc.DeleteGroupRepairAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Engineers));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

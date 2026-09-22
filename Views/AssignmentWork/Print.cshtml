@@ -1,0 +1,242 @@
+@model MiniService.Models.AssignmentWork
+@{
+    Layout = null;
+    var (stTxt, stCode, _) = Ui.AssignmentWorkStatus(Model.Status);
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Phiếu Giao Việc Xưởng @Model.AssignmentNo — Hyundai Car Service</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <style>
+        body { font-family: "Segoe UI", Arial, sans-serif; font-size: 13px; color: #1f2937; background: #fff; }
+        .print-container { max-width: 860px; margin: 20px auto; padding: 24px; border: 1px solid #d1d5db; border-radius: 8px; }
+        .table-custom th, .table-custom td { padding: 5px 8px; font-size: 12px; }
+        .barcode-box { display: inline-block; font-family: monospace; font-size: 18px; letter-spacing: 4px; padding: 4px 12px; border: 1px dashed #6b7280; font-weight: bold; background: #f9fafb; }
+        @@media print {
+            .no-print { display: none !important; }
+            .print-container { border: none !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
+            body { font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print bg-light border-bottom p-3 mb-3 text-center sticky-top">
+    <button onclick="window.print()" class="btn btn-primary btn-sm me-2 fw-bold">
+        <i class="bi bi-printer me-1"></i>In Phiếu Giao Việc (Print)
+    </button>
+    <button onclick="window.close()" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-x-circle me-1"></i>Đóng
+    </button>
+</div>
+
+<div class="print-container">
+    <!-- Header đại lý -->
+    <div class="row align-items-center border-bottom pb-3 mb-3">
+        <div class="col-8">
+            <h5 class="fw-bold text-uppercase mb-0 text-primary">HYUNDAI CAR SERVICE</h5>
+            <div class="text-muted small">TRUNG TÂM BẢO HÀNH &amp; SỬA CHỮA Ô TÔ CHÍNH HÃNG</div>
+            <div class="text-muted small">Hotline xưởng dịch vụ: 1900-6868 · Địa chỉ xưởng: Cầu Giấy, Hà Nội</div>
+        </div>
+        <div class="col-4 text-end">
+            <div class="barcode-box mb-1">||| @Model.AssignmentNo |||</div>
+            <div class="text-muted small">Ngày lập: <b>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</b></div>
+        </div>
+    </div>
+
+    <!-- Tiêu đề chính -->
+    <div class="text-center my-3">
+        <h4 class="fw-bold text-uppercase mb-1">PHIẾU PHÂN CÔNG CÔNG VIỆC &amp; GIAO XE VÀO XƯỞNG</h4>
+        <div class="small text-muted fst-italic">(Workshop Work Order &amp; Technician Assignment Sheet)</div>
+    </div>
+
+    <!-- Thông tin xe & RO -->
+    <table class="table table-bordered table-custom mb-3">
+        <tbody>
+            <tr>
+                <td style="width:18%" class="bg-light fw-bold">Số Lệnh RO:</td>
+                <td style="width:32%"><b class="text-primary fs-6">@Model.RO.Code</b></td>
+                <td style="width:18%" class="bg-light fw-bold">Biển số xe:</td>
+                <td style="width:32%"><b class="text-danger fs-6">@Model.RO.Car.Plate</b></td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Dòng xe (Model):</td>
+                <td>@Model.RO.Car.Model</td>
+                <td class="bg-light fw-bold">Số khung (VIN):</td>
+                <td>@(Model.RO.Car.Vin ?? "—")</td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Chủ xe:</td>
+                <td><b>@Model.RO.Customer.Name</b></td>
+                <td class="bg-light fw-bold">Số điện thoại:</td>
+                <td>@(Model.RO.Customer.Phone ?? "—")</td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Số km đồng hồ:</td>
+                <td>@Model.RO.Odometer.ToString("N0") km</td>
+                <td class="bg-light fw-bold">Trạng thái phiếu:</td>
+                <td><span class="badge bg-secondary">@stCode: @stTxt</span></td>
+            </tr>
+            <tr>
+                <td class="bg-light fw-bold">Yêu cầu của khách:</td>
+                <td colspan="3">@(string.IsNullOrWhiteSpace(Model.RO.IntakeNote) ? "Theo nội dung kiểm tra tiêu chuẩn xưởng." : Model.RO.IntakeNote)</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Kế hoạch khoang xưởng & tiến độ -->
+    <h6 class="fw-bold text-uppercase small text-primary mb-2"><i class="bi bi-clock-history me-1"></i>Kế hoạch tiến độ &amp; Khoang sửa chữa (Bay Dispatch):</h6>
+    <table class="table table-bordered table-custom mb-3">
+        <thead class="table-light">
+            <tr>
+                <th>Công đoạn sửa chữa</th>
+                <th>Khoang / Cầu nâng</th>
+                <th>Kế hoạch bắt đầu</th>
+                <th>Kế hoạch kết thúc</th>
+                <th>Thực tế bắt đầu</th>
+                <th>Thực tế kết thúc</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><b>SCC: Sửa chữa chung &amp; Gầm máy</b></td>
+                <td>@(Model.SCCCavity != null ? $"{Model.SCCCavity.CavityNo} ({Model.SCCCavity.CavityName})" : "—")</td>
+                <td>@(Model.SCCPlanStartDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+                <td>@(Model.SCCPlanFinishDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+                <td>@(Model.SCCActualStartDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+                <td>@(Model.SCCActualFinishDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+            </tr>
+            <tr>
+                <td><b>SCD: Sửa chữa đồng &amp; Thân vỏ</b></td>
+                <td>@(Model.SCDCavity != null ? $"{Model.SCDCavity.CavityNo} ({Model.SCDCavity.CavityName})" : "—")</td>
+                <td>@(Model.SCDPlanStartDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+                <td>@(Model.SCDPlanFinishDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+                <td>@(Model.SCDActualStartDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+                <td>@(Model.SCDActualFinishDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+            </tr>
+            <tr>
+                <td><b>SCS: Sửa chữa sơn &amp; Sấy nhiệt</b></td>
+                <td>@(Model.SCSCavity != null ? $"{Model.SCSCavity.CavityNo} ({Model.SCSCavity.CavityName})" : "—")</td>
+                <td>@(Model.SCSPlanStartDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+                <td>@(Model.SCSPlanFinishDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+                <td>@(Model.SCSActualStartDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+                <td>@(Model.SCSActualFinishDTime?.ToString("HH:mm dd/MM") ?? "—")</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- Danh sách Kỹ thuật viên phân công -->
+    <h6 class="fw-bold text-uppercase small text-primary mb-2"><i class="bi bi-people me-1"></i>Danh sách Kỹ thuật viên phân công thực hiện:</h6>
+    <table class="table table-bordered table-custom mb-3">
+        <thead class="table-light">
+            <tr>
+                <th style="width:50px" class="text-center">STT</th>
+                <th>Kỹ thuật viên</th>
+                <th>Tổ thợ</th>
+                <th>Công đoạn phụ trách</th>
+                <th class="text-center">Vai trò</th>
+                <th class="text-center">Định mức (giờ)</th>
+                <th>Ghi chú nhiệm vụ</th>
+                <th style="width:120px" class="text-center">Ký nhận</th>
+            </tr>
+        </thead>
+        <tbody>
+        @{ int idx = 1; }
+        @foreach (var eng in Model.Engineers)
+        {
+            var (wtTxt, wtCode, _, _) = Ui.WorkType(eng.WorkType);
+            <tr>
+                <td class="text-center">@(idx++)</td>
+                <td><b>@eng.Engineer.EngineerName</b> (@eng.Engineer.EngineerNo)</td>
+                <td>@(eng.Engineer.GroupRepair?.GroupRName ?? "—")</td>
+                <td>@wtCode: @wtTxt</td>
+                <td class="text-center">
+                    @if (eng.IsPrimary)
+                    {
+                        <span class="badge bg-primary">Thợ chính</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">Thợ phụ</span>
+                    }
+                </td>
+                <td class="text-center font-monospace">@eng.AssignedHours.ToString("0.##")</td>
+                <td>@(string.IsNullOrWhiteSpace(eng.Note) ? "Thực hiện theo quy chuẩn kỹ thuật" : eng.Note)</td>
+                <td></td>
+            </tr>
+        }
+        @if (Model.Engineers.Count == 0)
+        {
+            <tr><td colspan="8" class="text-center text-muted">Chưa có thông tin kỹ thuật viên.</td></tr>
+        }
+        </tbody>
+    </table>
+
+    <!-- Hạng mục công việc trên lệnh RO -->
+    @if (Model.RO.Lines.Count > 0)
+    {
+        <h6 class="fw-bold text-uppercase small text-primary mb-2"><i class="bi bi-tools me-1"></i>Hạng mục dịch vụ &amp; vật tư theo RO:</h6>
+        <table class="table table-bordered table-custom mb-3">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:50px" class="text-center">STT</th>
+                    <th style="width:100px">Loại</th>
+                    <th>Nội dung công việc / Phụ tùng thay thế</th>
+                    <th style="width:80px" class="text-center">SL</th>
+                    <th style="width:150px" class="text-center">KCS kiểm tra</th>
+                </tr>
+            </thead>
+            <tbody>
+            @{ int lineIdx = 1; }
+            @foreach (var line in Model.RO.Lines)
+            {
+                <tr>
+                    <td class="text-center">@(lineIdx++)</td>
+                    <td>@(line.Type == MiniService.Models.LineType.Labor ? "Công thợ" : "Phụ tùng")</td>
+                    <td>@line.Name</td>
+                    <td class="text-center">@line.Quantity.ToString("0.##")</td>
+                    <td class="text-center">[ ] Đạt &nbsp; [ ] Sửa lại</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+
+    <!-- Chỉ đạo Quản đốc -->
+    @if (!string.IsNullOrWhiteSpace(Model.Note))
+    {
+        <div class="p-2 border rounded bg-light mb-3 small">
+            <strong><i class="bi bi-pencil-square me-1"></i>Chỉ đạo kỹ thuật của Quản đốc xưởng:</strong>
+            <div>@Model.Note</div>
+        </div>
+    }
+
+    <!-- Chữ ký xác nhận 3 bên -->
+    <div class="row text-center mt-4 pt-2">
+        <div class="col-4">
+            <div class="fw-bold text-uppercase small">KỸ THUẬT VIÊN CHÍNH</div>
+            <div class="text-muted small fst-italic">(Ký &amp; ghi rõ họ tên)</div>
+            <div style="height:65px"></div>
+            <div class="fw-semibold">@Model.PrimaryTechnician</div>
+        </div>
+        <div class="col-4">
+            <div class="fw-bold text-uppercase small">CỐ VẤN DỊCH VỤ</div>
+            <div class="text-muted small fst-italic">(Ký &amp; bàn giao lệnh)</div>
+            <div style="height:65px"></div>
+            <div class="fw-semibold">@(Model.RO.CreatedBy ?? "CVDV")</div>
+        </div>
+        <div class="col-4">
+            <div class="fw-bold text-uppercase small">QUẢN ĐỐC XƯỞNG</div>
+            <div class="text-muted small fst-italic">(Ký duyệt điều phối)</div>
+            <div style="height:65px"></div>
+            <div class="fw-semibold">@Model.CreatedBy</div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

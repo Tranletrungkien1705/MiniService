@@ -32,6 +32,10 @@ public class AppDbContext : DbContext
     public DbSet<Cavity> Cavities => Set<Cavity>();
     public DbSet<ReceptionSheet> ReceptionSheets => Set<ReceptionSheet>();
     public DbSet<ReceptionItem> ReceptionItems => Set<ReceptionItem>();
+    public DbSet<GroupRepair> GroupRepairs => Set<GroupRepair>();
+    public DbSet<Engineer> Engineers => Set<Engineer>();
+    public DbSet<AssignmentWork> AssignmentWorks => Set<AssignmentWork>();
+    public DbSet<AssignmentEngineer> AssignmentEngineers => Set<AssignmentEngineer>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -70,6 +74,7 @@ public class AppDbContext : DbContext
             e.HasMany(x => x.OrderParts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Cavity).WithMany().HasForeignKey(x => x.CavityId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.ReceptionSheet).WithMany().HasForeignKey(x => x.ReceptionSheetId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.AssignmentWorks).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -254,6 +259,40 @@ public class AppDbContext : DbContext
         });
         b.Entity<ReceptionItem>(e =>
         {
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<GroupRepair>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.GroupRNo }).IsUnique();
+            e.HasMany(x => x.Engineers).WithOne(x => x.GroupRepair).HasForeignKey(x => x.GroupRId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Engineer>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.EngineerNo }).IsUnique();
+            e.HasOne(x => x.GroupRepair).WithMany(x => x.Engineers).HasForeignKey(x => x.GroupRId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<AssignmentWork>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.AssignmentNo }).IsUnique();
+            e.Ignore(x => x.PrimaryTechnician);
+            e.Ignore(x => x.HasSCC);
+            e.Ignore(x => x.HasSCD);
+            e.Ignore(x => x.HasSCS);
+            e.Ignore(x => x.EngineerCount);
+            e.Ignore(x => x.TotalAssignedHours);
+            e.HasOne(x => x.RO).WithMany(x => x.AssignmentWorks).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.SCCCavity).WithMany().HasForeignKey(x => x.SCCCavityId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.SCDCavity).WithMany().HasForeignKey(x => x.SCDCavityId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.SCSCavity).WithMany().HasForeignKey(x => x.SCSCavityId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Engineers).WithOne(x => x.AssignmentWork).HasForeignKey(x => x.AssignmentWorkId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<AssignmentEngineer>(e =>
+        {
+            e.Property(x => x.AssignedHours).HasPrecision(5, 2);
+            e.HasOne(x => x.Engineer).WithMany(x => x.Assignments).HasForeignKey(x => x.EngineerId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
