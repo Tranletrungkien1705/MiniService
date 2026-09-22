@@ -1191,6 +1191,137 @@ app.MapDelete("/api/orderparts/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Khoang sửa chữa & Cầu nâng xưởng dịch vụ (Ser_Cavity / Mst_Compartment)
+app.MapGet("/api/cavities", async (CavityType? type, CavityStatus? status, string? q, IRoService svc) =>
+{
+    var list = await svc.CavitiesAsync(type, status, q);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.CavityNo,
+        c.CavityName,
+        cavityType = Ui.CavityType(c.CavityType).text,
+        cavityTypeCode = Ui.CavityType(c.CavityType).code,
+        cavityTypeValue = (int)c.CavityType,
+        status = Ui.CavityStatus(c.Status).text,
+        statusCode = Ui.CavityStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.LiftEquipment,
+        c.AreaZone,
+        c.CurrentROId,
+        roCode = c.CurrentRO?.Code,
+        c.CurrentCarPlate,
+        c.CurrentCarModel,
+        c.CurrentTechnician,
+        c.StartUseDate,
+        c.ExpectedFinishDate,
+        c.FinishUseDate,
+        c.Note,
+        c.IsActive,
+        c.IsInUse,
+        elapsedMinutes = c.ElapsedTime.HasValue ? (int)c.ElapsedTime.Value.TotalMinutes : (int?)null,
+        c.CreatedAt
+    }));
+});
+
+app.MapGet("/api/cavities/{id:int}", async (int id, IRoService svc) =>
+{
+    var c = await svc.GetCavityAsync(id);
+    if (c == null) return Results.NotFound(new { error = "Không tìm thấy khoang sửa chữa." });
+    return Results.Ok(new
+    {
+        c.Id,
+        c.CavityNo,
+        c.CavityName,
+        cavityType = Ui.CavityType(c.CavityType).text,
+        cavityTypeCode = Ui.CavityType(c.CavityType).code,
+        cavityTypeValue = (int)c.CavityType,
+        status = Ui.CavityStatus(c.Status).text,
+        statusCode = Ui.CavityStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.LiftEquipment,
+        c.AreaZone,
+        currentRO = c.CurrentRO != null ? new
+        {
+            c.CurrentRO.Id,
+            c.CurrentRO.Code,
+            status = Ui.Status(c.CurrentRO.Status).text,
+            c.CurrentRO.Total,
+            c.CurrentRO.IntakeNote,
+            lines = c.CurrentRO.Lines.Select(l => new { l.Id, l.Name, l.Quantity, l.UnitPrice, l.Amount, type = Ui.Line(l.Type) })
+        } : null,
+        c.CurrentCarPlate,
+        c.CurrentCarModel,
+        c.CurrentTechnician,
+        c.StartUseDate,
+        c.ExpectedFinishDate,
+        c.FinishUseDate,
+        c.Note,
+        c.IsActive,
+        c.IsInUse,
+        elapsedMinutes = c.ElapsedTime.HasValue ? (int)c.ElapsedTime.Value.TotalMinutes : (int?)null,
+        c.CreatedAt
+    });
+});
+
+app.MapPost("/api/cavities", async (CreateCavityDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.CavityName))
+            return Results.BadRequest(new { error = "Vui lòng nhập tên khoang sửa chữa (CavityName)." });
+
+        var cavity = new Cavity
+        {
+            CavityNo = dto.CavityNo?.Trim() ?? "",
+            CavityName = dto.CavityName.Trim(),
+            CavityType = dto.CavityType,
+            LiftEquipment = dto.LiftEquipment?.Trim(),
+            AreaZone = dto.AreaZone?.Trim(),
+            Note = dto.Note?.Trim(),
+            IsActive = dto.IsActive ?? true,
+            CreatedBy = "api"
+        };
+
+        var id = await svc.CreateCavityAsync(cavity);
+        return Results.Ok(new { cavityId = id, cavityNo = cavity.CavityNo, message = "Đã thêm khoang sửa chữa thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/cavities/{id:int}", async (int id, UpdateCavityDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.UpdateCavityAsync(id, dto.CavityName, dto.CavityType, dto.LiftEquipment, dto.AreaZone, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/cavities/{id:int}/assign", async (int id, AssignCarToCavityDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.AssignCarToCavityAsync(id, dto.RoId, dto.Technician, dto.ExpectedFinish);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/cavities/{id:int}/release", async (int id, ReleaseCavityDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ReleaseCavityAsync(id, dto?.NextRoStatus);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/cavities/{id:int}/status", async (int id, SetCavityStatusDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.SetCavityStatusAsync(id, dto.Status, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/cavities/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCavityAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -1231,3 +1362,8 @@ record CreateOrderPartDto(string SupplierName, OrderPartDeliveryForm DeliveryFor
 record CreateOrderPartItemDto(int PartId, decimal Quantity, decimal? UnitPrice, decimal? DiscountRate, decimal? VatPercent, decimal? ApprovedQuantity, string? Note);
 record TransitionOrderPartDto(OrderPartStatus ToStatus, string? SupplierOrderNo, string? Note);
 record CreateStockInFromOrderDto(string? ApprovedBy);
+record CreateCavityDto(string? CavityNo, string CavityName, CavityType CavityType, string? LiftEquipment, string? AreaZone, string? Note, bool? IsActive);
+record UpdateCavityDto(string CavityName, CavityType CavityType, string? LiftEquipment, string? AreaZone, string? Note);
+record AssignCarToCavityDto(int RoId, string? Technician, DateTime? ExpectedFinish);
+record ReleaseCavityDto(ROStatus? NextRoStatus);
+record SetCavityStatusDto(CavityStatus Status, string? Note);

@@ -157,6 +157,25 @@ public enum OrderPartDeliveryForm
     UrgentVOR = 2  // 3: Đặt khẩn cấp / Cấp bách (Xe nằm chờ phụ tùng - Vehicle Off Road)
 }
 
+/// <summary>Phân loại khoang sửa chữa — theo Mst_Compartment idn.CarService.</summary>
+public enum CavityType
+{
+    EM = 0,    // Express Maintenance — Khoang bảo dưỡng nhanh
+    GR = 1,    // General Repair — Khoang sửa chữa chung / Gầm máy
+    BP = 2,    // Body & Paint — Khoang đồng sơn / Gò hàn / Buồng sơn sấy
+    KCS = 3,   // Quality Control — Khoang kiểm tra chất lượng xuất xưởng
+    Wash = 4   // Car Wash — Khoang rửa xe & Vệ sinh hoàn thiện
+}
+
+/// <summary>Trạng thái khoang sửa chữa — theo Ser_Cavity / StatusUse idn.CarService.</summary>
+public enum CavityStatus
+{
+    Available = 0,    // 0: Trống / Sẵn sàng tiếp nhận xe
+    Occupied = 1,     // 1: Đang có xe làm dịch vụ / Chiếm dụng
+    Maintenance = 2,  // 2: Đang bảo trì cầu nâng / thiết bị xưởng
+    Inactive = 3      // 3: Tạm ngừng sử dụng
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -202,6 +221,8 @@ public class RepairOrder : IOrgOwned
     public Customer Customer { get; set; } = null!;
     public int? AppointmentId { get; set; }
     public Appointment? Appointment { get; set; }
+    public int? CavityId { get; set; }
+    public Cavity? Cavity { get; set; }
     public List<RepairLine> Lines { get; set; } = [];
     public List<WarrantyReport> WarrantyReports { get; set; } = [];
     public List<StockOut> StockOuts { get; set; } = [];
@@ -693,5 +714,34 @@ public class OrderPartLine : IOrgOwned
     public decimal TaxableAmount => SubTotalBeforeDiscount - DiscountAmount;
     public decimal VatAmount => Math.Round(TaxableAmount * (VatPercent / 100m), 2);
     public decimal Amount => TaxableAmount + VatAmount;
+}
+
+/// <summary>Khoang sửa chữa & Cầu nâng trong xưởng dịch vụ — Ser_Cavity trong idn.CarService.</summary>
+public class Cavity : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CavityNo { get; set; } = "";             // Mã khoang (CavityNo, VD: KH-EM-01, KH-GR-01)
+    public string CavityName { get; set; } = "";           // Tên khoang (CavityName, VD: Khoang Bảo Dưỡng Nhanh #1)
+    public CavityType CavityType { get; set; } = CavityType.EM; // Loại khoang (CavityType)
+    public CavityStatus Status { get; set; } = CavityStatus.Available; // Trạng thái khoang
+    public string? LiftEquipment { get; set; }             // Loại cầu nâng / Thiết bị (Cầu 2 trụ, Cầu cắt kéo, Buồng sơn...)
+    public string? AreaZone { get; set; }                  // Khu vực xưởng (Tầng 1, Xưởng gầm máy, Xưởng đồng sơn...)
+    public int? CurrentROId { get; set; }                  // Lệnh RO hiện đang trên khoang
+    public string? CurrentCarPlate { get; set; }           // Biển số xe trên khoang
+    public string? CurrentCarModel { get; set; }           // Model xe trên khoang
+    public string? CurrentTechnician { get; set; }         // Kỹ thuật viên phụ trách trên khoang
+    public DateTime? StartUseDate { get; set; }            // Thời gian xe bắt đầu vào khoang
+    public DateTime? ExpectedFinishDate { get; set; }      // Thời gian dự kiến hoàn tất trên khoang
+    public DateTime? FinishUseDate { get; set; }           // Thời gian xe rời khoang gần nhất
+    public string? Note { get; set; }                      // Ghi chú khoang
+    public bool IsActive { get; set; } = true;             // Đang kích hoạt
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public RepairOrder? CurrentRO { get; set; }
+
+    public bool IsInUse => Status == CavityStatus.Occupied;
+    public TimeSpan? ElapsedTime => (StartUseDate.HasValue && Status == CavityStatus.Occupied) ? (DateTime.Now - StartUseDate.Value) : null;
 }
 

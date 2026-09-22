@@ -1197,6 +1197,97 @@ public class OrderPartController(IRoService svc) : Controller
     }
 }
 
+public class CavityController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(CavityType? type, CavityStatus? status, string? q)
+    {
+        ViewBag.Type = type;
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.EligibleROs = await svc.ROsEligibleForCavityAsync();
+        return View(await svc.CavitiesAsync(type, status, q));
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var cavity = await svc.GetCavityAsync(id);
+        if (cavity == null) return NotFound();
+        ViewBag.EligibleROs = await svc.ROsEligibleForCavityAsync();
+        return View(cavity);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string? cavityNo, string cavityName, CavityType type, string? liftEquipment, string? areaZone, string? note)
+    {
+        if (string.IsNullOrWhiteSpace(cavityName))
+        {
+            TempData["Error"] = "Vui lòng nhập tên khoang sửa chữa.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            var cavity = new Cavity
+            {
+                CavityNo = cavityNo?.Trim() ?? "",
+                CavityName = cavityName.Trim(),
+                CavityType = type,
+                LiftEquipment = liftEquipment?.Trim(),
+                AreaZone = areaZone?.Trim(),
+                Note = note?.Trim()
+            };
+            await svc.CreateCavityAsync(cavity);
+            TempData["Success"] = $"Đã thêm khoang sửa chữa '{cavity.CavityNo} - {cavity.CavityName}'.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string cavityName, CavityType type, string? liftEquipment, string? areaZone, string? note)
+    {
+        var (ok, msg) = await svc.UpdateCavityAsync(id, cavityName, type, liftEquipment, areaZone, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Assign(int cavityId, int roId, string? technician, DateTime? expectedFinish)
+    {
+        var (ok, msg) = await svc.AssignCarToCavityAsync(cavityId, roId, technician, expectedFinish);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Release(int cavityId, ROStatus? nextRoStatus)
+    {
+        var (ok, msg) = await svc.ReleaseCavityAsync(cavityId, nextRoStatus);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChangeStatus(int cavityId, CavityStatus status, string? note)
+    {
+        var (ok, msg) = await svc.SetCavityStatusAsync(cavityId, status, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCavityAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

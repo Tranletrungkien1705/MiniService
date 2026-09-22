@@ -96,6 +96,25 @@ public static class Ui
         _ => (f.ToString(), "secondary")
     };
 
+    public static (string text, string code, string css) CavityStatus(CavityStatus s) => s switch
+    {
+        Models.CavityStatus.Available => ("Trống / Sẵn sàng", "AVAIL", "success"),
+        Models.CavityStatus.Occupied => ("Đang có xe sửa", "OCCU", "danger"),
+        Models.CavityStatus.Maintenance => ("Đang bảo trì", "MAIN", "warning"),
+        Models.CavityStatus.Inactive => ("Tạm ngưng", "INAC", "secondary"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string code, string icon, string css) CavityType(CavityType t) => t switch
+    {
+        Models.CavityType.EM => ("Bảo dưỡng nhanh (EM)", "EM", "bi-lightning-charge", "info"),
+        Models.CavityType.GR => ("Sửa chữa chung (GR)", "GR", "bi-tools", "primary"),
+        Models.CavityType.BP => ("Đồng sơn (BP)", "BP", "bi-palette", "warning"),
+        Models.CavityType.KCS => ("Kiểm tra KCS (QC)", "KCS", "bi-shield-check", "success"),
+        Models.CavityType.Wash => ("Rửa xe & Vệ sinh", "WASH", "bi-droplet-half", "secondary"),
+        _ => (t.ToString(), "", "bi-wrench", "secondary")
+    };
+
     public static (string text, string code, string css) StockOutStatus(StockOutStatus s) => s switch
     {
         Models.StockOutStatus.Pending => ("Chờ xuất kho", "PEND", "warning"),

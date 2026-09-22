@@ -14,6 +14,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingQuotes, decimal MonthQuoteValue,
     int ServicePackages,
     int PendingOrderParts, decimal MonthOrderPartValue,
+    int TotalCavities, int OccupiedCavities, int AvailableCavities,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -104,6 +105,17 @@ public interface IRoService
     Task<(bool ok, string msg, int? stockInId)> CreateStockInFromOrderPartAsync(int id, string? approvedBy = null);
     Task<(bool ok, string msg)> DeleteOrderPartAsync(int id);
     Task<List<RepairOrder>> ROsWaitingForPartAsync();
+    // cavities (Ser_Cavity / Mst_Compartment)
+    Task<List<Cavity>> CavitiesAsync(CavityType? type, CavityStatus? status, string? q);
+    Task<Cavity?> GetCavityAsync(int id);
+    Task<int> CreateCavityAsync(Cavity cavity);
+    Task<(bool ok, string msg)> UpdateCavityAsync(int id, string cavityName, CavityType type, string? liftEquipment, string? areaZone, string? note);
+    Task<(bool ok, string msg)> AssignCarToCavityAsync(int cavityId, int roId, string? technician, DateTime? expectedFinish = null);
+    Task<(bool ok, string msg)> ReleaseCavityAsync(int cavityId, ROStatus? nextRoStatus = null);
+    Task<(bool ok, string msg)> SetCavityStatusAsync(int cavityId, CavityStatus status, string? note = null);
+    Task<(bool ok, string msg)> DeleteCavityAsync(int cavityId);
+    Task<List<Cavity>> CavitiesForSelectAsync(CavityType? type = null);
+    Task<List<RepairOrder>> ROsEligibleForCavityAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -420,6 +432,10 @@ public class RoService(AppDbContext db) : IRoService
             .ToListAsync();
         var monthOrderPartValue = monthOrderPartItems.Sum(o => o.Total);
 
+        var totalCavities = await db.Cavities.CountAsync();
+        var occupiedCavities = await db.Cavities.CountAsync(c => c.Status == CavityStatus.Occupied);
+        var availableCavities = await db.Cavities.CountAsync(c => c.Status == CavityStatus.Available && c.IsActive);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -445,6 +461,9 @@ public class RoService(AppDbContext db) : IRoService
             totalServicePackages,
             pendingOrderParts,
             monthOrderPartValue,
+            totalCavities,
+            occupiedCavities,
+            availableCavities,
             byStatus);
     }
 
@@ -1876,6 +1895,225 @@ public class RoService(AppDbContext db) : IRoService
             .Include(r => r.Lines)
             .Where(r => r.Status == ROStatus.Wait4Part || r.Status == ROStatus.Printed || r.Status == ROStatus.HasRO)
             .OrderByDescending(r => r.Status == ROStatus.Wait4Part)
+            .ThenByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+    // --- Cavity & Workshop Bay Dispatch Management (Ser_Cavity / Mst_Compartment) ---
+    public async Task<List<Cavity>> CavitiesAsync(CavityType? type, CavityStatus? status, string? q)
+    {
+        var query = db.Cavities
+            .Include(c => c.CurrentRO).ThenInclude(r => r!.Car)
+            .Include(c => c.CurrentRO).ThenInclude(r => r!.Customer)
+            .AsQueryable();
+
+        if (type.HasValue) query = query.Where(c => c.CavityType == type.Value);
+        if (status.HasValue) query = query.Where(c => c.Status == status.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(c => c.CavityNo.ToLower().Contains(kw)
+                || c.CavityName.ToLower().Contains(kw)
+                || (c.LiftEquipment != null && c.LiftEquipment.ToLower().Contains(kw))
+                || (c.AreaZone != null && c.AreaZone.ToLower().Contains(kw))
+                || (c.CurrentCarPlate != null && c.CurrentCarPlate.ToLower().Contains(kw))
+                || (c.CurrentCarModel != null && c.CurrentCarModel.ToLower().Contains(kw))
+                || (c.CurrentTechnician != null && c.CurrentTechnician.ToLower().Contains(kw))
+                || (c.CurrentRO != null && c.CurrentRO.Code.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderBy(c => c.CavityType).ThenBy(c => c.CavityNo).ToList();
+    }
+
+    public Task<Cavity?> GetCavityAsync(int id) =>
+        db.Cavities
+            .Include(c => c.CurrentRO).ThenInclude(r => r!.Car)
+            .Include(c => c.CurrentRO).ThenInclude(r => r!.Customer)
+            .Include(c => c.CurrentRO).ThenInclude(r => r!.Lines)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<int> CreateCavityAsync(Cavity cavity)
+    {
+        if (string.IsNullOrWhiteSpace(cavity.CavityNo))
+        {
+            var prefix = cavity.CavityType switch
+            {
+                CavityType.EM => "KH-EM",
+                CavityType.GR => "KH-GR",
+                CavityType.BP => "KH-BP",
+                CavityType.KCS => "KH-KCS",
+                CavityType.Wash => "KH-WASH",
+                _ => "KH"
+            };
+            var count = await db.Cavities.CountAsync(c => c.CavityType == cavity.CavityType);
+            cavity.CavityNo = $"{prefix}-{count + 1:D2}";
+        }
+        else
+        {
+            cavity.CavityNo = cavity.CavityNo.Trim().ToUpperInvariant();
+        }
+
+        var exists = await db.Cavities.AnyAsync(c => c.CavityNo == cavity.CavityNo);
+        if (exists)
+            throw new InvalidOperationException($"Mã khoang '{cavity.CavityNo}' đã tồn tại trong xưởng.");
+
+        cavity.CavityName = cavity.CavityName.Trim();
+        cavity.CreatedAt = DateTime.Now;
+
+        db.Cavities.Add(cavity);
+        await db.SaveChangesAsync();
+        return cavity.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateCavityAsync(int id, string cavityName, CavityType type, string? liftEquipment, string? areaZone, string? note)
+    {
+        var cavity = await db.Cavities.FirstOrDefaultAsync(c => c.Id == id);
+        if (cavity == null) return (false, "Không tìm thấy khoang sửa chữa.");
+
+        if (string.IsNullOrWhiteSpace(cavityName)) return (false, "Vui lòng nhập tên khoang sửa chữa.");
+
+        cavity.CavityName = cavityName.Trim();
+        cavity.CavityType = type;
+        cavity.LiftEquipment = liftEquipment?.Trim();
+        cavity.AreaZone = areaZone?.Trim();
+        cavity.Note = note?.Trim();
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật khoang '{cavity.CavityNo} - {cavity.CavityName}'.");
+    }
+
+    public async Task<(bool ok, string msg)> AssignCarToCavityAsync(int cavityId, int roId, string? technician, DateTime? expectedFinish = null)
+    {
+        var cavity = await db.Cavities.FirstOrDefaultAsync(c => c.Id == cavityId);
+        if (cavity == null) return (false, "Không tìm thấy khoang sửa chữa.");
+
+        if (!cavity.IsActive)
+            return (false, $"Khoang '{cavity.CavityNo}' đang ngưng hoạt động.");
+
+        if (cavity.Status == CavityStatus.Occupied && cavity.CurrentROId.HasValue && cavity.CurrentROId.Value != roId)
+            return (false, $"Khoang '{cavity.CavityNo}' đang có xe {cavity.CurrentCarPlate} sửa chữa. Vui lòng giải phóng khoang trước.");
+
+        if (cavity.Status == CavityStatus.Maintenance)
+            return (false, $"Khoang '{cavity.CavityNo}' đang trong thời gian bảo trì thiết bị/cầu nâng.");
+
+        var ro = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa (RO).");
+
+        if (ro.Status is ROStatus.Paid or ROStatus.Finished or ROStatus.Rejected or ROStatus.NotResponding)
+            return (false, $"Lệnh RO {ro.Code} đang ở trạng thái '{Ui.Status(ro.Status).text}', không thể đưa vào khoang sửa chữa.");
+
+        // Cập nhật thông tin trên khoang
+        cavity.CurrentROId = ro.Id;
+        cavity.CurrentCarPlate = ro.Car?.Plate ?? "";
+        cavity.CurrentCarModel = ro.Car?.Model ?? "";
+        var assignedTech = !string.IsNullOrWhiteSpace(technician) ? technician.Trim() : ro.Technician;
+        cavity.CurrentTechnician = assignedTech;
+        cavity.StartUseDate = DateTime.Now;
+        cavity.ExpectedFinishDate = expectedFinish ?? DateTime.Now.AddHours(2);
+        cavity.Status = CavityStatus.Occupied;
+
+        // Cập nhật Lệnh RO sang InGarage nếu chưa vào
+        ro.CavityId = cavity.Id;
+        if (ro.Status is ROStatus.Created or ROStatus.Printed or ROStatus.HasRO)
+        {
+            ro.Status = ROStatus.InGarage;
+            ro.IntakeAt ??= DateTime.Now;
+        }
+        if (!string.IsNullOrWhiteSpace(assignedTech))
+        {
+            ro.Technician = assignedTech;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã điều phối xe {ro.Car?.Plate} (RO: {ro.Code}) vào {cavity.CavityName}.");
+    }
+
+    public async Task<(bool ok, string msg)> ReleaseCavityAsync(int cavityId, ROStatus? nextRoStatus = null)
+    {
+        var cavity = await db.Cavities.FirstOrDefaultAsync(c => c.Id == cavityId);
+        if (cavity == null) return (false, "Không tìm thấy khoang sửa chữa.");
+
+        if (cavity.Status != CavityStatus.Occupied && !cavity.CurrentROId.HasValue)
+            return (false, $"Khoang '{cavity.CavityNo}' hiện đang trống, không cần giải phóng.");
+
+        string prevPlate = cavity.CurrentCarPlate ?? "xe";
+        string? prevRoCode = null;
+
+        if (cavity.CurrentROId.HasValue)
+        {
+            var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == cavity.CurrentROId.Value);
+            if (ro != null)
+            {
+                prevRoCode = ro.Code;
+                // Nếu người dùng chọn trạng thái tiếp theo cho RO (ví dụ Repaired hoặc CheckEnd)
+                if (nextRoStatus.HasValue)
+                {
+                    ro.Status = nextRoStatus.Value;
+                }
+                else if (ro.Status == ROStatus.InGarage)
+                {
+                    ro.Status = ROStatus.Repaired;
+                }
+            }
+        }
+
+        cavity.CurrentROId = null;
+        cavity.CurrentCarPlate = null;
+        cavity.CurrentCarModel = null;
+        cavity.CurrentTechnician = null;
+        cavity.FinishUseDate = DateTime.Now;
+        cavity.ExpectedFinishDate = null;
+        cavity.Status = CavityStatus.Available;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã giải phóng {cavity.CavityName} (Xe {prevPlate}{(prevRoCode != null ? $" - RO: {prevRoCode}" : "")} đã rời khoang).");
+    }
+
+    public async Task<(bool ok, string msg)> SetCavityStatusAsync(int cavityId, CavityStatus status, string? note = null)
+    {
+        var cavity = await db.Cavities.FirstOrDefaultAsync(c => c.Id == cavityId);
+        if (cavity == null) return (false, "Không tìm thấy khoang sửa chữa.");
+
+        if (status != CavityStatus.Occupied && cavity.Status == CavityStatus.Occupied && cavity.CurrentROId.HasValue)
+            return (false, $"Khoang '{cavity.CavityNo}' đang có xe làm việc. Vui lòng giải phóng xe trước khi đổi trạng thái.");
+
+        cavity.Status = status;
+        if (!string.IsNullOrWhiteSpace(note)) cavity.Note = note.Trim();
+
+        await db.SaveChangesAsync();
+        var statusDesc = Ui.CavityStatus(status).text;
+        return (true, $"Đã cập nhật trạng thái khoang '{cavity.CavityNo}' thành '{statusDesc}'.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCavityAsync(int cavityId)
+    {
+        var cavity = await db.Cavities.FirstOrDefaultAsync(c => c.Id == cavityId);
+        if (cavity == null) return (false, "Không tìm thấy khoang sửa chữa.");
+
+        if (cavity.Status == CavityStatus.Occupied || cavity.CurrentROId.HasValue)
+            return (false, "Không thể xóa khoang đang có xe sửa chữa.");
+
+        db.Cavities.Remove(cavity);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa khoang '{cavity.CavityNo} - {cavity.CavityName}'.");
+    }
+
+    public Task<List<Cavity>> CavitiesForSelectAsync(CavityType? type = null)
+    {
+        var query = db.Cavities.Where(c => c.IsActive).AsQueryable();
+        if (type.HasValue) query = query.Where(c => c.CavityType == type.Value);
+        return query.OrderBy(c => c.CavityType).ThenBy(c => c.CavityNo).ToListAsync();
+    }
+
+    public Task<List<RepairOrder>> ROsEligibleForCavityAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines)
+            .Where(r => r.Status == ROStatus.HasRO || r.Status == ROStatus.InGarage || r.Status == ROStatus.Created || r.Status == ROStatus.Printed || r.Status == ROStatus.Wait4Part || r.Status == ROStatus.HasPart)
+            .OrderByDescending(r => r.Status == ROStatus.InGarage)
+            .ThenByDescending(r => r.Status == ROStatus.HasRO)
             .ThenByDescending(r => r.CreatedAt)
             .ToListAsync();
 }

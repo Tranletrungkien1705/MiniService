@@ -29,6 +29,7 @@ public class AppDbContext : DbContext
     public DbSet<ServicePackageItem> ServicePackageItems => Set<ServicePackageItem>();
     public DbSet<OrderPart> OrderParts => Set<OrderPart>();
     public DbSet<OrderPartLine> OrderPartLines => Set<OrderPartLine>();
+    public DbSet<Cavity> Cavities => Set<Cavity>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -65,6 +66,7 @@ public class AppDbContext : DbContext
             e.HasMany(x => x.CustomerCares).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.Payments).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.OrderParts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Cavity).WithMany().HasForeignKey(x => x.CavityId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -224,6 +226,14 @@ public class AppDbContext : DbContext
             e.Property(x => x.ApprovedQuantity).HasPrecision(18, 2);
             e.Property(x => x.ReceivedQuantity).HasPrecision(18, 2);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Cavity>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CavityNo }).IsUnique();
+            e.Ignore(x => x.IsInUse);
+            e.Ignore(x => x.ElapsedTime);
+            e.HasOne(x => x.CurrentRO).WithMany().HasForeignKey(x => x.CurrentROId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

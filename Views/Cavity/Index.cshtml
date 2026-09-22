@@ -1,0 +1,514 @@
+@model List<MiniService.Models.Cavity>
+@{
+    ViewData["Title"] = "Khoang sửa chữa & Điều phối xưởng (Bays)";
+    var eligibleROs = (List<MiniService.Models.RepairOrder>)(ViewBag.EligibleROs ?? new List<MiniService.Models.RepairOrder>());
+    var totalCount = Model.Count;
+    var occupiedCount = Model.Count(c => c.Status == MiniService.Models.CavityStatus.Occupied);
+    var availCount = Model.Count(c => c.Status == MiniService.Models.CavityStatus.Available && c.IsActive);
+    var maintCount = Model.Count(c => c.Status == MiniService.Models.CavityStatus.Maintenance);
+    var occupancyRate = totalCount > 0 ? (occupiedCount * 100 / totalCount) : 0;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-1"><i class="bi bi-grid-3x3-gap me-2 text-primary"></i>Sơ đồ Khoang sửa chữa &amp; Điều phối xưởng (Bay Board)</h5>
+        <div class="text-muted small">Quản lý khoang kỹ thuật, cầu nâng xưởng và luồng điều phối xe theo tiêu chuẩn Hyundai Car Service (Ser_Cavity / Mst_Compartment)</div>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createCavityModal">
+            <i class="bi bi-plus-lg me-1"></i>Thêm khoang mới
+        </button>
+    </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card bg-white border-0 shadow-sm"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Tổng số khoang xưởng</div>
+                    <div class="stat-num text-dark">@totalCount</div>
+                </div>
+                <div class="p-3 bg-light rounded-circle text-primary"><i class="bi bi-building fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Gồm EM, GR, BP, KCS, WASH</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-white border-0 shadow-sm"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Đang sửa chữa (Occupied)</div>
+                    <div class="stat-num text-danger">@occupiedCount</div>
+                </div>
+                <div class="p-3 bg-danger-subtle rounded-circle text-danger"><i class="bi bi-car-front-fill fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Công suất hoạt động: <strong class="text-danger">@occupancyRate%</strong></div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-white border-0 shadow-sm"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Khoang trống sẵn sàng</div>
+                    <div class="stat-num text-success">@availCount</div>
+                </div>
+                <div class="p-3 bg-success-subtle rounded-circle text-success"><i class="bi bi-check-circle-fill fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Sẵn sàng nhận xe vào làm dịch vụ</div>
+        </div></div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-white border-0 shadow-sm"><div class="card-body py-3">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <div class="text-muted small">Bảo trì thiết bị / Cầu nâng</div>
+                    <div class="stat-num text-warning">@maintCount</div>
+                </div>
+                <div class="p-3 bg-warning-subtle rounded-circle text-warning"><i class="bi bi-wrench-adjustable-circle fs-3"></i></div>
+            </div>
+            <div class="text-muted small mt-1">Đang kiểm định &amp; bảo dưỡng</div>
+        </div></div>
+    </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="card mb-3"><div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-center">
+        <div class="col-md-4">
+            <div class="input-group input-group-sm">
+                <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                <input type="text" name="q" class="form-control" placeholder="Mã khoang, tên khoang, biển số xe, KTV..." value="@ViewBag.Q" />
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">-- Tất cả loại khoang --</option>
+                @foreach (MiniService.Models.CavityType t in Enum.GetValues(typeof(MiniService.Models.CavityType)))
+                {
+                    var (txt, code, icon, css) = MiniService.Services.Ui.CavityType(t);
+                    <!option value="@((int)t)" @(ViewBag.Type != null && (MiniService.Models.CavityType)ViewBag.Type == t ? "selected" : "")>@txt</!option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="">-- Tất cả trạng thái --</option>
+                @foreach (MiniService.Models.CavityStatus s in Enum.GetValues(typeof(MiniService.Models.CavityStatus)))
+                {
+                    var (txt, code, css) = MiniService.Services.Ui.CavityStatus(s);
+                    <!option value="@((int)s)" @(ViewBag.Status != null && (MiniService.Models.CavityStatus)ViewBag.Status == s ? "selected" : "")>@txt</!option>
+                }
+            </select>
+        </div>
+        <div class="col-md-2 text-end">
+            <a href="/Cavity" class="btn btn-sm btn-outline-secondary w-100"><i class="bi bi-arrow-counterclockwise me-1"></i>Làm mới</a>
+        </div>
+    </form>
+</div></div>
+
+<!-- Tab Navigation between Grid & Table -->
+<ul class="nav nav-tabs mb-3" id="cavityViewTabs" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active fw-semibold" id="grid-tab" data-bs-toggle="tab" data-bs-target="#gridView" type="button" role="tab">
+            <i class="bi bi-grid-fill me-1 text-primary"></i>Sơ đồ trực quan xưởng (Visual Bay Board)
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link fw-semibold" id="table-tab" data-bs-toggle="tab" data-bs-target="#tableView" type="button" role="tab">
+            <i class="bi bi-table me-1 text-secondary"></i>Bảng danh sách chi tiết (@Model.Count)
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="cavityViewContent">
+    <!-- Visual Bay Grid -->
+    <div class="tab-pane fade show active" id="gridView" role="tabpanel">
+        <div class="row g-3">
+            @foreach (var c in Model)
+            {
+                var (stTxt, stCode, stCss) = MiniService.Services.Ui.CavityStatus(c.Status);
+                var (tpTxt, tpCode, tpIcon, tpCss) = MiniService.Services.Ui.CavityType(c.CavityType);
+                var isOccupied = c.Status == MiniService.Models.CavityStatus.Occupied;
+                var isMaint = c.Status == MiniService.Models.CavityStatus.Maintenance;
+                var borderStyle = isOccupied ? "border-danger border-2" : (isMaint ? "border-warning border-2" : "border-success");
+                var headerBg = isOccupied ? "bg-danger text-white" : (isMaint ? "bg-warning text-dark" : "bg-light text-dark");
+
+                <div class="col-md-6 col-lg-4">
+                    <div class="card h-100 shadow-sm @borderStyle">
+                        <div class="card-header d-flex justify-content-between align-items-center py-2 @headerBg">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge @(isOccupied ? "bg-white text-danger" : "bg-primary")">@c.CavityNo</span>
+                                <span class="fw-bold small"><i class="bi @tpIcon me-1"></i>@tpCode</span>
+                            </div>
+                            <div>
+                                <span class="badge @(isOccupied ? "bg-white text-danger fw-bold" : (isMaint ? "bg-dark text-warning" : "bg-success text-white"))">
+                                    <i class="bi @(isOccupied ? "bi-record-fill" : (isMaint ? "bi-tools" : "bi-check-circle")) me-1"></i>@stTxt
+                                </span>
+                            </div>
+                        </div>
+                        <div class="card-body d-flex flex-column justify-content-between">
+                            <div>
+                                <h6 class="fw-bold mb-1">
+                                    <a href="/Cavity/Detail/@c.Id" class="text-decoration-none text-dark">@c.CavityName</a>
+                                </h6>
+                                <div class="text-muted small mb-2">
+                                    <i class="bi bi-geo-alt me-1"></i>@(c.AreaZone ?? "Khu xưởng chung")
+                                    @if (!string.IsNullOrWhiteSpace(c.LiftEquipment))
+                                    {
+                                        <span class="ms-1">· <i class="bi bi-wrench me-1"></i>@c.LiftEquipment</span>
+                                    }
+                                </div>
+
+                                @if (isOccupied)
+                                {
+                                    <div class="p-2 rounded bg-light border border-danger-subtle mb-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <span class="badge bg-danger fs-6 px-2 py-1"><i class="bi bi-car-front-fill me-1"></i>@c.CurrentCarPlate</span>
+                                            @if (c.CurrentRO != null)
+                                            {
+                                                <a href="/RO/Detail/@c.CurrentROId" class="badge bg-primary text-decoration-none">
+                                                    @c.CurrentRO.Code <i class="bi bi-box-arrow-up-right ms-1"></i>
+                                                </a>
+                                            }
+                                        </div>
+                                        <div class="fw-semibold small text-truncate">@c.CurrentCarModel</div>
+                                        <div class="text-muted small mt-1 d-flex justify-content-between">
+                                            <span><i class="bi bi-person-gear me-1"></i>KTV: <strong>@(c.CurrentTechnician ?? "Chưa phân công")</strong></span>
+                                            @if (c.ElapsedTime.HasValue)
+                                            {
+                                                var hours = (int)c.ElapsedTime.Value.TotalHours;
+                                                var mins = c.ElapsedTime.Value.Minutes;
+                                                <span class="text-danger fw-semibold"><i class="bi bi-stopwatch me-1"></i>@hours h @mins m</span>
+                                            }
+                                        </div>
+                                        @if (c.ExpectedFinishDate.HasValue)
+                                        {
+                                            <div class="text-muted small mt-1">
+                                                <i class="bi bi-clock-history me-1"></i>Dự kiến xong: <strong>@c.ExpectedFinishDate.Value.ToString("HH:mm - dd/MM")</strong>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                                else if (isMaint)
+                                {
+                                    <div class="p-2 rounded bg-warning-subtle text-dark border border-warning mb-2 text-center">
+                                        <i class="bi bi-exclamation-triangle-fill text-warning fs-4 d-block mb-1"></i>
+                                        <div class="fw-bold small">Cầu nâng đang bảo trì / kiểm định</div>
+                                        <div class="small text-muted">@(c.Note ?? "Tạm thời không tiếp nhận xe")</div>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="p-3 rounded bg-light text-center text-muted border border-dashed mb-2">
+                                        <i class="bi bi-shield-check text-success fs-3 d-block mb-1"></i>
+                                        <div class="fw-semibold text-success small">Khoang trống sẵn sàng</div>
+                                        <div class="small">Có thể điều phối xe vào ngay</div>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- Card Footer Actions -->
+                            <div class="pt-2 border-top d-flex justify-content-between align-items-center">
+                                @if (isOccupied)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#releaseModal_@c.Id">
+                                        <i class="bi bi-box-arrow-right me-1"></i>Giải phóng khoang
+                                    </button>
+                                }
+                                else if (isMaint)
+                                {
+                                    <form method="post" action="/Cavity/ChangeStatus" class="d-inline">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="cavityId" value="@c.Id" />
+                                        <input type="hidden" name="status" value="@((int)MiniService.Models.CavityStatus.Available)" />
+                                        <button type="submit" class="btn btn-sm btn-success">
+                                            <i class="bi bi-check2-circle me-1"></i>Xong bảo trì
+                                        </button>
+                                    </form>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#assignModal_@c.Id">
+                                        <i class="bi bi-box-arrow-in-down me-1"></i>Điều phối xe vào
+                                    </button>
+                                }
+
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                        Tác vụ
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                        <li><a class="dropdown-item" href="/Cavity/Detail/@c.Id"><i class="bi bi-eye me-2"></i>Xem chi tiết</a></li>
+                                        @if (!isOccupied && !isMaint)
+                                        {
+                                            <li>
+                                                <form method="post" action="/Cavity/ChangeStatus" onsubmit="return confirm('Xác nhận đưa cầu nâng vào chế độ bảo trì?')">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="cavityId" value="@c.Id" />
+                                                    <input type="hidden" name="status" value="@((int)MiniService.Models.CavityStatus.Maintenance)" />
+                                                    <button type="submit" class="dropdown-item text-warning"><i class="bi bi-wrench me-2"></i>Bảo trì thiết bị</button>
+                                                </form>
+                                            </li>
+                                        }
+                                        @if (!isOccupied)
+                                        {
+                                            <li><hr class="dropdown-divider"></li>
+                                            <li>
+                                                <form method="post" action="/Cavity/Delete" onsubmit="return confirm('Xác nhận xóa khoang sửa chữa này?')">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="id" value="@c.Id" />
+                                                    <button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash me-2"></i>Xóa khoang</button>
+                                                </form>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Release Cavity -->
+                @if (isOccupied)
+                {
+                    <div class="modal fade" id="releaseModal_@c.Id" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <form method="post" action="/Cavity/Release">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="cavityId" value="@c.Id" />
+                                    <div class="modal-header bg-danger text-white">
+                                        <h6 class="modal-title fw-bold"><i class="bi bi-box-arrow-right me-1"></i>Giải phóng khoang @c.CavityNo</h6>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="alert alert-info py-2 small">
+                                            Xe <strong>@c.CurrentCarPlate</strong> (@c.CurrentCarModel) sẽ được chuyển rời khỏi khoang để nhường chỗ cho xe khác.
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold">Cập nhật trạng thái Lệnh sửa chữa (RO: @(c.CurrentRO?.Code)):</label>
+                                            <select name="nextRoStatus" class="form-select">
+                                                <option value="@((int)MiniService.Models.ROStatus.Repaired)">RPRD — Đã sửa xong (chuyển sang chờ KCS kiểm tra)</option>
+                                                <option value="@((int)MiniService.Models.ROStatus.CheckEnd)">CEND — Đã kiểm tra chất lượng xong</option>
+                                                <option value="@((int)MiniService.Models.ROStatus.Wait4Part)">W4P — Đợi phụ tùng bổ sung</option>
+                                                <option value="@((int)MiniService.Models.ROStatus.InGarage)">INGA — Giữ nguyên trạng thái (chuyển khoang khác sau)</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                                        <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-check-lg me-1"></i>Xác nhận giải phóng</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <!-- Modal Assign Car To Cavity -->
+                @if (!isOccupied && !isMaint)
+                {
+                    <div class="modal fade" id="assignModal_@c.Id" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <form method="post" action="/Cavity/Assign">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="cavityId" value="@c.Id" />
+                                    <div class="modal-header bg-primary text-white">
+                                        <h6 class="modal-title fw-bold"><i class="bi bi-box-arrow-in-down me-1"></i>Điều phối xe vào @c.CavityNo — @c.CavityName</h6>
+                                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold">Chọn Lệnh sửa chữa (RO) cần đưa vào khoang: *</label>
+                                            @if (eligibleROs.Count > 0)
+                                            {
+                                                <select name="roId" class="form-select" required>
+                                                    @foreach (var ro in eligibleROs)
+                                                    {
+                                                        var (rTxt, rCode, rCss) = MiniService.Services.Ui.Status(ro.Status);
+                                                        <option value="@ro.Id">@ro.Code — Xe @ro.Car?.Plate (@ro.Car?.Model) · KH: @ro.Customer?.Name [@rCode - @rTxt]</option>
+                                                    }
+                                                </select>
+                                            }
+                                            else
+                                            {
+                                                <div class="alert alert-warning py-2 small mb-0">
+                                                    Hiện không có Lệnh sửa chữa nào đang chờ vào khoang. Vui lòng tạo RO mới trước.
+                                                </div>
+                                            }
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold">Kỹ thuật viên phụ trách:</label>
+                                            <input type="text" name="technician" class="form-control" placeholder="VD: Thợ Hùng / KTV Tuấn..." />
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label small fw-semibold">Dự kiến hoàn thành trên khoang:</label>
+                                            <input type="datetime-local" name="expectedFinish" class="form-control" value="@DateTime.Now.AddHours(2).ToString("yyyy-MM-ddTHH:mm")" />
+                                        </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                                        @if (eligibleROs.Count > 0)
+                                        {
+                                            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg me-1"></i>Đưa xe vào khoang</button>
+                                        }
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+
+    <!-- Table View -->
+    <div class="tab-pane fade" id="tableView" role="tabpanel">
+        <div class="card shadow-sm"><div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Mã khoang</th>
+                            <th>Tên khoang sửa chữa</th>
+                            <th>Phân loại</th>
+                            <th>Thiết bị &amp; Khu vực</th>
+                            <th>Trạng thái</th>
+                            <th>Xe đang sửa</th>
+                            <th>KTV phụ trách</th>
+                            <th>Thời gian bắt đầu</th>
+                            <th class="text-end pe-3">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in Model)
+                        {
+                            var (stTxt, stCode, stCss) = MiniService.Services.Ui.CavityStatus(c.Status);
+                            var (tpTxt, tpCode, tpIcon, tpCss) = MiniService.Services.Ui.CavityType(c.CavityType);
+                            <tr>
+                                <td class="ps-3 fw-bold text-primary">
+                                    <a href="/Cavity/Detail/@c.Id" class="text-decoration-none">@c.CavityNo</a>
+                                </td>
+                                <td class="fw-semibold">@c.CavityName</td>
+                                <td>
+                                    <span class="badge bg-light text-dark border"><i class="bi @tpIcon me-1 text-@tpCss"></i>@tpTxt</span>
+                                </td>
+                                <td class="small text-muted">
+                                    <div><i class="bi bi-geo-alt me-1"></i>@(c.AreaZone ?? "—")</div>
+                                    <div><i class="bi bi-wrench me-1"></i>@(c.LiftEquipment ?? "—")</div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-@stCss">@stTxt</span>
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(c.CurrentCarPlate))
+                                    {
+                                        <div><span class="badge bg-danger fs-6 px-2 py-0">@c.CurrentCarPlate</span></div>
+                                        <div class="small text-muted">@c.CurrentCarModel</div>
+                                        @if (c.CurrentRO != null)
+                                        {
+                                            <a href="/RO/Detail/@c.CurrentROId" class="small text-primary text-decoration-none">RO: @c.CurrentRO.Code</a>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">—</span>
+                                    }
+                                </td>
+                                <td class="small">@(c.CurrentTechnician ?? "—")</td>
+                                <td class="small text-muted">
+                                    @if (c.StartUseDate.HasValue && c.Status == MiniService.Models.CavityStatus.Occupied)
+                                    {
+                                        <div>@c.StartUseDate.Value.ToString("HH:mm - dd/MM")</div>
+                                        @if (c.ElapsedTime.HasValue)
+                                        {
+                                            <span class="badge bg-light text-danger border">@((int)c.ElapsedTime.Value.TotalHours)h @(c.ElapsedTime.Value.Minutes)m</span>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span>—</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-3">
+                                    <a href="/Cavity/Detail/@c.Id" class="btn btn-sm btn-outline-secondary py-0 px-2"><i class="bi bi-eye"></i></a>
+                                    @if (c.Status == MiniService.Models.CavityStatus.Occupied)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" data-bs-toggle="modal" data-bs-target="#releaseModal_@c.Id" title="Giải phóng khoang">
+                                            <i class="bi bi-box-arrow-right"></i>
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        @if (Model.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="9" class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                                    Không có khoang sửa chữa nào phù hợp với bộ lọc.
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div></div>
+    </div>
+</div>
+
+<!-- Modal Create Cavity -->
+<div class="modal fade" id="createCavityModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/Cavity/Create">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-primary text-white">
+                    <h6 class="modal-title fw-bold"><i class="bi bi-plus-lg me-1"></i>Thêm khoang sửa chữa mới</h6>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mã khoang (tự sinh nếu để trống):</label>
+                            <input type="text" name="cavityNo" class="form-control" placeholder="VD: KH-EM-03, KH-GR-04..." />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Phân loại khoang: *</label>
+                            <select name="type" class="form-select" required>
+                                <option value="@((int)MiniService.Models.CavityType.EM)">Bảo dưỡng nhanh (EM)</option>
+                                <option value="@((int)MiniService.Models.CavityType.GR)">Sửa chữa chung / Gầm máy (GR)</option>
+                                <option value="@((int)MiniService.Models.CavityType.BP)">Đồng sơn / Buồng sơn (BP)</option>
+                                <option value="@((int)MiniService.Models.CavityType.KCS)">Kiểm tra chất lượng (KCS / QC)</option>
+                                <option value="@((int)MiniService.Models.CavityType.Wash)">Rửa xe &amp; Vệ sinh (WASH)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Tên khoang sửa chữa: *</label>
+                        <input type="text" name="cavityName" class="form-control" placeholder="VD: Khoang Bảo Dưỡng Nhanh #3, Buồng sơn sấy nhiệt..." required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Loại cầu nâng / Thiết bị:</label>
+                        <input type="text" name="liftEquipment" class="form-control" placeholder="VD: Cầu nâng 2 trụ Corghi 4.0T, Cầu cắt kéo Werther..." />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Khu vực / Phân xưởng:</label>
+                        <input type="text" name="areaZone" class="form-control" placeholder="VD: Tầng 1 - Khu bảo dưỡng nhanh, Xưởng cơ khí..." />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Ghi chú:</label>
+                        <textarea name="note" rows="2" class="form-control" placeholder="Ghi chú kỹ thuật hoặc hướng dẫn sử dụng khoang..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-save me-1"></i>Lưu khoang</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

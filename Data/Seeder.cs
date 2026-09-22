@@ -840,18 +840,153 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        if (!await db.Cavities.AnyAsync())
+        {
+            var ro1 = await db.ROs.Include(r => r.Car).FirstOrDefaultAsync(r => r.Code == "ROSEED-001");
+            var roWar = await db.ROs.Include(r => r.Car).FirstOrDefaultAsync(r => r.Code == "ROSEED-WAR-001");
+
+            var cavities = new List<Cavity>
+            {
+                new Cavity
+                {
+                    CavityNo = "KH-EM-01",
+                    CavityName = "Khoang Bảo Dưỡng Nhanh #1 (EM 1)",
+                    CavityType = CavityType.EM,
+                    Status = CavityStatus.Occupied,
+                    LiftEquipment = "Cầu nâng cắt kéo Werther 3.5T (Italy)",
+                    AreaZone = "Xưởng dịch vụ tầng 1 - Khu bảo dưỡng nhanh",
+                    CurrentROId = ro1?.Id,
+                    CurrentCarPlate = ro1?.Car?.Plate ?? "30A-123.45",
+                    CurrentCarModel = ro1?.Car?.Model ?? "Hyundai Accent 2022",
+                    CurrentTechnician = ro1?.Technician ?? "Thợ Hùng",
+                    StartUseDate = DateTime.Now.AddHours(-3),
+                    ExpectedFinishDate = DateTime.Now.AddHours(1),
+                    Note = "Bảo dưỡng cấp 20.000km, thay dầu máy và lọc dầu.",
+                    CreatedBy = "seed"
+                },
+                new Cavity
+                {
+                    CavityNo = "KH-EM-02",
+                    CavityName = "Khoang Bảo Dưỡng Nhanh #2 (EM 2)",
+                    CavityType = CavityType.EM,
+                    Status = CavityStatus.Available,
+                    LiftEquipment = "Cầu nâng cắt kéo Werther 3.5T (Italy)",
+                    AreaZone = "Xưởng dịch vụ tầng 1 - Khu bảo dưỡng nhanh",
+                    Note = "Sẵn sàng đón xe đặt hẹn trực tuyến.",
+                    CreatedBy = "seed"
+                },
+                new Cavity
+                {
+                    CavityNo = "KH-GR-01",
+                    CavityName = "Cầu Nâng Sửa Chữa Gầm Máy #1 (GR 1)",
+                    CavityType = CavityType.GR,
+                    Status = CavityStatus.Available,
+                    LiftEquipment = "Cầu nâng 2 trụ Corghi 4.0T (Italy)",
+                    AreaZone = "Xưởng cơ khí & gầm máy chính",
+                    Note = "Cầu nâng định kỳ bảo dưỡng đạt chuẩn an toàn.",
+                    CreatedBy = "seed"
+                },
+                new Cavity
+                {
+                    CavityNo = "KH-GR-02",
+                    CavityName = "Cầu Nâng Sửa Chữa Gầm Máy #2 (GR 2)",
+                    CavityType = CavityType.GR,
+                    Status = CavityStatus.Occupied,
+                    LiftEquipment = "Cầu nâng 2 trụ Corghi 4.0T (Italy)",
+                    AreaZone = "Xưởng cơ khí & gầm máy chính",
+                    CurrentROId = roWar?.Id,
+                    CurrentCarPlate = roWar?.Car?.Plate ?? "51G-678.90",
+                    CurrentCarModel = roWar?.Car?.Model ?? "Hyundai Tucson 2023",
+                    CurrentTechnician = roWar?.Technician ?? "KTV Quang",
+                    StartUseDate = DateTime.Now.AddHours(-2),
+                    ExpectedFinishDate = DateTime.Now.AddHours(2),
+                    Note = "Xử lý sự cố bảo hành rung giật động cơ, thay thế bugi Iridium.",
+                    CreatedBy = "seed"
+                },
+                new Cavity
+                {
+                    CavityNo = "KH-GR-03",
+                    CavityName = "Cầu Cân Chỉnh Góc Đặt Bánh Xe (Alignment)",
+                    CavityType = CavityType.GR,
+                    Status = CavityStatus.Available,
+                    LiftEquipment = "Cầu nâng 4 trụ chuyên dụng + Máy cân chỉnh Hunter 3D Hawkeye (USA)",
+                    AreaZone = "Khu kiểm tra góc lái và cân bằng động",
+                    Note = "Thiết bị đo góc camber, caster, toe kỹ thuật số.",
+                    CreatedBy = "seed"
+                },
+                new Cavity
+                {
+                    CavityNo = "KH-BP-01",
+                    CavityName = "Khoang Kéo Nắn Khung Vỏ Xe Tai Nạn (BP 1)",
+                    CavityType = CavityType.BP,
+                    Status = CavityStatus.Available,
+                    LiftEquipment = "Giàn kéo nắn khung xe điện tử Car-O-Liner (Sweden) + Máy hàn bấm điểm",
+                    AreaZone = "Xưởng đồng sơn & phục hồi va chạm",
+                    Note = "Chuyên phục hồi xe tai nạn nặng.",
+                    CreatedBy = "seed"
+                },
+                new Cavity
+                {
+                    CavityNo = "KH-BP-02",
+                    CavityName = "Buồng Sơn Sấy Tiêu Chuẩn Cao Cấp (Spray Booth)",
+                    CavityType = CavityType.BP,
+                    Status = CavityStatus.Available,
+                    LiftEquipment = "Buồng sơn sấy nhiệt Blowtherm Italia, hệ thống lọc bụi than hoạt tính",
+                    AreaZone = "Khu vực sơn hấp & sấy nhiệt cao",
+                    Note = "Đạt tiêu chuẩn sơn gốc nước Hyundai Toàn cầu.",
+                    CreatedBy = "seed"
+                },
+                new Cavity
+                {
+                    CavityNo = "KH-KCS-01",
+                    CavityName = "Khoang Kiểm Tra Chất Lượng Xuất Xưởng (KCS / QC)",
+                    CavityType = CavityType.KCS,
+                    Status = CavityStatus.Available,
+                    LiftEquipment = "Băng thử phanh & trượt ngang Maha (Germany), máy kiểm tra đèn pha",
+                    AreaZone = "Khu nghiệm thu kỹ thuật trước khi giao xe",
+                    Note = "Kiểm tra chất lượng 100% xe trước khi bàn giao cho khách hàng.",
+                    CreatedBy = "seed"
+                },
+                new Cavity
+                {
+                    CavityNo = "KH-WASH-01",
+                    CavityName = "Khoang Rửa Xe & Chăm Sóc Hoàn Thiện (Car Wash)",
+                    CavityType = CavityType.Wash,
+                    Status = CavityStatus.Available,
+                    LiftEquipment = "Hệ thống rửa bọt tuyết áp lực cao Karcher + Cầu nâng 1 trụ rửa xe",
+                    AreaZone = "Khu vực giao xe & bàn giao",
+                    Note = "Rửa xe miễn phí cho mọi khách hàng bảo dưỡng định kỳ.",
+                    CreatedBy = "seed"
+                }
+            };
+
+            db.Cavities.AddRange(cavities);
+            await db.SaveChangesAsync();
+
+            if (ro1 != null)
+            {
+                ro1.CavityId = cavities[0].Id;
+            }
+            if (roWar != null)
+            {
+                roWar.CavityId = cavities[3].Id;
+            }
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON miniservice.\"Orgs\" (\"ApiKey\")",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"AppointmentId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CavityId\" integer NULL",
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartNo\" text NULL",
@@ -1177,7 +1312,31 @@ public static class Seeder
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""OrderPartId"") REFERENCES ""OrderParts"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
-            );"
+            );",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""CavityId"" INTEGER NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""Cavities"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""CavityNo"" TEXT NOT NULL,
+                ""CavityName"" TEXT NOT NULL,
+                ""CavityType"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""LiftEquipment"" TEXT NULL,
+                ""AreaZone"" TEXT NULL,
+                ""CurrentROId"" INTEGER NULL,
+                ""CurrentCarPlate"" TEXT NULL,
+                ""CurrentCarModel"" TEXT NULL,
+                ""CurrentTechnician"" TEXT NULL,
+                ""StartUseDate"" TEXT NULL,
+                ""ExpectedFinishDate"" TEXT NULL,
+                ""FinishUseDate"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""CurrentROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Cavities_OrgId_CavityNo"" ON ""Cavities"" (""OrgId"", ""CavityNo"");"
         };
 
         foreach (var sql in sqls)
