@@ -1,0 +1,428 @@
+@model OrderPart
+@{
+    ViewData["Title"] = $"Đơn đặt hàng phụ tùng {Model.OrderPartNo}";
+    var (stText, stCode, stCss) = Ui.OrderPartStatus(Model.Status);
+    var (dfText, dfCss) = Ui.OrderPartDeliveryForm(Model.DeliveryForm);
+    var next = (OrderPartStatus[])ViewBag.Next;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <h4 class="mb-0 fw-bold text-primary"><i class="bi bi-cart-check me-2"></i>@Model.OrderPartNo</h4>
+            <span class="badge bg-@stCss fs-6">@stCode — @stText</span>
+            <span class="badge bg-@dfCss">@dfText</span>
+            @if (Model.StockIn != null)
+            {
+                <span class="badge bg-success"><i class="bi bi-box-arrow-in-down me-1"></i>Đã nhập kho: @Model.StockIn.StockInNo</span>
+            }
+        </div>
+        <div class="text-muted small mt-1">
+            Ngày lập đơn: <b>@Model.OrderDate.ToString("dd/MM/yyyy")</b> · Người lập: <b>@Model.CreatedBy</b> (@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm"))
+            @if (Model.ApprovedAt.HasValue)
+            {
+                <span> · Duyệt lúc: <b>@Model.ApprovedAt.Value.ToString("dd/MM/yyyy HH:mm")</b></span>
+            }
+            @if (Model.FinishedAt.HasValue)
+            {
+                <span> · Hoàn tất lúc: <b>@Model.FinishedAt.Value.ToString("dd/MM/yyyy HH:mm")</b></span>
+            }
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/OrderPart" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách đơn</a>
+        <a href="/OrderPart/Print/@Model.Id" target="_blank" class="btn btn-sm btn-outline-dark"><i class="bi bi-printer me-1"></i>In đơn đặt hàng (PO)</a>
+        @if (Model.Status is OrderPartStatus.Pending or OrderPartStatus.Rejected && !Model.StockInId.HasValue)
+        {
+            <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal">
+                <i class="bi bi-trash me-1"></i>Xóa đơn
+            </button>
+        }
+    </div>
+</div>
+
+<!-- Workflow banner actions -->
+@if (Model.Status == OrderPartStatus.Pending)
+{
+    <div class="alert alert-warning d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-clock-history fs-4 me-3"></i>
+            <div>
+                <b>Đơn đặt hàng đang chờ phê duyệt (Pending).</b> Sau khi lãnh đạo bộ phận duyệt, thông tin sẽ được gửi tới Nhà cung cấp.
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                <i class="bi bi-x-circle me-1"></i>Hủy đơn hàng
+            </button>
+            <button class="btn btn-sm btn-success fw-semibold" data-bs-toggle="modal" data-bs-target="#approveModal">
+                <i class="bi bi-check2-circle me-1"></i>Phê duyệt đơn đặt hàng
+            </button>
+        </div>
+    </div>
+}
+else if (Model.Status == OrderPartStatus.Approved)
+{
+    <div class="alert alert-info d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-truck fs-4 me-3"></i>
+            <div>
+                <b>Đơn đặt hàng đã được duyệt gửi Nhà cung cấp (Approved).</b>
+                @if (!string.IsNullOrEmpty(Model.OrderSuppierNo))
+                {
+                    <span>Số tham chiếu NCC: <b>@Model.OrderSuppierNo</b>.</span>
+                }
+                Khi phụ tùng về tới xưởng, nhấn <b>"Tạo phiếu nhập kho ngay"</b> để nhập kho và cập nhật số lượng tồn kho tự động.
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                <i class="bi bi-x-circle me-1"></i>Hủy đơn
+            </button>
+            <button class="btn btn-sm btn-primary fw-semibold" data-bs-toggle="modal" data-bs-target="#createStockInModal">
+                <i class="bi bi-box-arrow-in-down me-1"></i>Tạo phiếu nhập kho ngay (StockIn)
+            </button>
+        </div>
+    </div>
+}
+else if (Model.Status == OrderPartStatus.Finished)
+{
+    <div class="alert alert-success d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+            <div>
+                <b>Đơn đặt hàng đã hoàn tất nhập kho (Finished)!</b>
+                Toàn bộ phụ tùng đã được cập nhật vào kho thực tế.
+                @if (Model.StockIn != null)
+                {
+                    <span>Phiếu nhập kho liên kết: <a href="/StockIn/Detail/@Model.StockIn.Id" class="fw-bold text-success text-decoration-none"><i class="bi bi-box-arrow-in-down me-1"></i>@Model.StockIn.StockInNo</a>.</span>
+                }
+            </div>
+        </div>
+        @if (Model.StockIn != null)
+        {
+            <a href="/StockIn/Detail/@Model.StockIn.Id" class="btn btn-sm btn-success">
+                <i class="bi bi-eye me-1"></i>Xem phiếu nhập kho
+            </a>
+        }
+    </div>
+}
+else if (Model.Status == OrderPartStatus.Rejected)
+{
+    <div class="alert alert-danger d-flex align-items-center mb-3">
+        <i class="bi bi-exclamation-octagon-fill fs-4 me-3"></i>
+        <div>
+            <b>Đơn đặt hàng đã bị hủy bỏ (Rejected).</b>
+            @if (!string.IsNullOrEmpty(Model.Remark))
+            {
+                <div class="small mt-1 text-muted">Lý do: @Model.Remark</div>
+            }
+        </div>
+    </div>
+}
+
+<!-- Info cards -->
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card h-100"><div class="card-body">
+            <h6 class="fw-bold mb-3 text-primary"><i class="bi bi-building me-1"></i>Thông tin Nhà cung cấp</h6>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Tên nhà cung cấp:</span>
+                <span class="fw-bold">@Model.SupplierName</span>
+            </div>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Hình thức đặt hàng:</span>
+                <span class="badge bg-@dfCss">@dfText</span>
+            </div>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Địa điểm giao hàng:</span>
+                <span><i class="bi bi-geo-alt me-1 text-muted"></i>@Model.DeliveryLocation</span>
+            </div>
+            @if (Model.EstimatedDeliverDate.HasValue)
+            {
+                <div>
+                    <span class="text-muted small d-block">Hạn giao hàng dự kiến (ETA):</span>
+                    <span class="fw-semibold text-danger"><i class="bi bi-calendar-event me-1"></i>@Model.EstimatedDeliverDate.Value.ToString("dd/MM/yyyy")</span>
+                </div>
+            }
+        </div></div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100"><div class="card-body">
+            <h6 class="fw-bold mb-3 text-info"><i class="bi bi-car-front me-1"></i>Mục đích đặt &amp; Phương tiện</h6>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Lệnh sửa chữa (RO):</span>
+                @if (Model.RO != null)
+                {
+                    <a href="/RO/Detail/@Model.RO.Id" class="fw-bold text-decoration-none">
+                        <i class="bi bi-clipboard2-pulse me-1"></i>@Model.RO.Code
+                    </a>
+                    <span class="badge bg-secondary ms-1">@Ui.Status(Model.RO.Status).text</span>
+                }
+                else
+                {
+                    <span class="text-muted">Bổ sung kho / Không gắn RO</span>
+                }
+            </div>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Xe &amp; Biển số:</span>
+                @if (Model.RO?.Car != null)
+                {
+                    <span class="fw-semibold">@Model.RO.Car.Plate</span> <span class="text-muted">(@Model.RO.Car.Model)</span>
+                }
+                else
+                {
+                    <span class="text-muted">—</span>
+                }
+            </div>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Số khung (VIN):</span>
+                @if (!string.IsNullOrEmpty(Model.VIN))
+                {
+                    <code class="fw-bold fs-6">@Model.VIN</code>
+                }
+                else
+                {
+                    <span class="text-muted">—</span>
+                }
+            </div>
+            @if (Model.RO?.Customer != null)
+            {
+                <div>
+                    <span class="text-muted small d-block">Khách hàng chủ xe:</span>
+                    <span>@Model.RO.Customer.Name (@Model.RO.Customer.Phone)</span>
+                </div>
+            }
+        </div></div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100"><div class="card-body">
+            <h6 class="fw-bold mb-3 text-success"><i class="bi bi-clipboard-check me-1"></i>Tiến độ xử lý &amp; Phê duyệt</h6>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Số đơn hàng phản hồi từ NCC:</span>
+                @if (!string.IsNullOrEmpty(Model.OrderSuppierNo))
+                {
+                    <span class="fw-bold font-monospace text-dark">@Model.OrderSuppierNo</span>
+                }
+                else
+                {
+                    <span class="text-muted">Chưa có mã NCC</span>
+                }
+            </div>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Tổng số mặt hàng:</span>
+                <span class="fw-semibold">@Model.ItemCount mặt hàng</span> (Tổng SL: <b>@Model.TotalQuantityOrdered.ToString("0.##")</b>)
+            </div>
+            <div class="mb-2">
+                <span class="text-muted small d-block">Số lượng đã nhận kho:</span>
+                <span class="fw-bold @(Model.TotalQuantityReceived >= Model.TotalQuantityOrdered ? "text-success" : "text-muted")">
+                    @Model.TotalQuantityReceived.ToString("0.##") / @Model.TotalQuantityOrdered.ToString("0.##")
+                </span>
+            </div>
+            @if (!string.IsNullOrEmpty(Model.Remark))
+            {
+                <div>
+                    <span class="text-muted small d-block">Ghi chú:</span>
+                    <span class="small text-muted" style="white-space:pre-line">@Model.Remark</span>
+                </div>
+            }
+        </div></div>
+    </div>
+</div>
+
+<!-- Items Table -->
+<div class="card mb-3">
+    <div class="card-header bg-white py-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-list-ul me-2 text-primary"></i>Chi tiết các hạng mục phụ tùng đặt hàng</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px" class="text-center">#</th>
+                        <th>Mã phụ tùng</th>
+                        <th>Tên phụ tùng</th>
+                        <th>ĐVT</th>
+                        <th class="text-end">SL đặt</th>
+                        <th class="text-end">SL duyệt</th>
+                        <th class="text-end">SL nhận</th>
+                        <th class="text-end">Đơn giá net</th>
+                        <th class="text-end">CK (%)</th>
+                        <th class="text-end">VAT (%)</th>
+                        <th class="text-end">Thành tiền</th>
+                        <th>Ghi chú</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @{ int idx = 1; }
+                @foreach (var l in Model.Lines)
+                {
+                    <tr>
+                        <td class="text-center text-muted">@(idx++)</td>
+                        <td>
+                            <code class="fw-bold text-dark">@l.PartCode</code>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">@l.PartName</span>
+                            @if (l.Part != null)
+                            {
+                                <div class="text-muted small" style="font-size:11px">
+                                    Kho hiện tại: @l.Part.InStock.ToString("0.##") @l.Part.Unit · Tối thiểu: @l.Part.MinStock.ToString("0.##")
+                                </div>
+                            }
+                        </td>
+                        <td><span class="badge bg-light text-dark border">@l.Unit</span></td>
+                        <td class="text-end fw-bold">@l.Quantity.ToString("0.##")</td>
+                        <td class="text-end">@l.ApprovedQuantity.ToString("0.##")</td>
+                        <td class="text-end fw-semibold @(l.ReceivedQuantity > 0 ? "text-success" : "text-muted")">
+                            @l.ReceivedQuantity.ToString("0.##")
+                        </td>
+                        <td class="text-end">@l.UnitPrice.ToString("N0")đ</td>
+                        <td class="text-end">@(l.DiscountRate > 0 ? $"{l.DiscountRate:0.##}%" : "—")</td>
+                        <td class="text-end">@l.VatPercent.ToString("0.##")%</td>
+                        <td class="text-end fw-bold" style="color:#0f766e">@l.Amount.ToString("N0")đ</td>
+                        <td class="small text-muted">@(l.Note ?? "—")</td>
+                    </tr>
+                }
+                </tbody>
+                <tfoot class="table-light">
+                    <tr>
+                        <td colspan="10" class="text-end text-muted">Tổng tiền trước chiết khấu:</td>
+                        <td class="text-end fw-semibold">@Model.SubTotalBeforeDiscount.ToString("N0")đ</td>
+                        <td></td>
+                    </tr>
+                    @if (Model.TotalDiscount > 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-end text-danger">Chiết khấu thương mại:</td>
+                            <td class="text-end text-danger fw-semibold">-@Model.TotalDiscount.ToString("N0")đ</td>
+                            <td></td>
+                        </tr>
+                    }
+                    <tr>
+                        <td colspan="10" class="text-end text-muted">Tiền thuế GTGT (VAT):</td>
+                        <td class="text-end text-muted">@Model.TotalVat.ToString("N0")đ</td>
+                        <td></td>
+                    </tr>
+                    <tr class="fs-6">
+                        <td colspan="10" class="text-end fw-bold text-primary">TỔNG CỘNG ĐƠN ĐẶT HÀNG:</td>
+                        <td class="text-end fw-bold text-primary" style="font-size:16px">@Model.Total.ToString("N0")đ</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Duyệt đơn hàng -->
+<div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/OrderPart/Transition/@Model.Id">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="to" value="@((int)OrderPartStatus.Approved)" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-check2-circle text-success me-2"></i>Phê duyệt đơn đặt hàng</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">Xác nhận duyệt đơn đặt hàng để gửi nhà phân phối. Bạn có thể nhập mã tham chiếu đơn hàng phía Nhà cung cấp nếu đã có.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mã đơn hàng phía Nhà cung cấp (OrderSuppierNo)</label>
+                        <input name="supplierOrderNo" class="form-control" placeholder="VD: HTC-SO-2026-9921 hoặc MBS-PO-8812" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ghi chú duyệt</label>
+                        <textarea name="note" class="form-control" rows="2" placeholder="Ghi chú ý kiến phê duyệt..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-success fw-semibold">Xác nhận duyệt</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Tạo phiếu nhập kho (Create StockIn) -->
+<div class="modal fade" id="createStockInModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/OrderPart/CreateStockIn/@Model.Id">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-box-arrow-in-down text-primary me-2"></i>Nhập kho từ đơn đặt hàng</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info small mb-3">
+                        <i class="bi bi-info-circle me-1"></i>Hệ thống sẽ tự động tạo một <b>Phiếu nhập kho (StockIn)</b> với toàn bộ <b>@Model.ItemCount</b> phụ tùng trong đơn đặt hàng này, cộng dồn vào tồn kho thực tế và cập nhật giá vốn nhập.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Người nhận hàng / Thủ kho duyệt nhập</label>
+                        <input name="approvedBy" class="form-control" value="Thủ kho" required />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary fw-semibold">
+                        <i class="bi bi-box-arrow-in-down me-1"></i>Xác nhận &amp; Tạo phiếu nhập kho
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Hủy đơn đặt hàng -->
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/OrderPart/Transition/@Model.Id">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="to" value="@((int)OrderPartStatus.Rejected)" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-danger"><i class="bi bi-x-circle me-2"></i>Hủy đơn đặt hàng</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do hủy đơn hàng <span class="text-danger">*</span></label>
+                        <textarea name="note" class="form-control" rows="3" placeholder="Nhập lý do hủy: Nhà cung cấp hết hàng, Khách hủy lệnh..." required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-danger fw-semibold">Xác nhận hủy đơn</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Xóa đơn đặt hàng -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/OrderPart/Delete/@Model.Id">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-danger"><i class="bi bi-trash me-2"></i>Xác nhận xóa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    Bạn có chắc chắn muốn xóa vĩnh viễn đơn đặt hàng <b>@Model.OrderPartNo</b> không? Thao tác này không thể hoàn tác.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-danger">Xóa đơn hàng</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,339 @@
+@{
+    ViewData["Title"] = "Lập đơn đặt hàng phụ tùng Nhà Cung Cấp (PO)";
+    var parts = (List<Part>)ViewBag.Parts;
+    var ros = (List<RepairOrder>)ViewBag.ROs;
+    var selectedRoId = (int?)ViewBag.SelectedROId;
+    var preloadedRO = (RepairOrder?)ViewBag.PreloadedRO;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-11">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-cart-plus me-2 text-warning"></i>Lập đơn đặt hàng phụ tùng Nhà Cung Cấp (Part Purchase Order)</h5>
+                        <div class="text-muted small">Đặt hàng chính hãng từ Hyundai Thành Công (HTC) / Mobis hoặc các nhà cung ứng linh kiện phụ trợ</div>
+                    </div>
+                    <a href="/OrderPart" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách đơn hàng</a>
+                </div>
+            </div>
+            <div class="card-body">
+                @if (preloadedRO != null)
+                {
+                    <div class="alert alert-info d-flex align-items-center justify-content-between mb-4">
+                        <div>
+                            <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                            <strong>Đang tạo đơn đặt hàng cho Lệnh sửa chữa:</strong>
+                            <a href="/RO/Detail/@preloadedRO.Id" class="fw-bold text-dark text-decoration-none ms-1">@preloadedRO.Code</a>
+                            — Xe: <b>@preloadedRO.Car.Plate (@preloadedRO.Car.Model)</b> · KH: <b>@preloadedRO.Customer.Name</b>
+                        </div>
+                        <span class="badge bg-warning text-dark">Trạng thái RO: @Ui.Status(preloadedRO.Status).text</span>
+                    </div>
+                }
+
+                <form method="post" action="/OrderPart/Create" id="orderPartForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold">Nhà cung cấp <span class="text-danger">*</span></label>
+                            <input name="supplierName" id="supplierNameInput" class="form-control" list="supplierSuggestions" placeholder="Nhập hoặc chọn nhà cung cấp..." required />
+                            <datalist id="supplierSuggestions">
+                                <option value="Công ty CP Liên doanh Ô tô Hyundai Thành Công Việt Nam (HTC)" />
+                                <option value="Công ty TNHH Phụ tùng Mobis Việt Nam" />
+                                <option value="Công ty TNHH Dầu nhớt Shell Auto Việt Nam" />
+                                <option value="Công ty TNHH Castrol BP Petco" />
+                                <option value="Công ty TNHH Ắc quy GS Việt Nam" />
+                                <option value="Công ty Phụ tùng Ô tô Denso Việt Nam" />
+                            </datalist>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Hình thức đặt hàng <span class="text-danger">*</span></label>
+                            <select name="deliveryForm" id="deliveryFormSelect" class="form-select" onchange="onDeliveryFormChange(this)">
+                                <option value="@((int)OrderPartDeliveryForm.Normal)">1. Đặt thường (Bổ sung kho / Định kỳ)</option>
+                                <option value="@((int)OrderPartDeliveryForm.Warranty)">2. Đặt bảo hành hãng (Bắt buộc VIN)</option>
+                                <option value="@((int)OrderPartDeliveryForm.UrgentVOR)">3. Đặt khẩn cấp / Cấp bách (VOR)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Ngày đặt hàng <span class="text-danger">*</span></label>
+                            <input type="date" name="orderDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Ngày giao dự kiến</label>
+                            <input type="date" name="estimatedDeliverDate" class="form-control" value="@DateTime.Today.AddDays(3).ToString("yyyy-MM-dd")" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Địa điểm nhận hàng</label>
+                            <input name="deliveryLocation" class="form-control" value="Kho phụ tùng chính" placeholder="Địa chỉ kho nhận hàng..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Liên kết Lệnh sửa chữa (RO)</label>
+                            <select name="roId" id="roSelect" class="form-select" onchange="onRoChange(this)">
+                                <option value="">-- Chọn RO nếu đặt cho xe cụ thể --</option>
+                                @foreach (var r in ros)
+                                {
+                                    var isSel = selectedRoId.HasValue && selectedRoId.Value == r.Id;
+                                    <option value="@r.Id" selected="@isSel" data-vin="@(r.Car?.Vin ?? "")" data-plate="@(r.Car?.Plate ?? "")" data-model="@(r.Car?.Model ?? "")">
+                                        @r.Code — @(r.Car?.Plate ?? "—") (@(r.Car?.Model ?? "—")) [@Ui.Status(r.Status).text]
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">
+                                Số khung xe (VIN) <span id="vinReqSpan" class="text-danger d-none">* (bắt buộc với Bảo hành)</span>
+                            </label>
+                            <input name="vin" id="vinInput" class="form-control font-monospace" value="@(preloadedRO?.Car?.Vin ?? "")" placeholder="VD: RLHXXAC001..." />
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Ghi chú &amp; Điều khoản đơn hàng</label>
+                            <input name="remark" class="form-control" placeholder="VD: Yêu cầu giao đủ số lượng trước 17h, phụ tùng mới 100% nguyên tem mác nhà sản xuất..." />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                        <h6 class="fw-bold mb-0"><i class="bi bi-list-check me-1 text-primary"></i>Danh sách phụ tùng đặt hàng</h6>
+                        <div class="d-flex gap-2">
+                            <button type="button" class="btn btn-sm btn-outline-warning text-dark" onclick="addLowStockParts()">
+                                <i class="bi bi-lightning-charge-fill text-warning me-1"></i>Thêm nhanh phụ tùng dưới định mức tồn
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()">
+                                <i class="bi bi-plus-lg me-1"></i>Thêm dòng phụ tùng
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="table-responsive mb-3">
+                        <table class="table table-bordered align-middle" id="itemsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:34%">Phụ tùng <span class="text-danger">*</span></th>
+                                    <th style="width:10%">ĐVT</th>
+                                    <th style="width:11%">Số lượng đặt <span class="text-danger">*</span></th>
+                                    <th style="width:15%">Đơn giá net (VNĐ) <span class="text-danger">*</span></th>
+                                    <th style="width:9%">CK (%)</th>
+                                    <th style="width:8%">VAT (%)</th>
+                                    <th style="width:15%" class="text-end">Thành tiền (VNĐ)</th>
+                                    <th style="width:5%" class="text-center"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <td colspan="6" class="text-end fw-semibold">Tổng tiền trước chiết khấu &amp; thuế:</td>
+                                    <td class="text-end fw-bold" id="lblSubTotal">0đ</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="6" class="text-end text-muted">Tổng chiết khấu thương mại:</td>
+                                    <td class="text-end text-danger fw-semibold" id="lblDiscount">-0đ</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="6" class="text-end text-muted">Tiền thuế GTGT (VAT):</td>
+                                    <td class="text-end text-muted" id="lblVat">0đ</td>
+                                    <td></td>
+                                </tr>
+                                <tr class="fs-6">
+                                    <td colspan="6" class="text-end fw-bold text-primary">TỔNG CỘNG ĐƠN ĐẶT HÀNG:</td>
+                                    <td class="text-end fw-bold text-primary" id="lblTotal" style="font-size:16px">0đ</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="/OrderPart" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-warning px-4 fw-semibold text-dark">
+                            <i class="bi bi-check-circle me-1"></i>Xác nhận &amp; Lập đơn đặt hàng (PO)
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const partsData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(parts.Select(p => new {
+        id = p.Id,
+        code = p.Code,
+        name = p.Name,
+        unit = p.Unit,
+        costPrice = p.CostPrice,
+        salePrice = p.SalePrice,
+        inStock = p.InStock,
+        minStock = p.MinStock,
+        isLowStock = p.IsLowStock
+    })));
+
+    let rowIndex = 0;
+
+    function onDeliveryFormChange(sel) {
+        const vinSpan = document.getElementById('vinReqSpan');
+        const vinInput = document.getElementById('vinInput');
+        if (sel.value === "1") { // Warranty
+            vinSpan.classList.remove('d-none');
+            vinInput.setAttribute('required', 'required');
+        } else {
+            vinSpan.classList.add('d-none');
+            vinInput.removeAttribute('required');
+        }
+    }
+
+    function onRoChange(sel) {
+        const opt = sel.options[sel.selectedIndex];
+        if (opt && opt.dataset.vin) {
+            document.getElementById('vinInput').value = opt.dataset.vin;
+        }
+    }
+
+    function addRow(presetPartId = null, presetQty = 1) {
+        const tbody = document.getElementById('itemsBody');
+        const tr = document.createElement('tr');
+        tr.id = `row_${rowIndex}`;
+
+        let partOptions = '<option value="">-- Chọn phụ tùng từ kho --</option>';
+        partsData.forEach(p => {
+            const isSel = presetPartId && presetPartId === p.id ? 'selected' : '';
+            const lowTag = p.isLowStock ? ' [SẮP HẾT]' : '';
+            partOptions += `<option value="${p.id}" ${isSel} data-code="${p.code}" data-name="${p.name}" data-unit="${p.unit}" data-price="${p.costPrice > 0 ? p.costPrice : p.salePrice}">[${p.code}] ${p.name}${lowTag} (Tồn: ${p.inStock} ${p.unit})</option>`;
+        });
+
+        tr.innerHTML = `
+            <td>
+                <select name="partIds" class="form-select form-select-sm part-select" onchange="onPartSelected(this, ${rowIndex})" required>
+                    ${partOptions}
+                </select>
+                <input type="text" name="notes" class="form-control form-control-sm mt-1" placeholder="Ghi chú quy cách phụ tùng..." />
+            </td>
+            <td>
+                <input type="text" class="form-control form-control-sm bg-light unit-input" id="unit_${rowIndex}" value="Cái" readonly />
+            </td>
+            <td>
+                <input type="number" step="0.01" min="0.01" name="quantities" id="qty_${rowIndex}" class="form-control form-control-sm qty-input text-end" value="${presetQty}" oninput="recalcRow(${rowIndex})" required />
+            </td>
+            <td>
+                <input type="number" step="1000" min="0" name="unitPrices" id="price_${rowIndex}" class="form-control form-control-sm price-input text-end" value="0" oninput="recalcRow(${rowIndex})" required />
+            </td>
+            <td>
+                <input type="number" step="0.5" min="0" max="100" name="discountRates" id="disc_${rowIndex}" class="form-control form-control-sm disc-input text-end" value="0" oninput="recalcRow(${rowIndex})" />
+            </td>
+            <td>
+                <input type="number" step="1" min="0" max="100" name="vatPercents" id="vat_${rowIndex}" class="form-control form-control-sm vat-input text-end" value="8" oninput="recalcRow(${rowIndex})" />
+            </td>
+            <td class="text-end fw-bold">
+                <span id="lineTotal_${rowIndex}">0đ</span>
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeRow(${rowIndex})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+        if (presetPartId) {
+            const select = tr.querySelector('.part-select');
+            onPartSelected(select, rowIndex);
+        }
+        rowIndex++;
+        recalcAll();
+    }
+
+    function onPartSelected(select, idx) {
+        const opt = select.options[select.selectedIndex];
+        if (opt && opt.value) {
+            const unit = opt.dataset.unit || 'Cái';
+            const price = parseFloat(opt.dataset.price) || 0;
+            document.getElementById(`unit_${idx}`).value = unit;
+            document.getElementById(`price_${idx}`).value = price;
+        }
+        recalcRow(idx);
+    }
+
+    function recalcRow(idx) {
+        const qty = parseFloat(document.getElementById(`qty_${idx}`)?.value) || 0;
+        const price = parseFloat(document.getElementById(`price_${idx}`)?.value) || 0;
+        const disc = parseFloat(document.getElementById(`disc_${idx}`)?.value) || 0;
+        const vat = parseFloat(document.getElementById(`vat_${idx}`)?.value) || 0;
+
+        const subTotal = qty * price;
+        const discAmount = Math.round(subTotal * (disc / 100));
+        const taxable = subTotal - discAmount;
+        const vatAmount = Math.round(taxable * (vat / 100));
+        const lineTotal = taxable + vatAmount;
+
+        const totalSpan = document.getElementById(`lineTotal_${idx}`);
+        if (totalSpan) {
+            totalSpan.innerText = lineTotal.toLocaleString('vi-VN') + 'đ';
+        }
+
+        recalcAll();
+    }
+
+    function removeRow(idx) {
+        const row = document.getElementById(`row_${idx}`);
+        if (row) {
+            row.remove();
+            recalcAll();
+        }
+    }
+
+    function recalcAll() {
+        let grandSubTotal = 0;
+        let grandDiscount = 0;
+        let grandVat = 0;
+
+        const rows = document.querySelectorAll('#itemsBody tr');
+        rows.forEach(r => {
+            const idx = r.id.replace('row_', '');
+            const qty = parseFloat(document.getElementById(`qty_${idx}`)?.value) || 0;
+            const price = parseFloat(document.getElementById(`price_${idx}`)?.value) || 0;
+            const disc = parseFloat(document.getElementById(`disc_${idx}`)?.value) || 0;
+            const vat = parseFloat(document.getElementById(`vat_${idx}`)?.value) || 0;
+
+            const subTotal = qty * price;
+            const discAmount = Math.round(subTotal * (disc / 100));
+            const taxable = subTotal - discAmount;
+            const vatAmount = Math.round(taxable * (vat / 100));
+
+            grandSubTotal += subTotal;
+            grandDiscount += discAmount;
+            grandVat += vatAmount;
+        });
+
+        const grandTotal = grandSubTotal - grandDiscount + grandVat;
+
+        document.getElementById('lblSubTotal').innerText = grandSubTotal.toLocaleString('vi-VN') + 'đ';
+        document.getElementById('lblDiscount').innerText = (grandDiscount > 0 ? '-' : '') + grandDiscount.toLocaleString('vi-VN') + 'đ';
+        document.getElementById('lblVat').innerText = grandVat.toLocaleString('vi-VN') + 'đ';
+        document.getElementById('lblTotal').innerText = grandTotal.toLocaleString('vi-VN') + 'đ';
+    }
+
+    function addLowStockParts() {
+        const lowStockParts = partsData.filter(p => p.isLowStock);
+        if (lowStockParts.length === 0) {
+            alert('Hiện tại tất cả phụ tùng trong kho đều trên mức tồn tối thiểu an toàn.');
+            return;
+        }
+
+        lowStockParts.forEach(p => {
+            // Đặt bù số lượng thiếu để đạt mức min + dự trữ
+            const deficit = Math.max(1, Math.ceil(p.minStock * 2 - p.inStock));
+            addRow(p.id, deficit);
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        addRow();
+        onDeliveryFormChange(document.getElementById('deliveryFormSelect'));
+    });
+</script>

@@ -1036,6 +1036,167 @@ public class ServicePackageController(IRoService svc) : Controller
     }
 }
 
+public class OrderPartController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(OrderPartStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+        var list = await svc.OrderPartsAsync(status, q, fromDate, toDate);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.ROs = await svc.ROsWaitingForPartAsync();
+        ViewBag.SelectedROId = roId;
+        if (roId.HasValue && roId.Value > 0)
+        {
+            var ro = await svc.GetROAsync(roId.Value);
+            ViewBag.PreloadedRO = ro;
+        }
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string supplierName, OrderPartDeliveryForm deliveryForm, string? deliveryLocation,
+        DateTime? orderDate, DateTime? estimatedDeliverDate, string? vin, int? roId, string? remark,
+        int[] partIds, decimal[] quantities, decimal[] unitPrices, decimal[] discountRates, decimal[] vatPercents, string[]? notes)
+    {
+        if (string.IsNullOrWhiteSpace(supplierName))
+        {
+            TempData["Error"] = "Vui lòng nhập tên nhà cung cấp.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.ROs = await svc.ROsWaitingForPartAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+
+        if (deliveryForm == OrderPartDeliveryForm.Warranty && string.IsNullOrWhiteSpace(vin))
+        {
+            TempData["Error"] = "Đơn đặt hàng bảo hành bắt buộc phải có số khung (VIN) xe.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.ROs = await svc.ROsWaitingForPartAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+
+        if (partIds == null || partIds.Length == 0)
+        {
+            TempData["Error"] = "Vui lòng chọn ít nhất một phụ tùng cần đặt hàng.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.ROs = await svc.ROsWaitingForPartAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+
+        try
+        {
+            var order = new OrderPart
+            {
+                SupplierName = supplierName.Trim(),
+                DeliveryForm = deliveryForm,
+                DeliveryLocation = string.IsNullOrWhiteSpace(deliveryLocation) ? "Kho phụ tùng chính" : deliveryLocation.Trim(),
+                OrderDate = orderDate ?? DateTime.Today,
+                EstimatedDeliverDate = estimatedDeliverDate,
+                VIN = vin?.Trim(),
+                ROId = (roId.HasValue && roId.Value > 0) ? roId : null,
+                Remark = remark?.Trim(),
+                CreatedBy = "web"
+            };
+
+            var lines = new List<OrderPartLine>();
+            for (int i = 0; i < partIds.Length; i++)
+            {
+                if (partIds[i] <= 0) continue;
+                var qty = (quantities != null && i < quantities.Length) ? quantities[i] : 1;
+                var price = (unitPrices != null && i < unitPrices.Length) ? unitPrices[i] : 0;
+                var disc = (discountRates != null && i < discountRates.Length) ? discountRates[i] : 0;
+                var vat = (vatPercents != null && i < vatPercents.Length) ? vatPercents[i] : 8;
+                var note = (notes != null && i < notes.Length) ? notes[i] : null;
+
+                lines.Add(new OrderPartLine
+                {
+                    PartId = partIds[i],
+                    Quantity = qty <= 0 ? 1 : qty,
+                    UnitPrice = price,
+                    DiscountRate = disc < 0 ? 0 : disc,
+                    VatPercent = vat < 0 ? 0 : vat,
+                    ApprovedQuantity = qty <= 0 ? 1 : qty,
+                    Note = note?.Trim()
+                });
+            }
+
+            if (lines.Count == 0)
+            {
+                TempData["Error"] = "Chưa có dòng phụ tùng hợp lệ.";
+                ViewBag.Parts = await svc.PartsForSelectAsync();
+                ViewBag.ROs = await svc.ROsWaitingForPartAsync();
+                ViewBag.SelectedROId = roId;
+                return View();
+            }
+
+            var id = await svc.CreateOrderPartAsync(order, lines);
+            TempData["Success"] = $"Đã lập đơn đặt hàng {order.OrderPartNo} thành công (Tổng tiền: {order.Total:N0}đ).";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.ROs = await svc.ROsWaitingForPartAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var order = await svc.GetOrderPartAsync(id);
+        if (order == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextOrderPart(order.Status);
+        return View(order);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, OrderPartStatus to, string? supplierOrderNo, string? note)
+    {
+        var (ok, msg) = await svc.TransitionOrderPartStatusAsync(id, to, supplierOrderNo, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateStockIn(int id, string? approvedBy)
+    {
+        var (ok, msg, stockInId) = await svc.CreateStockInFromOrderPartAsync(id, approvedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok && stockInId.HasValue)
+        {
+            return RedirectToAction("Detail", "StockIn", new { id = stockInId.Value });
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var order = await svc.GetOrderPartAsync(id);
+        if (order == null) return NotFound();
+        return View(order);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteOrderPartAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

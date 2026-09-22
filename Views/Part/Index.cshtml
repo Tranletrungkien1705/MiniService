@@ -61,7 +61,8 @@
                 }
             </form>
             <div class="d-flex align-items-center gap-2">
-                <a href="/StockIn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-journal-text me-1"></i>Sổ phiếu nhập kho</a>
+                <a href="/OrderPart" class="btn btn-sm btn-outline-warning"><i class="bi bi-cart-check me-1"></i>Đơn đặt NCC</a>
+                <a href="/StockIn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-journal-text me-1"></i>Sổ nhập kho</a>
                 <a href="/StockIn/Create" class="btn btn-sm btn-outline-primary"><i class="bi bi-box-arrow-in-down me-1"></i>Lập phiếu nhập kho</a>
                 <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createPartModal">
                     <i class="bi bi-plus-lg me-1"></i>Thêm phụ tùng
@@ -114,6 +115,12 @@
                             }
                         </td>
                         <td class="text-end">
+                            @if (p.IsLowStock)
+                            {
+                                <a href="/OrderPart/Create" class="btn btn-sm btn-warning me-1" title="Tạo đơn đặt NCC để bổ sung">
+                                    <i class="bi bi-cart-plus me-1"></i>Đặt NCC
+                                </a>
+                            }
                             <button class="btn btn-sm btn-outline-primary" onclick="openAdjustModal(@p.Id, '@p.Code', '@p.Name', '@p.Unit', @p.InStock)">
                                 <i class="bi bi-arrow-down-up me-1"></i>Nhập / Xuất
                             </button>

@@ -1,0 +1,180 @@
+@model List<OrderPart>
+@{
+    ViewData["Title"] = "Quản lý Đặt hàng phụ tùng Nhà Cung Cấp (Part Purchase Order)";
+    var curStatus = (OrderPartStatus?)ViewBag.Status;
+    var totalCount = Model.Count;
+    var pendingCount = Model.Count(o => o.Status == OrderPartStatus.Pending);
+    var approvedCount = Model.Count(o => o.Status == OrderPartStatus.Approved);
+    var finishedCount = Model.Count(o => o.Status == OrderPartStatus.Finished);
+    var totalOrderValue = Model.Where(o => o.Status != OrderPartStatus.Rejected).Sum(o => o.Total);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số đơn đặt hàng</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ duyệt gửi NCC</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã duyệt (Chờ giao hàng)</div>
+            <div class="stat-num text-info">@approvedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng giá trị đơn đặt</div>
+            <div class="stat-num" style="color:#0f766e;font-size:20px">@totalOrderValue.ToString("N0") <span class="fs-6 fw-normal text-muted">đ</span></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã PO / Nhà cung cấp / Mã NCC / VIN / RO..." style="max-width:260px" />
+                <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" title="Từ ngày" style="max-width:145px" />
+                <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" title="Đến ngày" style="max-width:145px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (OrderPartStatus s in Enum.GetValues(typeof(OrderPartStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.OrderPartStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curStatus.HasValue || !string.IsNullOrEmpty(ViewBag.Q) || !string.IsNullOrEmpty(ViewBag.FromDate) || !string.IsNullOrEmpty(ViewBag.ToDate))
+                {
+                    <a href="/OrderPart" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/Part" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Kho phụ tùng</a>
+                <a href="/StockIn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-in-down me-1"></i>Phiếu nhập kho</a>
+                <a href="/OrderPart/Create" class="btn btn-sm btn-warning"><i class="bi bi-plus-lg me-1"></i>Lập đơn đặt NCC</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã đơn hàng</th>
+                        <th>Ngày đặt</th>
+                        <th>Nhà cung cấp</th>
+                        <th>Hình thức đặt</th>
+                        <th>Địa điểm nhận</th>
+                        <th>Xe / Lệnh RO</th>
+                        <th class="text-center">Số mặt hàng</th>
+                        <th class="text-end">Tổng tiền (VNĐ)</th>
+                        <th class="text-center">Trạng thái</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var o in Model)
+                {
+                    var (stText, stCode, stCss) = Ui.OrderPartStatus(o.Status);
+                    var (dfText, dfCss) = Ui.OrderPartDeliveryForm(o.DeliveryForm);
+                    <tr>
+                        <td>
+                            <a href="/OrderPart/Detail/@o.Id" class="fw-bold text-decoration-none">
+                                <code>@o.OrderPartNo</code>
+                            </a>
+                            @if (!string.IsNullOrEmpty(o.OrderSuppierNo))
+                            {
+                                <div class="small text-muted font-monospace" style="font-size:11px">NCC: @o.OrderSuppierNo</div>
+                            }
+                        </td>
+                        <td>
+                            <span class="small">@o.OrderDate.ToString("dd/MM/yyyy")</span>
+                            @if (o.EstimatedDeliverDate.HasValue)
+                            {
+                                <div class="text-muted small" style="font-size:11px" title="Ngày dự kiến giao">
+                                    <i class="bi bi-clock me-1"></i>ETA: @o.EstimatedDeliverDate.Value.ToString("dd/MM/yyyy")
+                                </div>
+                            }
+                        </td>
+                        <td>
+                            <span class="fw-semibold">@o.SupplierName</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-@dfCss">@dfText</span>
+                        </td>
+                        <td class="small text-muted">
+                            <i class="bi bi-geo-alt me-1"></i>@o.DeliveryLocation
+                        </td>
+                        <td class="small">
+                            @if (o.RO != null)
+                            {
+                                <div><a href="/RO/Detail/@o.RO.Id" class="text-decoration-none fw-semibold">@o.RO.Code</a></div>
+                                <div class="text-muted">@(o.RO.Car?.Plate ?? "—")</div>
+                            }
+                            else if (!string.IsNullOrEmpty(o.VIN))
+                            {
+                                <span class="font-monospace text-muted">VIN: @o.VIN</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">Bổ sung kho</span>
+                            }
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-light text-dark border">@o.ItemCount món</span>
+                            <div class="text-muted small" style="font-size:11px">SL: @o.TotalQuantityOrdered.ToString("0.##")</div>
+                        </td>
+                        <td class="text-end fw-bold" style="color:#0f766e">
+                            @o.Total.ToString("N0")đ
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-@stCss">@stCode — @stText</span>
+                            @if (o.StockIn != null)
+                            {
+                                <div class="mt-1" style="font-size:11px">
+                                    <a href="/StockIn/Detail/@o.StockIn.Id" class="text-success text-decoration-none">
+                                        <i class="bi bi-box-arrow-in-down me-1"></i>@o.StockIn.StockInNo
+                                    </a>
+                                </div>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/OrderPart/Detail/@o.Id" class="btn btn-outline-primary" title="Xem chi tiết">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="/OrderPart/Print/@o.Id" class="btn btn-outline-secondary" title="In đơn đặt hàng PO" target="_blank">
+                                    <i class="bi bi-printer"></i>
+                                </a>
+                                @if (o.Status == OrderPartStatus.Approved && !o.StockInId.HasValue)
+                                {
+                                    <a href="/OrderPart/Detail/@o.Id" class="btn btn-success" title="Tạo phiếu nhập kho ngay">
+                                        <i class="bi bi-box-arrow-in-down"></i>
+                                    </a>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-5">
+                            <i class="bi bi-cart-x display-6 d-block mb-2 text-secondary"></i>
+                            Không có đơn đặt hàng phụ tùng nào phù hợp bộ lọc.
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

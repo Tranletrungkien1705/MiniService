@@ -1023,6 +1023,174 @@ app.MapDelete("/api/servicepackages/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Đơn đặt hàng phụ tùng Nhà Cung Cấp (Ser_Order_Part & Ser_Order_PartDtl)
+app.MapGet("/api/orderparts", async (OrderPartStatus? status, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.OrderPartsAsync(status, q, fromDate, toDate);
+    return Results.Ok(list.Select(o => new
+    {
+        o.Id,
+        o.OrderPartNo,
+        o.OrderDate,
+        o.SupplierName,
+        deliveryForm = Ui.OrderPartDeliveryForm(o.DeliveryForm).text,
+        deliveryFormValue = (int)o.DeliveryForm,
+        o.DeliveryLocation,
+        o.EstimatedDeliverDate,
+        o.VIN,
+        roId = o.ROId,
+        roCode = o.RO?.Code,
+        plate = o.RO?.Car?.Plate,
+        status = Ui.OrderPartStatus(o.Status).text,
+        statusCode = Ui.OrderPartStatus(o.Status).code,
+        statusValue = (int)o.Status,
+        o.OrderSuppierNo,
+        o.RequestSuppierDate,
+        o.ResponseSuppierDate,
+        o.Remark,
+        stockInId = o.StockInId,
+        stockInNo = o.StockIn?.StockInNo,
+        o.ItemCount,
+        o.TotalQuantityOrdered,
+        o.TotalQuantityApproved,
+        o.TotalQuantityReceived,
+        o.SubTotalBeforeDiscount,
+        o.TotalDiscount,
+        o.TaxableAmount,
+        o.TotalVat,
+        o.Total,
+        o.CreatedBy,
+        o.CreatedAt,
+        o.ApprovedAt,
+        o.FinishedAt
+    }));
+});
+
+app.MapGet("/api/orderparts/{id:int}", async (int id, IRoService svc) =>
+{
+    var o = await svc.GetOrderPartAsync(id);
+    if (o == null) return Results.NotFound(new { error = "Không tìm thấy đơn đặt hàng phụ tùng." });
+    return Results.Ok(new
+    {
+        o.Id,
+        o.OrderPartNo,
+        o.OrderDate,
+        o.SupplierName,
+        deliveryForm = Ui.OrderPartDeliveryForm(o.DeliveryForm).text,
+        deliveryFormValue = (int)o.DeliveryForm,
+        o.DeliveryLocation,
+        o.EstimatedDeliverDate,
+        o.VIN,
+        ro = o.RO != null ? new { o.RO.Id, o.RO.Code, o.RO.Status, plate = o.RO.Car?.Plate, customer = o.RO.Customer?.Name } : null,
+        status = Ui.OrderPartStatus(o.Status).text,
+        statusCode = Ui.OrderPartStatus(o.Status).code,
+        statusValue = (int)o.Status,
+        o.OrderSuppierNo,
+        o.RequestSuppierDate,
+        o.ResponseSuppierDate,
+        o.Remark,
+        stockIn = o.StockIn != null ? new { o.StockIn.Id, o.StockIn.StockInNo, o.StockIn.Status } : null,
+        o.ItemCount,
+        o.TotalQuantityOrdered,
+        o.TotalQuantityApproved,
+        o.TotalQuantityReceived,
+        o.SubTotalBeforeDiscount,
+        o.TotalDiscount,
+        o.TaxableAmount,
+        o.TotalVat,
+        o.Total,
+        o.CreatedBy,
+        o.CreatedAt,
+        o.ApprovedAt,
+        o.FinishedAt,
+        lines = o.Lines.Select(l => new
+        {
+            l.Id,
+            l.PartId,
+            l.PartCode,
+            l.PartName,
+            l.Unit,
+            l.Quantity,
+            l.UnitPrice,
+            l.DiscountRate,
+            l.DiscountAmount,
+            l.TaxableAmount,
+            l.VatPercent,
+            l.VatAmount,
+            l.Amount,
+            l.ApprovedQuantity,
+            l.ReceivedQuantity,
+            statusDtl = Ui.OrderPartStatus(l.StatusDtl).text,
+            l.Note,
+            inStock = l.Part?.InStock
+        })
+    });
+});
+
+app.MapPost("/api/orderparts", async (CreateOrderPartDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.SupplierName))
+            return Results.BadRequest(new { error = "Vui lòng nhập tên nhà cung cấp (SupplierName)." });
+
+        if (dto.DeliveryForm == OrderPartDeliveryForm.Warranty && string.IsNullOrWhiteSpace(dto.VIN))
+            return Results.BadRequest(new { error = "Đơn đặt hàng bảo hành bắt buộc có số khung (VIN) xe." });
+
+        if (dto.Items == null || dto.Items.Count == 0)
+            return Results.BadRequest(new { error = "Cần danh sách phụ tùng đặt hàng (Items)." });
+
+        var order = new OrderPart
+        {
+            SupplierName = dto.SupplierName.Trim(),
+            DeliveryForm = dto.DeliveryForm,
+            DeliveryLocation = string.IsNullOrWhiteSpace(dto.DeliveryLocation) ? "Kho phụ tùng chính" : dto.DeliveryLocation.Trim(),
+            OrderDate = dto.OrderDate ?? DateTime.Today,
+            EstimatedDeliverDate = dto.EstimatedDeliverDate,
+            VIN = dto.VIN?.Trim(),
+            ROId = (dto.ROId.HasValue && dto.ROId.Value > 0) ? dto.ROId : null,
+            Remark = dto.Remark?.Trim(),
+            CreatedBy = "api"
+        };
+
+        var lines = dto.Items.Select(i => new OrderPartLine
+        {
+            PartId = i.PartId,
+            Quantity = i.Quantity <= 0 ? 1 : i.Quantity,
+            UnitPrice = i.UnitPrice ?? 0,
+            DiscountRate = i.DiscountRate ?? 0,
+            VatPercent = i.VatPercent ?? 8,
+            ApprovedQuantity = i.ApprovedQuantity ?? (i.Quantity <= 0 ? 1 : i.Quantity),
+            Note = i.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateOrderPartAsync(order, lines);
+        return Results.Ok(new { orderPartId = id, orderPartNo = order.OrderPartNo, total = order.Total, message = "Đã lập đơn đặt hàng phụ tùng thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/orderparts/{id:int}/transition", async (int id, TransitionOrderPartDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionOrderPartStatusAsync(id, dto.ToStatus, dto.SupplierOrderNo, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/orderparts/{id:int}/create-stockin", async (int id, CreateStockInFromOrderDto? dto, IRoService svc) =>
+{
+    var (ok, msg, stockInId) = await svc.CreateStockInFromOrderPartAsync(id, dto?.ApprovedBy);
+    return ok ? Results.Ok(new { message = msg, stockInId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/orderparts/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteOrderPartAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -1059,3 +1227,7 @@ record CreateServicePackageDto(string? PackageNo, string Name, decimal? TakingTi
 record CreateServicePackageItemDto(LineType Type, int? PartId, string? Code, string? Name, string? Unit, decimal Quantity, decimal UnitPrice, decimal? VatPercent, ExpenseType? ExpenseType, string? Note);
 record ApplyPackageRoDto(int RoId);
 record ApplyPackageQuoteDto(int QuoteId);
+record CreateOrderPartDto(string SupplierName, OrderPartDeliveryForm DeliveryForm, string? DeliveryLocation, DateTime? OrderDate, DateTime? EstimatedDeliverDate, string? VIN, int? ROId, string? Remark, List<CreateOrderPartItemDto> Items);
+record CreateOrderPartItemDto(int PartId, decimal Quantity, decimal? UnitPrice, decimal? DiscountRate, decimal? VatPercent, decimal? ApprovedQuantity, string? Note);
+record TransitionOrderPartDto(OrderPartStatus ToStatus, string? SupplierOrderNo, string? Note);
+record CreateStockInFromOrderDto(string? ApprovedBy);

@@ -27,6 +27,19 @@
             </div>
         </div></div>
 
+        @if (Model.Status == ROStatus.Wait4Part)
+        {
+            <div class="alert alert-warning d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <i class="bi bi-clock-history me-2 fs-5"></i>
+                    <strong>Xe đang đợi phụ tùng về kho (W4P).</strong> Vui lòng đặt hàng nhà cung cấp hoặc theo dõi đơn đặt phụ tùng.
+                </div>
+                <a href="/OrderPart/Create?roId=@Model.Id" class="btn btn-warning btn-sm fw-semibold">
+                    <i class="bi bi-cart-plus me-1"></i>Đặt hàng NCC ngay
+                </a>
+            </div>
+        }
+
         <div class="card"><div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="fw-bold mb-0">Chi tiết công &amp; phụ tùng</h6>
@@ -214,6 +227,33 @@
             else
             {
                 <div class="text-muted small">Chưa có phiếu xuất kho cho lệnh này. Nhấn "Xuất kho" để điều phối linh kiện sửa chữa.</div>
+            }
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-cart-check text-warning me-1"></i>Đặt hàng NCC</h6>
+                <a href="/OrderPart/Create?roId=@Model.Id" class="btn btn-sm btn-outline-warning"><i class="bi bi-plus-lg me-1"></i>Đặt hàng NCC</a>
+            </div>
+            @if (Model.OrderParts.Count > 0)
+            {
+                <div class="list-group list-group-flush small">
+                    @foreach (var o in Model.OrderParts)
+                    {
+                        var (otxt, ocode, ocss) = Ui.OrderPartStatus(o.Status);
+                        <a href="/OrderPart/Detail/@o.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold">@o.OrderPartNo</div>
+                                <div class="text-muted" style="font-size:11px">@o.SupplierName · @o.Total.ToString("N0")đ</div>
+                            </div>
+                            <span class="badge bg-@ocss">@ocode</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small">Chưa có đơn đặt hàng NCC cho lệnh này.</div>
             }
         </div></div>
 

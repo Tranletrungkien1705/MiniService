@@ -79,6 +79,23 @@ public static class Ui
         _ => t.ToString()
     };
 
+    public static (string text, string code, string css) OrderPartStatus(OrderPartStatus s) => s switch
+    {
+        Models.OrderPartStatus.Pending => ("Chờ duyệt", "PEND", "warning"),
+        Models.OrderPartStatus.Approved => ("Đã duyệt NCC", "APPR", "info"),
+        Models.OrderPartStatus.Finished => ("Đã nhập kho", "FNS", "success"),
+        Models.OrderPartStatus.Rejected => ("Đã hủy", "REJ", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string css) OrderPartDeliveryForm(OrderPartDeliveryForm f) => f switch
+    {
+        Models.OrderPartDeliveryForm.Normal => ("Đặt thường", "secondary"),
+        Models.OrderPartDeliveryForm.Warranty => ("Đặt bảo hành", "info"),
+        Models.OrderPartDeliveryForm.UrgentVOR => ("Khẩn cấp (VOR)", "danger"),
+        _ => (f.ToString(), "secondary")
+    };
+
     public static (string text, string code, string css) StockOutStatus(StockOutStatus s) => s switch
     {
         Models.StockOutStatus.Pending => ("Chờ xuất kho", "PEND", "warning"),

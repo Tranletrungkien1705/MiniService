@@ -746,19 +746,115 @@ public static class Seeder
             db.ServicePackages.AddRange(packages);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.OrderParts.AnyAsync())
+        {
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+            var pFilter = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pAir = await db.Parts.FirstOrDefaultAsync(p => p.Code == "28113-1R100");
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+            var pSpark = await db.Parts.FirstOrDefaultAsync(p => p.Code == "18846-11070");
+            var sFinished = await db.StockIns.FirstOrDefaultAsync(s => s.StockInNo == "NK260420-001");
+            var ro1 = await db.ROs.Include(r => r.Car).FirstOrDefaultAsync();
+
+            var orderParts = new List<OrderPart>();
+
+            // 1. Đơn đặt hàng định kỳ đã nhập kho hoàn tất (Status = Finished)
+            var op1 = new OrderPart
+            {
+                OrderPartNo = "PO260420-001",
+                OrderDate = DateTime.Today.AddDays(-7),
+                SupplierName = "Công ty CP Liên doanh Ô tô Hyundai Thành Công Việt Nam (HTC)",
+                DeliveryForm = OrderPartDeliveryForm.Normal,
+                DeliveryLocation = "Kho phụ tùng chính - Cầu Giấy",
+                EstimatedDeliverDate = DateTime.Today.AddDays(-7),
+                Status = OrderPartStatus.Finished,
+                OrderSuppierNo = "HTC-SO-2026-8812",
+                RequestSuppierDate = DateTime.Today.AddDays(-8),
+                ResponseSuppierDate = DateTime.Today.AddDays(-7),
+                Remark = "Đơn đặt hàng định kỳ bổ sung vật tư dầu nhờn & lọc bảo dưỡng nhanh.",
+                StockInId = sFinished?.Id,
+                CreatedBy = "Quản lý kho",
+                CreatedAt = DateTime.Now.AddDays(-8),
+                ApprovedAt = DateTime.Now.AddDays(-8).AddHours(2),
+                FinishedAt = DateTime.Now.AddDays(-7),
+                Lines = [
+                    new OrderPartLine { PartId = pOil?.Id ?? 1, PartCode = pOil?.Code ?? "05100-00441", PartName = pOil?.Name ?? "Dầu nhờn động cơ Hyundai 5W-30", Unit = pOil?.Unit ?? "Can", Quantity = 20, UnitPrice = 420000, DiscountRate = 3, VatPercent = 8, ApprovedQuantity = 20, ReceivedQuantity = 20, StatusDtl = OrderPartStatus.Finished, Note = "Lô dầu chính hãng HTC" },
+                    new OrderPartLine { PartId = pFilter?.Id ?? 2, PartCode = pFilter?.Code ?? "26300-35505", PartName = pFilter?.Name ?? "Lọc dầu động cơ chính hãng Hyundai", Unit = pFilter?.Unit ?? "Cái", Quantity = 30, UnitPrice = 90000, DiscountRate = 5, VatPercent = 8, ApprovedQuantity = 30, ReceivedQuantity = 30, StatusDtl = OrderPartStatus.Finished, Note = "Lọc nhớt tiêu chuẩn" },
+                    new OrderPartLine { PartId = pAir?.Id ?? 3, PartCode = pAir?.Code ?? "28113-1R100", PartName = pAir?.Name ?? "Lọc gió động cơ Hyundai Accent", Unit = pAir?.Unit ?? "Cái", Quantity = 15, UnitPrice = 120000, DiscountRate = 0, VatPercent = 8, ApprovedQuantity = 15, ReceivedQuantity = 15, StatusDtl = OrderPartStatus.Finished, Note = "Lọc gió cho xe Accent" }
+                ]
+            };
+            orderParts.Add(op1);
+
+            // 2. Đơn đặt hàng khẩn cấp (UrgentVOR) đã được duyệt, chờ hàng về kho (Status = Approved)
+            var op2 = new OrderPart
+            {
+                OrderPartNo = "PO260426-002",
+                OrderDate = DateTime.Today.AddDays(-1),
+                SupplierName = "Công ty TNHH Phụ tùng Mobis Việt Nam",
+                DeliveryForm = OrderPartDeliveryForm.UrgentVOR,
+                DeliveryLocation = "Xưởng dịch vụ Hyundai Cầu Giấy - Khoang nhận hàng nhanh",
+                EstimatedDeliverDate = DateTime.Today.AddDays(1),
+                ROId = ro1?.Id,
+                VIN = ro1?.Car?.Vin ?? "RLHXXTC002",
+                Status = OrderPartStatus.Approved,
+                OrderSuppierNo = "MBS-PO-2604-0992",
+                RequestSuppierDate = DateTime.Today.AddDays(-1),
+                ResponseSuppierDate = DateTime.Today,
+                Remark = "Đơn đặt hàng phụ tùng khẩn cấp VOR phục vụ xe bảo dưỡng & sửa chữa gầm phanh.",
+                CreatedBy = "CVDV Tuấn",
+                CreatedAt = DateTime.Now.AddDays(-1),
+                ApprovedAt = DateTime.Now.AddHours(-10),
+                Lines = [
+                    new OrderPartLine { PartId = pBrake?.Id ?? 4, PartCode = pBrake?.Code ?? "58101-C1A00", PartName = pBrake?.Name ?? "Bộ má phanh đĩa trước", Unit = pBrake?.Unit ?? "Bộ", Quantity = 10, UnitPrice = 850000, DiscountRate = 2, VatPercent = 8, ApprovedQuantity = 10, ReceivedQuantity = 0, StatusDtl = OrderPartStatus.Approved, Note = "Giao hàng hỏa tốc trong 24h" }
+                ]
+            };
+            orderParts.Add(op2);
+
+            // 3. Đơn đặt hàng mới lập chờ duyệt (Status = Pending) bổ sung bugi sắp hết
+            var op3 = new OrderPart
+            {
+                OrderPartNo = "PO260427-003",
+                OrderDate = DateTime.Today,
+                SupplierName = "Công ty TNHH Phụ tùng Mobis Việt Nam",
+                DeliveryForm = OrderPartDeliveryForm.Normal,
+                DeliveryLocation = "Kho phụ tùng chính - Kệ K1-C03",
+                EstimatedDeliverDate = DateTime.Today.AddDays(3),
+                Status = OrderPartStatus.Pending,
+                Remark = "Bổ sung lượng tồn kho tối thiểu cho Bugi Iridium (hiện tại còn 3 cái, dưới mức 8 cái).",
+                CreatedBy = "Thủ kho Tuấn",
+                CreatedAt = DateTime.Now.AddHours(-2),
+                Lines = [
+                    new OrderPartLine { PartId = pSpark?.Id ?? 5, PartCode = pSpark?.Code ?? "18846-11070", PartName = pSpark?.Name ?? "Bugi đánh lửa Iridium cao cấp", Unit = pSpark?.Unit ?? "Cái", Quantity = 20, UnitPrice = 110000, DiscountRate = 5, VatPercent = 8, ApprovedQuantity = 20, ReceivedQuantity = 0, StatusDtl = OrderPartStatus.Pending, Note = "Đặt bù tồn kho an toàn" }
+                ]
+            };
+            orderParts.Add(op3);
+
+            db.OrderParts.AddRange(orderParts);
+            await db.SaveChangesAsync();
+
+            if (sFinished != null)
+            {
+                sFinished.OrderPartId = op1.Id;
+                sFinished.OrderPartNo = op1.OrderPartNo;
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON miniservice.\"Orgs\" (\"ApiKey\")",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"AppointmentId\" integer NULL",
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
+            "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartId\" integer NULL",
+            "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartNo\" text NULL",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -1034,6 +1130,53 @@ public static class Seeder
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""ServicePackageId"") REFERENCES ""ServicePackages"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE SET NULL
+            );",
+            @"ALTER TABLE ""StockIns"" ADD COLUMN ""OrderPartId"" INTEGER NULL;",
+            @"ALTER TABLE ""StockIns"" ADD COLUMN ""OrderPartNo"" TEXT NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""OrderParts"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""OrderPartNo"" TEXT NOT NULL,
+                ""OrderDate"" TEXT NOT NULL,
+                ""SupplierName"" TEXT NOT NULL,
+                ""DeliveryForm"" INTEGER NOT NULL,
+                ""DeliveryLocation"" TEXT NOT NULL,
+                ""EstimatedDeliverDate"" TEXT NULL,
+                ""VIN"" TEXT NULL,
+                ""ROId"" INTEGER NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""OrderSuppierNo"" TEXT NULL,
+                ""RequestSuppierDate"" TEXT NULL,
+                ""ResponseSuppierDate"" TEXT NULL,
+                ""Remark"" TEXT NULL,
+                ""StockInId"" INTEGER NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ApprovedAt"" TEXT NULL,
+                ""FinishedAt"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""StockInId"") REFERENCES ""StockIns"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_OrderParts_OrgId_OrderPartNo"" ON ""OrderParts"" (""OrgId"", ""OrderPartNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""OrderPartLines"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""OrderPartId"" INTEGER NOT NULL,
+                ""OrderPartNo"" TEXT NOT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""PartCode"" TEXT NOT NULL,
+                ""PartName"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""DiscountRate"" TEXT NOT NULL,
+                ""VatPercent"" TEXT NOT NULL,
+                ""ApprovedQuantity"" TEXT NOT NULL,
+                ""ReceivedQuantity"" TEXT NOT NULL,
+                ""StatusDtl"" INTEGER NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""OrderPartId"") REFERENCES ""OrderParts"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
             );"
         };
 

@@ -27,6 +27,8 @@ public class AppDbContext : DbContext
     public DbSet<QuoteItem> QuoteItems => Set<QuoteItem>();
     public DbSet<ServicePackage> ServicePackages => Set<ServicePackage>();
     public DbSet<ServicePackageItem> ServicePackageItems => Set<ServicePackageItem>();
+    public DbSet<OrderPart> OrderParts => Set<OrderPart>();
+    public DbSet<OrderPartLine> OrderPartLines => Set<OrderPartLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -62,6 +64,7 @@ public class AppDbContext : DbContext
             e.HasMany(x => x.StockOuts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.CustomerCares).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.Payments).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
+            e.HasMany(x => x.OrderParts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -105,6 +108,7 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.StockInNo }).IsUnique();
             e.Ignore(x => x.SubTotal); e.Ignore(x => x.TotalVat); e.Ignore(x => x.Total); e.Ignore(x => x.ItemCount);
+            e.HasOne(x => x.OrderPart).WithMany().HasForeignKey(x => x.OrderPartId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.Items).WithOne(x => x.StockIn).HasForeignKey(x => x.StockInId).OnDelete(DeleteBehavior.Cascade);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
@@ -196,6 +200,30 @@ public class AppDbContext : DbContext
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.Property(x => x.VatPercent).HasPrecision(5, 2);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<OrderPart>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.OrderPartNo }).IsUnique();
+            e.Ignore(x => x.SubTotalBeforeDiscount); e.Ignore(x => x.TotalDiscount); e.Ignore(x => x.TaxableAmount);
+            e.Ignore(x => x.TotalVat); e.Ignore(x => x.Total);
+            e.Ignore(x => x.TotalQuantityOrdered); e.Ignore(x => x.TotalQuantityApproved); e.Ignore(x => x.TotalQuantityReceived);
+            e.Ignore(x => x.ItemCount);
+            e.HasOne(x => x.RO).WithMany(x => x.OrderParts).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.StockIn).WithMany().HasForeignKey(x => x.StockInId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Lines).WithOne(x => x.OrderPart).HasForeignKey(x => x.OrderPartId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<OrderPartLine>(e =>
+        {
+            e.Ignore(x => x.SubTotalBeforeDiscount); e.Ignore(x => x.DiscountAmount); e.Ignore(x => x.TaxableAmount); e.Ignore(x => x.VatAmount); e.Ignore(x => x.Amount);
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.Property(x => x.DiscountRate).HasPrecision(5, 2);
+            e.Property(x => x.VatPercent).HasPrecision(5, 2);
+            e.Property(x => x.ApprovedQuantity).HasPrecision(18, 2);
+            e.Property(x => x.ReceivedQuantity).HasPrecision(18, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

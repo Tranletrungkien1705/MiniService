@@ -140,6 +140,23 @@ public enum QuoteStatus
     Rejected = 4   // 5: Khách từ chối / Hủy báo giá
 }
 
+/// <summary>Trạng thái Đơn đặt hàng phụ tùng — theo OrderPartStatus (P, A, F, R) idn.CarService.</summary>
+public enum OrderPartStatus
+{
+    Pending = 0,   // P: Chờ duyệt / Mới tạo
+    Approved = 1,  // A: Đã duyệt gửi NCC
+    Finished = 2,  // F: Hoàn tất (Đã nhập kho xong)
+    Rejected = 3   // R: Hủy đơn hàng / Từ chối
+}
+
+/// <summary>Hình thức đặt hàng phụ tùng — theo Mst_DeliveryForm idn.CarService.</summary>
+public enum OrderPartDeliveryForm
+{
+    Normal = 0,    // 1: Đặt thường (Định kỳ / Bổ sung kho)
+    Warranty = 1,  // 2: Đặt bảo hành hãng (Bắt buộc VIN)
+    UrgentVOR = 2  // 3: Đặt khẩn cấp / Cấp bách (Xe nằm chờ phụ tùng - Vehicle Off Road)
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -191,6 +208,7 @@ public class RepairOrder : IOrgOwned
     public List<CustomerCare> CustomerCares { get; set; } = [];
     public List<Payment> Payments { get; set; } = [];
     public List<Quote> Quotes { get; set; } = [];
+    public List<OrderPart> OrderParts { get; set; } = [];
 
     public decimal Total => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
@@ -336,11 +354,14 @@ public class StockIn : IOrgOwned
     public StockInType Type { get; set; } = StockInType.Normal; // Loại phiếu nhập (StockInType)
     public StockInStatus Status { get; set; } = StockInStatus.Pending; // Trạng thái phiếu nhập
     public string? Description { get; set; }                // Diễn giải / Ghi chú (Description)
+    public int? OrderPartId { get; set; }                   // Đơn đặt hàng phụ tùng gốc (nếu nhập từ đơn đặt)
+    public string? OrderPartNo { get; set; }                // Số đơn đặt hàng NCC
     public string CreatedBy { get; set; } = "web";          // Người tạo phiếu
     public DateTime CreatedAt { get; set; } = DateTime.Now; // Ngày tạo
     public DateTime? FinishedAt { get; set; }               // Ngày duyệt nhập kho
     public string? ApprovedBy { get; set; }                 // Người duyệt nhập kho
 
+    public OrderPart? OrderPart { get; set; }
     public List<StockInDetail> Items { get; set; } = [];
 
     public decimal SubTotal => Items.Sum(i => i.Quantity * i.UnitPrice);
@@ -603,5 +624,74 @@ public class ServicePackageItem : IOrgOwned
     public decimal SubTotal => Quantity * UnitPrice;
     public decimal VatAmount => Math.Round(SubTotal * (VatPercent / 100m), 2);
     public decimal Amount => SubTotal + VatAmount;
+}
+
+/// <summary>Đơn đặt hàng phụ tùng Nhà Cung Cấp — Ser_Order_Part trong idn.CarService.</summary>
+public class OrderPart : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string OrderPartNo { get; set; } = "";             // Số đơn hàng (VD: PO260427-001)
+    public DateTime OrderDate { get; set; } = DateTime.Today; // Ngày lập đơn hàng
+    public string SupplierName { get; set; } = "";            // Tên NCC (Hyundai Thành Công / Mobis...)
+    public OrderPartDeliveryForm DeliveryForm { get; set; } = OrderPartDeliveryForm.Normal; // Hình thức đặt
+    public string DeliveryLocation { get; set; } = "Kho phụ tùng chính"; // Địa điểm nhận hàng
+    public DateTime? EstimatedDeliverDate { get; set; }       // Ngày giao hàng dự kiến
+    public string? VIN { get; set; }                          // Số khung xe (bắt buộc nếu bảo hành)
+    public int? ROId { get; set; }                            // Lệnh sửa chữa gắn liền nếu đặt cho xe chờ phụ tùng (Wait4Part)
+    public OrderPartStatus Status { get; set; } = OrderPartStatus.Pending; // Trạng thái đơn hàng (P/A/F/R)
+    public string? OrderSuppierNo { get; set; }               // Số đơn hàng phía NCC xác nhận
+    public DateTime? RequestSuppierDate { get; set; }         // Ngày gửi đơn cho NCC
+    public DateTime? ResponseSuppierDate { get; set; }        // Ngày NCC phản hồi xác nhận
+    public string? Remark { get; set; }                       // Ghi chú / Điều khoản giao nhận
+    public int? StockInId { get; set; }                       // Phiếu nhập kho đã sinh khi nhận hàng (Finished)
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ApprovedAt { get; set; }                 // Ngày duyệt đơn hàng
+    public DateTime? FinishedAt { get; set; }                 // Ngày hoàn tất nhập kho
+
+    public RepairOrder? RO { get; set; }
+    public StockIn? StockIn { get; set; }
+    public List<OrderPartLine> Lines { get; set; } = [];
+
+    public decimal SubTotalBeforeDiscount => Lines.Sum(l => l.SubTotalBeforeDiscount);
+    public decimal TotalDiscount => Lines.Sum(l => l.DiscountAmount);
+    public decimal TaxableAmount => Lines.Sum(l => l.TaxableAmount);
+    public decimal TotalVat => Lines.Sum(l => l.VatAmount);
+    public decimal Total => Lines.Sum(l => l.Amount);
+    public decimal TotalQuantityOrdered => Lines.Sum(l => l.Quantity);
+    public decimal TotalQuantityApproved => Lines.Sum(l => l.ApprovedQuantity);
+    public decimal TotalQuantityReceived => Lines.Sum(l => l.ReceivedQuantity);
+    public int ItemCount => Lines.Count;
+}
+
+/// <summary>Chi tiết dòng phụ tùng đặt hàng NCC — Ser_Order_PartDtl trong idn.CarService.</summary>
+public class OrderPartLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int OrderPartId { get; set; }
+    public string OrderPartNo { get; set; } = "";
+    public int PartId { get; set; }                           // Phụ tùng trong danh mục
+    public string PartCode { get; set; } = "";                // Mã phụ tùng (PartCode)
+    public string PartName { get; set; } = "";                // Tên phụ tùng (VieName)
+    public string Unit { get; set; } = "Cái";                 // Đơn vị tính (Unit)
+    public decimal Quantity { get; set; } = 1;                // Số lượng đặt (QtyOrd)
+    public decimal UnitPrice { get; set; }                    // Đơn giá trước chiết khấu (Price / UPBeforeDc)
+    public decimal DiscountRate { get; set; } = 0;            // % Chiết khấu dòng (DiscountRate)
+    public decimal VatPercent { get; set; } = 8;              // % Thuế suất VAT (VAT)
+    public decimal ApprovedQuantity { get; set; } = 1;        // Số lượng duyệt cung cấp (QtyAppr)
+    public decimal ReceivedQuantity { get; set; } = 0;        // Số lượng thực tế đã nhập kho
+    public OrderPartStatus StatusDtl { get; set; } = OrderPartStatus.Pending; // Trạng thái dòng
+    public string? Note { get; set; }                         // Ghi chú dòng (Remark)
+
+    public OrderPart OrderPart { get; set; } = null!;
+    public Part Part { get; set; } = null!;
+
+    public decimal SubTotalBeforeDiscount => Quantity * UnitPrice;
+    public decimal DiscountAmount => Math.Round(SubTotalBeforeDiscount * (DiscountRate / 100m), 2);
+    public decimal TaxableAmount => SubTotalBeforeDiscount - DiscountAmount;
+    public decimal VatAmount => Math.Round(TaxableAmount * (VatPercent / 100m), 2);
+    public decimal Amount => TaxableAmount + VatAmount;
 }
 

@@ -13,6 +13,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingPayments, decimal MonthPaymentRevenue,
     int PendingQuotes, decimal MonthQuoteValue,
     int ServicePackages,
+    int PendingOrderParts, decimal MonthOrderPartValue,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -95,6 +96,14 @@ public interface IRoService
     Task<List<ServicePackage>> ServicePackagesForSelectAsync();
     Task<(bool ok, string msg, int itemsAdded)> ApplyServicePackageToROAsync(int packageId, int roId);
     Task<(bool ok, string msg, int itemsAdded)> ApplyServicePackageToQuoteAsync(int packageId, int quoteId);
+    // order parts (Ser_Order_Part)
+    Task<List<OrderPart>> OrderPartsAsync(OrderPartStatus? status, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<OrderPart?> GetOrderPartAsync(int id);
+    Task<int> CreateOrderPartAsync(OrderPart order, List<OrderPartLine> lines);
+    Task<(bool ok, string msg)> TransitionOrderPartStatusAsync(int id, OrderPartStatus to, string? supplierOrderNo = null, string? note = null);
+    Task<(bool ok, string msg, int? stockInId)> CreateStockInFromOrderPartAsync(int id, string? approvedBy = null);
+    Task<(bool ok, string msg)> DeleteOrderPartAsync(int id);
+    Task<List<RepairOrder>> ROsWaitingForPartAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -165,6 +174,14 @@ public class RoService(AppDbContext db) : IRoService
         QuoteStatus.Draft => [QuoteStatus.Sent, QuoteStatus.Confirmed, QuoteStatus.Rejected],
         QuoteStatus.Sent => [QuoteStatus.Confirmed, QuoteStatus.Rejected],
         QuoteStatus.Confirmed => [QuoteStatus.Converted, QuoteStatus.Rejected],
+        _ => []
+    };
+
+    /// <summary>Chuyển trạng thái Đơn đặt hàng phụ tùng theo OrderPartStatus (P, A, F, R) idn.CarService.</summary>
+    public static OrderPartStatus[] AllowedNextOrderPart(OrderPartStatus s) => s switch
+    {
+        OrderPartStatus.Pending => [OrderPartStatus.Approved, OrderPartStatus.Rejected],
+        OrderPartStatus.Approved => [OrderPartStatus.Finished, OrderPartStatus.Rejected],
         _ => []
     };
 
@@ -243,7 +260,7 @@ public class RoService(AppDbContext db) : IRoService
 
     public Task<RepairOrder?> GetROAsync(int id) =>
         db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer).Include(r => r.Lines).Include(r => r.Appointment)
-          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares).Include(r => r.Payments)
+          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -397,6 +414,12 @@ public class RoService(AppDbContext db) : IRoService
         var monthQuoteValue = monthQuotes.Sum(q => q.Total);
         var totalServicePackages = await db.ServicePackages.CountAsync();
 
+        var pendingOrderParts = await db.OrderParts.CountAsync(o => o.Status == OrderPartStatus.Pending || o.Status == OrderPartStatus.Approved);
+        var monthOrderPartItems = await db.OrderParts.Include(o => o.Lines)
+            .Where(o => (o.Status == OrderPartStatus.Approved || o.Status == OrderPartStatus.Finished) && o.OrderDate >= monthStart)
+            .ToListAsync();
+        var monthOrderPartValue = monthOrderPartItems.Sum(o => o.Total);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -420,6 +443,8 @@ public class RoService(AppDbContext db) : IRoService
             pendingQuotes,
             monthQuoteValue,
             totalServicePackages,
+            pendingOrderParts,
+            monthOrderPartValue,
             byStatus);
     }
 
@@ -1637,4 +1662,220 @@ public class RoService(AppDbContext db) : IRoService
         await db.SaveChangesAsync();
         return (true, $"Đã nạp gói '{package.PackageNo} - {package.Name}' ({count} hạng mục) vào Báo giá {quote.QuoteNo}.", count);
     }
+
+    // --- Order Part Management (Ser_Order_Part & Ser_Order_PartDtl) ---
+    public async Task<List<OrderPart>> OrderPartsAsync(OrderPartStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.OrderParts
+            .Include(o => o.Lines).ThenInclude(l => l.Part)
+            .Include(o => o.RO).ThenInclude(r => r!.Car)
+            .Include(o => o.StockIn)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(o => o.Status == status.Value);
+        if (fromDate.HasValue) query = query.Where(o => o.OrderDate.Date >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(o => o.OrderDate.Date <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(o => o.OrderPartNo.ToLower().Contains(kw)
+                || o.SupplierName.ToLower().Contains(kw)
+                || (o.OrderSuppierNo != null && o.OrderSuppierNo.ToLower().Contains(kw))
+                || (o.VIN != null && o.VIN.ToLower().Contains(kw))
+                || (o.RO != null && o.RO.Code.ToLower().Contains(kw))
+                || (o.Remark != null && o.Remark.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(o => o.OrderDate).ThenByDescending(o => o.CreatedAt).ToList();
+    }
+
+    public Task<OrderPart?> GetOrderPartAsync(int id) =>
+        db.OrderParts
+            .Include(o => o.Lines).ThenInclude(l => l.Part)
+            .Include(o => o.RO).ThenInclude(r => r!.Car)
+            .Include(o => o.RO).ThenInclude(r => r!.Customer)
+            .Include(o => o.StockIn)
+            .FirstOrDefaultAsync(o => o.Id == id);
+
+    public async Task<int> CreateOrderPartAsync(OrderPart order, List<OrderPartLine> lines)
+    {
+        if (string.IsNullOrWhiteSpace(order.OrderPartNo))
+        {
+            order.OrderPartNo = $"PO{DateTime.Now:yyMMdd}-{await db.OrderParts.CountAsync() + 1:D3}";
+        }
+
+        if (order.DeliveryForm == OrderPartDeliveryForm.Warranty && string.IsNullOrWhiteSpace(order.VIN))
+        {
+            throw new InvalidOperationException("Đơn đặt hàng theo chế độ Bảo hành bắt buộc phải có số khung (VIN) xe.");
+        }
+
+        order.CreatedAt = DateTime.Now;
+
+        foreach (var line in lines)
+        {
+            line.OrderPartNo = order.OrderPartNo;
+            var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == line.PartId)
+                ?? throw new InvalidOperationException($"Phụ tùng ID={line.PartId} không tồn tại.");
+
+            line.PartCode = part.Code;
+            line.PartName = part.Name;
+            line.Unit = string.IsNullOrWhiteSpace(line.Unit) ? part.Unit : line.Unit;
+            if (line.UnitPrice <= 0) line.UnitPrice = part.CostPrice > 0 ? part.CostPrice : part.SalePrice;
+            if (line.ApprovedQuantity <= 0) line.ApprovedQuantity = line.Quantity;
+            line.StatusDtl = OrderPartStatus.Pending;
+
+            order.Lines.Add(line);
+        }
+
+        db.OrderParts.Add(order);
+        await db.SaveChangesAsync();
+        return order.Id;
+    }
+
+    public async Task<(bool ok, string msg)> TransitionOrderPartStatusAsync(int id, OrderPartStatus to, string? supplierOrderNo = null, string? note = null)
+    {
+        var order = await db.OrderParts.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == id);
+        if (order == null) return (false, "Không tìm thấy đơn đặt hàng.");
+
+        if (!AllowedNextOrderPart(order.Status).Contains(to))
+            return (false, $"Không thể chuyển từ '{Ui.OrderPartStatus(order.Status).text}' sang '{Ui.OrderPartStatus(to).text}'.");
+
+        order.Status = to;
+        if (to == OrderPartStatus.Approved)
+        {
+            order.ApprovedAt = DateTime.Now;
+            if (!string.IsNullOrWhiteSpace(supplierOrderNo))
+                order.OrderSuppierNo = supplierOrderNo.Trim();
+            if (!string.IsNullOrWhiteSpace(note))
+                order.Remark = (order.Remark != null ? order.Remark + "\n" : "") + $"Duyệt: {note.Trim()}";
+            foreach (var l in order.Lines)
+            {
+                l.StatusDtl = OrderPartStatus.Approved;
+            }
+        }
+        else if (to == OrderPartStatus.Rejected)
+        {
+            if (!string.IsNullOrWhiteSpace(note))
+                order.Remark = (order.Remark != null ? order.Remark + "\n" : "") + $"Hủy: {note.Trim()}";
+            foreach (var l in order.Lines)
+            {
+                l.StatusDtl = OrderPartStatus.Rejected;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã chuyển trạng thái đơn hàng sang: {Ui.OrderPartStatus(to).text}.");
+    }
+
+    public async Task<(bool ok, string msg, int? stockInId)> CreateStockInFromOrderPartAsync(int id, string? approvedBy = null)
+    {
+        var order = await db.OrderParts
+            .Include(o => o.Lines).ThenInclude(l => l.Part)
+            .Include(o => o.RO)
+            .FirstOrDefaultAsync(o => o.Id == id);
+
+        if (order == null) return (false, "Không tìm thấy đơn đặt hàng phụ tùng.", null);
+        if (order.Status != OrderPartStatus.Approved)
+            return (false, "Chỉ có thể tạo phiếu nhập kho cho đơn đặt hàng đã được duyệt (Approved).", null);
+
+        if (order.StockInId.HasValue)
+            return (false, "Đơn đặt hàng này đã được lập phiếu nhập kho trước đó.", order.StockInId);
+
+        var stockInNo = $"NK{DateTime.Now:yyMMdd}-{await db.StockIns.CountAsync() + 1:D3}";
+        var stockIn = new StockIn
+        {
+            StockInNo = stockInNo,
+            StockInDate = DateTime.Today,
+            SupplierName = order.SupplierName,
+            BillNo = !string.IsNullOrWhiteSpace(order.OrderSuppierNo) ? order.OrderSuppierNo : order.OrderPartNo,
+            Type = StockInType.Normal,
+            Status = StockInStatus.Finished,
+            Description = $"Nhập kho theo đơn đặt hàng NCC {order.OrderPartNo}" + (!string.IsNullOrWhiteSpace(order.Remark) ? $": {order.Remark}" : ""),
+            OrderPartId = order.Id,
+            OrderPartNo = order.OrderPartNo,
+            CreatedBy = "system",
+            ApprovedBy = string.IsNullOrWhiteSpace(approvedBy) ? "Thủ kho" : approvedBy.Trim(),
+            FinishedAt = DateTime.Now
+        };
+
+        var details = new List<StockInDetail>();
+        foreach (var line in order.Lines)
+        {
+            var qty = line.ApprovedQuantity > 0 ? line.ApprovedQuantity : line.Quantity;
+            details.Add(new StockInDetail
+            {
+                PartId = line.PartId,
+                PartCode = line.PartCode,
+                PartName = line.PartName,
+                Unit = line.Unit,
+                Quantity = qty,
+                UnitPrice = line.UnitPrice,
+                VatPercent = line.VatPercent,
+                Note = $"Từ PO {order.OrderPartNo}" + (!string.IsNullOrWhiteSpace(line.Note) ? $": {line.Note}" : "")
+            });
+
+            // Tăng tồn kho và cập nhật giá vốn
+            if (line.Part != null)
+            {
+                line.Part.InStock += qty;
+                if (line.UnitPrice > 0)
+                {
+                    line.Part.CostPrice = line.UnitPrice;
+                }
+            }
+
+            line.ReceivedQuantity = qty;
+            line.StatusDtl = OrderPartStatus.Finished;
+        }
+
+        stockIn.Items = details;
+        db.StockIns.Add(stockIn);
+        await db.SaveChangesAsync();
+
+        order.StockInId = stockIn.Id;
+        order.Status = OrderPartStatus.Finished;
+        order.FinishedAt = DateTime.Now;
+
+        // Nếu đơn hàng gắn với RO đang ở trạng thái Wait4Part (Đợi phụ tùng) -> Chuyển sang HasPart (Đã có phụ tùng)!
+        if (order.ROId.HasValue)
+        {
+            var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == order.ROId.Value);
+            if (ro != null && ro.Status == ROStatus.Wait4Part)
+            {
+                ro.Status = ROStatus.HasPart;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo phiếu nhập kho {stockIn.StockInNo} và cập nhật tồn kho phụ tùng thành công.", stockIn.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeleteOrderPartAsync(int id)
+    {
+        var order = await db.OrderParts.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == id);
+        if (order == null) return (false, "Không tìm thấy đơn đặt hàng.");
+
+        if (order.Status is not (OrderPartStatus.Pending or OrderPartStatus.Rejected))
+            return (false, "Chỉ có thể xóa đơn hàng ở trạng thái Chờ duyệt hoặc Đã hủy.");
+
+        if (order.StockInId.HasValue)
+            return (false, "Không thể xóa đơn hàng đã có phiếu nhập kho liên kết.");
+
+        db.OrderPartLines.RemoveRange(order.Lines);
+        db.OrderParts.Remove(order);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa đơn đặt hàng {order.OrderPartNo}.");
+    }
+
+    public Task<List<RepairOrder>> ROsWaitingForPartAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines)
+            .Where(r => r.Status == ROStatus.Wait4Part || r.Status == ROStatus.Printed || r.Status == ROStatus.HasRO)
+            .OrderByDescending(r => r.Status == ROStatus.Wait4Part)
+            .ThenByDescending(r => r.CreatedAt)
+            .ToListAsync();
 }
