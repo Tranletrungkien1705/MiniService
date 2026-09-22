@@ -1677,6 +1677,236 @@ public class AssignmentWorkController(IRoService svc) : Controller
     }
 }
 
+public class InsuranceController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(InsuranceClaimStatus? status, string? q, int? companyId)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.CompanyId = companyId;
+        ViewBag.Companies = await svc.InsuranceCompaniesForSelectAsync();
+
+        var claims = await svc.InsuranceClaimsAsync(status, q, null, companyId);
+        var allClaims = await svc.InsuranceClaimsAsync(null, null, null, null);
+
+        ViewBag.TotalCount = allClaims.Count;
+        ViewBag.PendingCount = allClaims.Count(c => c.Status == InsuranceClaimStatus.Draft || c.Status == InsuranceClaimStatus.Submitted);
+        ViewBag.ApprovedCount = allClaims.Count(c => c.Status == InsuranceClaimStatus.Approved);
+        ViewBag.SettledCount = allClaims.Count(c => c.Status == InsuranceClaimStatus.Settled);
+        ViewBag.TotalInsuranceAmount = allClaims.Where(c => c.Status == InsuranceClaimStatus.Approved || c.Status == InsuranceClaimStatus.Settled)
+            .Sum(c => c.InsuranceAmount);
+
+        return View(claims);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.ROs = await svc.ROsEligibleForInsuranceAsync();
+        ViewBag.Companies = await svc.InsuranceCompaniesForSelectAsync();
+        ViewBag.Contracts = await svc.InsuranceContractsForSelectAsync();
+
+        RepairOrder? ro = null;
+        if (roId.HasValue && roId.Value > 0)
+        {
+            ro = await svc.GetROAsync(roId.Value);
+        }
+        ViewBag.SelectedRO = ro;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        int roId, int companyId, int? contractId, string policyNo, string? claimFileNo,
+        string? surveyorName, string? surveyorPhone, DateTime accidentDate, string? accidentLocation,
+        string? accidentDescription, decimal deductibleAmount, decimal penaltyAmount, string? createdBy,
+        int[]? lineTypes, string[]? itemCodes, string[]? itemNames, decimal[]? itemQtys, decimal[]? itemPrices,
+        decimal[]? itemEstAmounts, decimal[]? itemAppAmounts, string[]? itemNotes)
+    {
+        if (roId <= 0 || companyId <= 0 || string.IsNullOrWhiteSpace(policyNo))
+        {
+            TempData["Error"] = "Vui lòng chọn Lệnh sửa chữa RO, Hãng bảo hiểm và nhập Số đơn bảo hiểm.";
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+
+        try
+        {
+            var items = new List<InsuranceClaimItem>();
+            if (itemCodes != null && itemCodes.Length > 0)
+            {
+                for (int i = 0; i < itemCodes.Length; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(itemNames?[i])) continue;
+                    var type = (lineTypes != null && i < lineTypes.Length && lineTypes[i] == 1) ? LineType.Part : LineType.Labor;
+                    var qty = (itemQtys != null && i < itemQtys.Length) ? itemQtys[i] : 1;
+                    var price = (itemPrices != null && i < itemPrices.Length) ? itemPrices[i] : 0;
+                    var est = (itemEstAmounts != null && i < itemEstAmounts.Length && itemEstAmounts[i] > 0) ? itemEstAmounts[i] : (qty * price);
+                    var app = (itemAppAmounts != null && i < itemAppAmounts.Length && itemAppAmounts[i] > 0) ? itemAppAmounts[i] : est;
+                    var note = (itemNotes != null && i < itemNotes.Length) ? itemNotes[i] : null;
+
+                    items.Add(new InsuranceClaimItem
+                    {
+                        Type = type,
+                        Code = itemCodes[i].Trim(),
+                        Name = itemNames[i].Trim(),
+                        Quantity = qty,
+                        UnitPrice = price,
+                        EstimatedAmount = est,
+                        ApprovedAmount = app,
+                        IsApproved = true,
+                        Note = note
+                    });
+                }
+            }
+
+            int claimId;
+            if (items.Count > 0)
+            {
+                var claim = new InsuranceClaim
+                {
+                    ROId = roId,
+                    InsuranceCompanyId = companyId,
+                    InsuranceContractId = (contractId.HasValue && contractId.Value > 0) ? contractId.Value : null,
+                    PolicyNo = policyNo.Trim(),
+                    ClaimFileNo = claimFileNo?.Trim(),
+                    SurveyorName = surveyorName?.Trim(),
+                    SurveyorPhone = surveyorPhone?.Trim(),
+                    AccidentDate = accidentDate != default ? accidentDate : DateTime.Today,
+                    AccidentLocation = accidentLocation?.Trim(),
+                    AccidentDescription = accidentDescription?.Trim() ?? "Tổn thất thân vỏ xe",
+                    DeductibleAmount = deductibleAmount,
+                    PenaltyAmount = penaltyAmount,
+                    CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Cố vấn dịch vụ" : createdBy.Trim(),
+                    Status = InsuranceClaimStatus.Draft
+                };
+                claimId = await svc.CreateInsuranceClaimAsync(claim, items);
+            }
+            else
+            {
+                claimId = await svc.CreateInsuranceClaimFromROAsync(
+                    roId, companyId, contractId, policyNo, claimFileNo, surveyorName, surveyorPhone,
+                    accidentDescription ?? "", deductibleAmount, penaltyAmount, createdBy ?? "Cố vấn dịch vụ");
+            }
+
+            TempData["Success"] = "Đã lập Hồ sơ bồi thường bảo hiểm thành công.";
+            return RedirectToAction(nameof(Detail), new { id = claimId });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var claim = await svc.GetInsuranceClaimAsync(id);
+        if (claim == null) return NotFound();
+
+        ViewBag.AllowedNext = RoService.AllowedInsuranceNext(claim.Status);
+        return View(claim);
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var claim = await svc.GetInsuranceClaimAsync(id);
+        if (claim == null) return NotFound();
+        return View(claim);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, InsuranceClaimStatus toStatus, decimal? approvedAmount, string? note)
+    {
+        var (ok, msg) = await svc.TransitionInsuranceClaimAsync(id, toStatus, approvedAmount, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteInsuranceClaimAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Companies(string? q)
+    {
+        ViewBag.Q = q;
+        var companies = await svc.InsuranceCompaniesAsync(q);
+        ViewBag.Contracts = await svc.InsuranceContractsAsync(null, null);
+        return View(companies);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateCompany(string? insNo, string insName, string? phone, string? email, string? address, string? taxCode, string? hotline)
+    {
+        if (string.IsNullOrWhiteSpace(insName))
+        {
+            TempData["Error"] = "Vui lòng nhập tên công ty bảo hiểm.";
+            return RedirectToAction(nameof(Companies));
+        }
+
+        try
+        {
+            var c = new InsuranceCompany
+            {
+                InsNo = insNo?.Trim() ?? "",
+                InsName = insName.Trim(),
+                Phone = phone?.Trim(),
+                Email = email?.Trim(),
+                Address = address?.Trim(),
+                TaxCode = taxCode?.Trim(),
+                Hotline = hotline?.Trim(),
+                IsActive = true
+            };
+            await svc.CreateInsuranceCompanyAsync(c);
+            TempData["Success"] = $"Đã thêm hãng bảo hiểm '{c.InsName}'.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Companies));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateContract(string? contractNo, string? contractCode, int companyId, DateTime startDate, DateTime finishDate, InsurancePaymentType paymentType, decimal paymentLimit, decimal discountLaborRate, decimal discountPartRate, string? note)
+    {
+        if (companyId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn hãng bảo hiểm ký hợp đồng.";
+            return RedirectToAction(nameof(Companies));
+        }
+
+        try
+        {
+            var ct = new InsuranceContract
+            {
+                ContractNo = contractNo?.Trim() ?? "",
+                ContractCode = contractCode?.Trim() ?? "",
+                InsuranceCompanyId = companyId,
+                StartDate = startDate != default ? startDate : DateTime.Today,
+                FinishDate = finishDate != default ? finishDate : DateTime.Today.AddYears(1),
+                PaymentType = paymentType,
+                PaymentLimit = paymentLimit > 0 ? paymentLimit : 500_000_000m,
+                DiscountLaborRate = discountLaborRate,
+                DiscountPartRate = discountPartRate,
+                Note = note?.Trim(),
+                IsActive = true
+            };
+            await svc.CreateInsuranceContractAsync(ct);
+            TempData["Success"] = $"Đã tạo hợp đồng bảo hiểm '{ct.ContractNo}'.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Companies));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

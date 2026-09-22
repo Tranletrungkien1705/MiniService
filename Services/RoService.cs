@@ -17,6 +17,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int TotalCavities, int OccupiedCavities, int AvailableCavities,
     int PendingReceptions, int TodayReceptions,
     int ActiveAssignments, int TotalEngineers, int TotalGroups,
+    int PendingInsuranceClaims, decimal ApprovedInsuranceAmount,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -148,6 +149,22 @@ public interface IRoService
     Task<(bool ok, string msg)> CancelAssignmentWorkAsync(int id, string? reason = null);
     Task<(bool ok, string msg)> DeleteAssignmentWorkAsync(int id);
     Task<List<RepairOrder>> ROsEligibleForAssignmentAsync();
+    // insurance management (Ser_Insurance, Ser_InsuranceContract, Ser_InsuranceDebit)
+    Task<List<InsuranceCompany>> InsuranceCompaniesAsync(string? q, bool? isActive = null);
+    Task<InsuranceCompany?> GetInsuranceCompanyAsync(int id);
+    Task<int> CreateInsuranceCompanyAsync(InsuranceCompany c);
+    Task<List<InsuranceCompany>> InsuranceCompaniesForSelectAsync();
+    Task<List<InsuranceContract>> InsuranceContractsAsync(int? companyId = null, bool? activeOnly = null);
+    Task<InsuranceContract?> GetInsuranceContractAsync(int id);
+    Task<int> CreateInsuranceContractAsync(InsuranceContract c);
+    Task<List<InsuranceContract>> InsuranceContractsForSelectAsync(int? companyId = null);
+    Task<List<InsuranceClaim>> InsuranceClaimsAsync(InsuranceClaimStatus? status = null, string? q = null, int? roId = null, int? companyId = null);
+    Task<InsuranceClaim?> GetInsuranceClaimAsync(int id);
+    Task<int> CreateInsuranceClaimAsync(InsuranceClaim claim, List<InsuranceClaimItem>? items = null);
+    Task<int> CreateInsuranceClaimFromROAsync(int roId, int companyId, int? contractId, string policyNo, string? claimFileNo, string? surveyorName, string? surveyorPhone, string accidentDesc, decimal deductibleAmount, decimal penaltyAmount, string createdBy);
+    Task<(bool ok, string msg)> TransitionInsuranceClaimAsync(int id, InsuranceClaimStatus toStatus, decimal? approvedAmount = null, string? note = null);
+    Task<(bool ok, string msg)> DeleteInsuranceClaimAsync(int id);
+    Task<List<RepairOrder>> ROsEligibleForInsuranceAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -322,6 +339,7 @@ public class RoService(AppDbContext db) : IRoService
         db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer).Include(r => r.Lines).Include(r => r.Appointment)
           .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet)
           .Include(r => r.AssignmentWorks).ThenInclude(a => a.Engineers).ThenInclude(e => e.Engineer)
+          .Include(r => r.InsuranceClaims).ThenInclude(c => c.InsuranceCompany)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -492,6 +510,12 @@ public class RoService(AppDbContext db) : IRoService
         var totalEngineers = await db.Engineers.CountAsync(e => e.IsActive);
         var totalGroups = await db.GroupRepairs.CountAsync(g => g.IsActive);
 
+        var pendingInsuranceClaims = await db.InsuranceClaims.CountAsync(c =>
+            c.Status == InsuranceClaimStatus.Draft || c.Status == InsuranceClaimStatus.Submitted);
+        var approvedInsuranceClaims = await db.InsuranceClaims.Where(c => c.Status == InsuranceClaimStatus.Approved || c.Status == InsuranceClaimStatus.Settled)
+            .Select(c => (decimal?)c.ApprovedAmount).ToListAsync();
+        var approvedInsuranceAmount = approvedInsuranceClaims.Sum() ?? 0;
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -525,6 +549,8 @@ public class RoService(AppDbContext db) : IRoService
             activeAssignments,
             totalEngineers,
             totalGroups,
+            pendingInsuranceClaims,
+            approvedInsuranceAmount,
             byStatus);
     }
 
@@ -2862,5 +2888,255 @@ public class RoService(AppDbContext db) : IRoService
             .Where(r => r.Status == ROStatus.HasRO || r.Status == ROStatus.InGarage)
             .OrderByDescending(r => r.Status == ROStatus.HasRO)
             .ThenByDescending(r => r.CreatedAt)
+            .ToListAsync();
+
+    // =========================================================================
+    // QUẢN LÝ BẢO HIỂM XE & HỒ SƠ BỒI THƯỜNG (Ser_Insurance, Ser_InsuranceContract, Ser_InsuranceDebit)
+    // =========================================================================
+
+    public static InsuranceClaimStatus[] AllowedInsuranceNext(InsuranceClaimStatus s) => s switch
+    {
+        InsuranceClaimStatus.Draft => [InsuranceClaimStatus.Submitted, InsuranceClaimStatus.Rejected],
+        InsuranceClaimStatus.Submitted => [InsuranceClaimStatus.Approved, InsuranceClaimStatus.Rejected, InsuranceClaimStatus.Draft],
+        InsuranceClaimStatus.Approved => [InsuranceClaimStatus.Settled, InsuranceClaimStatus.Submitted],
+        _ => []
+    };
+
+    public async Task<List<InsuranceCompany>> InsuranceCompaniesAsync(string? q, bool? isActive = null)
+    {
+        var query = db.InsuranceCompanies.Include(c => c.Contracts).Include(c => c.Claims).AsQueryable();
+        if (isActive.HasValue) query = query.Where(c => c.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(c => c.InsNo.ToLower().Contains(s) || c.InsName.ToLower().Contains(s) || (c.Phone != null && c.Phone.Contains(s)));
+        }
+        return await query.OrderBy(c => c.InsNo).ToListAsync();
+    }
+
+    public Task<InsuranceCompany?> GetInsuranceCompanyAsync(int id) =>
+        db.InsuranceCompanies.Include(c => c.Contracts).Include(c => c.Claims).ThenInclude(cl => cl.RO).FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<int> CreateInsuranceCompanyAsync(InsuranceCompany c)
+    {
+        if (string.IsNullOrWhiteSpace(c.InsNo))
+            c.InsNo = $"BH-{(await db.InsuranceCompanies.CountAsync() + 1):D2}";
+        db.InsuranceCompanies.Add(c);
+        await db.SaveChangesAsync();
+        return c.Id;
+    }
+
+    public Task<List<InsuranceCompany>> InsuranceCompaniesForSelectAsync() =>
+        db.InsuranceCompanies.Where(c => c.IsActive).OrderBy(c => c.InsName).ToListAsync();
+
+    public async Task<List<InsuranceContract>> InsuranceContractsAsync(int? companyId = null, bool? activeOnly = null)
+    {
+        var query = db.InsuranceContracts.Include(c => c.InsuranceCompany).Include(c => c.Claims).AsQueryable();
+        if (companyId.HasValue && companyId.Value > 0)
+            query = query.Where(c => c.InsuranceCompanyId == companyId.Value);
+        if (activeOnly == true)
+            query = query.Where(c => c.IsActive && c.FinishDate >= DateTime.Today);
+        return await query.OrderByDescending(c => c.StartDate).ToListAsync();
+    }
+
+    public Task<InsuranceContract?> GetInsuranceContractAsync(int id) =>
+        db.InsuranceContracts.Include(c => c.InsuranceCompany).Include(c => c.Claims).FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<int> CreateInsuranceContractAsync(InsuranceContract c)
+    {
+        if (string.IsNullOrWhiteSpace(c.ContractNo))
+            c.ContractNo = $"HD-BH/{DateTime.Today:yyyy}/{(await db.InsuranceContracts.CountAsync() + 1):D2}";
+        if (string.IsNullOrWhiteSpace(c.ContractCode))
+            c.ContractCode = c.ContractNo;
+        db.InsuranceContracts.Add(c);
+        await db.SaveChangesAsync();
+        return c.Id;
+    }
+
+    public Task<List<InsuranceContract>> InsuranceContractsForSelectAsync(int? companyId = null)
+    {
+        var query = db.InsuranceContracts.Include(c => c.InsuranceCompany).Where(c => c.IsActive);
+        if (companyId.HasValue && companyId.Value > 0)
+            query = query.Where(c => c.InsuranceCompanyId == companyId.Value);
+        return query.OrderBy(c => c.ContractNo).ToListAsync();
+    }
+
+    public async Task<List<InsuranceClaim>> InsuranceClaimsAsync(InsuranceClaimStatus? status = null, string? q = null, int? roId = null, int? companyId = null)
+    {
+        var query = db.InsuranceClaims
+            .Include(c => c.RO).ThenInclude(r => r.Car)
+            .Include(c => c.RO).ThenInclude(r => r.Customer)
+            .Include(c => c.InsuranceCompany)
+            .Include(c => c.InsuranceContract)
+            .Include(c => c.Items)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(c => c.Status == status.Value);
+        if (roId.HasValue && roId.Value > 0) query = query.Where(c => c.ROId == roId.Value);
+        if (companyId.HasValue && companyId.Value > 0) query = query.Where(c => c.InsuranceCompanyId == companyId.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(c => c.ClaimNo.ToLower().Contains(s)
+                || c.PolicyNo.ToLower().Contains(s)
+                || (c.ClaimFileNo != null && c.ClaimFileNo.ToLower().Contains(s))
+                || c.RO.Code.ToLower().Contains(s)
+                || c.RO.Car.Plate.ToLower().Contains(s));
+        }
+
+        return await query.OrderByDescending(c => c.CreatedAt).ToListAsync();
+    }
+
+    public Task<InsuranceClaim?> GetInsuranceClaimAsync(int id) =>
+        db.InsuranceClaims
+            .Include(c => c.RO).ThenInclude(r => r.Car)
+            .Include(c => c.RO).ThenInclude(r => r.Customer)
+            .Include(c => c.RO).ThenInclude(r => r.Lines)
+            .Include(c => c.InsuranceCompany)
+            .Include(c => c.InsuranceContract)
+            .Include(c => c.Items)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<int> CreateInsuranceClaimAsync(InsuranceClaim claim, List<InsuranceClaimItem>? items = null)
+    {
+        if (string.IsNullOrWhiteSpace(claim.ClaimNo))
+            claim.ClaimNo = $"BH{DateTime.Now:yyMMdd}-{(await db.InsuranceClaims.CountAsync() + 1):D3}";
+
+        claim.CreatedAt = DateTime.Now;
+        if (items != null && items.Count > 0)
+        {
+            claim.Items = items;
+            claim.EstimatedAmount = items.Sum(i => i.EstimatedAmount > 0 ? i.EstimatedAmount : (i.Quantity * i.UnitPrice));
+            if (claim.ApprovedAmount <= 0)
+                claim.ApprovedAmount = items.Where(i => i.IsApproved).Sum(i => i.ApprovedAmount > 0 ? i.ApprovedAmount : (i.Quantity * i.UnitPrice));
+        }
+
+        claim.InsuranceAmount = Math.Max(0, claim.ApprovedAmount - claim.DeductibleAmount - claim.PenaltyAmount);
+        claim.CustomerAmount = claim.DeductibleAmount + claim.PenaltyAmount + Math.Max(0, claim.EstimatedAmount - claim.ApprovedAmount);
+
+        db.InsuranceClaims.Add(claim);
+        await db.SaveChangesAsync();
+        return claim.Id;
+    }
+
+    public async Task<int> CreateInsuranceClaimFromROAsync(int roId, int companyId, int? contractId, string policyNo, string? claimFileNo, string? surveyorName, string? surveyorPhone, string accidentDesc, decimal deductibleAmount, decimal penaltyAmount, string createdBy)
+    {
+        var ro = await db.ROs.Include(r => r.Lines).Include(r => r.Car).FirstOrDefaultAsync(r => r.Id == roId)
+            ?? throw new InvalidOperationException("Không tìm thấy Lệnh sửa chữa RO.");
+
+        var count = await db.InsuranceClaims.CountAsync() + 1;
+        var claimNo = $"BH{DateTime.Now:yyMMdd}-{count:D3}";
+
+        var claim = new InsuranceClaim
+        {
+            ClaimNo = claimNo,
+            ROId = roId,
+            InsuranceCompanyId = companyId,
+            InsuranceContractId = (contractId.HasValue && contractId.Value > 0) ? contractId.Value : null,
+            PolicyNo = policyNo.Trim(),
+            ClaimFileNo = claimFileNo?.Trim(),
+            SurveyorName = surveyorName?.Trim(),
+            SurveyorPhone = surveyorPhone?.Trim(),
+            AccidentDate = DateTime.Today,
+            AccidentDescription = string.IsNullOrWhiteSpace(accidentDesc) ? (ro.IntakeNote ?? "Tổn thất thân vỏ xe") : accidentDesc.Trim(),
+            DeductibleAmount = deductibleAmount,
+            PenaltyAmount = penaltyAmount,
+            CreatedBy = createdBy,
+            CreatedAt = DateTime.Now,
+            Status = InsuranceClaimStatus.Draft
+        };
+
+        // Sao chép các hạng mục từ RO Lines (ưu tiên các dòng có ExpenseType = Insurance hoặc lấy tất cả nếu chưa phân loại)
+        var linesToCopy = ro.Lines.Where(l => l.ExpenseType == ExpenseType.Insurance).ToList();
+        if (linesToCopy.Count == 0) linesToCopy = ro.Lines.ToList();
+
+        foreach (var l in linesToCopy)
+        {
+            claim.Items.Add(new InsuranceClaimItem
+            {
+                Type = l.Type,
+                Code = l.PartId.HasValue ? $"PT-{l.PartId}" : "CV-BH",
+                Name = l.Name,
+                Quantity = l.Quantity,
+                UnitPrice = l.UnitPrice,
+                EstimatedAmount = l.Amount,
+                ApprovedAmount = l.Amount,
+                IsApproved = true
+            });
+            l.ExpenseType = ExpenseType.Insurance;
+        }
+
+        claim.EstimatedAmount = claim.Items.Sum(i => i.EstimatedAmount);
+        claim.ApprovedAmount = claim.Items.Sum(i => i.ApprovedAmount);
+        claim.InsuranceAmount = Math.Max(0, claim.ApprovedAmount - claim.DeductibleAmount - claim.PenaltyAmount);
+        claim.CustomerAmount = claim.DeductibleAmount + claim.PenaltyAmount + Math.Max(0, claim.EstimatedAmount - claim.ApprovedAmount);
+
+        db.InsuranceClaims.Add(claim);
+        await db.SaveChangesAsync();
+        return claim.Id;
+    }
+
+    public async Task<(bool ok, string msg)> TransitionInsuranceClaimAsync(int id, InsuranceClaimStatus toStatus, decimal? approvedAmount = null, string? note = null)
+    {
+        var claim = await db.InsuranceClaims.Include(c => c.Items).Include(c => c.RO).FirstOrDefaultAsync(c => c.Id == id);
+        if (claim == null) return (false, "Không tìm thấy hồ sơ bảo hiểm.");
+
+        var allowed = AllowedInsuranceNext(claim.Status);
+        if (!allowed.Contains(toStatus))
+            return (false, $"Không thể chuyển từ '{Ui.InsuranceClaimStatus(claim.Status).text}' sang '{Ui.InsuranceClaimStatus(toStatus).text}'.");
+
+        claim.Status = toStatus;
+        if (!string.IsNullOrWhiteSpace(note))
+        {
+            if (toStatus == InsuranceClaimStatus.Rejected)
+                claim.RejectionReason = note.Trim();
+            else
+                claim.DecisionNote = note.Trim();
+        }
+
+        if (toStatus == InsuranceClaimStatus.Submitted)
+        {
+            claim.SubmittedAt = DateTime.Now;
+        }
+        else if (toStatus == InsuranceClaimStatus.Approved)
+        {
+            claim.ApprovedAt = DateTime.Now;
+            if (approvedAmount.HasValue && approvedAmount.Value > 0)
+            {
+                claim.ApprovedAmount = approvedAmount.Value;
+            }
+            claim.InsuranceAmount = Math.Max(0, claim.ApprovedAmount - claim.DeductibleAmount - claim.PenaltyAmount);
+            claim.CustomerAmount = claim.DeductibleAmount + claim.PenaltyAmount + Math.Max(0, claim.EstimatedAmount - claim.ApprovedAmount);
+        }
+        else if (toStatus == InsuranceClaimStatus.Settled)
+        {
+            claim.SettledAt = DateTime.Now;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trạng thái hồ sơ bồi thường sang: '{Ui.InsuranceClaimStatus(toStatus).text}'.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteInsuranceClaimAsync(int id)
+    {
+        var claim = await db.InsuranceClaims.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == id);
+        if (claim == null) return (false, "Không tìm thấy hồ sơ bảo hiểm.");
+        if (claim.Status != InsuranceClaimStatus.Draft && claim.Status != InsuranceClaimStatus.Rejected)
+            return (false, "Chỉ có thể xóa hồ sơ ở trạng thái 'Lập hồ sơ' hoặc 'Từ chối bồi thường'.");
+
+        db.InsuranceClaimItems.RemoveRange(claim.Items);
+        db.InsuranceClaims.Remove(claim);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa hồ sơ bồi thường bảo hiểm {claim.ClaimNo}.");
+    }
+
+    public Task<List<RepairOrder>> ROsEligibleForInsuranceAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines)
+            .Include(r => r.InsuranceClaims)
+            .Where(r => r.Status != ROStatus.Rejected && r.Status != ROStatus.NotResponding)
+            .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
 }

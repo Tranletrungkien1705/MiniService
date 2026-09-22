@@ -1,0 +1,134 @@
+@model List<InsuranceClaim>
+@{
+    ViewData["Title"] = "Hồ sơ bồi thường bảo hiểm (Insurance Claims)";
+    var curStatus = (InsuranceClaimStatus?)ViewBag.Status;
+    var companies = (List<InsuranceCompany>)ViewBag.Companies;
+    int? companyId = ViewBag.CompanyId;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số hồ sơ bảo hiểm</div>
+            <div class="stat-num text-primary">@ViewBag.TotalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ giám định / Thẩm định</div>
+            <div class="stat-num text-warning">@ViewBag.PendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Bảo hiểm đã bảo lãnh</div>
+            <div class="stat-num text-info">@ViewBag.ApprovedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Doanh thu bồi thường bảo lãnh</div>
+            <div class="stat-num" style="font-size:20px;color:#059669">@(((decimal)ViewBag.TotalInsuranceAmount).ToString("N0"))đ</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã hồ sơ / Số đơn BH / Biển số..." style="max-width:240px" />
+                <select name="companyId" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:200px">
+                    <option value="">— Tất cả hãng bảo hiểm —</option>
+                    @foreach (var c in companies)
+                    {
+                        <option value="@c.Id" selected="@(companyId == c.Id)">@c.InsNo — @c.InsName</option>
+                    }
+                </select>
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (InsuranceClaimStatus s in Enum.GetValues(typeof(InsuranceClaimStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.InsuranceClaimStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary"><i class="bi bi-funnel me-1"></i>Lọc</button>
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/Insurance/Companies" class="btn btn-sm btn-outline-primary"><i class="bi bi-building-gear me-1"></i>Hãng &amp; HĐ bảo hiểm</a>
+                <a href="/Insurance/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập hồ sơ bồi thường</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã hồ sơ</th>
+                        <th>Hãng bảo hiểm</th>
+                        <th>Lệnh SC (RO)</th>
+                        <th>Xe / Chủ xe</th>
+                        <th>Số đơn BH / Vụ</th>
+                        <th class="text-end">Dự toán BH</th>
+                        <th class="text-end">BH duyệt trả</th>
+                        <th class="text-end">Khách trả</th>
+                        <th>Trạng thái</th>
+                        <th>Ngày lập</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (Model.Count == 0)
+                {
+                    <tr><td colspan="11" class="text-center text-muted py-4">Chưa có hồ sơ bồi thường bảo hiểm nào.</td></tr>
+                }
+                @foreach (var c in Model)
+                {
+                    var (stTxt, stCode, stCss) = Ui.InsuranceClaimStatus(c.Status);
+                    <tr>
+                        <td>
+                            <a href="/Insurance/Detail/@c.Id" class="fw-bold text-decoration-none">@c.ClaimNo</a>
+                            @if (!string.IsNullOrWhiteSpace(c.SurveyorName))
+                            {
+                                <div class="text-muted" style="font-size:11px"><i class="bi bi-person me-1"></i>@c.SurveyorName</div>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">@c.InsuranceCompany.InsNo</span>
+                            <div class="small fw-semibold text-truncate" style="max-width:180px">@c.InsuranceCompany.InsName</div>
+                        </td>
+                        <td>
+                            <a href="/RO/Detail/@c.ROId" class="badge bg-primary-subtle text-primary border text-decoration-none">
+                                <i class="bi bi-clipboard2-pulse me-1"></i>@c.RO.Code
+                            </a>
+                        </td>
+                        <td>
+                            <div class="fw-bold">@c.RO.Car.Plate</div>
+                            <div class="text-muted small">@c.RO.Car.Model · @c.RO.Customer.Name</div>
+                        </td>
+                        <td>
+                            <span class="font-monospace small">@c.PolicyNo</span>
+                            @if (!string.IsNullOrWhiteSpace(c.ClaimFileNo))
+                            {
+                                <div class="text-muted small font-monospace">@c.ClaimFileNo</div>
+                            }
+                        </td>
+                        <td class="text-end font-monospace">@c.EstimatedAmount.ToString("N0")đ</td>
+                        <td class="text-end fw-bold font-monospace text-success">@c.InsuranceAmount.ToString("N0")đ</td>
+                        <td class="text-end font-monospace text-muted">@c.CustomerAmount.ToString("N0")đ</td>
+                        <td>
+                            <span class="badge bg-@stCss">@stCode — @stTxt</span>
+                        </td>
+                        <td class="small text-muted">@c.CreatedAt.ToString("dd/MM/yyyy")</td>
+                        <td class="text-end">
+                            <a href="/Insurance/Detail/@c.Id" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Chi tiết"><i class="bi bi-eye"></i></a>
+                            <a href="/Insurance/Print/@c.Id" class="btn btn-sm btn-outline-dark py-0 px-2" title="In hồ sơ" target="_blank"><i class="bi bi-printer"></i></a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

@@ -249,6 +249,23 @@ public static class Ui
     public static (string text, string css) PackageActive(bool isActive) =>
         isActive ? ("Đang áp dụng", "success") : ("Tạm dừng", "secondary");
 
+    public static (string text, string code, string css) InsuranceClaimStatus(InsuranceClaimStatus s) => s switch
+    {
+        Models.InsuranceClaimStatus.Draft => ("Lập hồ sơ", "DRAFT", "secondary"),
+        Models.InsuranceClaimStatus.Submitted => ("Chờ duyệt BH", "SUBMITTED", "warning"),
+        Models.InsuranceClaimStatus.Approved => ("Đã bảo lãnh", "APPROVED", "primary"),
+        Models.InsuranceClaimStatus.Settled => ("Đã quyết toán", "SETTLED", "success"),
+        Models.InsuranceClaimStatus.Rejected => ("Từ chối bồi thường", "REJECTED", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string css) InsurancePaymentType(InsurancePaymentType t) => t switch
+    {
+        Models.InsurancePaymentType.DirectGuarantee => ("Bảo lãnh trực tiếp", "success"),
+        Models.InsurancePaymentType.CustomerReimburse => ("Khách hoàn ứng", "info"),
+        _ => (t.ToString(), "secondary")
+    };
+
     public static string MoneyToWords(decimal total)
     {
         if (total <= 0) return "Không đồng";

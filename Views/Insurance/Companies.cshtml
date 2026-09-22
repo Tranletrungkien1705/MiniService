@@ -1,0 +1,294 @@
+@model List<InsuranceCompany>
+@{
+    ViewData["Title"] = "Hãng bảo hiểm & Hợp đồng liên kết (Insurance Partners)";
+    var contracts = (List<InsuranceContract>)ViewBag.Contracts;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h5 class="fw-bold mb-1"><i class="bi bi-building-gear text-primary me-2"></i>Hãng bảo hiểm &amp; Hợp đồng liên kết xưởng</h5>
+        <div class="text-muted small">Quản lý đối tác bảo hiểm, biểu phí chiết khấu và hợp đồng bảo lãnh bồi thường</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Insurance" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Hồ sơ bồi thường</a>
+        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#addCompanyModal">
+            <i class="bi bi-building-add me-1"></i>Thêm Hãng BH
+        </button>
+        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addContractModal">
+            <i class="bi bi-file-earmark-plus me-1"></i>Thêm Hợp đồng
+        </button>
+    </div>
+</div>
+
+<!-- Tab danh mục Hãng BH vs Hợp đồng -->
+<ul class="nav nav-tabs mb-3" id="insTab" role="tablist">
+    <li class="nav-item">
+        <button class="nav-link active fw-semibold" id="companies-tab" data-bs-toggle="tab" data-bs-target="#companies-pane" type="button">
+            <i class="bi bi-building me-1"></i>Danh sách Hãng bảo hiểm (@Model.Count)
+        </button>
+    </li>
+    <li class="nav-item">
+        <button class="nav-link fw-semibold" id="contracts-tab" data-bs-toggle="tab" data-bs-target="#contracts-pane" type="button">
+            <i class="bi bi-file-earmark-text me-1"></i>Hợp đồng liên kết bảo hiểm (@contracts.Count)
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="insTabContent">
+    <!-- Pane 1: Danh sách Hãng bảo hiểm -->
+    <div class="tab-pane fade show active" id="companies-pane" role="tabpanel">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Mã BH</th>
+                                <th>Tên hãng bảo hiểm</th>
+                                <th>Hotline / Điện thoại</th>
+                                <th>Email bồi thường</th>
+                                <th>Mã số thuế</th>
+                                <th>Địa chỉ</th>
+                                <th class="text-center">Số HĐ</th>
+                                <th class="text-center">Số vụ BH</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.Count == 0)
+                            {
+                                <tr><td colspan="9" class="text-center text-muted py-4">Chưa có hãng bảo hiểm nào.</td></tr>
+                            }
+                            @foreach (var c in Model)
+                            {
+                                <tr>
+                                    <td><span class="badge bg-light text-dark border font-monospace">@c.InsNo</span></td>
+                                    <td>
+                                        <div class="fw-bold">@c.InsName</div>
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrWhiteSpace(c.Hotline))
+                                        {
+                                            <div class="fw-semibold text-danger"><i class="bi bi-headset me-1"></i>@c.Hotline</div>
+                                        }
+                                        <div class="small text-muted">@c.Phone</div>
+                                    </td>
+                                    <td><div class="small font-monospace">@(c.Email ?? "—")</div></td>
+                                    <td><span class="font-monospace small">@(c.TaxCode ?? "—")</span></td>
+                                    <td class="small text-muted" style="max-width:220px">@(c.Address ?? "—")</td>
+                                    <td class="text-center"><span class="badge bg-primary-subtle text-primary">@c.Contracts.Count</span></td>
+                                    <td class="text-center"><span class="badge bg-info-subtle text-info">@c.Claims.Count</span></td>
+                                    <td>
+                                        @if (c.IsActive)
+                                        {
+                                            <span class="badge bg-success">Đang hợp tác</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Tạm ngừng</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pane 2: Danh sách Hợp đồng liên kết -->
+    <div class="tab-pane fade" id="contracts-pane" role="tabpanel">
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Số Hợp đồng</th>
+                                <th>Hãng bảo hiểm</th>
+                                <th>Hiệu lực</th>
+                                <th>Hình thức TT</th>
+                                <th class="text-end">Hạn mức bảo lãnh</th>
+                                <th class="text-center">CK Công</th>
+                                <th class="text-center">CK Phụ tùng</th>
+                                <th>Ghi chú điều khoản</th>
+                                <th>Trạng thái</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (contracts.Count == 0)
+                            {
+                                <tr><td colspan="9" class="text-center text-muted py-4">Chưa có hợp đồng bảo hiểm nào.</td></tr>
+                            }
+                            @foreach (var ct in contracts)
+                            {
+                                var (pTxt, pCss) = Ui.InsurancePaymentType(ct.PaymentType);
+                                <tr>
+                                    <td>
+                                        <div class="fw-bold font-monospace">@ct.ContractNo</div>
+                                        <div class="text-muted small">@ct.ContractCode</div>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-light text-dark border">@ct.InsuranceCompany.InsNo</span>
+                                        <div class="small fw-semibold">@ct.InsuranceCompany.InsName</div>
+                                    </td>
+                                    <td class="small">
+                                        <div>Từ: @ct.StartDate.ToString("dd/MM/yyyy")</div>
+                                        <div class="text-muted">Đến: @ct.FinishDate.ToString("dd/MM/yyyy")</div>
+                                    </td>
+                                    <td><span class="badge bg-@pCss">@pTxt</span></td>
+                                    <td class="text-end font-monospace fw-bold text-success">@ct.PaymentLimit.ToString("N0")đ</td>
+                                    <td class="text-center font-monospace"><span class="badge bg-info-subtle text-info">-@ct.DiscountLaborRate%</span></td>
+                                    <td class="text-center font-monospace"><span class="badge bg-warning-subtle text-warning">-@ct.DiscountPartRate%</span></td>
+                                    <td class="small text-muted" style="max-width:200px">@(ct.Note ?? "—")</td>
+                                    <td>
+                                        @if (ct.IsActive && ct.FinishDate >= DateTime.Today)
+                                        {
+                                            <span class="badge bg-success">Còn hiệu lực</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Hết hạn</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal thêm Hãng bảo hiểm mới -->
+<div class="modal fade" id="addCompanyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/Insurance/CreateCompany">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold">Thêm Hãng bảo hiểm đối tác mới</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body small">
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold">Mã hãng BH (VD: BH-BV, BH-PVI...):</label>
+                        <input name="insNo" class="form-control form-control-sm" placeholder="BH-..." />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold">Tên hãng bảo hiểm <span class="text-danger">*</span>:</label>
+                        <input name="insName" class="form-control form-control-sm" placeholder="VD: Tổng công ty Bảo hiểm Bảo Việt" required />
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Tổng đài Hotline:</label>
+                            <input name="hotline" class="form-control form-control-sm" placeholder="1900 xxxx" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Điện thoại cố định:</label>
+                            <input name="phone" class="form-control form-control-sm" placeholder="024.xxxx.xxxx" />
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Email tiếp nhận hồ sơ:</label>
+                            <input name="email" type="email" class="form-control form-control-sm" placeholder="claim@baohiem.vn" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Mã số thuế:</label>
+                            <input name="taxCode" class="form-control form-control-sm" placeholder="010xxxxxxx" />
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold">Địa chỉ chi nhánh / trụ sở:</label>
+                        <input name="address" class="form-control form-control-sm" placeholder="Số nhà, đường, quận/huyện..." />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Lưu hãng BH</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal thêm Hợp đồng liên kết bảo hiểm -->
+<div class="modal fade" id="addContractModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/Insurance/CreateContract">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold">Thêm Hợp đồng liên kết bảo hiểm mới</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body small">
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold">Hãng bảo hiểm ký kết <span class="text-danger">*</span>:</label>
+                        <select name="companyId" class="form-select form-select-sm" required>
+                            <option value="">— Chọn hãng bảo hiểm —</option>
+                            @foreach (var c in Model)
+                            {
+                                <option value="@c.Id">@c.InsNo — @c.InsName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Số hợp đồng:</label>
+                            <input name="contractNo" class="form-control form-control-sm" placeholder="VD: HD-BV/2026/01" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Mã hợp đồng quản lý:</label>
+                            <input name="contractCode" class="form-control form-control-sm" placeholder="VD: HDBV-01" />
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Ngày bắt đầu hiệu lực:</label>
+                            <input type="date" name="startDate" class="form-control form-control-sm" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Ngày hết hạn hiệu lực:</label>
+                            <input type="date" name="finishDate" class="form-control form-control-sm" value="@DateTime.Today.AddYears(1).ToString("yyyy-MM-dd")" required />
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Hình thức thanh toán:</label>
+                            <select name="paymentType" class="form-select form-select-sm">
+                                <option value="0">Bảo lãnh trực tiếp</option>
+                                <option value="1">Khách hoàn ứng</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Hạn mức bảo lãnh (VNĐ):</label>
+                            <input type="number" step="10000000" name="paymentLimit" class="form-control form-control-sm font-monospace" value="500000000" />
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Chiết khấu tiền công (%):</label>
+                            <input type="number" step="0.5" name="discountLaborRate" class="form-control form-control-sm" value="10.0" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Chiết khấu phụ tùng (%):</label>
+                            <input type="number" step="0.5" name="discountPartRate" class="form-control form-control-sm" value="5.0" />
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label fw-semibold">Ghi chú điều khoản:</label>
+                        <textarea name="note" class="form-control form-control-sm" rows="2" placeholder="Điều khoản thanh toán, bảo lãnh phụ tùng chính hãng..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Lưu hợp đồng</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

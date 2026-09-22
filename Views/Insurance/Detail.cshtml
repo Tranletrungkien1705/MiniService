@@ -1,0 +1,362 @@
+@model InsuranceClaim
+@{
+    ViewData["Title"] = $"Hồ sơ bảo hiểm {Model.ClaimNo}";
+    var (stTxt, stCode, stCss) = Ui.InsuranceClaimStatus(Model.Status);
+    var next = (InsuranceClaimStatus[])ViewBag.AllowedNext;
+    bool canDelete = Model.Status == InsuranceClaimStatus.Draft || Model.Status == InsuranceClaimStatus.Rejected;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h5 class="fw-bold mb-1">
+            <i class="bi bi-shield-shaded text-primary me-2"></i>@Model.ClaimNo
+            <span class="badge bg-@stCss ms-2">@stCode — @stTxt</span>
+        </h5>
+        <div class="text-muted small">
+            Lệnh sửa chữa: <a href="/RO/Detail/@Model.ROId" class="fw-bold text-decoration-none"><i class="bi bi-clipboard2-pulse me-1"></i>@Model.RO.Code</a>
+            · Ngày lập: @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+            · Người lập: <b>@Model.CreatedBy</b>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Insurance" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+        <a href="/Insurance/Print/@Model.Id" target="_blank" class="btn btn-sm btn-outline-dark"><i class="bi bi-printer me-1"></i>In biên bản giám định</a>
+        @if (canDelete)
+        {
+            <form method="post" action="/Insurance/Delete/@Model.Id" onsubmit="return confirm('Bạn có chắc chắn muốn xóa hồ sơ bảo hiểm này?');" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa hồ sơ</button>
+            </form>
+        }
+    </div>
+</div>
+
+<!-- Tiến trình quy trình bồi thường (Workflow Steps) -->
+<div class="card mb-3">
+    <div class="card-body py-3">
+        <div class="row text-center g-2 small">
+            <div class="col-3">
+                <div class="p-2 rounded @(Model.Status >= InsuranceClaimStatus.Draft ? "bg-primary-subtle text-primary fw-bold" : "bg-light text-muted")">
+                    <i class="bi bi-file-earmark-text d-block fs-5 mb-1"></i>
+                    1. Lập hồ sơ
+                    <div style="font-size:11px" class="fw-normal">@Model.CreatedAt.ToString("dd/MM HH:mm")</div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="p-2 rounded @(Model.Status == InsuranceClaimStatus.Submitted ? "bg-warning-subtle text-warning fw-bold border border-warning" : (Model.Status > InsuranceClaimStatus.Submitted ? "bg-primary-subtle text-primary fw-bold" : "bg-light text-muted"))">
+                    <i class="bi bi-send d-block fs-5 mb-1"></i>
+                    2. Chờ BH duyệt
+                    <div style="font-size:11px" class="fw-normal">@(Model.SubmittedAt?.ToString("dd/MM HH:mm") ?? "—")</div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="p-2 rounded @(Model.Status == InsuranceClaimStatus.Approved ? "bg-info-subtle text-info fw-bold border border-info" : (Model.Status > InsuranceClaimStatus.Approved ? "bg-primary-subtle text-primary fw-bold" : (Model.Status == InsuranceClaimStatus.Rejected ? "bg-danger-subtle text-danger fw-bold" : "bg-light text-muted")))">
+                    <i class="bi bi-shield-check d-block fs-5 mb-1"></i>
+                    3. Duyệt bảo lãnh
+                    <div style="font-size:11px" class="fw-normal">@(Model.ApprovedAt?.ToString("dd/MM HH:mm") ?? (Model.Status == InsuranceClaimStatus.Rejected ? "Từ chối" : "—"))</div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="p-2 rounded @(Model.Status == InsuranceClaimStatus.Settled ? "bg-success-subtle text-success fw-bold border border-success" : "bg-light text-muted")">
+                    <i class="bi bi-cash-stack d-block fs-5 mb-1"></i>
+                    4. Đã quyết toán
+                    <div style="font-size:11px" class="fw-normal">@(Model.SettledAt?.ToString("dd/MM HH:mm") ?? "—")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Cột trái: Thông tin hồ sơ & Hạng mục bồi thường -->
+    <div class="col-lg-8">
+        <!-- Thông tin xe & Chủ xe -->
+        <div class="card mb-3">
+            <div class="card-header bg-white fw-bold py-2"><i class="bi bi-car-front text-primary me-2"></i>Thông tin xe &amp; Hãng bảo hiểm</div>
+            <div class="card-body">
+                <div class="row g-2 small">
+                    <div class="col-md-4">
+                        <span class="text-muted">Biển số xe:</span>
+                        <div class="fw-bold fs-6 text-primary">@Model.RO.Car.Plate</div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">Dòng xe:</span>
+                        <div class="fw-bold">@Model.RO.Car.Model (@Model.RO.Car.Year)</div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">Số khung (VIN):</span>
+                        <div class="fw-semibold font-monospace">@(Model.RO.Car.Vin ?? "—")</div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">Khách hàng / Chủ xe:</span>
+                        <div class="fw-semibold">@Model.RO.Customer.Name</div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">Số điện thoại:</span>
+                        <div>@(Model.RO.Customer.Phone ?? "—")</div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">Số Km vào xưởng:</span>
+                        <div class="fw-semibold font-monospace">@Model.RO.Odometer.ToString("N0") km</div>
+                    </div>
+                </div>
+
+                <hr class="my-2" />
+
+                <div class="row g-2 small">
+                    <div class="col-md-4">
+                        <span class="text-muted">Hãng bảo hiểm:</span>
+                        <div class="fw-bold">@Model.InsuranceCompany.InsName</div>
+                        <div class="text-muted" style="font-size:11px"><i class="bi bi-telephone me-1"></i>Hotline: @(Model.InsuranceCompany.Hotline ?? Model.InsuranceCompany.Phone ?? "—")</div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">Số đơn / Hợp đồng BH:</span>
+                        <div class="fw-bold font-monospace">@Model.PolicyNo</div>
+                        @if (Model.InsuranceContract != null)
+                        {
+                            <div class="text-muted" style="font-size:11px">HĐ liên kết: @Model.InsuranceContract.ContractNo</div>
+                        }
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">Mã hồ sơ bảo hiểm:</span>
+                        <div class="fw-semibold font-monospace">@(Model.ClaimFileNo ?? "Chưa cấp")</div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">Giám định viên:</span>
+                        <div class="fw-semibold">@(Model.SurveyorName ?? "Chưa chỉ định")</div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">SĐT Giám định viên:</span>
+                        <div>@(Model.SurveyorPhone ?? "—")</div>
+                    </div>
+                    <div class="col-md-4">
+                        <span class="text-muted">Ngày xảy ra tai nạn:</span>
+                        <div>@Model.AccidentDate.ToString("dd/MM/yyyy")</div>
+                    </div>
+                    <div class="col-12">
+                        <span class="text-muted">Địa điểm tai nạn:</span>
+                        <div>@(Model.AccidentLocation ?? "—")</div>
+                    </div>
+                    <div class="col-12">
+                        <span class="text-muted">Mô tả hiện trường tổn thất:</span>
+                        <div class="p-2 bg-light rounded mt-1">@Model.AccidentDescription</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bảng chi tiết hạng mục bồi thường -->
+        <div class="card mb-3">
+            <div class="card-header bg-white fw-bold py-2 d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-list-check text-primary me-2"></i>Chi tiết hạng mục sửa chữa &amp; Bồi thường (@Model.ItemCount)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Loại</th>
+                            <th>Mã hiệu</th>
+                            <th>Tên hạng mục</th>
+                            <th class="text-center">SL</th>
+                            <th class="text-end">Đơn giá</th>
+                            <th class="text-end">Dự toán BH</th>
+                            <th class="text-end">BH duyệt</th>
+                            <th class="text-center">Duyệt</th>
+                            <th>Ghi chú</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Items.Count == 0)
+                        {
+                            <tr><td colspan="9" class="text-center text-muted py-3">Chưa có chi tiết hạng mục.</td></tr>
+                        }
+                        @foreach (var itm in Model.Items)
+                        {
+                            <tr class="@(itm.IsApproved ? "" : "table-secondary text-muted")">
+                                <td><span class="badge bg-light text-dark border">@Ui.Line(itm.Type)</span></td>
+                                <td class="font-monospace">@itm.Code</td>
+                                <td class="fw-semibold">@itm.Name</td>
+                                <td class="text-center">@itm.Quantity.ToString("G29")</td>
+                                <td class="text-end font-monospace">@itm.UnitPrice.ToString("N0")đ</td>
+                                <td class="text-end font-monospace">@itm.EstimatedAmount.ToString("N0")đ</td>
+                                <td class="text-end font-monospace fw-bold text-success">@itm.ApprovedAmount.ToString("N0")đ</td>
+                                <td class="text-center">
+                                    @if (itm.IsApproved)
+                                    {
+                                        <i class="bi bi-check-circle-fill text-success" title="Chấp thuận bồi thường"></i>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-x-circle-fill text-danger" title="Loại trừ / Không duyệt"></i>
+                                    }
+                                </td>
+                                <td class="text-muted">@(itm.Note ?? "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-light fw-bold font-monospace">
+                        <tr>
+                            <td colspan="5" class="text-end">TỔNG CỘNG HẠNG MỤC:</td>
+                            <td class="text-end">@Model.EstimatedAmount.ToString("N0")đ</td>
+                            <td class="text-end text-success">@Model.ApprovedAmount.ToString("N0")đ</td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.DecisionNote) || !string.IsNullOrWhiteSpace(Model.RejectionReason))
+        {
+            <div class="card mb-3">
+                <div class="card-header bg-white fw-bold py-2"><i class="bi bi-chat-left-quote text-primary me-2"></i>Ý kiến quyết định từ Hãng bảo hiểm</div>
+                <div class="card-body small">
+                    @if (!string.IsNullOrWhiteSpace(Model.DecisionNote))
+                    {
+                        <div class="alert alert-info mb-2 py-2">
+                            <b>Thông báo phê duyệt bồi thường:</b><br />
+                            @Model.DecisionNote
+                        </div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(Model.RejectionReason))
+                    {
+                        <div class="alert alert-danger mb-0 py-2">
+                            <b>Lý do từ chối bồi thường:</b><br />
+                            @Model.RejectionReason
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Cột phải: Phân bổ tài chính & Thao tác trạng thái -->
+    <div class="col-lg-4">
+        <!-- Bảng phân tích tài chính bảo lãnh -->
+        <div class="card mb-3">
+            <div class="card-header bg-white fw-bold py-2"><i class="bi bi-pie-chart text-primary me-2"></i>Phân bổ tài chính bảo hiểm</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2 small">
+                    <span class="text-muted">Tổng dự toán sửa chữa:</span>
+                    <span class="font-monospace fw-bold">@Model.EstimatedAmount.ToString("N0")đ</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 small">
+                    <span class="text-muted">Số tiền bảo hiểm duyệt:</span>
+                    <span class="font-monospace text-primary fw-bold">@Model.ApprovedAmount.ToString("N0")đ</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 small">
+                    <span class="text-muted">Mức miễn thường (khấu trừ):</span>
+                    <span class="font-monospace text-danger">-@Model.DeductibleAmount.ToString("N0")đ</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3 small">
+                    <span class="text-muted">Chế tài giảm trừ bồi thường:</span>
+                    <span class="font-monospace text-danger">-@Model.PenaltyAmount.ToString("N0")đ</span>
+                </div>
+
+                <div class="p-3 bg-success-subtle rounded border border-success mb-3">
+                    <div class="text-muted small">Bảo hiểm bảo lãnh trả Xưởng:</div>
+                    <div class="fs-4 fw-bold text-success font-monospace">@Model.InsuranceAmount.ToString("N0") VNĐ</div>
+                    <div class="text-muted" style="font-size:11px">Ghi nhận công nợ thu từ @Model.InsuranceCompany.InsNo</div>
+                </div>
+
+                <div class="p-3 bg-danger-subtle rounded border border-danger">
+                    <div class="text-muted small">Khách hàng tự chi trả:</div>
+                    <div class="fs-4 fw-bold text-danger font-monospace">@Model.CustomerAmount.ToString("N0") VNĐ</div>
+                    <div class="text-muted" style="font-size:11px">Bao gồm miễn thường + chênh lệch dự toán</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chuyển trạng thái workflow -->
+        @if (next.Length > 0)
+        {
+            <div class="card mb-3">
+                <div class="card-header bg-white fw-bold py-2"><i class="bi bi-arrow-repeat text-primary me-2"></i>Cập nhật tiến độ hồ sơ</div>
+                <div class="card-body">
+                    @foreach (var target in next)
+                    {
+                        var (tTxt, tCode, tCss) = Ui.InsuranceClaimStatus(target);
+                        <button type="button" class="btn btn-outline-@tCss w-100 mb-2 text-start d-flex justify-content-between align-items-center"
+                                data-bs-toggle="modal" data-bs-target="#transitionModal"
+                                data-status="@((int)target)" data-statusname="@tTxt" data-statuscode="@tCode">
+                            <span><i class="bi bi-check-circle me-1"></i>Chuyển sang <b>@tTxt</b></span>
+                            <span class="badge bg-@tCss">@tCode</span>
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+
+        <!-- Thao tác liên quan -->
+        <div class="card mb-3">
+            <div class="card-header bg-white fw-bold py-2"><i class="bi bi-lightning text-primary me-2"></i>Thao tác nhanh</div>
+            <div class="card-body small">
+                <a href="/Payment/Create?roId=@Model.ROId" class="btn btn-sm btn-outline-primary w-100 mb-2">
+                    <i class="bi bi-cash-coin me-1"></i>Lập phiếu thu bồi thường bảo lãnh
+                </a>
+                <a href="/RO/Detail/@Model.ROId" class="btn btn-sm btn-outline-secondary w-100 mb-2">
+                    <i class="bi bi-clipboard2-pulse me-1"></i>Xem Lệnh sửa chữa @Model.RO.Code
+                </a>
+                <a href="/Insurance/Print/@Model.Id" target="_blank" class="btn btn-sm btn-outline-dark w-100">
+                    <i class="bi bi-printer me-1"></i>In biên bản giám định hiện trường
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal xác nhận chuyển trạng thái -->
+<div class="modal fade" id="transitionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/Insurance/Transition/@Model.Id">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="toStatus" id="modalTargetStatus" />
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold" id="modalTitle">Chuyển trạng thái hồ sơ bảo hiểm</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body small">
+                    <div class="mb-3" id="approvedAmountGroup">
+                        <label class="form-label fw-semibold">Số tiền bảo hiểm đồng ý duyệt bồi thường (VNĐ):</label>
+                        <input type="number" step="100000" name="approvedAmount" class="form-control form-control-sm font-monospace" value="@Model.ApprovedAmount" />
+                        <div class="form-text">Số tiền được chấp thuận theo thông báo bồi thường của Hãng bảo hiểm.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ý kiến phê duyệt / Ghi chú / Lý do từ chối:</label>
+                        <textarea name="note" class="form-control form-control-sm" rows="3" placeholder="Nhập diễn giải quyết định của công ty bảo hiểm..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Xác nhận chuyển</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+const transitionModal = document.getElementById('transitionModal');
+if (transitionModal) {
+    transitionModal.addEventListener('show.bs.modal', function (event) {
+        const button = event.relatedTarget;
+        const status = button.getAttribute('data-status');
+        const statusName = button.getAttribute('data-statusname');
+        const statusCode = button.getAttribute('data-statuscode');
+
+        document.getElementById('modalTargetStatus').value = status;
+        document.getElementById('modalTitle').textContent = `Chuyển trạng thái sang [${statusCode}] ${statusName}`;
+
+        const appGrp = document.getElementById('approvedAmountGroup');
+        if (status === '2') { // Approved
+            appGrp.classList.remove('d-none');
+        } else {
+            appGrp.classList.add('d-none');
+        }
+    });
+}
+</script>
+}

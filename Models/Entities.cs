@@ -211,6 +211,23 @@ public enum WorkType
     SCS = 2          // Sửa chữa sơn & Sấy hoàn thiện (Paint / Spray Booth)
 }
 
+/// <summary>Trạng thái Hồ sơ bồi thường bảo hiểm — theo Ser_Insurance / Ser_InsuranceDebit idn.CarService.</summary>
+public enum InsuranceClaimStatus
+{
+    Draft = 0,      // DRAFT     — Lập hồ sơ / Khảo sát tổn thất
+    Submitted = 1,  // SUBMITTED — Đã gửi hồ sơ cho Hãng bảo hiểm thẩm định
+    Approved = 2,   // APPROVED  — Bảo hiểm chấp thuận bảo lãnh bồi thường
+    Settled = 3,    // SETTLED   — Đã quyết toán hoàn tất / xuất hóa đơn
+    Rejected = 4    // REJECTED  — Hãng bảo hiểm từ chối bồi thường
+}
+
+/// <summary>Hình thức thanh toán bồi thường bảo hiểm — theo Ser_InsuranceContract TypePayment idn.CarService.</summary>
+public enum InsurancePaymentType
+{
+    DirectGuarantee = 0,   // Bảo lãnh thanh toán trực tiếp (Bảo hiểm trả tiền cho đại lý)
+    CustomerReimburse = 1  // Khách tự trả trước, bảo hiểm bồi hoàn sau cho khách
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -269,12 +286,14 @@ public class RepairOrder : IOrgOwned
     public List<OrderPart> OrderParts { get; set; } = [];
     public List<ReceptionSheet> ReceptionSheets { get; set; } = [];
     public List<AssignmentWork> AssignmentWorks { get; set; } = [];
+    public List<InsuranceClaim> InsuranceClaims { get; set; } = [];
 
     public decimal Total => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
     public decimal PartTotal => Lines.Where(l => l.Type == LineType.Part).Sum(l => l.Amount);
     public decimal CustomerTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount);
     public decimal WarrantyTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Warranty).Sum(l => l.Amount);
+    public decimal InsuranceTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Insurance).Sum(l => l.Amount);
     public decimal PaidAmount => Payments.Where(p => p.Status == PaymentStatus.Completed).Sum(p => p.PaymentAmount);
     public decimal RemainingBalance => Math.Max(0, CustomerTotal - PaidAmount);
 }
@@ -937,6 +956,105 @@ public class AssignmentEngineer : IOrgOwned
 
     public AssignmentWork AssignmentWork { get; set; } = null!;
     public Engineer Engineer { get; set; } = null!;
+}
+
+/// <summary>Hãng / Công ty Bảo hiểm liên kết — Ser_Insurance trong idn.CarService.</summary>
+public class InsuranceCompany : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string InsNo { get; set; } = "";             // Mã hãng BH (VD: BH-BV, BH-PVI, BH-PTI)
+    public string InsName { get; set; } = "";           // Tên hãng bảo hiểm (VD: Bảo hiểm Bảo Việt)
+    public string? Address { get; set; }                // Địa chỉ trụ sở/chi nhánh
+    public string? Phone { get; set; }                  // Đường dây nóng / Điện thoại
+    public string? Email { get; set; }                  // Email nhận hồ sơ bồi thường
+    public string? TaxCode { get; set; }                // Mã số thuế
+    public string? Hotline { get; set; }                // Tổng đài cứu hộ / bồi thường
+    public bool IsActive { get; set; } = true;          // Đang hợp tác
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public List<InsuranceContract> Contracts { get; set; } = [];
+    public List<InsuranceClaim> Claims { get; set; } = [];
+}
+
+/// <summary>Hợp đồng liên kết bảo hiểm với xưởng dịch vụ — Ser_InsuranceContract trong idn.CarService.</summary>
+public class InsuranceContract : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ContractNo { get; set; } = "";        // Số hợp đồng (VD: HD-BV/2026/01)
+    public string ContractCode { get; set; } = "";      // Mã hợp đồng quản lý (VD: HDBV-01)
+    public int InsuranceCompanyId { get; set; }         // Hãng bảo hiểm ký kết
+    public DateTime StartDate { get; set; }             // Ngày bắt đầu hiệu lực
+    public DateTime FinishDate { get; set; }            // Ngày hết hạn hiệu lực
+    public InsurancePaymentType PaymentType { get; set; } = InsurancePaymentType.DirectGuarantee; // Hình thức thanh toán
+    public decimal PaymentLimit { get; set; } = 500_000_000m; // Hạn mức bảo lãnh thanh toán (VNĐ)
+    public decimal DiscountLaborRate { get; set; } = 10m;     // Chiết khấu tiền công cho bảo hiểm (%)
+    public decimal DiscountPartRate { get; set; } = 5m;       // Chiết khấu phụ tùng cho bảo hiểm (%)
+    public string? Note { get; set; }                   // Điều khoản đặc biệt
+    public bool IsActive { get; set; } = true;          // Còn hiệu lực
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public InsuranceCompany InsuranceCompany { get; set; } = null!;
+    public List<InsuranceClaim> Claims { get; set; } = [];
+}
+
+/// <summary>Hồ sơ yêu cầu bồi thường bảo hiểm xe — Ser_Insurance / Ser_InsuranceDebit trong idn.CarService.</summary>
+public class InsuranceClaim : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ClaimNo { get; set; } = "";           // Mã hồ sơ bồi thường (VD: CLM260427-001)
+    public int ROId { get; set; }                       // Lệnh sửa chữa gắn với hồ sơ bồi thường
+    public int InsuranceCompanyId { get; set; }         // Công ty bảo hiểm bồi thường
+    public int? InsuranceContractId { get; set; }       // Hợp đồng bảo hiểm áp dụng
+    public string PolicyNo { get; set; } = "";          // Số giấy chứng nhận bảo hiểm / Số đơn bảo hiểm
+    public string? ClaimFileNo { get; set; }            // Mã vụ tổn thất / Số hồ sơ của hãng bảo hiểm
+    public string? SurveyorName { get; set; }           // Họ tên Giám định viên đại diện bảo hiểm
+    public string? SurveyorPhone { get; set; }          // Số điện thoại Giám định viên
+    public DateTime AccidentDate { get; set; } = DateTime.Today; // Ngày xảy ra sự vụ tổn thất
+    public string? AccidentLocation { get; set; }       // Nơi xảy ra sự việc (địa điểm tai nạn)
+    public string AccidentDescription { get; set; } = ""; // Tình trạng va chạm & hiện trường tai nạn
+    public decimal EstimatedAmount { get; set; }        // Tổng chi phí sửa chữa dự toán (VNĐ)
+    public decimal ApprovedAmount { get; set; }         // Số tiền bảo hiểm đồng ý duyệt bồi thường (VNĐ)
+    public decimal DeductibleAmount { get; set; } = 500_000m; // Mức khấu trừ / Miễn thường khách chịu (InsuranceMienThuong)
+    public decimal PenaltyAmount { get; set; } = 0;     // Số tiền chế tài giảm trừ bồi thường nếu có (InsuranceCheTai)
+    public decimal InsuranceAmount { get; set; }        // Số tiền bảo hiểm bảo lãnh trả xưởng = ApprovedAmount - DeductibleAmount - PenaltyAmount
+    public decimal CustomerAmount { get; set; }         // Số tiền khách hàng tự chi trả = DeductibleAmount + PenaltyAmount + (EstimatedAmount - ApprovedAmount)
+    public InsuranceClaimStatus Status { get; set; } = InsuranceClaimStatus.Draft; // Trạng thái hồ sơ
+    public string? DecisionNote { get; set; }           // Ghi chú quyết định / Ý kiến bảo lãnh của hãng bảo hiểm
+    public string? RejectionReason { get; set; }        // Lý do từ chối bồi thường nếu có
+    public string CreatedBy { get; set; } = "Cố vấn dịch vụ"; // Cố vấn phụ trách hồ sơ
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? SubmittedAt { get; set; }          // Ngày gửi hồ sơ giám định
+    public DateTime? ApprovedAt { get; set; }           // Ngày hãng bảo hiểm duyệt bảo lãnh
+    public DateTime? SettledAt { get; set; }            // Ngày quyết toán hoàn tất
+
+    public RepairOrder RO { get; set; } = null!;
+    public InsuranceCompany InsuranceCompany { get; set; } = null!;
+    public InsuranceContract? InsuranceContract { get; set; }
+    public List<InsuranceClaimItem> Items { get; set; } = [];
+
+    public int ItemCount => Items.Count;
+}
+
+/// <summary>Chi tiết hạng mục bồi thường bảo hiểm — Ser_InsuranceDebitDetail / RO Line trong idn.CarService.</summary>
+public class InsuranceClaimItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int InsuranceClaimId { get; set; }
+    public LineType Type { get; set; } = LineType.Labor; // Tiền công hoặc Phụ tùng
+    public string Code { get; set; } = "";               // Mã phụ tùng hoặc mã công việc (Gò, Hàn, Sơn, Thay thế...)
+    public string Name { get; set; } = "";               // Tên hạng mục sửa chữa phục hồi
+    public decimal Quantity { get; set; } = 1;           // Số lượng
+    public decimal UnitPrice { get; set; }               // Đơn giá
+    public decimal EstimatedAmount { get; set; }         // Số tiền yêu cầu bồi thường
+    public decimal ApprovedAmount { get; set; }          // Số tiền bảo hiểm chấp thuận chi trả
+    public bool IsApproved { get; set; } = true;         // Được duyệt bồi thường hay bị loại trừ
+    public string? Note { get; set; }                    // Diễn giải / Đánh giá giám định
+
+    public InsuranceClaim InsuranceClaim { get; set; } = null!;
 }
 
 

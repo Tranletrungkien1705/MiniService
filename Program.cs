@@ -1710,6 +1710,293 @@ app.MapPost("/api/groups", async (CreateGroupDto dto, IRoService svc) =>
     }
 });
 
+// API Quản lý Bảo hiểm xe & Hồ sơ bồi thường (Ser_Insurance, Ser_InsuranceContract, Ser_InsuranceDebit)
+app.MapGet("/api/insurance/companies", async (string? q, bool? isActive, IRoService svc) =>
+{
+    var list = await svc.InsuranceCompaniesAsync(q, isActive);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.InsNo,
+        c.InsName,
+        c.Address,
+        c.Phone,
+        c.Email,
+        c.TaxCode,
+        c.Hotline,
+        c.IsActive,
+        contractCount = c.Contracts.Count,
+        claimCount = c.Claims.Count,
+        c.CreatedAt
+    }));
+});
+
+app.MapGet("/api/insurance/companies/{id:int}", async (int id, IRoService svc) =>
+{
+    var c = await svc.GetInsuranceCompanyAsync(id);
+    if (c == null) return Results.NotFound(new { error = "Không tìm thấy hãng bảo hiểm." });
+    return Results.Ok(new
+    {
+        c.Id,
+        c.InsNo,
+        c.InsName,
+        c.Address,
+        c.Phone,
+        c.Email,
+        c.TaxCode,
+        c.Hotline,
+        c.IsActive,
+        contracts = c.Contracts.Select(ct => new
+        {
+            ct.Id,
+            ct.ContractNo,
+            ct.ContractCode,
+            ct.StartDate,
+            ct.FinishDate,
+            paymentType = Ui.InsurancePaymentType(ct.PaymentType).text,
+            ct.PaymentLimit,
+            ct.DiscountLaborRate,
+            ct.DiscountPartRate,
+            ct.IsActive
+        }),
+        c.CreatedAt
+    });
+});
+
+app.MapPost("/api/insurance/companies", async (CreateInsuranceCompanyDto dto, IRoService svc) =>
+{
+    try
+    {
+        var company = new InsuranceCompany
+        {
+            InsNo = dto.InsNo?.Trim() ?? "",
+            InsName = dto.InsName.Trim(),
+            Address = dto.Address?.Trim(),
+            Phone = dto.Phone?.Trim(),
+            Email = dto.Email?.Trim(),
+            TaxCode = dto.TaxCode?.Trim(),
+            Hotline = dto.Hotline?.Trim(),
+            IsActive = true
+        };
+        var id = await svc.CreateInsuranceCompanyAsync(company);
+        return Results.Ok(new { companyId = id, insNo = company.InsNo, message = "Đã thêm hãng bảo hiểm thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/insurance/contracts", async (int? companyId, bool? activeOnly, IRoService svc) =>
+{
+    var list = await svc.InsuranceContractsAsync(companyId, activeOnly);
+    return Results.Ok(list.Select(ct => new
+    {
+        ct.Id,
+        ct.ContractNo,
+        ct.ContractCode,
+        companyId = ct.InsuranceCompanyId,
+        companyName = ct.InsuranceCompany.InsName,
+        ct.StartDate,
+        ct.FinishDate,
+        paymentType = Ui.InsurancePaymentType(ct.PaymentType).text,
+        paymentTypeValue = (int)ct.PaymentType,
+        ct.PaymentLimit,
+        ct.DiscountLaborRate,
+        ct.DiscountPartRate,
+        ct.Note,
+        ct.IsActive,
+        ct.CreatedAt
+    }));
+});
+
+app.MapPost("/api/insurance/contracts", async (CreateInsuranceContractDto dto, IRoService svc) =>
+{
+    try
+    {
+        var ct = new InsuranceContract
+        {
+            ContractNo = dto.ContractNo?.Trim() ?? "",
+            ContractCode = dto.ContractCode?.Trim() ?? "",
+            InsuranceCompanyId = dto.InsuranceCompanyId,
+            StartDate = dto.StartDate != default ? dto.StartDate : DateTime.Today,
+            FinishDate = dto.FinishDate != default ? dto.FinishDate : DateTime.Today.AddYears(1),
+            PaymentType = dto.PaymentType,
+            PaymentLimit = dto.PaymentLimit > 0 ? dto.PaymentLimit : 500_000_000m,
+            DiscountLaborRate = dto.DiscountLaborRate,
+            DiscountPartRate = dto.DiscountPartRate,
+            Note = dto.Note?.Trim(),
+            IsActive = true
+        };
+        var id = await svc.CreateInsuranceContractAsync(ct);
+        return Results.Ok(new { contractId = id, contractNo = ct.ContractNo, message = "Đã thêm hợp đồng bảo hiểm." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/insurance/claims", async (InsuranceClaimStatus? status, string? q, int? roId, int? companyId, IRoService svc) =>
+{
+    var list = await svc.InsuranceClaimsAsync(status, q, roId, companyId);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.ClaimNo,
+        roId = c.ROId,
+        roCode = c.RO.Code,
+        plate = c.RO.Car.Plate,
+        model = c.RO.Car.Model,
+        customer = c.RO.Customer.Name,
+        company = c.InsuranceCompany.InsName,
+        c.PolicyNo,
+        c.ClaimFileNo,
+        c.SurveyorName,
+        c.SurveyorPhone,
+        c.AccidentDate,
+        c.AccidentLocation,
+        c.EstimatedAmount,
+        c.ApprovedAmount,
+        c.DeductibleAmount,
+        c.PenaltyAmount,
+        c.InsuranceAmount,
+        c.CustomerAmount,
+        status = Ui.InsuranceClaimStatus(c.Status).text,
+        statusCode = Ui.InsuranceClaimStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        itemCount = c.Items.Count,
+        c.CreatedAt,
+        c.SubmittedAt,
+        c.ApprovedAt,
+        c.SettledAt
+    }));
+});
+
+app.MapGet("/api/insurance/claims/{id:int}", async (int id, IRoService svc) =>
+{
+    var c = await svc.GetInsuranceClaimAsync(id);
+    if (c == null) return Results.NotFound(new { error = "Không tìm thấy hồ sơ bồi thường bảo hiểm." });
+    return Results.Ok(new
+    {
+        c.Id,
+        c.ClaimNo,
+        ro = new { c.RO.Id, c.RO.Code, c.RO.Status, roTotal = c.RO.Total },
+        car = new { c.RO.Car.Id, c.RO.Car.Plate, c.RO.Car.Model, c.RO.Car.Vin, c.RO.Car.Year },
+        customer = new { c.RO.Customer.Id, c.RO.Customer.Name, c.RO.Customer.Phone },
+        company = new { c.InsuranceCompany.Id, c.InsuranceCompany.InsNo, c.InsuranceCompany.InsName, c.InsuranceCompany.Phone, c.InsuranceCompany.Hotline },
+        contract = c.InsuranceContract != null ? new { c.InsuranceContract.Id, c.InsuranceContract.ContractNo, c.InsuranceContract.PaymentLimit } : null,
+        c.PolicyNo,
+        c.ClaimFileNo,
+        c.SurveyorName,
+        c.SurveyorPhone,
+        c.AccidentDate,
+        c.AccidentLocation,
+        c.AccidentDescription,
+        c.EstimatedAmount,
+        c.ApprovedAmount,
+        c.DeductibleAmount,
+        c.PenaltyAmount,
+        c.InsuranceAmount,
+        c.CustomerAmount,
+        status = Ui.InsuranceClaimStatus(c.Status).text,
+        statusCode = Ui.InsuranceClaimStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.DecisionNote,
+        c.RejectionReason,
+        items = c.Items.Select(i => new
+        {
+            i.Id,
+            type = Ui.Line(i.Type),
+            i.Code,
+            i.Name,
+            i.Quantity,
+            i.UnitPrice,
+            i.EstimatedAmount,
+            i.ApprovedAmount,
+            i.IsApproved,
+            i.Note
+        }),
+        c.CreatedBy,
+        c.CreatedAt,
+        c.SubmittedAt,
+        c.ApprovedAt,
+        c.SettledAt
+    });
+});
+
+app.MapPost("/api/insurance/claims", async (CreateInsuranceClaimDto dto, IRoService svc) =>
+{
+    try
+    {
+        var claim = new InsuranceClaim
+        {
+            ROId = dto.RoId,
+            InsuranceCompanyId = dto.CompanyId,
+            InsuranceContractId = dto.ContractId,
+            PolicyNo = dto.PolicyNo.Trim(),
+            ClaimFileNo = dto.ClaimFileNo?.Trim(),
+            SurveyorName = dto.SurveyorName?.Trim(),
+            SurveyorPhone = dto.SurveyorPhone?.Trim(),
+            AccidentDate = dto.AccidentDate ?? DateTime.Today,
+            AccidentLocation = dto.AccidentLocation?.Trim(),
+            AccidentDescription = dto.AccidentDescription?.Trim() ?? "Tổn thất thân vỏ xe",
+            DeductibleAmount = dto.DeductibleAmount ?? 500_000m,
+            PenaltyAmount = dto.PenaltyAmount ?? 0m,
+            CreatedBy = dto.CreatedBy ?? "api",
+            Status = InsuranceClaimStatus.Draft
+        };
+
+        var items = dto.Items?.Select(i => new InsuranceClaimItem
+        {
+            Type = i.Type,
+            Code = i.Code,
+            Name = i.Name,
+            Quantity = i.Quantity,
+            UnitPrice = i.UnitPrice,
+            EstimatedAmount = i.EstimatedAmount ?? (i.Quantity * i.UnitPrice),
+            ApprovedAmount = i.ApprovedAmount ?? (i.Quantity * i.UnitPrice),
+            IsApproved = i.IsApproved ?? true,
+            Note = i.Note
+        }).ToList();
+
+        var id = await svc.CreateInsuranceClaimAsync(claim, items);
+        return Results.Ok(new { claimId = id, claimNo = claim.ClaimNo, message = "Đã lập hồ sơ bồi thường bảo hiểm." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/insurance/claims/from-ro", async (CreateInsuranceClaimFromRoDto dto, IRoService svc) =>
+{
+    try
+    {
+        var id = await svc.CreateInsuranceClaimFromROAsync(
+            dto.RoId, dto.CompanyId, dto.ContractId, dto.PolicyNo, dto.ClaimFileNo,
+            dto.SurveyorName, dto.SurveyorPhone, dto.AccidentDescription ?? "",
+            dto.DeductibleAmount ?? 500_000m, dto.PenaltyAmount ?? 0m, dto.CreatedBy ?? "api");
+        return Results.Ok(new { claimId = id, message = "Đã tạo hồ sơ bảo hiểm từ Lệnh sửa chữa RO." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/insurance/claims/{id:int}/transition", async (int id, TransitionInsuranceClaimDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionInsuranceClaimAsync(id, dto.ToStatus, dto.ApprovedAmount, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/insurance/claims/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteInsuranceClaimAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -1767,3 +2054,9 @@ record CompleteAssignmentDto(string? CompletedBy);
 record CancelAssignmentDto(string? Reason);
 record CreateEngineerDto(string? Code, string Name, string? Phone, string? SkillLevel, string? Specialty, int? GroupId);
 record CreateGroupDto(string? Code, string Name, string? Leader, string? Note);
+record CreateInsuranceCompanyDto(string? InsNo, string InsName, string? Address, string? Phone, string? Email, string? TaxCode, string? Hotline);
+record CreateInsuranceContractDto(string? ContractNo, string? ContractCode, int InsuranceCompanyId, DateTime StartDate, DateTime FinishDate, InsurancePaymentType PaymentType, decimal PaymentLimit, decimal DiscountLaborRate, decimal DiscountPartRate, string? Note);
+record CreateInsuranceClaimDto(int RoId, int CompanyId, int? ContractId, string PolicyNo, string? ClaimFileNo, string? SurveyorName, string? SurveyorPhone, DateTime? AccidentDate, string? AccidentLocation, string? AccidentDescription, decimal? DeductibleAmount, decimal? PenaltyAmount, string? CreatedBy, List<CreateInsuranceClaimItemDto>? Items);
+record CreateInsuranceClaimItemDto(LineType Type, string Code, string Name, decimal Quantity, decimal UnitPrice, decimal? EstimatedAmount, decimal? ApprovedAmount, bool? IsApproved, string? Note);
+record CreateInsuranceClaimFromRoDto(int RoId, int CompanyId, int? ContractId, string PolicyNo, string? ClaimFileNo, string? SurveyorName, string? SurveyorPhone, string? AccidentDescription, decimal? DeductibleAmount, decimal? PenaltyAmount, string? CreatedBy);
+record TransitionInsuranceClaimDto(InsuranceClaimStatus ToStatus, decimal? ApprovedAmount, string? Note);

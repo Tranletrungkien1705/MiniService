@@ -88,6 +88,10 @@
                         <tr><td colspan="5" class="text-end text-primary fw-semibold"><i class="bi bi-shield-check me-1"></i>Hãng bảo hành chi trả</td><td class="text-end text-primary fw-semibold">@Model.WarrantyTotal.ToString("N0")đ</td><td></td></tr>
                         <tr><td colspan="5" class="text-end text-muted">Khách hàng thanh toán thực tế</td><td class="text-end fw-semibold">@Model.CustomerTotal.ToString("N0")đ</td><td></td></tr>
                     }
+                    @if (Model.InsuranceTotal > 0)
+                    {
+                        <tr><td colspan="5" class="text-end text-info fw-semibold"><i class="bi bi-shield-shaded me-1"></i>Bảo hiểm bồi thường bảo lãnh</td><td class="text-end text-info fw-semibold">@Model.InsuranceTotal.ToString("N0")đ</td><td></td></tr>
+                    }
                     <tr class="fw-bold"><td colspan="5" class="text-end">TỔNG LỆNH SC</td><td class="text-end" style="color:#1d4ed8">@Model.Total.ToString("N0")đ</td><td></td></tr>
                 </tfoot>
             </table>
@@ -317,6 +321,33 @@
             else
             {
                 <div class="text-muted small">Chưa có Báo cáo bảo hành cho lệnh này. Nhấn "Lập BCBH" để tạo đề nghị bồi hoàn gửi HTC.</div>
+            }
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-shield-shaded text-primary me-1"></i>Hồ sơ bảo hiểm</h6>
+                <a href="/Insurance/Create?roId=@Model.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>Lập hồ sơ BH</a>
+            </div>
+            @if (Model.InsuranceClaims.Count > 0)
+            {
+                <div class="list-group list-group-flush small">
+                    @foreach (var c in Model.InsuranceClaims)
+                    {
+                        var (ctxt, ccode, ccss) = Ui.InsuranceClaimStatus(c.Status);
+                        <a href="/Insurance/Detail/@c.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold">@c.ClaimNo</div>
+                                <div class="text-muted" style="font-size:11px">@c.InsuranceCompany.InsNo · BH duyệt: @c.InsuranceAmount.ToString("N0")đ</div>
+                            </div>
+                            <span class="badge bg-@ccss">@ccode</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small">Chưa có Hồ sơ bảo hiểm cho lệnh này. Nhấn "Lập hồ sơ BH" để đề nghị bảo lãnh chi trả bồi thường.</div>
             }
         </div></div>
 

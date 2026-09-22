@@ -1,0 +1,350 @@
+@{
+    ViewData["Title"] = "Lập hồ sơ bồi thường bảo hiểm";
+    var ros = (List<RepairOrder>)ViewBag.ROs;
+    var companies = (List<InsuranceCompany>)ViewBag.Companies;
+    var contracts = (List<InsuranceContract>)ViewBag.Contracts;
+    var selectedRO = (RepairOrder?)ViewBag.SelectedRO;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0"><i class="bi bi-shield-plus text-primary me-2"></i>Lập hồ sơ yêu cầu bồi thường bảo hiểm xe</h5>
+            <a href="/Insurance" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách hồ sơ</a>
+        </div>
+
+        <form method="post" action="/Insurance/Create" id="claimForm">
+            @Html.AntiForgeryToken()
+
+            <!-- Khối 1: Lệnh sửa chữa & Hãng bảo hiểm -->
+            <div class="card mb-3">
+                <div class="card-header bg-white fw-bold py-3">
+                    <i class="bi bi-info-circle text-primary me-2"></i>1. Thông tin Lệnh sửa chữa &amp; Hãng bảo hiểm
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Chọn Lệnh sửa chữa (RO) <span class="text-danger">*</span></label>
+                            <select name="roId" id="roSelect" class="form-select form-select-sm" required onchange="onRoChange(this.value)">
+                                <option value="">— Chọn Lệnh sửa chữa —</option>
+                                @foreach (var r in ros)
+                                {
+                                    <option value="@r.Id" selected="@(selectedRO?.Id == r.Id)"
+                                            data-plate="@r.Car.Plate" data-model="@r.Car.Model" data-vin="@(r.Car.Vin ?? "")"
+                                            data-customer="@r.Customer.Name" data-phone="@(r.Customer.Phone ?? "")"
+                                            data-note="@(r.IntakeNote ?? "")" data-total="@r.Total">
+                                        @r.Code — @r.Car.Plate (@r.Car.Model) — @r.Customer.Name [@r.Total.ToString("N0")đ]
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text">Chọn RO cần lập hồ sơ yêu cầu bồi thường bảo hiểm.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Hãng bảo hiểm bảo lãnh <span class="text-danger">*</span></label>
+                            <select name="companyId" id="companySelect" class="form-select form-select-sm" required onchange="onCompanyChange(this.value)">
+                                <option value="">— Chọn công ty bảo hiểm —</option>
+                                @foreach (var c in companies)
+                                {
+                                    <option value="@c.Id">@c.InsNo — @c.InsName</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Hợp đồng liên kết bảo hiểm (nếu có)</label>
+                            <select name="contractId" id="contractSelect" class="form-select form-select-sm">
+                                <option value="">— Áp dụng biểu giá chuẩn / Không theo HĐ —</option>
+                                @foreach (var ct in contracts)
+                                {
+                                    <option value="@ct.Id" data-company="@ct.InsuranceCompanyId">
+                                        @ct.ContractNo (@ct.InsuranceCompany.InsName) — Giảm công @ct.DiscountLaborRate%, PT @ct.DiscountPartRate%
+                                    </option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Số GCN / Đơn bảo hiểm <span class="text-danger">*</span></label>
+                            <input name="policyNo" class="form-control form-control-sm" placeholder="VD: BV-VCX-2026-..." required />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Mã hồ sơ tai nạn của BH</label>
+                            <input name="claimFileNo" class="form-control form-control-sm" placeholder="VD: HS-26-04-0012" />
+                        </div>
+                    </div>
+
+                    <!-- Hộp tóm tắt thông tin Xe & KH -->
+                    <div id="roSummaryBox" class="mt-3 p-3 bg-light rounded border @(selectedRO == null ? "d-none" : "")">
+                        <div class="row g-2 small">
+                            <div class="col-md-3">
+                                <span class="text-muted">Biển số xe:</span>
+                                <div class="fw-bold text-primary" id="dispPlate">@(selectedRO?.Car.Plate ?? "—")</div>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="text-muted">Dòng xe:</span>
+                                <div class="fw-bold" id="dispModel">@(selectedRO?.Car.Model ?? "—")</div>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="text-muted">Số khung (VIN):</span>
+                                <div class="fw-semibold font-monospace" id="dispVin">@(selectedRO?.Car.Vin ?? "—")</div>
+                            </div>
+                            <div class="col-md-3">
+                                <span class="text-muted">Chủ xe / SĐT:</span>
+                                <div class="fw-semibold" id="dispCustomer">@(selectedRO?.Customer.Name ?? "—") · @(selectedRO?.Customer.Phone ?? "")</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Khối 2: Thông tin Giám định & Hiện trường tai nạn -->
+            <div class="card mb-3">
+                <div class="card-header bg-white fw-bold py-3">
+                    <i class="bi bi-camera text-primary me-2"></i>2. Thông tin Giám định viên &amp; Hiện trường tai nạn
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Họ tên Giám định viên BH</label>
+                            <input name="surveyorName" class="form-control form-control-sm" placeholder="VD: Nguyễn Văn Tuấn (Giám định viên)" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Số điện thoại Giám định viên</label>
+                            <input name="surveyorPhone" class="form-control form-control-sm" placeholder="VD: 0912.345.678" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Ngày xảy ra sự việc</label>
+                            <input type="date" name="accidentDate" class="form-control form-control-sm" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Địa điểm xảy ra sự việc</label>
+                            <input name="accidentLocation" class="form-control form-control-sm" placeholder="VD: Ngã tư Nguyễn Trãi - Khuất Duy Tiến, Thanh Xuân, Hà Nội" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Mô tả hiện trường tổn thất &amp; Vụ việc va chạm</label>
+                            <textarea name="accidentDescription" id="accidentDesc" class="form-control form-control-sm" rows="3" placeholder="Mô tả chi tiết góc va chạm, các bộ phận bị biến dạng nứt rách trầy xước...">@(selectedRO?.IntakeNote ?? "")</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Khối 3: Hạng mục tổn thất & Chi phí bồi thường -->
+            <div class="card mb-3">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                    <div class="fw-bold"><i class="bi bi-list-check text-primary me-2"></i>3. Chi tiết hạng mục tổn thất &amp; Đề xuất bồi thường</div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><i class="bi bi-plus-lg me-1"></i>Thêm dòng</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-bordered mb-0 align-middle small" id="itemsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:110px">Loại</th>
+                                    <th style="width:120px">Mã hiệu</th>
+                                    <th>Tên hạng mục sửa chữa / Phụ tùng thay thế</th>
+                                    <th style="width:70px" class="text-center">SL</th>
+                                    <th style="width:130px" class="text-end">Đơn giá</th>
+                                    <th style="width:140px" class="text-end">Dự toán BH</th>
+                                    <th style="width:140px" class="text-end">BH duyệt</th>
+                                    <th>Ghi chú giám định</th>
+                                    <th style="width:40px"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                @if (selectedRO != null && selectedRO.Lines.Count > 0)
+                                {
+                                    @for (int i = 0; i < selectedRO.Lines.Count; i++)
+                                    {
+                                        var l = selectedRO.Lines[i];
+                                        <tr>
+                                            <td>
+                                                <select name="lineTypes" class="form-select form-select-sm">
+                                                    <option value="0" selected="@(l.Type == LineType.Labor)">Tiền công</option>
+                                                    <option value="1" selected="@(l.Type == LineType.Part)">Phụ tùng</option>
+                                                </select>
+                                            </td>
+                                            <td><input name="itemCodes" class="form-control form-control-sm" value="@(l.PartId.HasValue ? $"PT-{l.PartId}" : "CV-GO")" /></td>
+                                            <td><input name="itemNames" class="form-control form-control-sm" value="@l.Name" required /></td>
+                                            <td><input type="number" step="1" name="itemQtys" class="form-control form-control-sm text-center" value="@l.Quantity" oninput="recalc()" /></td>
+                                            <td><input type="number" step="1000" name="itemPrices" class="form-control form-control-sm text-end" value="@l.UnitPrice" oninput="recalc()" /></td>
+                                            <td><input type="number" step="1000" name="itemEstAmounts" class="form-control form-control-sm text-end" value="@l.Amount" oninput="recalc()" /></td>
+                                            <td><input type="number" step="1000" name="itemAppAmounts" class="form-control form-control-sm text-end fw-bold text-success" value="@l.Amount" oninput="recalc()" /></td>
+                                            <td><input name="itemNotes" class="form-control form-control-sm" placeholder="Giám định duyệt 100%" /></td>
+                                            <td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeRow(this)"><i class="bi bi-trash"></i></button></td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td>
+                                            <select name="lineTypes" class="form-select form-select-sm">
+                                                <option value="0">Tiền công</option>
+                                                <option value="1">Phụ tùng</option>
+                                            </select>
+                                        </td>
+                                        <td><input name="itemCodes" class="form-control form-control-sm" value="CV-GO-01" /></td>
+                                        <td><input name="itemNames" class="form-control form-control-sm" placeholder="Công gò cản trước / Cụm chi tiết..." required /></td>
+                                        <td><input type="number" step="1" name="itemQtys" class="form-control form-control-sm text-center" value="1" oninput="recalc()" /></td>
+                                        <td><input type="number" step="1000" name="itemPrices" class="form-control form-control-sm text-end" value="1200000" oninput="recalc()" /></td>
+                                        <td><input type="number" step="1000" name="itemEstAmounts" class="form-control form-control-sm text-end" value="1200000" oninput="recalc()" /></td>
+                                        <td><input type="number" step="1000" name="itemAppAmounts" class="form-control form-control-sm text-end fw-bold text-success" value="1200000" oninput="recalc()" /></td>
+                                        <td><input name="itemNotes" class="form-control form-control-sm" placeholder="Giám định duyệt 100%" /></td>
+                                        <td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeRow(this)"><i class="bi bi-trash"></i></button></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Khối 4: Khấu trừ & Quyết toán tài chính bảo lãnh -->
+            <div class="card mb-4">
+                <div class="card-header bg-white fw-bold py-3">
+                    <i class="bi bi-calculator text-primary me-2"></i>4. Phân bổ tài chính bảo hiểm &amp; Khấu trừ bồi thường
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Tổng dự toán sửa chữa</label>
+                            <input id="totalEstDisp" class="form-control form-control-sm bg-light font-monospace" readonly value="0đ" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Số tiền bảo hiểm duyệt</label>
+                            <input id="totalAppDisp" class="form-control form-control-sm bg-light font-monospace text-primary fw-bold" readonly value="0đ" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Mức miễn thường / khấu trừ (VNĐ) <span class="text-danger">*</span></label>
+                            <input type="number" step="100000" name="deductibleAmount" id="deductibleInput" class="form-control form-control-sm font-monospace" value="500000" oninput="recalc()" required />
+                            <div class="form-text">Khách tự chi trả theo quy định hợp đồng bảo hiểm.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-semibold">Số tiền chế tài giảm trừ (VNĐ)</label>
+                            <input type="number" step="100000" name="penaltyAmount" id="penaltyInput" class="form-control form-control-sm font-monospace" value="0" oninput="recalc()" />
+                            <div class="form-text">Chế tài do chậm thông báo tai nạn (nếu có).</div>
+                        </div>
+
+                        <!-- Bảng kết quả phân bổ cuối -->
+                        <div class="col-12 mt-3">
+                            <div class="p-3 bg-light rounded border d-flex justify-content-between align-items-center flex-wrap gap-3">
+                                <div>
+                                    <div class="text-muted small">Bảo hiểm bảo lãnh thanh toán cho Xưởng:</div>
+                                    <div class="fs-4 fw-bold text-success font-monospace" id="insPayDisp">0 VNĐ</div>
+                                    <div class="text-muted" style="font-size:12px">= Số tiền duyệt - Miễn thường - Chế tài</div>
+                                </div>
+                                <div>
+                                    <div class="text-muted small">Khách hàng thanh toán phần tự chịu:</div>
+                                    <div class="fs-4 fw-bold text-danger font-monospace" id="cusPayDisp">0 VNĐ</div>
+                                    <div class="text-muted" style="font-size:12px">= Miễn thường + Chế tài + (Dự toán - Duyệt)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-white d-flex justify-content-between align-items-center py-3">
+                    <a href="/Insurance" class="btn btn-outline-secondary">Hủy bỏ</a>
+                    <button type="submit" class="btn btn-primary px-4 fw-semibold"><i class="bi bi-check2-circle me-1"></i>Lưu &amp; Tạo hồ sơ bồi thường</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+function onRoChange(roId) {
+    if (!roId) {
+        document.getElementById('roSummaryBox').classList.add('d-none');
+        return;
+    }
+    window.location.href = '/Insurance/Create?roId=' + roId;
+}
+
+function onCompanyChange(companyId) {
+    const contractSelect = document.getElementById('contractSelect');
+    const options = contractSelect.querySelectorAll('option');
+    options.forEach(opt => {
+        if (!opt.value) { opt.hidden = false; return; }
+        const cId = opt.getAttribute('data-company');
+        opt.hidden = (companyId && cId !== companyId);
+    });
+    contractSelect.value = '';
+}
+
+function addRow() {
+    const tbody = document.getElementById('itemsBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td>
+            <select name="lineTypes" class="form-select form-select-sm">
+                <option value="0">Tiền công</option>
+                <option value="1">Phụ tùng</option>
+            </select>
+        </td>
+        <td><input name="itemCodes" class="form-control form-control-sm" value="CV-BH" /></td>
+        <td><input name="itemNames" class="form-control form-control-sm" placeholder="Tên công việc / Phụ tùng..." required /></td>
+        <td><input type="number" step="1" name="itemQtys" class="form-control form-control-sm text-center" value="1" oninput="recalc()" /></td>
+        <td><input type="number" step="1000" name="itemPrices" class="form-control form-control-sm text-end" value="0" oninput="recalc()" /></td>
+        <td><input type="number" step="1000" name="itemEstAmounts" class="form-control form-control-sm text-end" value="0" oninput="recalc()" /></td>
+        <td><input type="number" step="1000" name="itemAppAmounts" class="form-control form-control-sm text-end fw-bold text-success" value="0" oninput="recalc()" /></td>
+        <td><input name="itemNotes" class="form-control form-control-sm" placeholder="Ghi chú giám định" /></td>
+        <td class="text-center"><button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeRow(this)"><i class="bi bi-trash"></i></button></td>
+    `;
+    tbody.appendChild(tr);
+    recalc();
+}
+
+function removeRow(btn) {
+    const tbody = document.getElementById('itemsBody');
+    if (tbody.rows.length <= 1) {
+        alert('Hồ sơ phải có ít nhất 1 hạng mục sửa chữa.');
+        return;
+    }
+    btn.closest('tr').remove();
+    recalc();
+}
+
+function recalc() {
+    let totalEst = 0;
+    let totalApp = 0;
+    const rows = document.querySelectorAll('#itemsBody tr');
+    rows.forEach(r => {
+        const qty = parseFloat(r.querySelector('[name="itemQtys"]')?.value || '1');
+        const price = parseFloat(r.querySelector('[name="itemPrices"]')?.value || '0');
+        const estInp = r.querySelector('[name="itemEstAmounts"]');
+        const appInp = r.querySelector('[name="itemAppAmounts"]');
+
+        let est = parseFloat(estInp?.value || '0');
+        if (est === 0 && price > 0) {
+            est = qty * price;
+            if (estInp) estInp.value = est;
+        }
+
+        let app = parseFloat(appInp?.value || '0');
+        if (app === 0 && est > 0) {
+            app = est;
+            if (appInp) appInp.value = app;
+        }
+
+        totalEst += est;
+        totalApp += app;
+    });
+
+    const deductible = parseFloat(document.getElementById('deductibleInput')?.value || '0');
+    const penalty = parseFloat(document.getElementById('penaltyInput')?.value || '0');
+
+    const insPay = Math.max(0, totalApp - deductible - penalty);
+    const cusPay = deductible + penalty + Math.max(0, totalEst - totalApp);
+
+    document.getElementById('totalEstDisp').value = totalEst.toLocaleString('vi-VN') + ' đ';
+    document.getElementById('totalAppDisp').value = totalApp.toLocaleString('vi-VN') + ' đ';
+    document.getElementById('insPayDisp').textContent = insPay.toLocaleString('vi-VN') + ' VNĐ';
+    document.getElementById('cusPayDisp').textContent = cusPay.toLocaleString('vi-VN') + ' VNĐ';
+}
+
+document.addEventListener('DOMContentLoaded', recalc);
+</script>
+}

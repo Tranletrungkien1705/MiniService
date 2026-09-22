@@ -1307,13 +1307,175 @@ public static class Seeder
 
             await db.SaveChangesAsync();
         }
+
+        if (!await db.InsuranceCompanies.AnyAsync())
+        {
+            var bv = new InsuranceCompany
+            {
+                InsNo = "BH-BV",
+                InsName = "Tổng công ty Bảo hiểm Bảo Việt (BaoViet Insurance)",
+                Address = "Số 7 Lý Thường Kiệt, Hoàn Kiếm, Hà Nội",
+                Phone = "024.3826.2614",
+                Email = "giamdinh.baoviet@baoviet.com.vn",
+                TaxCode = "0100111761",
+                Hotline = "1900 558899",
+                IsActive = true
+            };
+            var pvi = new InsuranceCompany
+            {
+                InsNo = "BH-PVI",
+                InsName = "Tổng công ty Bảo hiểm PVI (PVI Insurance)",
+                Address = "Tòa nhà PVI Tower, Số 1 Phạm Văn Bạch, Cầu Giấy, Hà Nội",
+                Phone = "024.3733.5588",
+                Email = "hotroboihoan@pvi.com.vn",
+                TaxCode = "0105315570",
+                Hotline = "1900 545458",
+                IsActive = true
+            };
+            var pti = new InsuranceCompany
+            {
+                InsNo = "BH-PTI",
+                InsName = "Tổng công ty CP Bảo hiểm Bưu điện (PTI)",
+                Address = "Tầng 8, Tòa nhà Harec, Số 4A Láng Hạ, Ba Đình, Hà Nội",
+                Phone = "024.3772.4466",
+                Email = "claim.auto@pti.com.vn",
+                TaxCode = "0100778409",
+                Hotline = "1900 545475",
+                IsActive = true
+            };
+            var mic = new InsuranceCompany
+            {
+                InsNo = "BH-MIC",
+                InsName = "Tổng công ty CP Bảo hiểm Quân đội (MIC)",
+                Address = "Tầng 15, Tòa nhà MIPEC, 229 Tây Sơn, Đống Đa, Hà Nội",
+                Phone = "024.6285.3388",
+                Email = "giamdinhmic@mic.vn",
+                TaxCode = "0102422588",
+                Hotline = "1900 558891",
+                IsActive = true
+            };
+
+            db.InsuranceCompanies.AddRange(bv, pvi, pti, mic);
+            await db.SaveChangesAsync();
+
+            // Seed Contracts
+            var ctBv = new InsuranceContract
+            {
+                ContractNo = "HD-BV/2026/01",
+                ContractCode = "HDBV-HYUNDAI-2026",
+                InsuranceCompanyId = bv.Id,
+                StartDate = new DateTime(2026, 1, 1),
+                FinishDate = new DateTime(2026, 12, 31),
+                PaymentType = InsurancePaymentType.DirectGuarantee,
+                PaymentLimit = 1_000_000_000m,
+                DiscountLaborRate = 10.0m,
+                DiscountPartRate = 5.0m,
+                Note = "Bảo lãnh sửa chữa sơn gò, phụ tùng thay thế thân vỏ tiêu chuẩn chính hãng Hyundai",
+                IsActive = true
+            };
+            var ctPvi = new InsuranceContract
+            {
+                ContractNo = "HD-PVI/2026/03",
+                ContractCode = "HDPVI-HYUNDAI-2026",
+                InsuranceCompanyId = pvi.Id,
+                StartDate = new DateTime(2026, 1, 1),
+                FinishDate = new DateTime(2026, 12, 31),
+                PaymentType = InsurancePaymentType.DirectGuarantee,
+                PaymentLimit = 800_000_000m,
+                DiscountLaborRate = 8.0m,
+                DiscountPartRate = 5.0m,
+                Note = "Hợp đồng liên kết bảo hiểm vật chất xe toàn diện cho khách hàng Hyundai",
+                IsActive = true
+            };
+            db.InsuranceContracts.AddRange(ctBv, ctPvi);
+            await db.SaveChangesAsync();
+
+            // Seed Claims
+            var ros = await db.ROs.Include(r => r.Car).Include(r => r.Customer).ToListAsync();
+            var ro1 = ros.FirstOrDefault();
+            var ro2 = ros.Skip(1).FirstOrDefault();
+
+            if (ro1 != null)
+            {
+                var claim1 = new InsuranceClaim
+                {
+                    ClaimNo = "BH260427-001",
+                    ROId = ro1.Id,
+                    InsuranceCompanyId = bv.Id,
+                    InsuranceContractId = ctBv.Id,
+                    PolicyNo = "BV-VCX-2026-88992",
+                    ClaimFileNo = "HS-26-04-0012",
+                    SurveyorName = "Nguyễn Văn Tuấn (Giám định viên BV)",
+                    SurveyorPhone = "0912.345.678",
+                    AccidentDate = DateTime.Today.AddDays(-2),
+                    AccidentLocation = "Ngã tư Nguyễn Trãi - Khuất Duy Tiến, Thanh Xuân, Hà Nội",
+                    AccidentDescription = "Xe va quẹt góc cản trước bên phụ khi chuyển làn, rách ba đờ sốc trước và xước cụm đèn pha.",
+                    EstimatedAmount = 8_200_000m,
+                    ApprovedAmount = 7_700_000m,
+                    DeductibleAmount = 500_000m,
+                    PenaltyAmount = 0m,
+                    InsuranceAmount = 7_200_000m,
+                    CustomerAmount = 1_000_000m,
+                    Status = InsuranceClaimStatus.Approved,
+                    DecisionNote = "Bảo Việt chấp thuận bảo lãnh bồi thường 7.700.000đ. Khách hàng chịu mức miễn thường 500.000đ theo đơn BH.",
+                    CreatedBy = "CVDV Hoàng",
+                    CreatedAt = DateTime.Now.AddDays(-2),
+                    SubmittedAt = DateTime.Now.AddDays(-1),
+                    ApprovedAt = DateTime.Now.AddHours(-6),
+                    Items = [
+                        new InsuranceClaimItem { Type = LineType.Labor, Code = "CV-GO-01", Name = "Công gò nắn phục hồi cản trước", Quantity = 1, UnitPrice = 1200000, EstimatedAmount = 1200000, ApprovedAmount = 1200000, IsApproved = true, Note = "Giám định duyệt 100%" },
+                        new InsuranceClaimItem { Type = LineType.Labor, Code = "CV-SON-02", Name = "Công sơn sấy hấp cản trước xe", Quantity = 1, UnitPrice = 1800000, EstimatedAmount = 1800000, ApprovedAmount = 1800000, IsApproved = true, Note = "Sơn chuẩn pha vi tính" },
+                        new InsuranceClaimItem { Type = LineType.Part, Code = "86511-S8000", Name = "Ba đờ sốc (cản trước) chính hãng", Quantity = 1, UnitPrice = 4200000, EstimatedAmount = 4200000, ApprovedAmount = 4200000, IsApproved = true, Note = "Duyệt thay mới do rách gãy tai bắt ốc" },
+                        new InsuranceClaimItem { Type = LineType.Part, Code = "CV-DAN-03", Name = "Đánh bóng phục hồi chóa đèn pha phụ", Quantity = 1, UnitPrice = 1000000, EstimatedAmount = 1000000, ApprovedAmount = 500000, IsApproved = true, Note = "Bảo hiểm duyệt giảm trừ công đánh bóng chóa" }
+                    ]
+                };
+                db.InsuranceClaims.Add(claim1);
+            }
+
+            if (ro2 != null)
+            {
+                var claim2 = new InsuranceClaim
+                {
+                    ClaimNo = "BH260427-002",
+                    ROId = ro2.Id,
+                    InsuranceCompanyId = pvi.Id,
+                    InsuranceContractId = ctPvi.Id,
+                    PolicyNo = "PVI-VC-2026-44319",
+                    ClaimFileNo = "PVI-HN-9921",
+                    SurveyorName = "Lê Hoàng Long (PVI Cầu Giấy)",
+                    SurveyorPhone = "0988.112.233",
+                    AccidentDate = DateTime.Today.AddDays(-1),
+                    AccidentLocation = "Bãi đỗ xe Big C Thăng Long, Cầu Giấy, Hà Nội",
+                    AccidentDescription = "Lùi xe va phải cột bê tông, móp méo nắp cốp sau và vỡ cụm đèn hậu bên lái.",
+                    EstimatedAmount = 6_500_000m,
+                    ApprovedAmount = 6_500_000m,
+                    DeductibleAmount = 500_000m,
+                    PenaltyAmount = 0m,
+                    InsuranceAmount = 6_000_000m,
+                    CustomerAmount = 500_000m,
+                    Status = InsuranceClaimStatus.Submitted,
+                    DecisionNote = null,
+                    CreatedBy = "CVDV Thắng",
+                    CreatedAt = DateTime.Now.AddDays(-1),
+                    SubmittedAt = DateTime.Now.AddHours(-3),
+                    Items = [
+                        new InsuranceClaimItem { Type = LineType.Labor, Code = "CV-GO-03", Name = "Công gò phục hồi nắp cốp sau", Quantity = 1, UnitPrice = 1500000, EstimatedAmount = 1500000, ApprovedAmount = 1500000, IsApproved = true },
+                        new InsuranceClaimItem { Type = LineType.Labor, Code = "CV-SON-04", Name = "Sơn nắp cốp sau và góc hông", Quantity = 1, UnitPrice = 1800000, EstimatedAmount = 1800000, ApprovedAmount = 1800000, IsApproved = true },
+                        new InsuranceClaimItem { Type = LineType.Part, Code = "92401-D3000", Name = "Cụm đèn hậu ngoài bên lái", Quantity = 1, UnitPrice = 3200000, EstimatedAmount = 3200000, ApprovedAmount = 3200000, IsApproved = true }
+                    ]
+                };
+                db.InsuranceClaims.Add(claim2);
+            }
+
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -1783,6 +1945,86 @@ public static class Seeder
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""AssignmentWorkId"") REFERENCES ""AssignmentWorks"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""EngineerId"") REFERENCES ""Engineers"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE TABLE IF NOT EXISTS ""InsuranceCompanies"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""InsNo"" TEXT NOT NULL,
+                ""InsName"" TEXT NOT NULL,
+                ""Address"" TEXT NULL,
+                ""Phone"" TEXT NULL,
+                ""Email"" TEXT NULL,
+                ""TaxCode"" TEXT NULL,
+                ""Hotline"" TEXT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_InsuranceCompanies_OrgId_InsNo"" ON ""InsuranceCompanies"" (""OrgId"", ""InsNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""InsuranceContracts"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ContractNo"" TEXT NOT NULL,
+                ""ContractCode"" TEXT NOT NULL,
+                ""InsuranceCompanyId"" INTEGER NOT NULL,
+                ""StartDate"" TEXT NOT NULL,
+                ""FinishDate"" TEXT NOT NULL,
+                ""PaymentType"" INTEGER NOT NULL,
+                ""PaymentLimit"" TEXT NOT NULL,
+                ""DiscountLaborRate"" TEXT NOT NULL,
+                ""DiscountPartRate"" TEXT NOT NULL,
+                ""Note"" TEXT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""InsuranceCompanyId"") REFERENCES ""InsuranceCompanies"" (""Id"") ON DELETE CASCADE
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_InsuranceContracts_OrgId_ContractNo"" ON ""InsuranceContracts"" (""OrgId"", ""ContractNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""InsuranceClaims"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ClaimNo"" TEXT NOT NULL,
+                ""ROId"" INTEGER NOT NULL,
+                ""InsuranceCompanyId"" INTEGER NOT NULL,
+                ""InsuranceContractId"" INTEGER NULL,
+                ""PolicyNo"" TEXT NOT NULL,
+                ""ClaimFileNo"" TEXT NULL,
+                ""SurveyorName"" TEXT NULL,
+                ""SurveyorPhone"" TEXT NULL,
+                ""AccidentDate"" TEXT NOT NULL,
+                ""AccidentLocation"" TEXT NULL,
+                ""AccidentDescription"" TEXT NOT NULL,
+                ""EstimatedAmount"" TEXT NOT NULL,
+                ""ApprovedAmount"" TEXT NOT NULL,
+                ""DeductibleAmount"" TEXT NOT NULL,
+                ""PenaltyAmount"" TEXT NOT NULL,
+                ""InsuranceAmount"" TEXT NOT NULL,
+                ""CustomerAmount"" TEXT NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""DecisionNote"" TEXT NULL,
+                ""RejectionReason"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""SubmittedAt"" TEXT NULL,
+                ""ApprovedAt"" TEXT NULL,
+                ""SettledAt"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""InsuranceCompanyId"") REFERENCES ""InsuranceCompanies"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""InsuranceContractId"") REFERENCES ""InsuranceContracts"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_InsuranceClaims_OrgId_ClaimNo"" ON ""InsuranceClaims"" (""OrgId"", ""ClaimNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""InsuranceClaimItems"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""InsuranceClaimId"" INTEGER NOT NULL,
+                ""Type"" INTEGER NOT NULL,
+                ""Code"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""EstimatedAmount"" TEXT NOT NULL,
+                ""ApprovedAmount"" TEXT NOT NULL,
+                ""IsApproved"" INTEGER NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""InsuranceClaimId"") REFERENCES ""InsuranceClaims"" (""Id"") ON DELETE CASCADE
             );"
         };
 

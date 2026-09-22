@@ -36,6 +36,10 @@ public class AppDbContext : DbContext
     public DbSet<Engineer> Engineers => Set<Engineer>();
     public DbSet<AssignmentWork> AssignmentWorks => Set<AssignmentWork>();
     public DbSet<AssignmentEngineer> AssignmentEngineers => Set<AssignmentEngineer>();
+    public DbSet<InsuranceCompany> InsuranceCompanies => Set<InsuranceCompany>();
+    public DbSet<InsuranceContract> InsuranceContracts => Set<InsuranceContract>();
+    public DbSet<InsuranceClaim> InsuranceClaims => Set<InsuranceClaim>();
+    public DbSet<InsuranceClaimItem> InsuranceClaimItems => Set<InsuranceClaimItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -62,7 +66,7 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
             e.Ignore(x => x.Total); e.Ignore(x => x.LaborTotal); e.Ignore(x => x.PartTotal);
-            e.Ignore(x => x.CustomerTotal); e.Ignore(x => x.WarrantyTotal);
+            e.Ignore(x => x.CustomerTotal); e.Ignore(x => x.WarrantyTotal); e.Ignore(x => x.InsuranceTotal);
             e.Ignore(x => x.PaidAmount); e.Ignore(x => x.RemainingBalance);
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
@@ -75,6 +79,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Cavity).WithMany().HasForeignKey(x => x.CavityId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.ReceptionSheet).WithMany().HasForeignKey(x => x.ReceptionSheetId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.AssignmentWorks).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
+            e.HasMany(x => x.InsuranceClaims).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -253,7 +258,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
-            e.HasOne(x => x.RO).WithMany().HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.RO).WithMany(x => x.ReceptionSheets).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.Items).WithOne(x => x.ReceptionSheet).HasForeignKey(x => x.ReceptionSheetId).OnDelete(DeleteBehavior.Cascade);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
@@ -293,6 +298,44 @@ public class AppDbContext : DbContext
         {
             e.Property(x => x.AssignedHours).HasPrecision(5, 2);
             e.HasOne(x => x.Engineer).WithMany(x => x.Assignments).HasForeignKey(x => x.EngineerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InsuranceCompany>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.InsNo }).IsUnique();
+            e.HasMany(x => x.Contracts).WithOne(x => x.InsuranceCompany).HasForeignKey(x => x.InsuranceCompanyId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Claims).WithOne(x => x.InsuranceCompany).HasForeignKey(x => x.InsuranceCompanyId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InsuranceContract>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ContractNo }).IsUnique();
+            e.Property(x => x.PaymentLimit).HasPrecision(18, 2);
+            e.Property(x => x.DiscountLaborRate).HasPrecision(5, 2);
+            e.Property(x => x.DiscountPartRate).HasPrecision(5, 2);
+            e.HasMany(x => x.Claims).WithOne(x => x.InsuranceContract).HasForeignKey(x => x.InsuranceContractId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InsuranceClaim>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ClaimNo }).IsUnique();
+            e.Property(x => x.EstimatedAmount).HasPrecision(18, 2);
+            e.Property(x => x.ApprovedAmount).HasPrecision(18, 2);
+            e.Property(x => x.DeductibleAmount).HasPrecision(18, 2);
+            e.Property(x => x.PenaltyAmount).HasPrecision(18, 2);
+            e.Property(x => x.InsuranceAmount).HasPrecision(18, 2);
+            e.Property(x => x.CustomerAmount).HasPrecision(18, 2);
+            e.Ignore(x => x.ItemCount);
+            e.HasOne(x => x.RO).WithMany(x => x.InsuranceClaims).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
+            e.HasMany(x => x.Items).WithOne(x => x.InsuranceClaim).HasForeignKey(x => x.InsuranceClaimId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InsuranceClaimItem>(e =>
+        {
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.Property(x => x.EstimatedAmount).HasPrecision(18, 2);
+            e.Property(x => x.ApprovedAmount).HasPrecision(18, 2);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
