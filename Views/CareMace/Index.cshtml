@@ -1,0 +1,175 @@
+@model List<CustomerCareMace>
+@{
+    ViewData["Title"] = "Quản lý Nhắc bảo dưỡng định kỳ xe (Care Mace)";
+    var curStatus = (CustomerCareMaceStatus?)ViewBag.Status;
+    var curMaceType = (MaceType?)ViewBag.MaceType;
+    var curTimeFilter = (string?)ViewBag.TimeFilter;
+    var totalCount = Model.Count;
+    var pendingCount = (int)(ViewBag.PendingCount ?? Model.Count(m => m.Status == CustomerCareMaceStatus.Pending));
+    var overdueCount = (int)(ViewBag.OverdueCount ?? Model.Count(m => m.IsOverdue));
+    var bookedCount = (int)(ViewBag.BookedCount ?? Model.Count(m => m.Status == CustomerCareMaceStatus.Booked));
+    var conversionRate = totalCount > 0 ? Math.Round((double)bookedCount * 100 / totalCount, 1) : 0.0;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng mốc nhắc bảo dưỡng</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ liên hệ gọi điện</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Quá hạn chưa liên hệ</div>
+            <div class="stat-num text-danger">@overdueCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã chốt hẹn bảo dưỡng</div>
+            <div class="stat-num text-success">@bookedCount <span style="font-size:12px;font-weight:normal" class="text-muted">(Tỷ lệ: @conversionRate%)</span></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã phiếu / Biển số / Khách / SĐT..." style="max-width:220px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (CustomerCareMaceStatus s in Enum.GetValues(typeof(CustomerCareMaceStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.CustomerCareMaceStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <select name="maceType" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Mọi phương pháp tính —</option>
+                    @foreach (MaceType t in Enum.GetValues(typeof(MaceType)))
+                    {
+                        var (typeName, _) = Ui.MaceType(t);
+                        <option value="@((int)t)" selected="@(curMaceType == t)">@typeName</option>
+                    }
+                </select>
+                <select name="timeFilter" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:170px">
+                    <option value="">— Tất cả thời hạn —</option>
+                    <option value="overdue" selected="@(curTimeFilter == "overdue")">⚠️ Quá hạn bảo dưỡng</option>
+                    <option value="due_7days" selected="@(curTimeFilter == "due_7days")">⏳ Sắp đến hạn (7 ngày)</option>
+                    <option value="month" selected="@(curTimeFilter == "month")">📅 Đến hạn trong tháng</option>
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curStatus.HasValue || curMaceType.HasValue || !string.IsNullOrWhiteSpace(curTimeFilter) || !string.IsNullOrWhiteSpace((string?)ViewBag.Q))
+                {
+                    <a href="/CareMace" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <a href="/CareMace/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập mốc nhắc mới</a>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã phiếu</th>
+                        <th>Biển số xe &amp; Dòng xe</th>
+                        <th>Khách hàng &amp; Liên hệ</th>
+                        <th>Mốc KM</th>
+                        <th>Phương pháp</th>
+                        <th>Ngày khuyến nghị</th>
+                        <th>Trạng thái</th>
+                        <th>Lịch sử cuộc gọi / Ghi chú</th>
+                        <th>Cuộc hẹn chốt</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var m in Model)
+                {
+                    var (stText, stCode, stCss) = Ui.CustomerCareMaceStatus(m.Status);
+                    var (typeText, typeCss) = Ui.MaceType(m.MaceType);
+                    var rowBg = m.IsOverdue ? "table-danger" : (m.IsDueSoon ? "table-warning" : "");
+                    <tr class="@rowBg" style="cursor:pointer" onclick="location.href='/CareMace/Detail/@m.Id'">
+                        <td class="fw-semibold text-primary">@m.MaceNo</td>
+                        <td>
+                            <b>@m.Car.Plate</b>
+                            <div class="text-muted small">@m.Car.Model</div>
+                        </td>
+                        <td>
+                            @m.Customer.Name
+                            <div class="text-muted small"><i class="bi bi-telephone me-1"></i>@(m.Customer.Phone ?? "—")</div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">
+                                @m.LastKm.ToString("N0") km → <b class="text-primary">@m.NextKm.ToString("N0") km</b>
+                            </span>
+                        </td>
+                        <td><span class="badge bg-@typeCss">@typeText</span></td>
+                        <td>
+                            <b>@m.MaceRecomentDate.ToString("dd/MM/yyyy")</b>
+                            @if (m.IsOverdue)
+                            {
+                                <div class="text-danger small fw-bold"><i class="bi bi-exclamation-circle me-1"></i>Quá hạn @((DateTime.Today - m.MaceRecomentDate.Date).Days) ngày</div>
+                            }
+                            else if (m.IsDueSoon)
+                            {
+                                <div class="text-warning small fw-bold"><i class="bi bi-hourglass-split me-1"></i>Còn @((m.MaceRecomentDate.Date - DateTime.Today).Days) ngày</div>
+                            }
+                        </td>
+                        <td><span class="badge bg-@stCss">@stCode — @stText</span></td>
+                        <td style="max-width:260px">
+                            @if (m.ContactDate.HasValue)
+                            {
+                                <div class="small fw-semibold text-dark">
+                                    <i class="bi bi-telephone-outbound me-1"></i>@m.ContactDate.Value.ToString("dd/MM/yyyy HH:mm")
+                                    @if (!string.IsNullOrWhiteSpace(m.ContactBy)) { <span class="text-muted">(@m.ContactBy)</span> }
+                                </div>
+                            }
+                            @if (m.ApointDate.HasValue)
+                            {
+                                <div class="small text-success fw-bold"><i class="bi bi-calendar-check me-1"></i>Hẹn: @m.ApointDate.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(m.Remark))
+                            {
+                                <div class="text-muted small text-truncate" title="@m.Remark">@m.Remark</div>
+                            }
+                            else if (!m.ContactDate.HasValue)
+                            {
+                                <span class="text-muted small fst-italic">Chưa liên hệ</span>
+                            }
+                        </td>
+                        <td>
+                            @if (m.Appointment != null)
+                            {
+                                <a href="/Appointment/Detail/@m.Appointment.Id" class="badge bg-success text-decoration-none" onclick="event.stopPropagation()">
+                                    <i class="bi bi-calendar2-check me-1"></i>@m.Appointment.AppNo
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">—</span>
+                            }
+                        </td>
+                        <td class="text-end" onclick="event.stopPropagation()">
+                            <a href="/CareMace/Detail/@m.Id" class="btn btn-sm btn-outline-primary" title="Chi tiết / Cập nhật"><i class="bi bi-pencil-square"></i></a>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-4">Không có phiếu nhắc bảo dưỡng nào phù hợp điều kiện lọc.</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

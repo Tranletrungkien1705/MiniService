@@ -285,6 +285,24 @@ public static class Ui
         return (string.Join(" · ", parts), "info");
     }
 
+    public static (string text, string css) MaceType(MaceType t) => t switch
+    {
+        Models.MaceType.Advisor => ("CVDV chỉ định", "info"),
+        Models.MaceType.Standard6Months => ("Định kỳ 6 tháng", "primary"),
+        Models.MaceType.FrequencyFvx => ("Tần suất vào xưởng (Fvx)", "success"),
+        _ => (t.ToString(), "secondary")
+    };
+
+    public static (string text, string code, string css) CustomerCareMaceStatus(CustomerCareMaceStatus s) => s switch
+    {
+        Models.CustomerCareMaceStatus.Pending => ("Chờ gọi nhắc", "PEND", "warning"),
+        Models.CustomerCareMaceStatus.Contacted => ("Đã liên hệ", "CONT", "info"),
+        Models.CustomerCareMaceStatus.NotContacted => ("Không nghe máy", "NOCONT", "secondary"),
+        Models.CustomerCareMaceStatus.Booked => ("Đã chốt hẹn", "BOOKED", "success"),
+        Models.CustomerCareMaceStatus.Cancelled => ("Từ chối / Hủy", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
     public static string MoneyToWords(decimal total)
     {
         if (total <= 0) return "Không đồng";

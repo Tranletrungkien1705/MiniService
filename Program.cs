@@ -2166,6 +2166,120 @@ app.MapDelete("/api/campaigns/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Nhắc bảo dưỡng định kỳ xe (Ser_CustomerCareMace / MH 83)
+app.MapGet("/api/caremaces", async (CustomerCareMaceStatus? status, MaceType? maceType, string? timeFilter, string? q, IRoService svc) =>
+{
+    var list = await svc.CustomerCareMacesAsync(status, maceType, timeFilter, q);
+    return Results.Ok(list.Select(m => new
+    {
+        m.Id,
+        m.MaceNo,
+        carId = m.CarId,
+        plate = m.Car?.Plate,
+        model = m.Car?.Model,
+        customerId = m.CustomerId,
+        customer = m.Customer?.Name,
+        phone = m.Customer?.Phone,
+        maceType = Ui.MaceType(m.MaceType).text,
+        maceTypeValue = (int)m.MaceType,
+        m.LastKm,
+        m.NextKm,
+        m.MaceRecomentDate,
+        status = Ui.CustomerCareMaceStatus(m.Status).text,
+        statusCode = Ui.CustomerCareMaceStatus(m.Status).code,
+        statusValue = (int)m.Status,
+        m.ContactDate,
+        m.ContactBy,
+        m.ApointDate,
+        m.Remark,
+        m.IsOverdue,
+        m.IsDueSoon,
+        roId = m.ROId,
+        roCode = m.RO?.Code,
+        appointmentId = m.AppointmentId,
+        appointmentNo = m.Appointment?.AppNo,
+        m.CreatedAt,
+        m.UpdatedAt
+    }));
+});
+
+app.MapGet("/api/caremaces/{id:int}", async (int id, IRoService svc) =>
+{
+    var m = await svc.GetCustomerCareMaceAsync(id);
+    if (m == null) return Results.NotFound(new { error = "Không tìm thấy phiếu nhắc bảo dưỡng." });
+    return Results.Ok(new
+    {
+        m.Id,
+        m.MaceNo,
+        car = new { m.Car.Id, m.Car.Plate, m.Car.Model, m.Car.Vin, m.Car.Year },
+        customer = new { m.Customer.Id, m.Customer.Name, m.Customer.Phone, m.Customer.Email },
+        maceType = Ui.MaceType(m.MaceType).text,
+        maceTypeValue = (int)m.MaceType,
+        m.LastKm,
+        m.NextKm,
+        m.MaceRecomentDate,
+        status = Ui.CustomerCareMaceStatus(m.Status).text,
+        statusCode = Ui.CustomerCareMaceStatus(m.Status).code,
+        statusValue = (int)m.Status,
+        m.ContactDate,
+        m.ContactBy,
+        m.ApointDate,
+        m.Remark,
+        m.IsOverdue,
+        m.IsDueSoon,
+        ro = m.RO != null ? new { m.RO.Id, m.RO.Code, m.RO.Status, m.RO.Odometer, m.RO.FinishedAt } : null,
+        appointment = m.Appointment != null ? new { m.Appointment.Id, m.Appointment.AppNo, m.Appointment.AppointmentDate, m.Appointment.Status } : null,
+        m.CreatedBy,
+        m.CreatedAt,
+        m.UpdatedAt
+    });
+});
+
+app.MapPost("/api/caremaces", async (CreateCareMaceDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.CarId <= 0) return Results.BadRequest(new { error = "Vui lòng chọn xe (CarId)." });
+
+        var mace = new CustomerCareMace
+        {
+            CarId = dto.CarId,
+            MaceType = dto.MaceType ?? MaceType.Standard6Months,
+            LastKm = dto.LastKm ?? 0,
+            NextKm = dto.NextKm ?? 0,
+            MaceRecomentDate = dto.MaceRecomentDate ?? DateTime.Today.AddMonths(6),
+            Remark = dto.Remark?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api",
+            Status = CustomerCareMaceStatus.Pending
+        };
+
+        var id = await svc.CreateCustomerCareMaceAsync(mace);
+        return Results.Ok(new { maceId = id, maceNo = mace.MaceNo, message = "Đã tạo phiếu nhắc bảo dưỡng thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/caremaces/{id:int}/update-call", async (int id, UpdateCareMaceCallDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.UpdateCustomerCareMaceCallAsync(id, dto.Status, dto.ContactDate, dto.ApointDate, dto.Remark, dto.ContactBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/caremaces/{id:int}/convert-to-appointment", async (int id, ConvertMaceToAppointmentDto? dto, IRoService svc) =>
+{
+    var (ok, msg, appId) = await svc.ConvertMaceToAppointmentAsync(id, dto?.Advisor, dto?.Cavity, dto?.Note);
+    return ok ? Results.Ok(new { message = msg, appointmentId = appId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/caremaces/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCustomerCareMaceAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -2232,3 +2346,6 @@ record TransitionInsuranceClaimDto(InsuranceClaimStatus ToStatus, decimal? Appro
 record CreateCampaignDto(string? CamMarketingNo, string CamMarketingName, string? CamMarketingDesc, DateTime? EffDateStart, DateTime? EffDateEnd, string? ConditionModel, string? ConditionPlateNo, string? ConditionVIN, decimal? DiscountLaborPercent, decimal? DiscountPartPercent, string? CreatedBy, List<CreateCampaignItemDto>? Items);
 record CreateCampaignItemDto(int PartId, string? PartCode, string? PartName, decimal? PercentDiscount, decimal? MaxQuantity, string? Note);
 record TransitionCampaignDto(CampaignMarketingStatus ToStatus, string? ApprovedBy);
+record CreateCareMaceDto(int CarId, MaceType? MaceType, int? LastKm, int? NextKm, DateTime? MaceRecomentDate, string? Remark, string? CreatedBy);
+record UpdateCareMaceCallDto(CustomerCareMaceStatus Status, DateTime? ContactDate, DateTime? ApointDate, string? Remark, string? ContactBy);
+record ConvertMaceToAppointmentDto(string? Advisor, string? Cavity, string? Note);

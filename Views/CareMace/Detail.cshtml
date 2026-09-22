@@ -1,0 +1,296 @@
+@model CustomerCareMace
+@{
+    ViewData["Title"] = $"Phiếu nhắc bảo dưỡng {Model.MaceNo}";
+    var (stText, stCode, stCss) = Ui.CustomerCareMaceStatus(Model.Status);
+    var (typeText, typeCss) = Ui.MaceType(Model.MaceType);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="mb-0 fw-bold"><i class="bi bi-bell-fill me-2 text-primary"></i>@Model.MaceNo</h4>
+            <span class="badge bg-@stCss fs-6">@stCode — @stText</span>
+            <span class="badge bg-@typeCss">@typeText</span>
+            @if (Model.IsOverdue)
+            {
+                <span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>Quá hạn @((DateTime.Today - Model.MaceRecomentDate.Date).Days) ngày</span>
+            }
+            else if (Model.IsDueSoon)
+            {
+                <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>Còn @((Model.MaceRecomentDate.Date - DateTime.Today).Days) ngày đến hạn</span>
+            }
+        </div>
+        <div class="text-muted small">Phiếu theo dõi và nhắc bảo dưỡng định kỳ xe ô tô theo tiêu chuẩn Hyundai Car Service</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/CareMace" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+        @if (Model.Appointment != null)
+        {
+            <a href="/Appointment/Detail/@Model.Appointment.Id" class="btn btn-sm btn-success">
+                <i class="bi bi-calendar2-check me-1"></i>Xem lịch hẹn @Model.Appointment.AppNo
+            </a>
+        }
+        else if (Model.Status != CustomerCareMaceStatus.Cancelled)
+        {
+            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#convertModal">
+                <i class="bi bi-calendar-plus me-1"></i>Chuyển thành Cuộc hẹn
+            </button>
+        }
+        @if (Model.Status != CustomerCareMaceStatus.Booked)
+        {
+            <form method="post" action="/CareMace/Delete" onsubmit="return confirm('Bạn có chắc chắn muốn xóa phiếu nhắc này?');" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+        }
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Cột trái: Thông tin xe, Khách hàng & Lịch sử RO -->
+    <div class="col-lg-7">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2 fw-bold text-primary">
+                <i class="bi bi-car-front me-2"></i>Thông tin Xe &amp; Khách hàng
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-sm-6">
+                        <div class="text-muted small">Biển số xe:</div>
+                        <div class="fs-5 fw-bold text-dark">@Model.Car.Plate</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted small">Dòng xe (Model):</div>
+                        <div class="fw-semibold">@Model.Car.Model @(Model.Car.Year > 0 ? $"({Model.Car.Year})" : "")</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted small">Số khung (VIN):</div>
+                        <div class="font-monospace text-secondary">@(Model.Car.Vin ?? "—")</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted small">Chủ xe:</div>
+                        <div class="fw-bold">@Model.Customer.Name</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted small">Số điện thoại liên hệ:</div>
+                        <div>
+                            @if (!string.IsNullOrWhiteSpace(Model.Customer.Phone))
+                            {
+                                <a href="tel:@Model.Customer.Phone" class="btn btn-sm btn-outline-success py-0 px-2 fw-bold">
+                                    <i class="bi bi-telephone-fill me-1"></i>@Model.Customer.Phone
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted small">Email:</div>
+                        <div class="text-secondary">@(Model.Customer.Email ?? "—")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (Model.RO != null)
+        {
+            <div class="card mb-3">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold text-primary"><i class="bi bi-clipboard2-pulse me-2"></i>Lệnh sửa chữa gần nhất (RO gốc)</span>
+                    <a href="/RO/Detail/@Model.RO.Id" class="badge bg-light text-primary border text-decoration-none">@Model.RO.Code</a>
+                </div>
+                <div class="card-body">
+                    <div class="row g-2 mb-3">
+                        <div class="col-sm-4">
+                            <div class="text-muted small">Trạng thái RO:</div>
+                            @{ var (roTxt, roCode, roCss) = Ui.Status(Model.RO.Status); }
+                            <span class="badge bg-@roCss">@roCode — @roTxt</span>
+                        </div>
+                        <div class="col-sm-4">
+                            <div class="text-muted small">Số KM khi làm dịch vụ:</div>
+                            <div class="fw-bold">@Model.RO.Odometer.ToString("N0") km</div>
+                        </div>
+                        <div class="col-sm-4">
+                            <div class="text-muted small">Ngày hoàn tất giao xe:</div>
+                            <div>@(Model.RO.FinishedAt?.ToString("dd/MM/yyyy HH:mm") ?? Model.RO.CreatedAt.ToString("dd/MM/yyyy"))</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="text-muted small">Nội dung tiếp nhận dịch vụ:</div>
+                            <div class="fst-italic text-secondary">@(Model.RO.IntakeNote ?? "Bảo dưỡng / sửa chữa định kỳ")</div>
+                        </div>
+                    </div>
+
+                    @if (Model.RO.Lines.Count > 0)
+                    {
+                        <div class="small fw-semibold mb-1">Các hạng mục đã thực hiện trong lần trước:</div>
+                        <ul class="list-group list-group-flush border rounded-2 small">
+                            @foreach (var line in Model.RO.Lines.Take(5))
+                            {
+                                <li class="list-group-item d-flex justify-content-between py-1">
+                                    <span><span class="badge bg-light text-dark border me-1">@Ui.Line(line.Type)</span> @line.Name</span>
+                                    <span class="fw-semibold">@line.Amount.ToString("N0") đ</span>
+                                </li>
+                            }
+                            @if (Model.RO.Lines.Count > 5)
+                            {
+                                <li class="list-group-item py-1 text-center text-muted small bg-light">... và @(Model.RO.Lines.Count - 5) hạng mục khác</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (Model.Appointment != null)
+        {
+            <div class="card border-success">
+                <div class="card-header bg-success text-white py-2 fw-bold">
+                    <i class="bi bi-calendar2-check-fill me-2"></i>Cuộc hẹn dịch vụ đã tạo thành công
+                </div>
+                <div class="card-body">
+                    <div class="row g-2">
+                        <div class="col-sm-6">
+                            <div class="text-muted small">Mã cuộc hẹn:</div>
+                            <a href="/Appointment/Detail/@Model.Appointment.Id" class="fw-bold fs-6 text-success">@Model.Appointment.AppNo</a>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="text-muted small">Ngày giờ hẹn:</div>
+                            <div class="fw-bold text-dark">@Model.Appointment.AppointmentDate.ToString("dd/MM/yyyy HH:mm")</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="text-muted small">Cố vấn tiếp nhận:</div>
+                            <div>@(Model.Appointment.Advisor ?? "Cố vấn dịch vụ")</div>
+                        </div>
+                        <div class="col-sm-6">
+                            <div class="text-muted small">Khoang đón tiếp:</div>
+                            <div>@(Model.Appointment.Cavity ?? "Khoang EM")</div>
+                        </div>
+                        <div class="col-12">
+                            <div class="text-muted small">Yêu cầu bảo dưỡng:</div>
+                            <div class="text-dark">@Model.Appointment.CustomerRequest</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Cột phải: Tiến độ cuộc gọi & Cập nhật CSKH -->
+    <div class="col-lg-5">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2 fw-bold text-primary">
+                <i class="bi bi-speedometer me-2"></i>Kế hoạch Mốc Bảo Dưỡng
+            </div>
+            <div class="card-body">
+                <div class="p-3 bg-light rounded-2 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small">Số KM lần trước:</span>
+                        <span class="fw-semibold">@Model.LastKm.ToString("N0") km</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted small">Mốc KM kế tiếp:</span>
+                        <span class="fs-5 fw-bold text-primary">@Model.NextKm.ToString("N0") km</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Ngày khuyến nghị:</span>
+                        <span class="fw-bold fs-6 @(Model.IsOverdue ? "text-danger" : "text-dark")">
+                            @Model.MaceRecomentDate.ToString("dd/MM/yyyy")
+                        </span>
+                    </div>
+                </div>
+
+                <form method="post" action="/CareMace/UpdateCall">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+
+                    <h6 class="fw-bold border-bottom pb-2 mb-3"><i class="bi bi-headset me-2"></i>Ghi nhận kết quả liên hệ KH</h6>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Trạng thái chăm sóc <span class="text-danger">*</span></label>
+                        <select name="status" class="form-select form-select-sm" required>
+                            @foreach (CustomerCareMaceStatus s in Enum.GetValues(typeof(CustomerCareMaceStatus)))
+                            {
+                                var (sName, sCode, _) = Ui.CustomerCareMaceStatus(s);
+                                <option value="@((int)s)" selected="@(Model.Status == s)">[@sCode] @sName</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Thời điểm liên hệ</label>
+                            <input type="datetime-local" name="contactDate" class="form-control form-control-sm"
+                                   value="@(Model.ContactDate?.ToString("yyyy-MM-ddTHH:mm") ?? DateTime.Now.ToString("yyyy-MM-ddTHH:mm"))" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Nhân viên gọi điện</label>
+                            <input name="contactBy" class="form-control form-control-sm" value="@(Model.ContactBy ?? "Cố vấn CSKH")" />
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Ngày khách hẹn đem xe vào xưởng (nếu đồng ý)</label>
+                        <input type="datetime-local" name="apointDate" class="form-control form-control-sm"
+                               value="@(Model.ApointDate?.ToString("yyyy-MM-ddTHH:mm") ?? Model.MaceRecomentDate.ToString("yyyy-MM-ddT09:00"))" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Ghi chú cuộc gọi / Phản hồi của khách</label>
+                        <textarea name="remark" rows="3" class="form-control form-control-sm" placeholder="VD: Khách báo xe hiện đi được 28.500km, đồng ý mang xe vào xưởng sáng thứ 7...">@Model.Remark</textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-sm btn-primary w-100">
+                        <i class="bi bi-save me-1"></i>Lưu kết quả cuộc gọi CSKH
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Chuyển thành Cuộc hẹn dịch vụ (Appointment) -->
+<div class="modal fade" id="convertModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/CareMace/ConvertToAppointment">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-calendar2-plus me-2 text-success"></i>Tạo Lịch hẹn dịch vụ từ Phiếu nhắc</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">Hệ thống sẽ tự động tạo một cuộc hẹn mới (Service Appointment) cho xe <b>@Model.Car.Plate</b> và chuyển trạng thái phiếu nhắc sang <b>Đã chốt hẹn (Booked)</b>.</p>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Ngày giờ hẹn khách đến:</label>
+                        <input type="datetime-local" class="form-control form-control-sm" value="@(Model.ApointDate?.ToString("yyyy-MM-ddTHH:mm") ?? Model.MaceRecomentDate.ToString("yyyy-MM-ddT09:00"))" disabled />
+                        <div class="form-text small text-muted">Lấy từ ngày hẹn đã thống nhất ở trên.</div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Cố vấn dịch vụ đón tiếp:</label>
+                        <input name="advisor" class="form-control form-control-sm" value="@(Model.ContactBy ?? "CVDV Tuấn")" />
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Khoang đón tiếp dự kiến:</label>
+                        <input name="cavity" class="form-control form-control-sm" value="Khoang bảo dưỡng nhanh (EM)" />
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Ghi chú đón tiếp:</label>
+                        <textarea name="note" rows="2" class="form-control form-control-sm">@(Model.Remark ?? $"Khách hẹn bảo dưỡng mốc {Model.NextKm:N0} km")</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg me-1"></i>Xác nhận tạo Cuộc hẹn</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

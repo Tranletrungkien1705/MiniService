@@ -19,6 +19,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int ActiveAssignments, int TotalEngineers, int TotalGroups,
     int PendingInsuranceClaims, decimal ApprovedInsuranceAmount,
     int ActiveCampaigns, decimal MonthCampaignDiscount,
+    int PendingCareMaces, int OverdueCareMaces, int BookedCareMaces,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -177,6 +178,14 @@ public interface IRoService
     Task<(bool ok, string msg)> RemoveCampaignFromROAsync(int roId);
     Task<List<RepairOrder>> ROsEligibleForCampaignAsync(int campaignId);
     Task<List<CampaignMarketing>> ActiveCampaignsForSelectAsync();
+    // periodic maintenance reminders (Ser_CustomerCareMace / MH 83)
+    Task<List<CustomerCareMace>> CustomerCareMacesAsync(CustomerCareMaceStatus? status, MaceType? maceType, string? timeFilter, string? q);
+    Task<CustomerCareMace?> GetCustomerCareMaceAsync(int id);
+    Task<int> CreateCustomerCareMaceAsync(CustomerCareMace mace);
+    Task<(bool ok, string msg)> UpdateCustomerCareMaceCallAsync(int id, CustomerCareMaceStatus status, DateTime? contactDate, DateTime? apointDate, string? remark, string? contactBy);
+    Task<(bool ok, string msg, int? appointmentId)> ConvertMaceToAppointmentAsync(int id, string? advisor = null, string? cavity = null, string? note = null);
+    Task<(bool ok, string msg)> DeleteCustomerCareMaceAsync(int id);
+    Task<(DateTime recommendDate, MaceType maceType, int nextKm)> CalculateNextMaintenanceAsync(int carId, DateTime? referenceDate = null, int? currentOdometer = null);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -442,6 +451,26 @@ public class RoService(AppDbContext db) : IRoService
                 };
                 db.CustomerCares.Add(care);
             }
+            // Tự động kích hoạt quy trình Nhắc bảo dưỡng định kỳ Ser_CustomerCareMace idn.CarService
+            var hasMace = await db.CustomerCareMaces.AnyAsync(m => m.ROId == roId);
+            if (!hasMace)
+            {
+                var (recDate, mType, nextKm) = await CalculateNextMaintenanceAsync(ro.CarId, ro.FinishedAt, ro.Odometer);
+                var mace = new CustomerCareMace
+                {
+                    MaceNo = $"MC{DateTime.Now:yyMMdd}-{await db.CustomerCareMaces.CountAsync() + 1:D3}",
+                    ROId = ro.Id,
+                    CarId = ro.CarId,
+                    CustomerId = ro.CustomerId,
+                    MaceType = mType,
+                    LastKm = ro.Odometer,
+                    NextKm = nextKm,
+                    MaceRecomentDate = recDate,
+                    Status = CustomerCareMaceStatus.Pending,
+                    CreatedBy = "system"
+                };
+                db.CustomerCareMaces.Add(mace);
+            }
         }
         await db.SaveChangesAsync();
         return (true, $"Đã chuyển sang: {Ui.Status(to).text}.");
@@ -541,6 +570,10 @@ public class RoService(AppDbContext db) : IRoService
             .Where(r => r.CampaignMarketingId.HasValue && r.CreatedAt >= monthStart)
             .SumAsync(r => (decimal?)r.CampaignDiscountAmount) ?? 0;
 
+        var pendingCareMaces = await db.CustomerCareMaces.CountAsync(m => m.Status == CustomerCareMaceStatus.Pending);
+        var overdueCareMaces = await db.CustomerCareMaces.CountAsync(m => m.Status == CustomerCareMaceStatus.Pending && m.MaceRecomentDate.Date < today);
+        var bookedCareMaces = await db.CustomerCareMaces.CountAsync(m => m.Status == CustomerCareMaceStatus.Booked && m.CreatedAt >= monthStart);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -578,6 +611,9 @@ public class RoService(AppDbContext db) : IRoService
             approvedInsuranceAmount,
             activeCampaigns,
             monthCampaignDiscount,
+            pendingCareMaces,
+            overdueCareMaces,
+            bookedCareMaces,
             byStatus);
     }
 
@@ -3411,4 +3447,200 @@ public class RoService(AppDbContext db) : IRoService
             .Where(c => c.Status == CampaignMarketingStatus.Active)
             .OrderBy(c => c.CamMarketingName)
             .ToListAsync();
+
+    // --- Periodic Maintenance Reminders (Ser_CustomerCareMace / MH 83) ---
+    public async Task<List<CustomerCareMace>> CustomerCareMacesAsync(CustomerCareMaceStatus? status, MaceType? maceType, string? timeFilter, string? q)
+    {
+        var query = db.CustomerCareMaces
+            .Include(m => m.Car)
+            .Include(m => m.Customer)
+            .Include(m => m.RO)
+            .Include(m => m.Appointment)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(m => m.Status == status.Value);
+        if (maceType.HasValue) query = query.Where(m => m.MaceType == maceType.Value);
+
+        var today = DateTime.Today;
+        if (!string.IsNullOrWhiteSpace(timeFilter))
+        {
+            switch (timeFilter.Trim().ToLower())
+            {
+                case "overdue":
+                    query = query.Where(m => m.MaceRecomentDate.Date < today && m.Status == CustomerCareMaceStatus.Pending);
+                    break;
+                case "due_7days":
+                    var next7 = today.AddDays(7);
+                    query = query.Where(m => m.MaceRecomentDate.Date >= today && m.MaceRecomentDate.Date <= next7);
+                    break;
+                case "month":
+                    query = query.Where(m => m.MaceRecomentDate.Year == today.Year && m.MaceRecomentDate.Month == today.Month);
+                    break;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(m => m.MaceNo.ToLower().Contains(term)
+                || m.Car.Plate.ToLower().Contains(term)
+                || m.Car.Model.ToLower().Contains(term)
+                || m.Customer.Name.ToLower().Contains(term)
+                || (m.Customer.Phone != null && m.Customer.Phone.Contains(term)));
+        }
+
+        return await query
+            .OrderBy(m => m.Status == CustomerCareMaceStatus.Pending ? 0 : 1)
+            .ThenBy(m => m.MaceRecomentDate)
+            .ThenByDescending(m => m.CreatedAt)
+            .ToListAsync();
+    }
+
+    public Task<CustomerCareMace?> GetCustomerCareMaceAsync(int id) =>
+        db.CustomerCareMaces
+            .Include(m => m.Car)
+            .Include(m => m.Customer)
+            .Include(m => m.RO).ThenInclude(r => r!.Lines)
+            .Include(m => m.Appointment)
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+    public async Task<int> CreateCustomerCareMaceAsync(CustomerCareMace mace)
+    {
+        var car = await db.Cars.Include(c => c.Customer).FirstOrDefaultAsync(c => c.Id == mace.CarId)
+            ?? throw new InvalidOperationException("Không tìm thấy xe được chọn.");
+
+        mace.CustomerId = car.CustomerId;
+        if (string.IsNullOrWhiteSpace(mace.MaceNo))
+        {
+            var count = await db.CustomerCareMaces.CountAsync() + 1;
+            mace.MaceNo = $"MC{DateTime.Today:yyMMdd}-{count:D3}";
+        }
+
+        if (mace.NextKm <= 0)
+        {
+            var (_, _, km) = await CalculateNextMaintenanceAsync(mace.CarId, mace.MaceRecomentDate, mace.LastKm);
+            mace.NextKm = km;
+        }
+
+        mace.CreatedAt = DateTime.Now;
+        db.CustomerCareMaces.Add(mace);
+        await db.SaveChangesAsync();
+        return mace.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateCustomerCareMaceCallAsync(int id, CustomerCareMaceStatus status, DateTime? contactDate, DateTime? apointDate, string? remark, string? contactBy)
+    {
+        var mace = await db.CustomerCareMaces.Include(m => m.Car).FirstOrDefaultAsync(m => m.Id == id);
+        if (mace == null) return (false, "Không tìm thấy phiếu nhắc bảo dưỡng.");
+
+        mace.Status = status;
+        mace.ContactDate = contactDate ?? DateTime.Now;
+        mace.ContactBy = !string.IsNullOrWhiteSpace(contactBy) ? contactBy.Trim() : (mace.ContactBy ?? "Cố vấn CSKH");
+        if (apointDate.HasValue) mace.ApointDate = apointDate;
+        if (!string.IsNullOrWhiteSpace(remark)) mace.Remark = remark.Trim();
+        mace.UpdatedAt = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật tiến độ chăm sóc mốc {mace.NextKm:N0}km cho xe {mace.Car.Plate}.");
+    }
+
+    public async Task<(bool ok, string msg, int? appointmentId)> ConvertMaceToAppointmentAsync(int id, string? advisor = null, string? cavity = null, string? note = null)
+    {
+        var mace = await db.CustomerCareMaces
+            .Include(m => m.Car)
+            .Include(m => m.Customer)
+            .Include(m => m.Appointment)
+            .FirstOrDefaultAsync(m => m.Id == id);
+
+        if (mace == null) return (false, "Không tìm thấy phiếu nhắc bảo dưỡng.", null);
+        if (mace.AppointmentId.HasValue && mace.Appointment != null)
+            return (false, $"Phiếu nhắc này đã liên kết với cuộc hẹn {mace.Appointment.AppNo}.", mace.AppointmentId);
+
+        var appDate = mace.ApointDate ?? mace.MaceRecomentDate;
+        if (appDate < DateTime.Now) appDate = DateTime.Today.AddHours(9);
+
+        var appCount = await db.Appointments.CountAsync() + 1;
+        var appNo = $"APP{DateTime.Today:yyMMdd}-{appCount:D3}";
+
+        var appointment = new Appointment
+        {
+            AppNo = appNo,
+            CarId = mace.CarId,
+            CustomerId = mace.CustomerId,
+            AppointmentDate = appDate,
+            ServiceType = AppointmentServiceType.Maintenance,
+            Status = AppointmentStatus.Confirmed,
+            Advisor = !string.IsNullOrWhiteSpace(advisor) ? advisor.Trim() : (mace.ContactBy ?? "Cố vấn dịch vụ"),
+            Cavity = !string.IsNullOrWhiteSpace(cavity) ? cavity.Trim() : "Khoang bảo dưỡng nhanh (EM)",
+            CustomerRequest = $"Bảo dưỡng định kỳ mốc {mace.NextKm:N0} km theo chương trình nhắc bảo dưỡng.",
+            Note = !string.IsNullOrWhiteSpace(note) ? note.Trim() : (mace.Remark ?? $"Chốt hẹn từ phiếu nhắc {mace.MaceNo}"),
+            Source = "Nhắc bảo dưỡng (CareMace)",
+            CreatedBy = mace.ContactBy ?? "cskh",
+            CreatedAt = DateTime.Now,
+            ConfirmedAt = DateTime.Now
+        };
+
+        db.Appointments.Add(appointment);
+        await db.SaveChangesAsync();
+
+        mace.AppointmentId = appointment.Id;
+        mace.Status = CustomerCareMaceStatus.Booked;
+        mace.UpdatedAt = DateTime.Now;
+        await db.SaveChangesAsync();
+
+        return (true, $"Đã tạo cuộc hẹn {appointment.AppNo} thành công cho xe {mace.Car.Plate}.", appointment.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCustomerCareMaceAsync(int id)
+    {
+        var mace = await db.CustomerCareMaces.FirstOrDefaultAsync(m => m.Id == id);
+        if (mace == null) return (false, "Không tìm thấy phiếu nhắc bảo dưỡng.");
+
+        if (mace.Status == CustomerCareMaceStatus.Booked && mace.AppointmentId.HasValue)
+            return (false, "Không thể xóa phiếu nhắc đã chốt thành cuộc hẹn dịch vụ.");
+
+        db.CustomerCareMaces.Remove(mace);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu nhắc bảo dưỡng '{mace.MaceNo}'.");
+    }
+
+    public async Task<(DateTime recommendDate, MaceType maceType, int nextKm)> CalculateNextMaintenanceAsync(int carId, DateTime? referenceDate = null, int? currentOdometer = null)
+    {
+        var refDate = referenceDate ?? DateTime.Today;
+        var ros = await db.ROs.Where(r => r.CarId == carId && (r.Status == ROStatus.Finished || r.Status == ROStatus.Paid || r.Status == ROStatus.Repaired))
+            .OrderBy(r => r.IntakeAt ?? r.CreatedAt)
+            .ToListAsync();
+
+        DateTime recDate;
+        MaceType mType;
+
+        if (ros.Count > 1)
+        {
+            // M1: Tính dựa theo tần suất trung bình xe vào xưởng Fvx (Ser_CustomerCareMace / ProcessGetLastestMace idn.CarService)
+            int totalDays = 0;
+            for (int i = 1; i < ros.Count; i++)
+            {
+                var dt1 = ros[i - 1].IntakeAt ?? ros[i - 1].CreatedAt;
+                var dt2 = ros[i].IntakeAt ?? ros[i].CreatedAt;
+                totalDays += Math.Max(1, (int)(dt2 - dt1).TotalDays);
+            }
+            int avgMonths = totalDays / ((ros.Count - 1) * 30);
+            if (avgMonths <= 0) avgMonths = 1;
+            recDate = refDate.AddMonths(avgMonths);
+            mType = MaceType.FrequencyFvx;
+        }
+        else
+        {
+            // M2: Chu kỳ tiêu chuẩn sau 6 tháng
+            recDate = refDate.AddMonths(6);
+            mType = MaceType.Standard6Months;
+        }
+
+        // Tính mốc km bảo dưỡng kế tiếp: mốc 5.000km chuẩn (5k, 10k, 15k, 20k...)
+        int lastKm = currentOdometer ?? (ros.Count > 0 ? ros.Last().Odometer : 0);
+        int nextKm = ((lastKm / 5000) + 1) * 5000;
+        if (nextKm <= lastKm) nextKm = lastKm + 5000;
+
+        return (recDate, mType, nextKm);
+    }
 }

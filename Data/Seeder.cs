@@ -1559,13 +1559,98 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        if (!await db.CustomerCareMaces.AnyAsync())
+        {
+            var car1 = await db.Cars.FirstAsync();
+            var car2 = await db.Cars.OrderByDescending(c => c.Id).FirstAsync();
+            var ro1 = await db.ROs.FirstOrDefaultAsync(r => r.Code == "ROSEED-001");
+            var roFns = await db.ROs.FirstOrDefaultAsync(r => r.Code == "ROSEED-FNS-001");
+            var app1 = await db.Appointments.FirstOrDefaultAsync(a => a.AppNo == "APP260427-001");
+
+            // 1. Xe Accent (Car 1): Quá hạn bảo dưỡng mốc 30.000 km, đang chờ CSKH liên hệ (Pending / Overdue)
+            var mace1 = new CustomerCareMace
+            {
+                MaceNo = "MC260415-001",
+                ROId = ro1?.Id,
+                CarId = car1.Id,
+                CustomerId = car1.CustomerId,
+                MaceType = MaceType.Standard6Months,
+                LastKm = 25400,
+                NextKm = 30000,
+                MaceRecomentDate = DateTime.Today.AddDays(-12), // Quá hạn 12 ngày
+                Status = CustomerCareMaceStatus.Pending,
+                Remark = "Xe đã quá hạn bảo dưỡng cấp 3 (30.000km). Cần ưu tiên gọi điện nhắc khách.",
+                CreatedBy = "system",
+                CreatedAt = DateTime.Today.AddDays(-20)
+            };
+
+            // 2. Xe Tucson (Car 2): Mốc 25.000 km sắp đến hạn trong tuần này (DueSoon), đã liên hệ khách (Contacted)
+            var mace2 = new CustomerCareMace
+            {
+                MaceNo = "MC260425-002",
+                CarId = car2.Id,
+                CustomerId = car2.CustomerId,
+                MaceType = MaceType.FrequencyFvx,
+                LastKm = 18200,
+                NextKm = 25000,
+                MaceRecomentDate = DateTime.Today.AddDays(4), // Còn 4 ngày nữa đến hạn
+                Status = CustomerCareMaceStatus.Contacted,
+                ContactDate = DateTime.Today.AddDays(-1),
+                ContactBy = "CVDV Tuấn",
+                ApointDate = DateTime.Today.AddDays(5).AddHours(9),
+                Remark = "Khách hàng đồng ý đem xe vào xưởng sáng thứ 7 để thay dầu và kiểm tra định kỳ.",
+                CreatedBy = "CVDV Tuấn",
+                CreatedAt = DateTime.Today.AddDays(-5)
+            };
+
+            // 3. Xe Accent (Car 1): Đã chốt hẹn bảo dưỡng (Booked) liên kết với cuộc hẹn APP260427-001
+            var mace3 = new CustomerCareMace
+            {
+                MaceNo = "MC260420-003",
+                ROId = roFns?.Id,
+                CarId = car1.Id,
+                CustomerId = car1.CustomerId,
+                MaceType = MaceType.Standard6Months,
+                LastKm = 20000,
+                NextKm = 25000,
+                MaceRecomentDate = DateTime.Today,
+                Status = CustomerCareMaceStatus.Booked,
+                ContactDate = DateTime.Today.AddDays(-2),
+                ContactBy = "CVDV Tuấn",
+                ApointDate = DateTime.Today.AddHours(8).AddMinutes(30),
+                AppointmentId = app1?.Id,
+                Remark = "Đã chốt lịch hẹn qua điện thoại. Xe đã tiếp nhận vào khoang EM sáng nay.",
+                CreatedBy = "system",
+                CreatedAt = DateTime.Today.AddDays(-10)
+            };
+
+            // 4. Xe Tucson (Car 2): Mốc bảo dưỡng định kỳ 6 tháng tới (Pending / Future)
+            var mace4 = new CustomerCareMace
+            {
+                MaceNo = "MC260427-004",
+                CarId = car2.Id,
+                CustomerId = car2.CustomerId,
+                MaceType = MaceType.Standard6Months,
+                LastKm = 18200,
+                NextKm = 30000,
+                MaceRecomentDate = DateTime.Today.AddMonths(5),
+                Status = CustomerCareMaceStatus.Pending,
+                Remark = "Mốc bảo dưỡng dự kiến tiếp theo theo chu kỳ tiêu chuẩn 6 tháng.",
+                CreatedBy = "system",
+                CreatedAt = DateTime.Today
+            };
+
+            db.CustomerCareMaces.AddRange(mace1, mace2, mace3, mace4);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -1576,6 +1661,7 @@ public static class Seeder
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CampaignMarketingId\" integer NULL",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CampaignDiscountAmount\" numeric(18,2) NOT NULL DEFAULT 0",
             "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"ReceptionSheetId\" integer NULL",
+            "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"CustomerCareMaceId\" integer NULL",
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartNo\" text NULL",
@@ -2155,7 +2241,34 @@ public static class Seeder
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""CampaignMarketingId"") REFERENCES ""CampaignMarketings"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
-            );"
+            );",
+            @"CREATE TABLE IF NOT EXISTS ""CustomerCareMaces"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""MaceNo"" TEXT NOT NULL,
+                ""ROId"" INTEGER NULL,
+                ""CarId"" INTEGER NOT NULL,
+                ""CustomerId"" INTEGER NOT NULL,
+                ""MaceType"" INTEGER NOT NULL,
+                ""LastKm"" INTEGER NOT NULL,
+                ""NextKm"" INTEGER NOT NULL,
+                ""MaceRecomentDate"" TEXT NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""ContactDate"" TEXT NULL,
+                ""ContactBy"" TEXT NULL,
+                ""ApointDate"" TEXT NULL,
+                ""Remark"" TEXT NULL,
+                ""AppointmentId"" INTEGER NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""UpdatedAt"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""AppointmentId"") REFERENCES ""Appointments"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerCareMaces_OrgId_MaceNo"" ON ""CustomerCareMaces"" (""OrgId"", ""MaceNo"");",
+            @"ALTER TABLE ""Appointments"" ADD COLUMN ""CustomerCareMaceId"" INTEGER NULL;"
         };
 
         foreach (var sql in sqls)

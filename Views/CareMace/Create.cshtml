@@ -1,0 +1,123 @@
+@{
+    ViewData["Title"] = "Lập mốc Nhắc bảo dưỡng định kỳ (Care Mace)";
+    var cars = (List<Car>)ViewBag.Cars;
+    var selectedCarId = (int?)ViewBag.SelectedCarId;
+    var suggestedDate = (string?)ViewBag.SuggestedDate ?? DateTime.Today.AddMonths(6).ToString("yyyy-MM-dd");
+    var suggestedMaceType = (MaceType?)ViewBag.SuggestedMaceType ?? MaceType.Standard6Months;
+    var suggestedNextKm = (int?)ViewBag.SuggestedNextKm ?? 5000;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-bell-fill me-2 text-primary"></i>Lập mốc Nhắc bảo dưỡng định kỳ xe (Care Mace)</h5>
+                        <div class="text-muted small">Thiết lập chu kỳ bảo dưỡng định kỳ chuẩn Hyundai theo thuật toán M1/M2/M3 (Ser_CustomerCareMace)</div>
+                    </div>
+                    <a href="/CareMace" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách nhắc</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/CareMace/Create" id="careMaceForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-12">
+                            <label class="form-label fw-semibold">Chọn xe cần nhắc bảo dưỡng <span class="text-danger">*</span></label>
+                            <select name="carId" id="carSelect" class="form-select" required onchange="onCarChange(this)">
+                                <option value="">— Chọn xe theo biển số / chủ xe —</option>
+                                @foreach (var c in cars)
+                                {
+                                    <option value="@c.Id" selected="@(selectedCarId == c.Id)"
+                                            data-plate="@c.Plate"
+                                            data-model="@c.Model"
+                                            data-customer="@c.Customer?.Name"
+                                            data-phone="@(c.Customer?.Phone ?? "")">
+                                        @c.Plate — @c.Model (@(c.Customer?.Name ?? "Chưa rõ"), SĐT: @(c.Customer?.Phone ?? "—"))
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text text-muted small">Hệ thống sẽ liên kết tự động với chủ sở hữu chiếc xe này để nhân viên CSKH liên hệ.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Phương pháp tính mốc bảo dưỡng</label>
+                            <select name="maceType" id="maceTypeSelect" class="form-select" onchange="onMaceTypeChange(this)">
+                                <option value="@((int)MaceType.Standard6Months)" selected="@(suggestedMaceType == MaceType.Standard6Months)">M2 — Chu kỳ tiêu chuẩn (+6 tháng / +5.000 km)</option>
+                                <option value="@((int)MaceType.FrequencyFvx)" selected="@(suggestedMaceType == MaceType.FrequencyFvx)">M1 — Theo tần suất vào xưởng thực tế (Fvx)</option>
+                                <option value="@((int)MaceType.Advisor)" selected="@(suggestedMaceType == MaceType.Advisor)">M3 — Cố vấn dịch vụ (CVDV) trực tiếp chỉ định</option>
+                            </select>
+                            <div class="form-text text-muted small">Thuật toán idn.CarService tự động tính toán dựa trên chu kỳ hoặc lịch sử các lần vào xưởng trước đó.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ngày khuyến nghị bảo dưỡng <span class="text-danger">*</span></label>
+                            <input type="date" name="maceRecomentDate" id="maceRecomentDateInput" class="form-control" value="@suggestedDate" required />
+                            <div class="form-text text-muted small">Ngày dự kiến xe cần mang vào đại lý để bảo dưỡng cấp tiếp theo.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Số KM lần bảo dưỡng gần nhất (Last KM)</label>
+                            <div class="input-group">
+                                <input type="number" name="lastKm" id="lastKmInput" class="form-control" value="0" min="0" oninput="recalcNextKm()" />
+                                <span class="input-group-text">km</span>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mốc KM khuyến nghị tiếp theo (Next KM) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="number" name="nextKm" id="nextKmInput" class="form-control" value="@suggestedNextKm" min="1000" step="1000" required />
+                                <span class="input-group-text">km</span>
+                            </div>
+                            <div class="form-text text-muted small">Thường là bội số 5.000km: 5.000, 10.000, 15.000, 20.000, 40.000km...</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Người lập phiếu / Cố vấn phụ trách</label>
+                            <input name="createdBy" class="form-control" value="Cố vấn dịch vụ" />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ghi chú nhắc bảo dưỡng</label>
+                            <input name="remark" class="form-control" placeholder="VD: Nhắc thay dầu máy, lọc dầu và bảo dưỡng cấp 20.000km..." />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                        <a href="/CareMace" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu mốc nhắc bảo dưỡng</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function onCarChange(sel) {
+        if (!sel.value) return;
+        location.href = '/CareMace/Create?carId=' + sel.value;
+    }
+
+    function recalcNextKm() {
+        var last = parseInt(document.getElementById('lastKmInput').value) || 0;
+        var next = Math.floor(last / 5000 + 1) * 5000;
+        if (next <= last) next = last + 5000;
+        document.getElementById('nextKmInput').value = next;
+    }
+
+    function onMaceTypeChange(sel) {
+        var val = sel.value;
+        var d = new Date();
+        if (val === "2") {
+            // Chu kỳ 6 tháng
+            d.setMonth(d.getMonth() + 6);
+            document.getElementById('maceRecomentDateInput').value = d.toISOString().split('T')[0];
+        }
+    }
+</script>
+}

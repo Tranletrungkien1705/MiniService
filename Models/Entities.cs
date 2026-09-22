@@ -237,6 +237,24 @@ public enum CampaignMarketingStatus
     Cancelled = 3  // CANCELLED — Đã hủy bỏ
 }
 
+/// <summary>Phương pháp tính mốc bảo dưỡng định kỳ — theo Ser_CustomerCareMace MaceType idn.CarService.</summary>
+public enum MaceType
+{
+    Advisor = 1,          // 1: CVDV chỉ định
+    Standard6Months = 2,  // 2: Thời hạn sau 6 tháng
+    FrequencyFvx = 3      // 3: Thời hạn theo tần suất vào xưởng
+}
+
+/// <summary>Trạng thái Phiếu nhắc bảo dưỡng định kỳ — theo Ser_CustomerCareMace Status idn.CarService.</summary>
+public enum CustomerCareMaceStatus
+{
+    Pending = 0,       // 0: Chưa liên hệ (Pending / PEND)
+    Contacted = 1,     // 1: Đã liên hệ (Contacted / CONT)
+    NotContacted = 2,  // 2: Không liên hệ được (Not Contacted / NOCONT)
+    Booked = 3,        // 3: Đã chốt hẹn bảo dưỡng (Booked)
+    Cancelled = 4      // 4: Khách từ chối / Hủy (Cancelled)
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -299,6 +317,7 @@ public class RepairOrder : IOrgOwned
     public List<ReceptionSheet> ReceptionSheets { get; set; } = [];
     public List<AssignmentWork> AssignmentWorks { get; set; } = [];
     public List<InsuranceClaim> InsuranceClaims { get; set; } = [];
+    public List<CustomerCareMace> CustomerCareMaces { get; set; } = [];
 
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
@@ -434,6 +453,8 @@ public class Appointment : IOrgOwned
     public RepairOrder? RO { get; set; }
     public int? ReceptionSheetId { get; set; }
     public ReceptionSheet? ReceptionSheet { get; set; }
+    public int? CustomerCareMaceId { get; set; }
+    public CustomerCareMace? CustomerCareMace { get; set; }
 }
 
 /// <summary>Phiếu Nhập kho phụ tùng — Ser_Inv_StockIn trong idn.CarService.</summary>
@@ -1118,6 +1139,38 @@ public class CampaignMarketingItem : IOrgOwned
 
     public CampaignMarketing CampaignMarketing { get; set; } = null!;
     public Part Part { get; set; } = null!;
+}
+
+/// <summary>Phiếu nhắc bảo dưỡng định kỳ xe — Ser_CustomerCareMace trong idn.CarService.</summary>
+public class CustomerCareMace : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string MaceNo { get; set; } = "";             // Mã phiếu nhắc bảo dưỡng (VD: MC260427-001)
+    public int? ROId { get; set; }                       // Lệnh sửa chữa gần nhất kích hoạt mốc nhắc
+    public int CarId { get; set; }                       // Xe cần bảo dưỡng
+    public int CustomerId { get; set; }                  // Khách hàng / Chủ xe
+    public MaceType MaceType { get; set; } = MaceType.Standard6Months; // Phương thức tính mốc nhắc (CVDV chỉ định, 6 tháng, Tần suất vào xưởng)
+    public int LastKm { get; set; }                      // Số km lần bảo dưỡng trước đó
+    public int NextKm { get; set; }                      // Mốc km dự kiến tiếp theo (5.000, 10.000, 15.000, 20.000...)
+    public DateTime MaceRecomentDate { get; set; }       // Ngày khuyến nghị bảo dưỡng
+    public CustomerCareMaceStatus Status { get; set; } = CustomerCareMaceStatus.Pending; // Trạng thái chăm sóc
+    public DateTime? ContactDate { get; set; }           // Thời điểm liên hệ
+    public string? ContactBy { get; set; }               // Nhân viên CSKH thực hiện gọi điện
+    public DateTime? ApointDate { get; set; }            // Ngày hẹn khách đồng ý mang xe đến
+    public string? Remark { get; set; }                  // Ghi chú cuộc gọi / Phản hồi của khách
+    public int? AppointmentId { get; set; }              // Cuộc hẹn sinh ra khi chuyển đổi thành công
+    public string CreatedBy { get; set; } = "system";    // Tự động sinh từ RO hoặc do CVDV lập
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? UpdatedAt { get; set; }
+
+    public RepairOrder? RO { get; set; }
+    public Car Car { get; set; } = null!;
+    public Customer Customer { get; set; } = null!;
+    public Appointment? Appointment { get; set; }
+
+    public bool IsOverdue => Status == CustomerCareMaceStatus.Pending && DateTime.Today > MaceRecomentDate.Date;
+    public bool IsDueSoon => Status == CustomerCareMaceStatus.Pending && DateTime.Today <= MaceRecomentDate.Date && MaceRecomentDate.Date <= DateTime.Today.AddDays(7);
 }
 
 

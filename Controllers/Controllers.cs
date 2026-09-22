@@ -2053,6 +2053,108 @@ public class CampaignController(IRoService svc) : Controller
     }
 }
 
+public class CareMaceController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(CustomerCareMaceStatus? status, MaceType? maceType, string? timeFilter, string? q)
+    {
+        ViewBag.Status = status;
+        ViewBag.MaceType = maceType;
+        ViewBag.TimeFilter = timeFilter;
+        ViewBag.Q = q;
+
+        var list = await svc.CustomerCareMacesAsync(status, maceType, timeFilter, q);
+        ViewBag.PendingCount = list.Count(m => m.Status == CustomerCareMaceStatus.Pending);
+        ViewBag.OverdueCount = list.Count(m => m.IsOverdue);
+        ViewBag.BookedCount = list.Count(m => m.Status == CustomerCareMaceStatus.Booked);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? carId)
+    {
+        ViewBag.Cars = await svc.CarsForSelectAsync();
+        ViewBag.SelectedCarId = carId;
+        if (carId.HasValue && carId.Value > 0)
+        {
+            var (recDate, mType, nextKm) = await svc.CalculateNextMaintenanceAsync(carId.Value);
+            ViewBag.SuggestedDate = recDate.ToString("yyyy-MM-dd");
+            ViewBag.SuggestedMaceType = mType;
+            ViewBag.SuggestedNextKm = nextKm;
+        }
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int carId, MaceType maceType, int lastKm, int nextKm, DateTime maceRecomentDate, string? remark, string? createdBy)
+    {
+        if (carId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn xe cần lập mốc bảo dưỡng.";
+            ViewBag.Cars = await svc.CarsForSelectAsync();
+            return View();
+        }
+
+        try
+        {
+            var mace = new CustomerCareMace
+            {
+                CarId = carId,
+                MaceType = maceType,
+                LastKm = lastKm,
+                NextKm = nextKm,
+                MaceRecomentDate = maceRecomentDate != default ? maceRecomentDate : DateTime.Today.AddMonths(6),
+                Remark = remark?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Cố vấn dịch vụ" : createdBy.Trim(),
+                Status = CustomerCareMaceStatus.Pending
+            };
+
+            var id = await svc.CreateCustomerCareMaceAsync(mace);
+            TempData["Success"] = $"Đã lập phiếu nhắc bảo dưỡng {mace.MaceNo} cho mốc {mace.NextKm:N0} km.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Cars = await svc.CarsForSelectAsync();
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var item = await svc.GetCustomerCareMaceAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateCall(int id, CustomerCareMaceStatus status, DateTime? contactDate, DateTime? apointDate, string? remark, string? contactBy)
+    {
+        var (ok, msg) = await svc.UpdateCustomerCareMaceCallAsync(id, status, contactDate, apointDate, remark, contactBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConvertToAppointment(int id, string? advisor, string? cavity, string? note)
+    {
+        var (ok, msg, appId) = await svc.ConvertMaceToAppointmentAsync(id, advisor, cavity, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok && appId.HasValue)
+        {
+            return RedirectToAction("Detail", "Appointment", new { id = appId.Value });
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCustomerCareMaceAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

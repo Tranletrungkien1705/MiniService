@@ -42,6 +42,7 @@ public class AppDbContext : DbContext
     public DbSet<InsuranceClaimItem> InsuranceClaimItems => Set<InsuranceClaimItem>();
     public DbSet<CampaignMarketing> CampaignMarketings => Set<CampaignMarketing>();
     public DbSet<CampaignMarketingItem> CampaignMarketingItems => Set<CampaignMarketingItem>();
+    public DbSet<CustomerCareMace> CustomerCareMaces => Set<CustomerCareMace>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -361,6 +362,17 @@ public class AppDbContext : DbContext
             e.Property(x => x.PercentDiscount).HasPrecision(5, 2);
             e.Property(x => x.MaxQuantity).HasPrecision(18, 2);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CustomerCareMace>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.MaceNo }).IsUnique();
+            e.Ignore(x => x.IsOverdue);
+            e.Ignore(x => x.IsDueSoon);
+            e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.RO).WithMany(x => x.CustomerCareMaces).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Appointment).WithOne(x => x.CustomerCareMace).HasForeignKey<CustomerCareMace>(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
