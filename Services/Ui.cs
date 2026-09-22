@@ -78,4 +78,22 @@ public static class Ui
         Models.StockInType.Return => "Nhập hoàn trả",
         _ => t.ToString()
     };
+
+    public static (string text, string code, string css) StockOutStatus(StockOutStatus s) => s switch
+    {
+        Models.StockOutStatus.Pending => ("Chờ xuất kho", "PEND", "warning"),
+        Models.StockOutStatus.Executing => ("Đang soạn hàng", "EXEC", "info"),
+        Models.StockOutStatus.Finished => ("Đã xuất kho", "FNS", "success"),
+        Models.StockOutStatus.Rejected => ("Đã hủy", "REJ", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static string StockOutType(StockOutType t) => t switch
+    {
+        Models.StockOutType.Service => "Xuất dịch vụ (RO)",
+        Models.StockOutType.Normal => "Xuất bán lẻ",
+        Models.StockOutType.Warranty => "Xuất bảo hành",
+        Models.StockOutType.Internal => "Xuất nội bộ",
+        _ => t.ToString()
+    };
 }

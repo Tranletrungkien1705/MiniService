@@ -139,6 +139,33 @@
 
         <div class="card mb-3"><div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-box-arrow-up-right text-primary me-1"></i>Xuất kho phụ tùng</h6>
+                <a href="/StockOut/Create?roId=@Model.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>Xuất kho</a>
+            </div>
+            @if (Model.StockOuts.Count > 0)
+            {
+                <div class="list-group list-group-flush small">
+                    @foreach (var s in Model.StockOuts)
+                    {
+                        var (stxt, scode, scss) = Ui.StockOutStatus(s.Status);
+                        <a href="/StockOut/Detail/@s.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold">@s.StockOutNo</div>
+                                <div class="text-muted" style="font-size:11px">@s.Total.ToString("N0")đ · @s.StockOutDate.ToString("dd/MM/yyyy")</div>
+                            </div>
+                            <span class="badge bg-@scss">@scode</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small">Chưa có phiếu xuất kho cho lệnh này. Nhấn "Xuất kho" để điều phối linh kiện sửa chữa.</div>
+            }
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="fw-bold mb-0"><i class="bi bi-shield-check text-success me-1"></i>Bảo hành hãng</h6>
                 <a href="/Warranty/Create?roId=@Model.Id" class="btn btn-sm btn-outline-success"><i class="bi bi-plus-lg me-1"></i>Lập BCBH</a>
             </div>

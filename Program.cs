@@ -377,6 +377,130 @@ app.MapDelete("/api/stockin/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Xuất kho phụ tùng (Ser_Inv_StockOut & Ser_Inv_StockOutDetail)
+app.MapGet("/api/stockout", async (StockOutStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId, IRoService svc) =>
+{
+    var list = await svc.StockOutsAsync(status, q, fromDate, toDate, roId);
+    return Results.Ok(list.Select(s => new
+    {
+        s.Id,
+        s.StockOutNo,
+        s.StockOutDate,
+        type = Ui.StockOutType(s.Type),
+        typeValue = (int)s.Type,
+        status = Ui.StockOutStatus(s.Status).text,
+        statusCode = Ui.StockOutStatus(s.Status).code,
+        statusValue = (int)s.Status,
+        roId = s.ROId,
+        roCode = s.RO?.Code,
+        plate = s.Car?.Plate,
+        customer = s.Customer?.Name,
+        s.RecipientName,
+        s.Description,
+        s.CreatedBy,
+        s.ApprovedBy,
+        s.CreatedAt,
+        s.FinishedAt,
+        s.ItemCount,
+        s.SubTotal,
+        s.TotalVat,
+        s.Total
+    }));
+});
+
+app.MapGet("/api/stockout/{id:int}", async (int id, IRoService svc) =>
+{
+    var s = await svc.GetStockOutAsync(id);
+    if (s == null) return Results.NotFound(new { error = "Không tìm thấy phiếu xuất kho." });
+    return Results.Ok(new
+    {
+        s.Id,
+        s.StockOutNo,
+        s.StockOutDate,
+        type = Ui.StockOutType(s.Type),
+        typeValue = (int)s.Type,
+        status = Ui.StockOutStatus(s.Status).text,
+        statusCode = Ui.StockOutStatus(s.Status).code,
+        statusValue = (int)s.Status,
+        ro = s.RO != null ? new { s.RO.Id, s.RO.Code, s.RO.Status } : null,
+        car = s.Car != null ? new { s.Car.Id, s.Car.Plate, s.Car.Model } : null,
+        customer = s.Customer != null ? new { s.Customer.Id, s.Customer.Name, s.Customer.Phone } : null,
+        s.RecipientName,
+        s.Description,
+        s.CreatedBy,
+        s.ApprovedBy,
+        s.CreatedAt,
+        s.FinishedAt,
+        s.SubTotal,
+        s.TotalVat,
+        s.Total,
+        items = s.Items.Select(i => new
+        {
+            i.Id,
+            i.PartId,
+            i.PartCode,
+            i.PartName,
+            i.Unit,
+            i.Quantity,
+            i.UnitPrice,
+            i.VatPercent,
+            i.SubTotal,
+            i.VatAmount,
+            i.Amount,
+            i.Location,
+            i.Note,
+            currentInStock = i.Part?.InStock
+        })
+    });
+});
+
+app.MapPost("/api/stockout", async (CreateStockOutDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.Items == null || dto.Items.Count == 0)
+            return Results.BadRequest(new { error = "Cần danh sách phụ tùng xuất kho (Items)." });
+
+        var stockOut = new StockOut
+        {
+            Type = dto.Type,
+            ROId = (dto.RoId.HasValue && dto.RoId.Value > 0) ? dto.RoId : null,
+            RecipientName = dto.RecipientName?.Trim(),
+            StockOutDate = dto.StockOutDate ?? DateTime.Today,
+            Description = dto.Description?.Trim(),
+            CreatedBy = "api"
+        };
+
+        var details = dto.Items.Select(i => new StockOutDetail
+        {
+            PartId = i.PartId,
+            Quantity = i.Quantity <= 0 ? 1 : i.Quantity,
+            UnitPrice = i.UnitPrice ?? 0,
+            VatPercent = i.VatPercent ?? 8,
+            Note = i.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateStockOutAsync(stockOut, details);
+        return Results.Ok(new { stockOutId = id, stockOutNo = stockOut.StockOutNo, message = "Đã lập phiếu xuất kho thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/stockout/{id:int}/transition", async (int id, TransitionStockOutDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionStockOutStatusAsync(id, dto.ToStatus, dto.ApprovedBy, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/stockout/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteStockOutAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -398,3 +522,6 @@ record CheckInAppointmentDto(int Odometer, string? Technician);
 record CreateStockInDto(string SupplierName, string? BillNo, DateTime? StockInDate, StockInType Type, string? Description, List<CreateStockInItemDto> Items);
 record CreateStockInItemDto(int PartId, decimal Quantity, decimal? UnitPrice, decimal? VatPercent, string? Note);
 record TransitionStockInDto(StockInStatus ToStatus, string? ApprovedBy, string? Note);
+record CreateStockOutDto(StockOutType Type, int? RoId, string? RecipientName, DateTime? StockOutDate, string? Description, List<CreateStockOutItemDto> Items);
+record CreateStockOutItemDto(int PartId, decimal Quantity, decimal? UnitPrice, decimal? VatPercent, string? Note);
+record TransitionStockOutDto(StockOutStatus ToStatus, string? ApprovedBy, string? Note);

@@ -430,6 +430,124 @@ public class StockInController(IRoService svc) : Controller
     }
 }
 
+public class StockOutController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(StockOutStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+        ViewBag.ROId = roId;
+        var list = await svc.StockOutsAsync(status, q, fromDate, toDate, roId);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.ROs = await svc.ROsForStockOutAsync();
+        ViewBag.SelectedROId = roId;
+        if (roId.HasValue && roId.Value > 0)
+        {
+            var ro = await svc.GetROAsync(roId.Value);
+            ViewBag.PreloadedRO = ro;
+        }
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(StockOutType type, int? roId, string? recipientName, DateTime stockOutDate, string? description,
+        int[] partIds, decimal[] quantities, decimal[] unitPrices, decimal[] vatPercents, string[]? notes)
+    {
+        if (partIds == null || partIds.Length == 0)
+        {
+            TempData["Error"] = "Vui lòng chọn ít nhất một phụ tùng xuất kho.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.ROs = await svc.ROsForStockOutAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+
+        try
+        {
+            var stockOut = new StockOut
+            {
+                Type = type,
+                ROId = (roId.HasValue && roId.Value > 0) ? roId.Value : null,
+                RecipientName = recipientName?.Trim(),
+                StockOutDate = stockOutDate != default ? stockOutDate : DateTime.Today,
+                Description = description?.Trim(),
+                CreatedBy = "web"
+            };
+
+            var items = new List<StockOutDetail>();
+            for (int i = 0; i < partIds.Length; i++)
+            {
+                if (partIds[i] <= 0) continue;
+                var qty = (quantities != null && i < quantities.Length) ? quantities[i] : 1;
+                var price = (unitPrices != null && i < unitPrices.Length) ? unitPrices[i] : 0;
+                var vat = (vatPercents != null && i < vatPercents.Length) ? vatPercents[i] : 8;
+                var note = (notes != null && i < notes.Length) ? notes[i] : null;
+
+                items.Add(new StockOutDetail
+                {
+                    PartId = partIds[i],
+                    Quantity = qty <= 0 ? 1 : qty,
+                    UnitPrice = price,
+                    VatPercent = vat < 0 ? 0 : vat,
+                    Note = note?.Trim()
+                });
+            }
+
+            if (items.Count == 0)
+            {
+                TempData["Error"] = "Chưa có dòng phụ tùng hợp lệ.";
+                ViewBag.Parts = await svc.PartsForSelectAsync();
+                ViewBag.ROs = await svc.ROsForStockOutAsync();
+                ViewBag.SelectedROId = roId;
+                return View();
+            }
+
+            var id = await svc.CreateStockOutAsync(stockOut, items);
+            TempData["Success"] = $"Đã lập phiếu xuất kho {stockOut.StockOutNo} thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.ROs = await svc.ROsForStockOutAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var stockOut = await svc.GetStockOutAsync(id);
+        if (stockOut == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextStockOut(stockOut.Status);
+        return View(stockOut);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, StockOutStatus to, string? note)
+    {
+        var (ok, msg) = await svc.TransitionStockOutStatusAsync(id, to, "Thủ kho", note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteStockOutAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

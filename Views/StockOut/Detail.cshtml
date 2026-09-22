@@ -1,0 +1,353 @@
+@model StockOut
+@{
+    ViewData["Title"] = $"Phiếu xuất kho {Model.StockOutNo}";
+    var (stText, stCode, stCss) = Ui.StockOutStatus(Model.Status);
+    var typeText = Ui.StockOutType(Model.Type);
+    var next = (StockOutStatus[])ViewBag.Next;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="mb-0 fw-bold text-primary"><i class="bi bi-box-arrow-up-right me-2"></i>@Model.StockOutNo</h4>
+            <span class="badge bg-@stCss fs-6">@stCode — @stText</span>
+            <span class="badge bg-light text-dark border">@typeText</span>
+        </div>
+        <div class="text-muted small mt-1">
+            Ngày xuất: <b>@Model.StockOutDate.ToString("dd/MM/yyyy")</b> · Lập bởi: <b>@Model.CreatedBy</b> (@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm"))
+            @if (Model.FinishedAt.HasValue)
+            {
+                <span> · Duyệt xuất: <b>@Model.FinishedAt.Value.ToString("dd/MM/yyyy HH:mm")</b> (@(Model.ApprovedBy ?? "Thủ kho"))</span>
+            }
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/StockOut" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Sổ phiếu xuất</a>
+        <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()"><i class="bi bi-printer me-1"></i>In phiếu xuất</button>
+    </div>
+</div>
+
+@if (Model.Status == StockOutStatus.Finished)
+{
+    <div class="alert alert-success d-flex align-items-center mb-3">
+        <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+        <div>
+            <b>Phiếu xuất kho đã hoàn tất!</b> Toàn bộ <b>@Model.ItemCount</b> mặt hàng phụ tùng đã được xuất khỏi kho và trừ tồn kho thực tế tương ứng trong hệ thống.
+        </div>
+    </div>
+}
+else if (Model.Status == StockOutStatus.Pending)
+{
+    <div class="alert alert-warning d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-clock-history fs-4 me-3"></i>
+            <div>
+                <b>Phiếu xuất kho đang chờ duyệt (Pending).</b> Tồn kho phụ tùng chưa bị trừ. Vui lòng kiểm tra linh kiện thực tế trước khi bấm "Duyệt xuất kho".
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <form method="post" action="/StockOut/Transition/@Model.Id">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="to" value="@((int)StockOutStatus.Executing)" />
+                <button type="submit" class="btn btn-sm btn-outline-info">Bắt đầu soạn hàng</button>
+            </form>
+            <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#approveModal">
+                <i class="bi bi-check-lg me-1"></i>Duyệt xuất kho ngay
+            </button>
+            <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                <i class="bi bi-x-lg me-1"></i>Hủy phiếu
+            </button>
+        </div>
+    </div>
+}
+else if (Model.Status == StockOutStatus.Executing)
+{
+    <div class="alert alert-info d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-gear-wide-connected fs-4 me-3"></i>
+            <div>
+                <b>Đang tiến hành soạn và xuất hàng (Executing).</b> Kiểm tra quy cách và số lượng linh kiện trước khi bàn giao cho thợ / khách.
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#approveModal">
+                <i class="bi bi-check-lg me-1"></i>Hoàn tất &amp; Trừ tồn kho
+            </button>
+            <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                <i class="bi bi-x-lg me-1"></i>Hủy phiếu
+            </button>
+        </div>
+    </div>
+}
+else if (Model.Status == StockOutStatus.Rejected)
+{
+    <div class="alert alert-danger d-flex align-items-center mb-3">
+        <i class="bi bi-x-circle-fill fs-4 me-3"></i>
+        <div>
+            <b>Phiếu xuất kho đã bị hủy.</b> Hàng hóa không bị trừ tồn kho.
+        </div>
+    </div>
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-file-earmark-text me-1 text-primary"></i>Thông tin chứng từ &amp; Đối tượng tiếp nhận</h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="text-muted small">Lệnh sửa chữa (RO) liên kết:</div>
+                        @if (Model.RO != null)
+                        {
+                            <div>
+                                <a href="/RO/Detail/@Model.RO.Id" class="fw-bold fs-6 text-primary text-decoration-none">
+                                    <i class="bi bi-clipboard2-pulse me-1"></i>@Model.RO.Code
+                                </a>
+                                <span class="badge bg-secondary ms-1">@Ui.Status(Model.RO.Status).code</span>
+                            </div>
+                        }
+                        else
+                        {
+                            <span class="text-muted fst-italic">Không liên kết RO (Xuất bán lẻ / nội bộ)</span>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">Người nhận hàng / Kỹ thuật viên:</div>
+                        <div class="fw-bold text-dark fs-6">@(Model.RecipientName ?? "—")</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">Thông tin Xe / Biển số:</div>
+                        @if (Model.Car != null)
+                        {
+                            <div class="fw-semibold"><i class="bi bi-car-front me-1 text-secondary"></i>@Model.Car.Plate — @Model.Car.Model</div>
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">Khách hàng / Chủ xe:</div>
+                        @if (Model.Customer != null)
+                        {
+                            <div class="fw-semibold"><i class="bi bi-person me-1 text-secondary"></i>@Model.Customer.Name @if(!string.IsNullOrEmpty(Model.Customer.Phone)){<span class="text-muted fw-normal">(@Model.Customer.Phone)</span>}</div>
+                        }
+                        else
+                        {
+                            <span class="text-muted">—</span>
+                        }
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(Model.Description))
+                    {
+                        <div class="col-12">
+                            <div class="text-muted small">Ghi chú / Diễn giải lý do:</div>
+                            <div class="bg-light p-2 rounded small">@Model.Description</div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-cash-stack me-1 text-primary"></i>Tổng hợp giá trị xuất kho</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Số loại phụ tùng:</span>
+                    <span class="fw-semibold">@Model.ItemCount mặt hàng</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Tổng số lượng xuất:</span>
+                    <span class="fw-semibold">@Model.Items.Sum(i => i.Quantity).ToString("0.##")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Tiền hàng trước thuế:</span>
+                    <span class="fw-semibold">@Model.SubTotal.ToString("N0") đ</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Tiền thuế VAT:</span>
+                    <span class="fw-semibold">@Model.TotalVat.ToString("N0") đ</span>
+                </div>
+                <hr class="my-2" />
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="fw-bold">TỔNG CỘNG:</span>
+                    <span class="fw-bold fs-5 text-primary">@Model.Total.ToString("N0") đ</span>
+                </div>
+            </div>
+        </div>
+
+        @if (Model.Status is StockOutStatus.Pending or StockOutStatus.Rejected)
+        {
+            <div class="card border-danger-subtle">
+                <div class="card-body">
+                    <form method="post" action="/StockOut/Delete/@Model.Id" onsubmit="return confirm('Bạn có chắc chắn muốn xóa phiếu xuất kho này?')">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                            <i class="bi bi-trash me-1"></i>Xóa phiếu xuất kho này
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header bg-white py-3">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-list-check me-1 text-primary"></i>Chi tiết danh mục phụ tùng xuất kho</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:40px" class="text-center">#</th>
+                    <th>Mã phụ tùng</th>
+                    <th>Tên phụ tùng</th>
+                    <th class="text-center">ĐVT</th>
+                    <th class="text-end">SL xuất</th>
+                    <th class="text-end">Tồn kho hiện tại</th>
+                    <th class="text-end">Đơn giá xuất</th>
+                    <th class="text-center">VAT</th>
+                    <th class="text-end">Thành tiền (VAT)</th>
+                    <th>Vị trí kho</th>
+                    <th>Ghi chú</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ int idx = 1; }
+                @foreach (var item in Model.Items)
+                {
+                    var isShortage = (item.Part != null && item.Part.InStock < item.Quantity && Model.Status != StockOutStatus.Finished);
+                    <tr class="@(isShortage ? "table-warning" : "")">
+                        <td class="text-center text-muted">@(idx++)</td>
+                        <td>
+                            <code class="fw-bold text-dark">@item.PartCode</code>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@item.PartName</div>
+                            @if (item.Part != null && !string.IsNullOrEmpty(item.Part.Model))
+                            {
+                                <div class="text-muted" style="font-size:11px">Dòng xe: @item.Part.Model</div>
+                            }
+                        </td>
+                        <td class="text-center">@item.Unit</td>
+                        <td class="text-end fw-bold fs-6">@item.Quantity.ToString("0.##")</td>
+                        <td class="text-end">
+                            @if (item.Part != null)
+                            {
+                                <span class="@(item.Part.InStock < item.Quantity && Model.Status != StockOutStatus.Finished ? "text-danger fw-bold" : "text-muted")">
+                                    @item.Part.InStock.ToString("0.##") @item.Unit
+                                </span>
+                                @if (isShortage)
+                                {
+                                    <div class="badge bg-danger" style="font-size:10px">Thiếu tồn</div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td class="text-end">@item.UnitPrice.ToString("N0") đ</td>
+                        <td class="text-center"><span class="badge bg-light text-dark border">@item.VatPercent%</span></td>
+                        <td class="text-end fw-bold text-dark">@item.Amount.ToString("N0") đ</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(item.Location))
+                            {
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis"><i class="bi bi-geo-alt me-1"></i>@item.Location</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td class="text-muted small">@(item.Note ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot class="table-light">
+                <tr>
+                    <th colspan="8" class="text-end">Tiền hàng trước thuế:</th>
+                    <th class="text-end">@Model.SubTotal.ToString("N0") đ</th>
+                    <th colspan="2"></th>
+                </tr>
+                <tr>
+                    <th colspan="8" class="text-end">Tiền thuế VAT:</th>
+                    <th class="text-end">@Model.TotalVat.ToString("N0") đ</th>
+                    <th colspan="2"></th>
+                </tr>
+                <tr class="table-primary">
+                    <th colspan="8" class="text-end fs-6">TỔNG CỘNG GIÁ TRỊ PHIẾU XUẤT:</th>
+                    <th class="text-end fs-6 text-primary">@Model.Total.ToString("N0") đ</th>
+                    <th colspan="2"></th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Duyệt Hoàn Tất Xuất Kho -->
+<div class="modal fade" id="approveModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="/StockOut/Transition/@Model.Id">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="to" value="@((int)StockOutStatus.Finished)" />
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-check2-circle text-success me-2"></i>Xác nhận duyệt xuất kho</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Bạn sắp xác nhận hoàn tất xuất kho cho phiếu <b>@Model.StockOutNo</b>.</p>
+                    <div class="alert alert-warning small">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        Hành động này sẽ <b>tự động trừ số lượng tồn kho</b> của <b>@Model.ItemCount</b> mặt hàng phụ tùng tương ứng.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Người duyệt / Thủ kho bàn giao</label>
+                        <input type="text" name="approvedBy" class="form-control" value="Thủ kho" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ghi chú bổ sung</label>
+                        <input type="text" name="note" class="form-control" placeholder="VD: Đã kiểm đếm đầy đủ linh kiện và giao cho xưởng..." />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-success fw-semibold"><i class="bi bi-check-lg me-1"></i>Duyệt xuất kho &amp; Trừ tồn</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Modal Hủy Phiếu Xuất Kho -->
+<div class="modal fade" id="rejectModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="post" action="/StockOut/Transition/@Model.Id">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="to" value="@((int)StockOutStatus.Rejected)" />
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-danger"><i class="bi bi-x-circle me-2"></i>Hủy phiếu xuất kho</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do hủy phiếu <span class="text-danger">*</span></label>
+                        <textarea name="note" class="form-control" rows="3" required placeholder="Nhập lý do hủy phiếu xuất kho (VD: Khách đổi ý, thợ không cần thay thế phụ tùng này)..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-danger fw-semibold"><i class="bi bi-trash me-1"></i>Xác nhận hủy phiếu</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>

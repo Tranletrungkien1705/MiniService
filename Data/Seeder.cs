@@ -275,13 +275,65 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        if (!await db.StockOuts.AnyAsync())
+        {
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+            var pFilter = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+            var ro1 = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync();
+
+            if (pOil != null && pFilter != null && ro1 != null)
+            {
+                // 1. Phiếu xuất kho phụ tùng sửa chữa hoàn tất cho RO1 (Status = Finished)
+                var x1 = new StockOut
+                {
+                    StockOutNo = "XK260427-001",
+                    StockOutDate = DateTime.Today,
+                    Type = StockOutType.Service,
+                    Status = StockOutStatus.Finished,
+                    ROId = ro1.Id,
+                    CarId = ro1.CarId,
+                    CustomerId = ro1.CustomerId,
+                    RecipientName = ro1.Technician ?? "Thợ Hùng",
+                    Description = $"Xuất vật tư bảo dưỡng định kỳ 20.000km cho lệnh {ro1.Code} (xe {ro1.Car.Plate}).",
+                    CreatedBy = "Thủ kho Tuấn",
+                    CreatedAt = DateTime.Now.AddHours(-3),
+                    ApprovedBy = "Thủ kho Tuấn",
+                    FinishedAt = DateTime.Now.AddHours(-2).AddMinutes(-45),
+                    Items = [
+                        new StockOutDetail { PartId = pOil.Id, PartCode = pOil.Code, PartName = pOil.Name, Unit = pOil.Unit, Quantity = 1, UnitPrice = pOil.SalePrice, VatPercent = 8, Location = pOil.Location, Note = "Dầu nhớt Hyundai 5W-30 can 4L" },
+                        new StockOutDetail { PartId = pFilter.Id, PartCode = pFilter.Code, PartName = pFilter.Name, Unit = pFilter.Unit, Quantity = 1, UnitPrice = pFilter.SalePrice, VatPercent = 8, Location = pFilter.Location, Note = "Lọc dầu chính hãng" }
+                    ]
+                };
+
+                // 2. Phiếu xuất kho đang chuẩn bị soạn hàng cho khách lẻ / sửa chữa (Status = Pending)
+                var x2 = new StockOut
+                {
+                    StockOutNo = "XK260427-002",
+                    StockOutDate = DateTime.Today,
+                    Type = StockOutType.Normal,
+                    Status = StockOutStatus.Pending,
+                    RecipientName = "Nguyễn Hoàng Long (Khách vãng lai)",
+                    Description = "Xuất bán lẻ phụ tùng má phanh trước cho khách tự thay thế.",
+                    CreatedBy = "Thủ kho Tuấn",
+                    CreatedAt = DateTime.Now.AddHours(-1),
+                    Items = [
+                        new StockOutDetail { PartId = pBrake != null ? pBrake.Id : pFilter.Id, PartCode = pBrake != null ? pBrake.Code : pFilter.Code, PartName = pBrake != null ? pBrake.Name : pFilter.Name, Unit = pBrake != null ? pBrake.Unit : pFilter.Unit, Quantity = 1, UnitPrice = pBrake != null ? pBrake.SalePrice : pFilter.SalePrice, VatPercent = 8, Location = pBrake?.Location, Note = "Bán lẻ thanh toán ngay" }
+                    ]
+                };
+
+                db.StockOuts.AddRange(x1, x2);
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -398,6 +450,43 @@ public static class Seeder
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""StockInId"") REFERENCES ""StockIns"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"" ) REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE TABLE IF NOT EXISTS ""StockOuts"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""StockOutNo"" TEXT NOT NULL,
+                ""StockOutDate"" TEXT NOT NULL,
+                ""Type"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""ROId"" INTEGER NULL,
+                ""CustomerId"" INTEGER NULL,
+                ""CarId"" INTEGER NULL,
+                ""RecipientName"" TEXT NULL,
+                ""Description"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""FinishedAt"" TEXT NULL,
+                ""ApprovedBy"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_StockOuts_OrgId_StockOutNo"" ON ""StockOuts"" (""OrgId"", ""StockOutNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""StockOutDetails"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""StockOutId"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""PartCode"" TEXT NOT NULL,
+                ""PartName"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""VatPercent"" TEXT NOT NULL,
+                ""Location"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""StockOutId"") REFERENCES ""StockOuts"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
             );"
         };
 

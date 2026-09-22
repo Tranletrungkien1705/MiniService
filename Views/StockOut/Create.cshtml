@@ -1,0 +1,325 @@
+@{
+    ViewData["Title"] = "Lập phiếu xuất kho phụ tùng";
+    var parts = (List<Part>)ViewBag.Parts;
+    var ros = (List<RepairOrder>)ViewBag.ROs;
+    var selectedRoId = (int?)ViewBag.SelectedROId;
+    var preloadedRO = (RepairOrder?)ViewBag.PreloadedRO;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-11">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-box-arrow-up-right me-2 text-primary"></i>Lập phiếu xuất kho phụ tùng (Stock Out)</h5>
+                        <div class="text-muted small">Xuất linh kiện phục vụ lệnh sửa chữa (RO) tại xưởng hoặc bán lẻ / bảo hành</div>
+                    </div>
+                    <a href="/StockOut" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách phiếu</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/StockOut/Create" id="stockOutForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Hình thức xuất <span class="text-danger">*</span></label>
+                            <select name="type" id="typeSelect" class="form-select" onchange="onTypeChange(this.value)">
+                                <option value="@((int)StockOutType.Service)" selected="@(preloadedRO != null || selectedRoId.HasValue)">Xuất dịch vụ (Sửa chữa RO)</option>
+                                <option value="@((int)StockOutType.Normal)">Xuất bán lẻ thương mại</option>
+                                <option value="@((int)StockOutType.Warranty)">Xuất bảo hành hãng HTC</option>
+                                <option value="@((int)StockOutType.Internal)">Xuất sử dụng nội bộ xưởng</option>
+                            </select>
+                        </div>
+                        <div class="col-md-5" id="roSelectGroup">
+                            <label class="form-label fw-semibold">Lệnh sửa chữa (RO) liên kết</label>
+                            <select name="roId" id="roSelect" class="form-select" onchange="onRoSelected(this)">
+                                <option value="">— Chọn Lệnh sửa chữa (tùy chọn) —</option>
+                                @foreach (var r in ros)
+                                {
+                                    var isSel = (selectedRoId == r.Id);
+                                    var partCount = r.Lines.Count(l => l.Type == LineType.Part);
+                                    <option value="@r.Id" selected="@isSel"
+                                            data-plate="@r.Car.Plate"
+                                            data-model="@r.Car.Model"
+                                            data-customer="@r.Customer.Name"
+                                            data-technician="@(r.Technician ?? "")"
+                                            data-parts='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(r.Lines.Where(l => l.Type == LineType.Part).Select(l => new { partId = l.PartId, name = l.Name, qty = l.Quantity, price = l.UnitPrice })))'>
+                                        [@r.Code] Xe @r.Car.Plate (@r.Car.Model) — @r.Customer.Name (@partCount phụ tùng)
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text text-muted small">Chọn RO để tự động điền thông tin xe và nạp phụ tùng cần xuất.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Người nhận hàng / Kỹ thuật viên</label>
+                            <input name="recipientName" id="recipientNameInput" class="form-control"
+                                   value="@(preloadedRO?.Technician ?? preloadedRO?.Customer?.Name ?? "")"
+                                   placeholder="VD: KTV Tuấn / Khách nhận..." />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Ngày xuất kho <span class="text-danger">*</span></label>
+                            <input type="date" name="stockOutDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-9">
+                            <label class="form-label fw-semibold">Ghi chú / Diễn giải lý do xuất</label>
+                            <input name="description" id="descriptionInput" class="form-control"
+                                   value="@(preloadedRO != null ? $"Xuất vật tư phụ tùng cho lệnh sửa chữa {preloadedRO.Code} (xe {preloadedRO.Car.Plate})" : "")"
+                                   placeholder="VD: Xuất phụ tùng thay thế bảo dưỡng định kỳ..." />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <h6 class="fw-bold mb-0"><i class="bi bi-list-check me-1 text-primary"></i>Danh mục phụ tùng xuất kho</h6>
+                            <span class="text-muted small">Hệ thống sẽ kiểm tra số lượng tồn kho trước khi duyệt xuất</span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()">
+                            <i class="bi bi-plus-lg me-1"></i>Thêm dòng phụ tùng
+                        </button>
+                    </div>
+
+                    <div class="table-responsive mb-3">
+                        <table class="table table-bordered align-middle" id="itemsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:34%">Phụ tùng <span class="text-danger">*</span></th>
+                                    <th style="width:8%">ĐVT</th>
+                                    <th style="width:11%">Tồn kho</th>
+                                    <th style="width:12%">Số lượng xuất <span class="text-danger">*</span></th>
+                                    <th style="width:15%">Đơn giá (VNĐ) <span class="text-danger">*</span></th>
+                                    <th style="width:8%">VAT (%)</th>
+                                    <th style="width:12%" class="text-end">Thành tiền (có VAT)</th>
+                                    <th style="width:4%"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                <!-- Dynamic rows inserted by JavaScript -->
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <th colspan="6" class="text-end">Tiền hàng trước thuế:</th>
+                                    <th class="text-end" id="sumSubTotal">0 đ</th>
+                                    <th></th>
+                                </tr>
+                                <tr>
+                                    <th colspan="6" class="text-end">Tiền thuế VAT:</th>
+                                    <th class="text-end" id="sumVat">0 đ</th>
+                                    <th></th>
+                                </tr>
+                                <tr class="table-primary">
+                                    <th colspan="6" class="text-end fs-6">TỔNG GIÁ TRỊ XUẤT KHO:</th>
+                                    <th class="text-end fs-6 text-primary" id="sumTotal">0 đ</th>
+                                    <th></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                        <a href="/StockOut" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary px-4 fw-semibold">
+                            <i class="bi bi-check2-circle me-1"></i>Lưu phiếu xuất kho
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    var availableParts = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(parts.Select(p => new {
+        id = p.Id,
+        code = p.Code,
+        name = p.Name,
+        unit = p.Unit,
+        inStock = p.InStock,
+        price = p.SalePrice > 0 ? p.SalePrice : p.CostPrice,
+        location = p.Location ?? ""
+    })));
+
+    var rowIndex = 0;
+
+    function addRow(prefillPartId, prefillQty, prefillPrice) {
+        var tbody = document.getElementById('itemsBody');
+        var tr = document.createElement('tr');
+        tr.id = 'row_' + rowIndex;
+
+        var optionsHtml = '<option value="">-- Chọn phụ tùng --</option>';
+        for (var i = 0; i < availableParts.length; i++) {
+            var p = availableParts[i];
+            var isSel = (prefillPartId && prefillPartId == p.id) ? 'selected' : '';
+            optionsHtml += '<option value="' + p.id + '" data-unit="' + p.unit + '" data-stock="' + p.inStock + '" data-price="' + p.price + '" ' + isSel + '>'
+                + '[' + p.code + '] ' + p.name + ' (Tồn: ' + p.inStock + ' ' + p.unit + ')'
+                + '</option>';
+        }
+
+        tr.innerHTML =
+            '<td>' +
+                '<select name="partIds" class="form-select form-select-sm" onchange="onPartChange(' + rowIndex + ', this)" required>' +
+                    optionsHtml +
+                '</select>' +
+            '</td>' +
+            '<td><input type="text" class="form-control form-control-sm text-center bg-light" id="unit_' + rowIndex + '" readonly value="" /></td>' +
+            '<td><input type="text" class="form-control form-control-sm text-center bg-light" id="stock_' + rowIndex + '" readonly value="" /></td>' +
+            '<td><input type="number" name="quantities" id="qty_' + rowIndex + '" class="form-control form-control-sm text-end" min="0.01" step="0.01" value="' + (prefillQty || 1) + '" oninput="calcRow(' + rowIndex + ')" required /></td>' +
+            '<td><input type="number" name="unitPrices" id="price_' + rowIndex + '" class="form-control form-control-sm text-end" min="0" step="1000" value="' + (prefillPrice || 0) + '" oninput="calcRow(' + rowIndex + ')" required /></td>' +
+            '<td><input type="number" name="vatPercents" id="vat_' + rowIndex + '" class="form-control form-control-sm text-center" min="0" max="100" step="1" value="8" oninput="calcRow(' + rowIndex + ')" /></td>' +
+            '<td class="text-end fw-semibold" id="total_' + rowIndex + '">0 đ</td>' +
+            '<td class="text-center">' +
+                '<button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="removeRow(' + rowIndex + ')"><i class="bi bi-trash"></i></button>' +
+            '</td>';
+
+        tbody.appendChild(tr);
+
+        var selectEl = tr.querySelector('select');
+        if (prefillPartId) {
+            onPartChange(rowIndex, selectEl, prefillPrice);
+        }
+
+        rowIndex++;
+        calcGrandTotal();
+    }
+
+    function onPartChange(idx, sel, overridePrice) {
+        var opt = sel.options[sel.selectedIndex];
+        if (sel.value) {
+            var unit = opt.getAttribute('data-unit') || '';
+            var stock = parseFloat(opt.getAttribute('data-stock') || 0);
+            var price = overridePrice !== undefined ? overridePrice : parseFloat(opt.getAttribute('data-price') || 0);
+
+            document.getElementById('unit_' + idx).value = unit;
+            var stockEl = document.getElementById('stock_' + idx);
+            stockEl.value = stock + ' ' + unit;
+            if (stock <= 0) {
+                stockEl.classList.add('text-danger', 'fw-bold');
+            } else {
+                stockEl.classList.remove('text-danger', 'fw-bold');
+            }
+
+            var priceEl = document.getElementById('price_' + idx);
+            if (priceEl && (!priceEl.value || priceEl.value == 0 || overridePrice !== undefined)) {
+                priceEl.value = price;
+            }
+        } else {
+            document.getElementById('unit_' + idx).value = '';
+            document.getElementById('stock_' + idx).value = '';
+        }
+        calcRow(idx);
+    }
+
+    function removeRow(idx) {
+        var tr = document.getElementById('row_' + idx);
+        if (tr) {
+            tr.remove();
+            calcGrandTotal();
+        }
+    }
+
+    function calcRow(idx) {
+        var qty = parseFloat(document.getElementById('qty_' + idx)?.value || 0);
+        var price = parseFloat(document.getElementById('price_' + idx)?.value || 0);
+        var vat = parseFloat(document.getElementById('vat_' + idx)?.value || 0);
+
+        var subTotal = qty * price;
+        var vatAmount = Math.round(subTotal * (vat / 100));
+        var total = subTotal + vatAmount;
+
+        var totalEl = document.getElementById('total_' + idx);
+        if (totalEl) totalEl.innerText = total.toLocaleString('vi-VN') + ' đ';
+
+        // Check stock warning
+        var stockStr = document.getElementById('stock_' + idx)?.value || '';
+        var stockNum = parseFloat(stockStr);
+        var qtyEl = document.getElementById('qty_' + idx);
+        if (qtyEl && !isNaN(stockNum) && qty > stockNum) {
+            qtyEl.classList.add('is-invalid');
+            qtyEl.title = 'Số lượng xuất vượt quá tồn kho hiện tại!';
+        } else if (qtyEl) {
+            qtyEl.classList.remove('is-invalid');
+            qtyEl.title = '';
+        }
+
+        calcGrandTotal();
+    }
+
+    function calcGrandTotal() {
+        var sumSub = 0;
+        var sumV = 0;
+        var sumTot = 0;
+
+        for (var i = 0; i < rowIndex; i++) {
+            var tr = document.getElementById('row_' + i);
+            if (!tr) continue;
+            var qty = parseFloat(document.getElementById('qty_' + i)?.value || 0);
+            var price = parseFloat(document.getElementById('price_' + i)?.value || 0);
+            var vat = parseFloat(document.getElementById('vat_' + i)?.value || 0);
+
+            var sub = qty * price;
+            var v = Math.round(sub * (vat / 100));
+            sumSub += sub;
+            sumV += v;
+            sumTot += (sub + v);
+        }
+
+        document.getElementById('sumSubTotal').innerText = sumSub.toLocaleString('vi-VN') + ' đ';
+        document.getElementById('sumVat').innerText = sumV.toLocaleString('vi-VN') + ' đ';
+        document.getElementById('sumTotal').innerText = sumTot.toLocaleString('vi-VN') + ' đ';
+    }
+
+    function onTypeChange(val) {
+        var roGroup = document.getElementById('roSelectGroup');
+        if (val == "@((int)StockOutType.Service)") {
+            roGroup.style.display = 'block';
+        } else {
+            // For normal/warranty/internal, RO is optional
+            roGroup.style.display = 'block';
+        }
+    }
+
+    function onRoSelected(sel) {
+        var opt = sel.options[sel.selectedIndex];
+        if (sel.value) {
+            var tech = opt.getAttribute('data-technician');
+            var cus = opt.getAttribute('data-customer');
+            var plate = opt.getAttribute('data-plate');
+            var recipientEl = document.getElementById('recipientNameInput');
+            if (recipientEl && !recipientEl.value) {
+                recipientEl.value = tech || cus || '';
+            }
+
+            var descEl = document.getElementById('descriptionInput');
+            if (descEl && !descEl.value) {
+                descEl.value = 'Xuất phụ tùng cho lệnh ' + opt.text.split(' ')[0] + ' (' + plate + ')';
+            }
+
+            var partsData = opt.getAttribute('data-parts');
+            if (partsData) {
+                try {
+                    var parsedParts = JSON.parse(partsData);
+                    if (parsedParts && parsedParts.length > 0) {
+                        // Clear existing rows
+                        document.getElementById('itemsBody').innerHTML = '';
+                        rowIndex = 0;
+                        for (var i = 0; i < parsedParts.length; i++) {
+                            var p = parsedParts[i];
+                            addRow(p.partId, p.qty, p.price);
+                        }
+                    }
+                } catch (e) { console.error(e); }
+            }
+        }
+    }
+
+    // Auto-populate when preloaded RO is present or initialize with 1 row
+    document.addEventListener("DOMContentLoaded", function() {
+        var roSel = document.getElementById('roSelect');
+        if (roSel && roSel.value) {
+            onRoSelected(roSel);
+        } else {
+            addRow();
+        }
+    });
+</script>

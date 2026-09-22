@@ -85,6 +85,24 @@ public enum StockInType
     Return = 2       // 3: Return      — Nhập thu hồi / hoàn trả từ xưởng dịch vụ
 }
 
+/// <summary>Trạng thái Phiếu Xuất kho — theo Ser_Inv_StockOut idn.CarService.</summary>
+public enum StockOutStatus
+{
+    Pending = 0,     // 1: Pending   — Mới tạo / Chờ soạn hàng & duyệt xuất
+    Executing = 1,   // 2: Executing — Đang soạn hàng / Tiến hành xuất kho
+    Finished = 2,    // 3: Finished  — Hoàn tất / Đã xuất kho (giảm tồn kho thực tế)
+    Rejected = 3     // 5: Reject    — Đã hủy phiếu xuất
+}
+
+/// <summary>Hình thức xuất kho phụ tùng — theo Ser_Inv_StockOutType idn.CarService.</summary>
+public enum StockOutType
+{
+    Service = 0,     // 1: Xuất dịch vụ (Sửa chữa theo lệnh RO)
+    Normal = 1,      // 2: Xuất thương mại (Bán lẻ / Khách mua ngoài)
+    Warranty = 2,    // 3: Xuất bảo hành hãng HTC
+    Internal = 3     // 4: Xuất sử dụng nội bộ xưởng / tiêu hao
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -131,6 +149,7 @@ public class RepairOrder : IOrgOwned
     public Appointment? Appointment { get; set; }
     public List<RepairLine> Lines { get; set; } = [];
     public List<WarrantyReport> WarrantyReports { get; set; } = [];
+    public List<StockOut> StockOuts { get; set; } = [];
 
     public decimal Total => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
@@ -304,6 +323,60 @@ public class StockInDetail : IOrgOwned
     public string? Note { get; set; }                       // Ghi chú dòng (Description)
 
     public StockIn StockIn { get; set; } = null!;
+    public Part Part { get; set; } = null!;
+
+    public decimal SubTotal => Quantity * UnitPrice;
+    public decimal VatAmount => Math.Round(SubTotal * (VatPercent / 100m), 2);
+    public decimal Amount => SubTotal + VatAmount;
+}
+
+/// <summary>Phiếu Xuất kho phụ tùng / vật tư — Ser_Inv_StockOut trong idn.CarService.</summary>
+public class StockOut : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string StockOutNo { get; set; } = "";             // Số phiếu xuất (VD: XK260427-001)
+    public DateTime StockOutDate { get; set; } = DateTime.Today; // Ngày xuất kho
+    public StockOutType Type { get; set; } = StockOutType.Service; // Loại phiếu xuất (StockOutType)
+    public StockOutStatus Status { get; set; } = StockOutStatus.Pending; // Trạng thái phiếu xuất
+    public int? ROId { get; set; }                          // Lệnh sửa chữa gắn liền (nếu có)
+    public int? CustomerId { get; set; }                    // Khách hàng nhận / chủ xe
+    public int? CarId { get; set; }                         // Xe nhận phụ tùng
+    public string? RecipientName { get; set; }              // Người nhận hàng / Kỹ thuật viên / Khách
+    public string? Description { get; set; }                // Diễn giải / Lý do xuất kho
+    public string CreatedBy { get; set; } = "web";          // Người lập phiếu
+    public DateTime CreatedAt { get; set; } = DateTime.Now; // Thời điểm lập phiếu
+    public DateTime? FinishedAt { get; set; }               // Ngày hoàn tất xuất kho (trừ tồn)
+    public string? ApprovedBy { get; set; }                 // Thủ kho duyệt xuất
+
+    public RepairOrder? RO { get; set; }
+    public Customer? Customer { get; set; }
+    public Car? Car { get; set; }
+    public List<StockOutDetail> Items { get; set; } = [];
+
+    public decimal SubTotal => Items.Sum(i => i.Quantity * i.UnitPrice);
+    public decimal TotalVat => Items.Sum(i => i.VatAmount);
+    public decimal Total => Items.Sum(i => i.Amount);
+    public int ItemCount => Items.Count;
+}
+
+/// <summary>Chi tiết phụ tùng xuất kho — Ser_Inv_StockOutDetail trong idn.CarService.</summary>
+public class StockOutDetail : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int StockOutId { get; set; }
+    public int PartId { get; set; }                         // ID phụ tùng trong kho
+    public string PartCode { get; set; } = "";              // Mã phụ tùng (PartCode)
+    public string PartName { get; set; } = "";              // Tên phụ tùng (VieName)
+    public string Unit { get; set; } = "Cái";               // Đơn vị tính (Unit)
+    public decimal Quantity { get; set; } = 1;              // Số lượng xuất (Quantity)
+    public decimal UnitPrice { get; set; }                  // Đơn giá xuất trước thuế (Price)
+    public decimal VatPercent { get; set; } = 8;            // Thuế suất VAT % (VAT)
+    public string? Location { get; set; }                   // Vị trí kho xuất (ActualLocation)
+    public string? Note { get; set; }                       // Ghi chú dòng phụ tùng
+
+    public StockOut StockOut { get; set; } = null!;
     public Part Part { get; set; } = null!;
 
     public decimal SubTotal => Quantity * UnitPrice;

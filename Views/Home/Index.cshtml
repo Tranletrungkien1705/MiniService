@@ -30,6 +30,12 @@
             <div class="stat-num text-primary" style="font-size:18px"><span class="text-warning">@d.PendingStockIns chờ</span> · @d.MonthStockInValue.ToString("N0")đ</div>
         </div></div>
     </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Xuất kho phụ tùng</div>
+            <div class="stat-num" style="font-size:18px;color:#2563eb"><span class="text-warning">@d.PendingStockOuts chờ</span> · @d.MonthStockOutValue.ToString("N0")đ</div>
+        </div></div>
+    </div>
     <div class="col-12 col-lg">
         <div class="card"><div class="card-body">
             <div class="text-muted small">Bảo hành duyệt</div>
@@ -57,7 +63,8 @@
         <a href="/RO?status=5" class="btn btn-outline-primary w-100 mb-2"><i class="bi bi-wrench me-1"></i>Xe đang sửa</a>
         <a href="/Part" class="btn btn-outline-secondary w-100 mb-2"><i class="bi bi-box-seam me-1"></i>Kho phụ tùng @if(d.LowStockParts > 0){<span class="badge bg-danger ms-1">@d.LowStockParts cảnh báo</span>}</a>
         <a href="/StockIn" class="btn btn-outline-primary w-100 mb-2"><i class="bi bi-box-arrow-in-down me-1"></i>Nhập kho phụ tùng @if(d.PendingStockIns > 0){<span class="badge bg-warning text-dark ms-1">@d.PendingStockIns chờ duyệt</span>}</a>
+        <a href="/StockOut" class="btn btn-outline-primary w-100 mb-2"><i class="bi bi-box-arrow-up-right me-1"></i>Xuất kho phụ tùng @if(d.PendingStockOuts > 0){<span class="badge bg-warning text-dark ms-1">@d.PendingStockOuts chờ duyệt</span>}</a>
         <a href="/Warranty" class="btn btn-outline-success w-100 mb-2"><i class="bi bi-shield-check me-1"></i>Báo cáo bảo hành xe (Warranty) @if(d.PendingWarranty > 0){<span class="badge bg-warning text-dark ms-1">@d.PendingWarranty chờ duyệt</span>}</a>
-        <div class="text-muted small mt-2">API tra cứu: <code>GET /api/ro?plate=30A</code> · <code>GET /api/appointments</code> · <code>GET /api/parts</code> · <code>GET /api/stockin</code> · <code>GET /api/warranty</code></div>
+        <div class="text-muted small mt-2">API tra cứu: <code>GET /api/ro?plate=30A</code> · <code>GET /api/appointments</code> · <code>GET /api/parts</code> · <code>GET /api/stockin</code> · <code>GET /api/stockout</code> · <code>GET /api/warranty</code></div>
     </div></div></div>
 </div>
