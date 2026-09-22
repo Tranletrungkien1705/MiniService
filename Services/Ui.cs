@@ -354,4 +354,20 @@ public static class Ui
         Models.StockAdjType.DamageScrap => ("Hao hụt / Hư hỏng", "HH", "danger"),
         _ => (t.ToString(), "", "secondary")
     };
+
+    public static (string text, string code, string css) BulletinStatus(BulletinStatus s) => s switch
+    {
+        Models.BulletinStatus.Draft => ("Dự thảo", "DRAFT", "secondary"),
+        Models.BulletinStatus.Active => ("Có hiệu lực", "ACTIVE", "success"),
+        Models.BulletinStatus.Finished => ("Đã kết thúc", "FNS", "info"),
+        Models.BulletinStatus.Cancelled => ("Đã hủy", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string code, string css) BulletinVinStatus(BulletinVinStatus s) => s switch
+    {
+        Models.BulletinVinStatus.Pending => ("Chưa xử lý", "PEND", "warning"),
+        Models.BulletinVinStatus.Completed => ("Đã hoàn thành", "FNS", "success"),
+        _ => (s.ToString(), "", "secondary")
+    };
 }

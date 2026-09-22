@@ -45,6 +45,9 @@ public class AppDbContext : DbContext
     public DbSet<CustomerCareMace> CustomerCareMaces => Set<CustomerCareMace>();
     public DbSet<StockAdj> StockAdjs => Set<StockAdj>();
     public DbSet<StockAdjDetail> StockAdjDetails => Set<StockAdjDetail>();
+    public DbSet<Bulletin> Bulletins => Set<Bulletin>();
+    public DbSet<BulletinDetail> BulletinDetails => Set<BulletinDetail>();
+    public DbSet<BulletinVin> BulletinVins => Set<BulletinVin>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -78,6 +81,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.CampaignMarketing).WithMany(x => x.AppliedROs).HasForeignKey(x => x.CampaignMarketingId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Bulletin).WithMany(x => x.AppliedROs).HasForeignKey(x => x.BulletinId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.WarrantyReports).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.StockOuts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.CustomerCares).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
@@ -398,6 +402,33 @@ public class AppDbContext : DbContext
             e.Property(x => x.SystemQuantity).HasPrecision(18, 2);
             e.Property(x => x.ActualQuantity).HasPrecision(18, 2);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Bulletin>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BulletinNo }).IsUnique();
+            e.Ignore(x => x.TotalVinCount);
+            e.Ignore(x => x.CompletedVinCount);
+            e.Ignore(x => x.PendingVinCount);
+            e.Ignore(x => x.CompletionRate);
+            e.Ignore(x => x.IsExpired);
+            e.HasMany(x => x.Items).WithOne(x => x.Bulletin).HasForeignKey(x => x.BulletinId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.TargetVins).WithOne(x => x.Bulletin).HasForeignKey(x => x.BulletinId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.AppliedROs).WithOne(x => x.Bulletin).HasForeignKey(x => x.BulletinId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BulletinDetail>(e =>
+        {
+            e.Ignore(x => x.Amount);
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BulletinVin>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BulletinId, x.VinNo });
+            e.HasOne(x => x.RO).WithMany().HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

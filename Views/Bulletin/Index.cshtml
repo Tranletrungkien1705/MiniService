@@ -1,0 +1,190 @@
+@model List<Bulletin>
+@{
+    ViewData["Title"] = "Bản tin kỹ thuật & Triệu hồi xe (TSB)";
+    var currentStatus = (BulletinStatus?)ViewBag.Status;
+    var currentQ = (string?)ViewBag.Q;
+    var activeOnly = (bool?)ViewBag.ActiveOnly;
+    var checkVin = (string?)ViewBag.CheckVin;
+    var matchedVins = (List<BulletinVin>?)ViewBag.MatchedVins;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-0"><i class="bi bi-file-earmark-check text-primary me-2"></i>Bản tin kỹ thuật dịch vụ &amp; Triệu hồi xe (TSB)</h5>
+        <div class="text-muted small">Quản lý các thông báo kỹ thuật, nâng cấp phần mềm và chiến dịch triệu hồi chính hãng Hyundai HTC/HMC theo số khung VIN.</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Bulletin/Create" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Ban hành bản tin mới</a>
+    </div>
+</div>
+
+<!-- Form Tra cứu nhanh số khung xe VIN -->
+<div class="card mb-3 border-primary">
+    <div class="card-body py-2">
+        <form method="get" class="row g-2 align-items-center">
+            <input type="hidden" name="status" value="@currentStatus" />
+            <div class="col-auto">
+                <span class="fw-semibold text-primary"><i class="bi bi-search me-1"></i>Tra cứu số VIN xe:</span>
+            </div>
+            <div class="col-md-4">
+                <input type="text" name="checkVin" value="@checkVin" class="form-control form-control-sm font-monospace text-uppercase" placeholder="Nhập số khung VIN (VD: RLHXXTC002)..." />
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check2-circle me-1"></i>Kiểm tra triệu hồi</button>
+                @if (!string.IsNullOrWhiteSpace(checkVin))
+                {
+                    <a href="/Bulletin" class="btn btn-sm btn-outline-secondary ms-1">Xóa tra cứu</a>
+                }
+            </div>
+        </form>
+
+        @if (!string.IsNullOrWhiteSpace(checkVin))
+        {
+            <div class="mt-2 pt-2 border-top">
+                @if (matchedVins != null && matchedVins.Count > 0)
+                {
+                    <div class="alert alert-danger mb-0 py-2">
+                        <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Phát hiện @matchedVins.Count Bản tin kỹ thuật / Triệu hồi áp dụng cho số khung VIN: <code>@checkVin.ToUpper()</code>:</div>
+                        <ul class="mb-0 ps-3 small">
+                            @foreach (var mv in matchedVins)
+                            {
+                                var (vtxt, _, vcss) = Ui.BulletinVinStatus(mv.Status);
+                                <li>
+                                    <a href="/Bulletin/Detail/@mv.BulletinId" class="fw-semibold text-danger">@mv.Bulletin.BulletinNo: @mv.Bulletin.Title</a>
+                                    — Trạng thái xử lý: <span class="badge bg-@vcss">@vtxt</span>
+                                    @if (mv.Status == BulletinVinStatus.Completed)
+                                    {
+                                        <span class="text-muted ms-1">(Đã hoàn tất ngày @mv.DateDone?.ToString("dd/MM/yyyy") @(mv.RONo != null ? $"theo RO: {mv.RONo}" : ""))</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-success mb-0 py-2 small">
+                        <i class="bi bi-check-circle me-1"></i>Số khung VIN <b>@checkVin.ToUpper()</b> không nằm trong bất kỳ chiến dịch triệu hồi hoặc bản tin kỹ thuật nào đang hiệu lực! Xe đạt chuẩn an toàn.
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Bộ lọc tìm kiếm danh sách Bản tin -->
+<div class="card mb-3"><div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-center">
+        <div class="col-md-3">
+            <input type="text" name="q" value="@currentQ" class="form-control form-control-sm" placeholder="Tìm theo mã TSB, mã HMC, tiêu đề..." />
+        </div>
+        <div class="col-md-2">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">-- Tất cả trạng thái --</option>
+                <option value="1" selected="@(currentStatus == BulletinStatus.Active)">Có hiệu lực (Active)</option>
+                <option value="0" selected="@(currentStatus == BulletinStatus.Draft)">Dự thảo (Draft)</option>
+                <option value="2" selected="@(currentStatus == BulletinStatus.Finished)">Đã kết thúc (Finished)</option>
+                <option value="3" selected="@(currentStatus == BulletinStatus.Cancelled)">Đã hủy (Cancelled)</option>
+            </select>
+        </div>
+        <div class="col-auto">
+            <div class="form-check form-check-inline small">
+                <input class="form-check-input" type="checkbox" name="activeOnly" value="true" id="chkActiveOnly" checked="@(activeOnly == true)" />
+                <label class="form-check-label" for="chkActiveOnly">Đang áp dụng</label>
+            </div>
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-funnel me-1"></i>Lọc danh sách</button>
+            <a href="/Bulletin" class="btn btn-sm btn-outline-secondary">Đặt lại</a>
+        </div>
+    </form>
+</div></div>
+
+<!-- Danh sách Bản tin kỹ thuật TSB -->
+<div class="card"><div class="card-body p-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:130px">Mã TSB / HMC</th>
+                    <th>Nội dung Bản tin kỹ thuật</th>
+                    <th style="width:140px">Ban hành &amp; Hạn</th>
+                    <th style="width:160px">Tiến độ triệu hồi</th>
+                    <th style="width:120px">Trạng thái</th>
+                    <th style="width:120px" class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Count == 0)
+                {
+                    <tr><td colspan="6" class="text-center py-4 text-muted">Không tìm thấy bản tin kỹ thuật phù hợp.</td></tr>
+                }
+                @foreach (var b in Model)
+                {
+                    var (stTxt, stCode, stCss) = Ui.BulletinStatus(b.Status);
+                    <tr>
+                        <td>
+                            <a href="/Bulletin/Detail/@b.Id" class="fw-bold text-decoration-none">@b.BulletinNo</a>
+                            @if (!string.IsNullOrEmpty(b.BulletinNoHMC))
+                            {
+                                <div class="small text-muted font-monospace" style="font-size:11px">@b.BulletinNoHMC</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="fw-semibold">
+                                <a href="/Bulletin/Detail/@b.Id" class="text-dark text-decoration-none">@b.Title</a>
+                            </div>
+                            @if (!string.IsNullOrEmpty(b.Remark))
+                            {
+                                <div class="small text-muted text-truncate" style="max-width:450px">@b.Remark</div>
+                            }
+                            <div class="small mt-1 text-primary" style="font-size:11px">
+                                <i class="bi bi-person-fill-gear me-1"></i>@b.UserCreate
+                                @if (b.Items.Count > 0)
+                                {
+                                    <span class="ms-2 badge bg-light text-dark border">@b.Items.Count hạng mục thay thế</span>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <div class="small"><i class="bi bi-calendar-event me-1"></i>@b.CreateDate.ToString("dd/MM/yyyy")</div>
+                            @if (b.DateExpired.HasValue)
+                            {
+                                <div class="small @(b.IsExpired ? "text-danger fw-semibold" : "text-muted")">
+                                    Hạn: @b.DateExpired.Value.ToString("dd/MM/yyyy")
+                                    @if (b.IsExpired) { <span class="badge bg-danger ms-1" style="font-size:9px">HẾT HẠN</span> }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="small text-muted">Vô thời hạn</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span><b class="text-success">@b.CompletedVinCount</b> / @b.TotalVinCount xe</span>
+                                <span class="fw-semibold">@b.CompletionRate%</span>
+                            </div>
+                            <div class="progress" style="height:6px">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: @(b.CompletionRate)%" aria-valuenow="@b.CompletionRate" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-@stCss">@stTxt</span>
+                            @if (!b.IsActive)
+                            {
+                                <div class="badge bg-secondary mt-1">Tạm dừng</div>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/Bulletin/Detail/@b.Id" class="btn btn-outline-primary" title="Xem chi tiết"><i class="bi bi-eye"></i></a>
+                                <a href="/Bulletin/Print/@b.Id" class="btn btn-outline-secondary" target="_blank" title="In TSB"><i class="bi bi-printer"></i></a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div></div>

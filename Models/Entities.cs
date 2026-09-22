@@ -272,6 +272,22 @@ public enum StockAdjStatus
     Rejected = 3    // 3: REJECTED — Hủy phiếu kiểm kê
 }
 
+/// <summary>Trạng thái Bản tin kỹ thuật & Chiến dịch triệu hồi — theo Btl_Bulletin idn.CarService.</summary>
+public enum BulletinStatus
+{
+    Draft = 0,     // DRAFT    — Dự thảo / Đang soạn thảo
+    Active = 1,    // ACTIVE   — Có hiệu lực / Đang áp dụng triệu hồi
+    Finished = 2,  // FINISHED — Đã kết thúc chiến dịch
+    Cancelled = 3  // CANCEL   — Đã hủy bỏ
+}
+
+/// <summary>Trạng thái xử lý xe theo số khung VIN trong Bản tin kỹ thuật — theo Btl_Bulletin_VIN Status ('P', 'F') idn.CarService.</summary>
+public enum BulletinVinStatus
+{
+    Pending = 0,   // P — Chờ xử lý / Chưa thực hiện triệu hồi
+    Completed = 1  // F — Đã thực hiện xong theo Lệnh RO
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -324,6 +340,8 @@ public class RepairOrder : IOrgOwned
     public int? CampaignMarketingId { get; set; }
     public CampaignMarketing? CampaignMarketing { get; set; }
     public decimal CampaignDiscountAmount { get; set; } = 0;
+    public int? BulletinId { get; set; }
+    public Bulletin? Bulletin { get; set; }
     public List<RepairLine> Lines { get; set; } = [];
     public List<WarrantyReport> WarrantyReports { get; set; } = [];
     public List<StockOut> StockOuts { get; set; } = [];
@@ -1239,6 +1257,78 @@ public class StockAdjDetail : IOrgOwned
 
     public decimal DiffQuantity => ActualQuantity - SystemQuantity;
     public decimal DiffAmount => (ActualQuantity - SystemQuantity) * CostPrice;
+}
+
+/// <summary>Bản tin kỹ thuật dịch vụ & Chiến dịch triệu hồi xe — Btl_Bulletin trong idn.CarService.</summary>
+public class Bulletin : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string BulletinNo { get; set; } = "";             // Số bản tin HTC (VD: TSB-2026-001, CAM-RECALL-HYU01)
+    public string? BulletinNoHMC { get; set; }               // Số bản tin tập đoàn Hyundai toàn cầu (VD: HMC-TSB-24-01-002)
+    public string Title { get; set; } = "";                  // Tiêu đề bản tin kỹ thuật
+    public string? Remark { get; set; }                      // Hiện tượng hư hỏng / Nguyên nhân kỹ thuật
+    public string? Solution { get; set; }                    // Hướng dẫn xử lý / Phương án khắc phục tiêu chuẩn HTC
+    public DateTime CreateDate { get; set; } = DateTime.Today; // Ngày ban hành bản tin
+    public DateTime? DateExpired { get; set; }               // Hạn áp dụng bản tin
+    public bool IsActive { get; set; } = true;               // Cờ hiệu lực (IsActive)
+    public BulletinStatus Status { get; set; } = BulletinStatus.Active; // Trạng thái bản tin
+    public string UserCreate { get; set; } = "Hyundai Thành Công (HTC)"; // Người / Đơn vị ban hành
+    public string? FileNameAttachment { get; set; }          // Tài liệu kỹ thuật / Hướng dẫn đính kèm
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public List<BulletinDetail> Items { get; set; } = [];
+    public List<BulletinVin> TargetVins { get; set; } = [];
+    public List<RepairOrder> AppliedROs { get; set; } = [];
+
+    public int TotalVinCount => TargetVins.Count;
+    public int CompletedVinCount => TargetVins.Count(v => v.Status == BulletinVinStatus.Completed);
+    public int PendingVinCount => TargetVins.Count(v => v.Status == BulletinVinStatus.Pending);
+    public decimal CompletionRate => TotalVinCount == 0 ? 0 : Math.Round((decimal)CompletedVinCount * 100 / TotalVinCount, 1);
+    public bool IsExpired => DateExpired.HasValue && DateTime.Today > DateExpired.Value.Date;
+}
+
+/// <summary>Hạng mục công việc & Phụ tùng trong Bản tin kỹ thuật — Btl_BulletinDtl trong idn.CarService.</summary>
+public class BulletinDetail : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int BulletinId { get; set; }
+    public LineType Type { get; set; } = LineType.Labor;     // Công lao động hoặc Phụ tùng thay thế
+    public int? PartId { get; set; }                         // Phụ tùng liên kết trong kho nếu là Part
+    public string Code { get; set; } = "";                   // Mã công việc (SerCode) hoặc Mã phụ tùng (PartCode)
+    public string Name { get; set; } = "";                   // Tên công việc (SerName) hoặc Tên phụ tùng (PartName)
+    public string Unit { get; set; } = "Cái";                // Đơn vị tính
+    public decimal Quantity { get; set; } = 1;               // Số lượng / Giờ công quy định
+    public decimal UnitPrice { get; set; } = 0;              // Đơn giá định mức bồi hoàn hãng HTC (0đ hoặc giá hãng thanh toán)
+    public string? Note { get; set; }                        // Hướng dẫn kỹ thuật cụ thể
+
+    public Bulletin Bulletin { get; set; } = null!;
+    public Part? Part { get; set; }
+
+    public decimal Amount => Quantity * UnitPrice;
+}
+
+/// <summary>Danh sách xe áp dụng theo số khung VIN — Btl_Bulletin_VIN trong idn.CarService.</summary>
+public class BulletinVin : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int BulletinId { get; set; }
+    public string VinNo { get; set; } = "";                  // Số khung xe (VinNo)
+    public string? PlateNo { get; set; }                     // Biển số xe (nếu đã đăng ký)
+    public string? Model { get; set; }                       // Dòng xe tương thích (Accent, Tucson, Santa Fe...)
+    public string? DealerCode { get; set; } = "HYUNDAI-MAIN";// Đại lý phụ trách thực hiện
+    public BulletinVinStatus Status { get; set; } = BulletinVinStatus.Pending; // Trạng thái thực hiện (P: Pending, F: Finished)
+    public DateTime? DateDone { get; set; }                  // Thời điểm hoàn tất xử lý
+    public string? DoneBy { get; set; }                      // Kỹ thuật viên / CVDV thực hiện
+    public int? ROId { get; set; }                           // Lệnh sửa chữa RO đã xử lý
+    public string? RONo { get; set; }                        // Số Lệnh sửa chữa RO
+    public string? Note { get; set; }                        // Ghi chú kiểm tra xe
+
+    public Bulletin Bulletin { get; set; } = null!;
+    public RepairOrder? RO { get; set; }
 }
 
 

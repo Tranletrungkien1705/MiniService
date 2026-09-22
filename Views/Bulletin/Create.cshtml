@@ -1,0 +1,167 @@
+@{
+    ViewData["Title"] = "Ban hành Bản tin kỹ thuật mới";
+    var parts = (List<Part>?)ViewBag.Parts ?? [];
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-0"><i class="bi bi-file-earmark-plus text-primary me-2"></i>Ban hành Bản tin kỹ thuật / Chiến dịch triệu hồi xe</h5>
+        <div class="text-muted small">Khai báo thông báo kỹ thuật, định mức phụ tùng bảo hành và danh sách số khung xe VIN chịu ảnh hưởng.</div>
+    </div>
+    <a href="/Bulletin" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Quay lại</a>
+</div>
+
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="card mb-3"><div class="card-body">
+                <h6 class="fw-bold mb-3 text-primary"><i class="bi bi-info-circle me-1"></i>Thông tin chung bản tin</h6>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Mã Bản tin nội bộ / HTC:</label>
+                        <input type="text" name="bulletinNo" class="form-control form-control-sm font-monospace text-uppercase" placeholder="VD: TSB-2026-003 (để trống tự sinh)" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Mã Bản tin Tập đoàn Hyundai HMC:</label>
+                        <input type="text" name="bulletinNoHMC" class="form-control form-control-sm font-monospace text-uppercase" placeholder="VD: HMC-TSB-24-03-010" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Tiêu đề Bản tin kỹ thuật <span class="text-danger">*</span>:</label>
+                    <input type="text" name="title" class="form-control form-control-sm" required placeholder="VD: Nâng cấp phần mềm điều khiển hộp số & Kiểm tra cụm bugi xe..." />
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Ngày ban hành:</label>
+                        <input type="date" name="createDate" class="form-control form-control-sm" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Ngày hết hạn hiệu lực (nếu có):</label>
+                        <input type="date" name="dateExpired" class="form-control form-control-sm" />
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Đơn vị ban hành:</label>
+                        <input type="text" name="userCreate" class="form-control form-control-sm" value="Phòng Kỹ thuật Dịch vụ HTC" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">File tài liệu đính kèm:</label>
+                        <input type="text" name="fileNameAttachment" class="form-control form-control-sm" placeholder="VD: TSB_2026_003_HuongDanKyThuat.pdf" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Hiện tượng hư hỏng &amp; Nguyên nhân kỹ thuật:</label>
+                    <textarea name="remark" class="form-control form-control-sm" rows="3" placeholder="Mô tả triệu chứng, điều kiện xuất hiện lỗi, cảnh báo trên đồng hồ taplo..."></textarea>
+                </div>
+
+                <div class="mb-0">
+                    <label class="form-label small fw-semibold">Phương án khắc phục &amp; Quy trình xử lý tiêu chuẩn:</label>
+                    <textarea name="solution" class="form-control form-control-sm" rows="3" placeholder="Các bước kiểm tra, máy chẩn đoán GDS Mobile, thao tác thay thế phụ tùng..."></textarea>
+                </div>
+            </div></div>
+
+            <!-- Khai báo Hạng mục phụ tùng & Công bảo hành -->
+            <div class="card mb-3"><div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-box-seam me-1"></i>Hạng mục công việc &amp; Phụ tùng thay thế miễn phí (Bảo hành HTC)</h6>
+                    <button type="button" class="btn btn-xs btn-outline-primary" onclick="addRow()"><i class="bi bi-plus-lg me-1"></i>Thêm dòng</button>
+                </div>
+                <div class="text-muted small mb-3">Các hạng mục dưới đây sẽ được tự động nạp vào Lệnh sửa chữa RO khi áp dụng bản tin (Loại chi phí Bảo hành hãng).</div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered align-middle mb-0" id="itemsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:110px">Loại</th>
+                                <th style="width:130px">Mã hiệu</th>
+                                <th>Tên công việc / Phụ tùng</th>
+                                <th style="width:80px">ĐVT</th>
+                                <th style="width:80px">SL</th>
+                                <th style="width:120px">Giá BH (đ)</th>
+                                <th>Ghi chú</th>
+                                <th style="width:40px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsBody">
+                            <tr>
+                                <td>
+                                    <select name="itemTypes" class="form-select form-select-xs">
+                                        <option value="0">Công (Labor)</option>
+                                        <option value="1">Phụ tùng</option>
+                                    </select>
+                                </td>
+                                <td><input type="text" name="itemCodes" class="form-control form-control-xs font-monospace" placeholder="CV-TSB-01" /></td>
+                                <td><input type="text" name="itemNames" class="form-control form-control-xs" placeholder="Công kiểm tra & cập nhật phần mềm" required /></td>
+                                <td><input type="text" name="itemUnits" class="form-control form-control-xs" value="Lần" /></td>
+                                <td><input type="number" name="itemQuantities" class="form-control form-control-xs text-end" value="1" min="1" step="1" /></td>
+                                <td><input type="number" name="itemUnitPrices" class="form-control form-control-xs text-end" value="0" min="0" step="1000" /></td>
+                                <td><input type="text" name="itemNotes" class="form-control form-control-xs" placeholder="Miễn phí theo chính sách TSB" /></td>
+                                <td class="text-center"><button type="button" class="btn btn-xs btn-link text-danger p-0" onclick="removeRow(this)"><i class="bi bi-x-circle"></i></button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div></div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Khai báo danh sách VINs áp dụng -->
+            <div class="card mb-3"><div class="card-body">
+                <h6 class="fw-bold mb-2 text-primary"><i class="bi bi-car-front me-1"></i>Danh sách số khung VIN áp dụng</h6>
+                <div class="text-muted small mb-2">Nhập danh sách các xe thuộc diện triệu hồi (phân tách bằng dấu phẩy, khoảng trắng hoặc xuống dòng):</div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Dòng xe áp dụng:</label>
+                    <input type="text" name="targetModel" class="form-control form-control-sm" placeholder="VD: Hyundai Tucson 2023" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Danh sách số VIN:</label>
+                    <textarea name="vinListRaw" class="form-control form-control-sm font-monospace text-uppercase" rows="8" placeholder="RLHXXTC002&#10;RLHXXTC003&#10;RLHXXTC004&#10;RLHXXTC005"></textarea>
+                    <div class="form-text small" style="font-size:11px">Hệ thống sẽ tự đối chiếu số VIN với biển số xe đã có trong danh mục.</div>
+                </div>
+
+                <button type="submit" class="btn btn-primary w-100 fw-semibold">
+                    <i class="bi bi-check2-circle me-1"></i>Ban hành Bản tin kỹ thuật
+                </button>
+            </div></div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    function addRow() {
+        var tbody = document.getElementById('itemsBody');
+        var tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>
+                <select name="itemTypes" class="form-select form-select-xs">
+                    <option value="1">Phụ tùng</option>
+                    <option value="0">Công (Labor)</option>
+                </select>
+            </td>
+            <td><input type="text" name="itemCodes" class="form-control form-control-xs font-monospace" placeholder="Mã PT" /></td>
+            <td><input type="text" name="itemNames" class="form-control form-control-xs" placeholder="Tên phụ tùng thay thế" required /></td>
+            <td><input type="text" name="itemUnits" class="form-control form-control-xs" value="Cái" /></td>
+            <td><input type="number" name="itemQuantities" class="form-control form-control-xs text-end" value="1" min="1" step="1" /></td>
+            <td><input type="number" name="itemUnitPrices" class="form-control form-control-xs text-end" value="0" min="0" step="1000" /></td>
+            <td><input type="text" name="itemNotes" class="form-control form-control-xs" placeholder="Bảo hành HTC cấp" /></td>
+            <td class="text-center"><button type="button" class="btn btn-xs btn-link text-danger p-0" onclick="removeRow(this)"><i class="bi bi-x-circle"></i></button></td>
+        `;
+        tbody.appendChild(tr);
+    }
+    function removeRow(btn) {
+        var tbody = document.getElementById('itemsBody');
+        if (tbody.children.length > 1) {
+            btn.closest('tr').remove();
+        }
+    }
+</script>
+}

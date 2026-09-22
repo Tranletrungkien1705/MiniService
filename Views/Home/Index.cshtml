@@ -74,6 +74,12 @@
     </div>
     <div class="col-6 col-lg">
         <div class="card"><div class="card-body">
+            <div class="text-muted small">Bản tin kỹ thuật (TSB)</div>
+            <div class="stat-num" style="font-size:18px;color:#dc2626"><a href="/Bulletin" class="text-decoration-none" style="color:#dc2626">@d.ActiveBulletins đang chạy</a> @if(d.PendingBulletinVins > 0){<span class="text-warning" style="font-size:13px;font-weight:normal">(@d.PendingBulletinVins xe chờ)</span>}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
             <div class="text-muted small">Hồ sơ bảo hiểm</div>
             <div class="stat-num" style="font-size:18px;color:#0d9488"><a href="/Insurance" class="text-decoration-none" style="color:#0d9488"><span class="text-warning">@d.PendingInsuranceClaims chờ</span> · @d.ApprovedInsuranceAmount.ToString("N0")đ</a></div>
         </div></div>

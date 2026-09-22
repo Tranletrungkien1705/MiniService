@@ -2415,6 +2415,230 @@ app.MapDelete("/api/stockadjs/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Bản tin kỹ thuật & Chiến dịch triệu hồi xe (Btl_Bulletin, Btl_BulletinDtl, Btl_Bulletin_VIN)
+app.MapGet("/api/bulletins", async (BulletinStatus? status, string? q, bool? activeOnly, IRoService svc) =>
+{
+    var list = await svc.BulletinsAsync(status, q, activeOnly);
+    return Results.Ok(list.Select(b => new
+    {
+        b.Id,
+        b.BulletinNo,
+        b.BulletinNoHMC,
+        b.Title,
+        b.Remark,
+        b.Solution,
+        b.CreateDate,
+        b.DateExpired,
+        b.IsActive,
+        b.IsExpired,
+        status = Ui.BulletinStatus(b.Status).text,
+        statusCode = Ui.BulletinStatus(b.Status).code,
+        statusValue = (int)b.Status,
+        b.UserCreate,
+        b.FileNameAttachment,
+        b.TotalVinCount,
+        b.CompletedVinCount,
+        b.PendingVinCount,
+        b.CompletionRate,
+        b.CreatedAt
+    }));
+});
+
+app.MapGet("/api/bulletins/{id:int}", async (int id, IRoService svc) =>
+{
+    var b = await svc.GetBulletinAsync(id);
+    if (b == null) return Results.NotFound(new { error = "Không tìm thấy bản tin kỹ thuật." });
+    return Results.Ok(new
+    {
+        b.Id,
+        b.BulletinNo,
+        b.BulletinNoHMC,
+        b.Title,
+        b.Remark,
+        b.Solution,
+        b.CreateDate,
+        b.DateExpired,
+        b.IsActive,
+        b.IsExpired,
+        status = Ui.BulletinStatus(b.Status).text,
+        statusCode = Ui.BulletinStatus(b.Status).code,
+        statusValue = (int)b.Status,
+        b.UserCreate,
+        b.FileNameAttachment,
+        b.TotalVinCount,
+        b.CompletedVinCount,
+        b.PendingVinCount,
+        b.CompletionRate,
+        items = b.Items.Select(i => new
+        {
+            i.Id,
+            type = Ui.Line(i.Type),
+            typeValue = (int)i.Type,
+            i.Code,
+            i.Name,
+            i.Unit,
+            i.Quantity,
+            i.UnitPrice,
+            i.Amount,
+            i.PartId,
+            partCode = i.Part?.Code,
+            i.Note
+        }),
+        targetVins = b.TargetVins.Select(v => new
+        {
+            v.Id,
+            v.VinNo,
+            v.PlateNo,
+            v.Model,
+            v.DealerCode,
+            status = Ui.BulletinVinStatus(v.Status).text,
+            statusCode = Ui.BulletinVinStatus(v.Status).code,
+            statusValue = (int)v.Status,
+            v.DateDone,
+            v.DoneBy,
+            v.ROId,
+            v.RONo,
+            v.Note
+        }),
+        appliedROs = b.AppliedROs.Select(r => new
+        {
+            r.Id,
+            r.Code,
+            plate = r.Car?.Plate,
+            model = r.Car?.Model,
+            status = Ui.Status(r.Status).text,
+            r.Total
+        })
+    });
+});
+
+app.MapPost("/api/bulletins", async (CreateBulletinDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.Title))
+            return Results.BadRequest(new { error = "Vui lòng nhập tiêu đề Bản tin kỹ thuật." });
+
+        var bulletin = new Bulletin
+        {
+            BulletinNo = dto.BulletinNo?.Trim() ?? "",
+            BulletinNoHMC = dto.BulletinNoHMC?.Trim(),
+            Title = dto.Title.Trim(),
+            Remark = dto.Remark?.Trim(),
+            Solution = dto.Solution?.Trim(),
+            CreateDate = dto.CreateDate ?? DateTime.Today,
+            DateExpired = dto.DateExpired,
+            UserCreate = dto.UserCreate?.Trim() ?? "Hyundai Thành Công (HTC)",
+            FileNameAttachment = dto.FileNameAttachment?.Trim(),
+            IsActive = true,
+            Status = BulletinStatus.Active,
+            CreatedBy = "api"
+        };
+
+        var details = (dto.Items ?? []).Select(i => new BulletinDetail
+        {
+            Type = i.Type,
+            PartId = i.PartId,
+            Code = i.Code?.Trim() ?? "",
+            Name = i.Name?.Trim() ?? "",
+            Unit = i.Unit?.Trim() ?? "Cái",
+            Quantity = i.Quantity <= 0 ? 1 : i.Quantity,
+            UnitPrice = i.UnitPrice ?? 0,
+            Note = i.Note?.Trim()
+        }).ToList();
+
+        var vins = (dto.TargetVins ?? []).Select(v => new BulletinVin
+        {
+            VinNo = v.VinNo.Trim().ToUpperInvariant(),
+            PlateNo = v.PlateNo?.Trim(),
+            Model = v.Model?.Trim(),
+            DealerCode = v.DealerCode?.Trim() ?? "HYUNDAI-MAIN",
+            Status = BulletinVinStatus.Pending,
+            Note = v.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateBulletinAsync(bulletin, details, vins);
+        return Results.Ok(new { bulletinId = id, bulletinNo = bulletin.BulletinNo, message = "Đã tạo bản tin kỹ thuật thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/bulletins/check-vin/{vin}", async (string vin, IRoService svc) =>
+{
+    var list = await svc.CheckVinBulletinsAsync(vin);
+    return Results.Ok(list.Select(v => new
+    {
+        v.Id,
+        v.BulletinId,
+        bulletinNo = v.Bulletin.BulletinNo,
+        bulletinNoHMC = v.Bulletin.BulletinNoHMC,
+        title = v.Bulletin.Title,
+        remark = v.Bulletin.Remark,
+        solution = v.Bulletin.Solution,
+        createDate = v.Bulletin.CreateDate,
+        dateExpired = v.Bulletin.DateExpired,
+        isExpired = v.Bulletin.IsExpired,
+        v.VinNo,
+        v.PlateNo,
+        v.Model,
+        status = Ui.BulletinVinStatus(v.Status).text,
+        statusCode = Ui.BulletinVinStatus(v.Status).code,
+        statusValue = (int)v.Status,
+        v.DateDone,
+        v.RONo,
+        items = v.Bulletin.Items.Select(i => new
+        {
+            type = Ui.Line(i.Type),
+            i.Code,
+            i.Name,
+            i.Quantity,
+            i.UnitPrice
+        })
+    }));
+});
+
+app.MapPost("/api/bulletins/{id:int}/vins", async (int id, AddVinsDto dto, IRoService svc) =>
+{
+    if (dto.VinList == null || dto.VinList.Count == 0)
+        return Results.BadRequest(new { error = "Vui lòng cung cấp danh sách số VIN." });
+
+    var (ok, msg) = await svc.AddVinsToBulletinAsync(id, dto.VinList, dto.Model, dto.DealerCode);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/bulletins/vins/{vinId:int}/status", async (int vinId, UpdateBulletinVinStatusDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.UpdateBulletinVinStatusAsync(vinId, dto.Status, dto.DoneBy, dto.ROId, dto.RONo);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/bulletins/{id:int}/apply-to-ro", async (int id, ApplyBulletinToRoDto dto, IRoService svc) =>
+{
+    var (ok, msg, itemsAdded) = await svc.ApplyBulletinToROAsync(id, dto.RoId);
+    return ok ? Results.Ok(new { message = msg, itemsAdded }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/bulletins/{id:int}/toggle-active", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ToggleBulletinActiveAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/bulletins/{id:int}/transition", async (int id, TransitionBulletinDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionBulletinStatusAsync(id, dto.ToStatus);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/bulletins/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteBulletinAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -2489,3 +2713,10 @@ record CreateStockAdjItemDto(int PartId, decimal ActualQuantity, string? ToLocat
 record TransitionStockAdjDto(StockAdjStatus ToStatus, string? ApprovedBy, string? Note);
 record UpdateStockAdjItemsDto(List<UpdateStockAdjItemLineDto> Items);
 record UpdateStockAdjItemLineDto(int ItemId, decimal ActualQuantity, string? ToLocation, string? Note);
+record CreateBulletinDto(string? BulletinNo, string? BulletinNoHMC, string Title, string? Remark, string? Solution, DateTime? CreateDate, DateTime? DateExpired, string? UserCreate, string? FileNameAttachment, List<CreateBulletinItemDto>? Items, List<CreateBulletinVinDto>? TargetVins);
+record CreateBulletinItemDto(LineType Type, int? PartId, string? Code, string Name, string? Unit, decimal Quantity, decimal? UnitPrice, string? Note);
+record CreateBulletinVinDto(string VinNo, string? PlateNo, string? Model, string? DealerCode, string? Note);
+record AddVinsDto(List<string> VinList, string? Model, string? DealerCode);
+record UpdateBulletinVinStatusDto(BulletinVinStatus Status, string? DoneBy, int? ROId, string? RONo);
+record ApplyBulletinToRoDto(int RoId);
+record TransitionBulletinDto(BulletinStatus ToStatus);

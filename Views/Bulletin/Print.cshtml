@@ -1,0 +1,175 @@
+@model Bulletin
+@{
+    Layout = null;
+    var (stTxt, _, _) = Ui.BulletinStatus(Model.Status);
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>Bản tin kỹ thuật @Model.BulletinNo — Hyundai Service</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+        body { font-family: "Be Vietnam Pro", sans-serif; font-size: 13px; color: #1f2937; line-height: 1.5; padding: 25px; }
+        .print-header { border-bottom: 2px solid #002c5f; padding-bottom: 12px; margin-bottom: 20px; }
+        .brand-title { color: #002c5f; font-weight: 800; font-size: 18px; text-transform: uppercase; }
+        .doc-title { text-align: center; color: #b91c1c; font-weight: 800; font-size: 20px; margin: 15px 0 5px; text-transform: uppercase; }
+        .sub-doc-title { text-align: center; color: #4b5563; font-size: 13px; font-weight: 600; margin-bottom: 20px; }
+        .box-section { border: 1px solid #d1d5db; border-radius: 6px; padding: 12px; margin-bottom: 15px; background: #fafafa; }
+        .box-title { font-weight: 700; font-size: 13px; color: #002c5f; text-transform: uppercase; margin-bottom: 6px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+        table th { background: #f3f4f6 !important; font-size: 11.5px; text-transform: uppercase; font-weight: 700; }
+        .sign-box { text-align: center; margin-top: 40px; }
+        .sign-title { font-weight: 700; font-size: 12px; text-transform: uppercase; }
+        .sign-space { height: 75px; }
+        @@media print {
+            .no-print { display: none !important; }
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print mb-3 text-end">
+        <button class="btn btn-primary btn-sm" onclick="window.print()"><i class="bi bi-printer"></i> In văn bản</button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="window.close()">Đóng</button>
+    </div>
+
+    <div class="print-header d-flex justify-content-between align-items-center">
+        <div>
+            <div class="brand-title">HYUNDAI TÂY HỒ — HYUNDAI THÀNH CÔNG VIỆT NAM (HTC)</div>
+            <div class="small text-muted">Hệ thống Xưởng Dịch vụ &amp; Bảo hành Tiêu chuẩn Hyundai 3S Toàn cầu</div>
+        </div>
+        <div class="text-end">
+            <div class="fw-bold text-dark font-monospace">Mã TSB: @Model.BulletinNo</div>
+            <div class="small text-muted">Mã HMC: @(Model.BulletinNoHMC ?? "N/A")</div>
+        </div>
+    </div>
+
+    <div class="doc-title">THÔNG BÁO KỸ THUẬT &amp; CHIẾN DỊCH TRIỆU HỒI XE</div>
+    <div class="sub-doc-title">TECHNICAL SERVICE BULLETIN (TSB) &amp; SAFETY RECALL CAMPAIGN</div>
+
+    <!-- Thông tin hành chính của bản tin -->
+    <div class="row g-2 mb-3">
+        <div class="col-8">
+            <div class="p-2 border rounded">
+                <div><b>Tiêu đề chiến dịch:</b> <span class="text-primary fw-bold">@Model.Title</span></div>
+                <div class="small text-muted mt-1"><b>Đơn vị ban hành:</b> @Model.UserCreate</div>
+            </div>
+        </div>
+        <div class="col-4">
+            <div class="p-2 border rounded small">
+                <div><b>Ngày ban hành:</b> @Model.CreateDate.ToString("dd/MM/yyyy")</div>
+                <div><b>Hiệu lực đến:</b> @(Model.DateExpired.HasValue ? Model.DateExpired.Value.ToString("dd/MM/yyyy") : "Vô thời hạn")</div>
+                <div><b>Trạng thái:</b> @stTxt</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hiện tượng hư hỏng & Nguyên nhân -->
+    <div class="box-section">
+        <div class="box-title">1. Hiện tượng hư hỏng &amp; Phân tích nguyên nhân kỹ thuật</div>
+        <div class="small" style="white-space: pre-line">@Model.Remark</div>
+    </div>
+
+    <!-- Phương án khắc phục & Quy trình chuẩn -->
+    <div class="box-section">
+        <div class="box-title">2. Phương án khắc phục &amp; Hướng dẫn quy trình xử lý tiêu chuẩn HTC</div>
+        <div class="small" style="white-space: pre-line">@Model.Solution</div>
+    </div>
+
+    <!-- Danh mục phụ tùng thay thế & Giờ công bảo hành -->
+    <div class="mb-3">
+        <div class="box-title">3. Danh mục phụ tùng &amp; Định mức giờ công bồi hoàn bảo hành hãng</div>
+        <table class="table table-bordered table-sm align-middle">
+            <thead>
+                <tr>
+                    <th style="width:50px" class="text-center">STT</th>
+                    <th style="width:110px">Phân loại</th>
+                    <th style="width:140px">Mã hạng mục</th>
+                    <th>Tên công việc / Phụ tùng thay thế</th>
+                    <th style="width:90px" class="text-center">ĐVT</th>
+                    <th style="width:90px" class="text-center">Số lượng</th>
+                    <th style="width:120px" class="text-end">Định mức BH</th>
+                    <th>Chính sách bảo hành</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Items.Count == 0)
+                {
+                    <tr><td colspan="8" class="text-center text-muted">Chưa có danh mục phụ tùng / công việc.</td></tr>
+                }
+                @{ int idx = 1; }
+                @foreach (var it in Model.Items)
+                {
+                    <tr>
+                        <td class="text-center">@(idx++)</td>
+                        <td>@(it.Type == LineType.Labor ? "Công thợ (Labor)" : "Phụ tùng chính hãng")</td>
+                        <td class="font-monospace fw-semibold">@it.Code</td>
+                        <td>@it.Name</td>
+                        <td class="text-center">@it.Unit</td>
+                        <td class="text-center">@it.Quantity.ToString("N0")</td>
+                        <td class="text-end fw-semibold">@(it.UnitPrice > 0 ? it.UnitPrice.ToString("N0") + "đ" : "Miễn phí")</td>
+                        <td class="small text-muted">@(it.Note ?? "Hãng HTC chi trả 100%")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Danh sách số khung VIN áp dụng -->
+    <div class="mb-3">
+        <div class="box-title">4. Danh sách phương tiện chịu ảnh hưởng (Theo số khung VIN: @Model.TargetVins.Count xe)</div>
+        <table class="table table-bordered table-sm align-middle">
+            <thead>
+                <tr>
+                    <th style="width:40px" class="text-center">STT</th>
+                    <th style="width:160px">Số khung VIN</th>
+                    <th style="width:120px">Biển số</th>
+                    <th>Dòng xe tương thích</th>
+                    <th style="width:120px">Trạng thái</th>
+                    <th style="width:150px">Thời điểm hoàn tất</th>
+                    <th style="width:120px">Lệnh RO</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ int vIdx = 1; }
+                @foreach (var vin in Model.TargetVins)
+                {
+                    var (vtxt, _, _) = Ui.BulletinVinStatus(vin.Status);
+                    <tr>
+                        <td class="text-center">@(vIdx++)</td>
+                        <td class="font-monospace fw-bold">@vin.VinNo</td>
+                        <td>@(vin.PlateNo ?? "—")</td>
+                        <td>@(vin.Model ?? "—")</td>
+                        <td>@vtxt</td>
+                        <td class="small">@(vin.DateDone?.ToString("dd/MM/yyyy HH:mm") ?? "Chưa thực hiện")</td>
+                        <td>@(vin.RONo ?? "—")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Khối chữ ký phê duyệt -->
+    <div class="row sign-box">
+        <div class="col-4">
+            <div class="sign-title">Cán bộ lập bản tin</div>
+            <div class="sign-space"></div>
+            <div class="fw-bold">@Model.CreatedBy</div>
+            <div class="small text-muted">Kỹ thuật viên dịch vụ</div>
+        </div>
+        <div class="col-4">
+            <div class="sign-title">Quản đốc xưởng dịch vụ</div>
+            <div class="sign-space"></div>
+            <div class="fw-bold">Nguyễn Văn Hùng</div>
+            <div class="small text-muted">Kỹ thuật viên trưởng</div>
+        </div>
+        <div class="col-4">
+            <div class="sign-title">Giám đốc Dịch vụ đại lý</div>
+            <div class="sign-space"></div>
+            <div class="fw-bold">Trần Đình Trọng</div>
+            <div class="small text-muted">Phê duyệt ban hành xưởng</div>
+        </div>
+    </div>
+</body>
+</html>

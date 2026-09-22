@@ -6,6 +6,7 @@
     var parts = (List<Part>?)ViewBag.Parts ?? [];
     var servicePackages = (List<ServicePackage>?)ViewBag.ServicePackages ?? [];
     var eligibleCampaigns = (List<CampaignMarketing>?)ViewBag.EligibleCampaigns ?? [];
+    var pendingBulletins = (List<BulletinVin>?)ViewBag.PendingBulletins ?? [];
     bool editable = Model.Status is not (ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding);
     bool deletable = Model.Status is ROStatus.Created or ROStatus.Printed or ROStatus.Rejected or ROStatus.NotResponding;
 }
@@ -54,6 +55,52 @@
                     </form>
                 }
             </div>
+        }
+
+        @if (Model.Bulletin != null)
+        {
+            <div class="alert alert-info d-flex justify-content-between align-items-center mb-3 border-info">
+                <div>
+                    <i class="bi bi-file-earmark-check-fill me-2 fs-5 text-info"></i>
+                    <strong>Bản tin kỹ thuật HTC: <a href="/Bulletin/Detail/@Model.Bulletin.Id" class="text-decoration-none">@Model.Bulletin.BulletinNo — @Model.Bulletin.Title</a></strong>
+                    <div class="small text-muted mt-1">
+                        Hạng mục phụ tùng &amp; tiền công trong bản tin được hãng Hyundai chi trả 100% bảo hành!
+                    </div>
+                </div>
+                <a href="/Bulletin/Detail/@Model.Bulletin.Id" class="btn btn-outline-info btn-sm">
+                    <i class="bi bi-eye me-1"></i>Xem TSB
+                </a>
+            </div>
+        }
+
+        @if (pendingBulletins.Count > 0 && Model.BulletinId == null)
+        {
+            @foreach (var bvin in pendingBulletins.Where(v => v.Status == BulletinVinStatus.Pending))
+            {
+                <div class="alert alert-danger d-flex justify-content-between align-items-center mb-3 border-danger shadow-sm">
+                    <div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-danger">TRIỆU HỒI / TSB</span>
+                            <strong class="text-danger">Xe có Bản tin kỹ thuật từ HTC: @bvin.Bulletin.BulletinNo (@(bvin.Bulletin.BulletinNoHMC ?? "HMC"))</strong>
+                        </div>
+                        <div class="small mt-1 text-dark">
+                            <b>@bvin.Bulletin.Title</b>
+                            <div class="text-muted">@bvin.Bulletin.Remark</div>
+                        </div>
+                    </div>
+                    @if (editable)
+                    {
+                        <form asp-action="ApplyBulletin" method="post" class="d-inline ms-3">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="id" value="@Model.Id" />
+                            <input type="hidden" name="bulletinId" value="@bvin.Bulletin.Id" />
+                            <button type="submit" class="btn btn-danger btn-sm text-nowrap" onclick="return confirm('Nạp toàn bộ công việc & phụ tùng triệu hồi vào lệnh sửa chữa RO này?')">
+                                <i class="bi bi-plus-circle me-1"></i>Áp dụng vào RO ngay
+                            </button>
+                        </form>
+                    }
+                </div>
+            }
         }
 
         @if (Model.Status == ROStatus.Wait4Part)

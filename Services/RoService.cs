@@ -21,7 +21,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int ActiveCampaigns, decimal MonthCampaignDiscount,
     int PendingCareMaces, int OverdueCareMaces, int BookedCareMaces,
     List<(ROStatus Status, int Count)> ByStatus,
-    int PendingStockAdjs = 0, int DiscrepancyStockAdjs = 0);
+    int PendingStockAdjs = 0, int DiscrepancyStockAdjs = 0,
+    int ActiveBulletins = 0, int PendingBulletinVins = 0);
 
 public interface IRoService
 {
@@ -195,6 +196,17 @@ public interface IRoService
     Task<(bool ok, string msg)> UpdateStockAdjItemsAsync(int id, List<(int itemId, decimal actualQty, string? toLoc, string? note)> updates);
     Task<(bool ok, string msg)> DeleteStockAdjAsync(int id);
     Task<List<Part>> PartsForStockAdjAsync(string? q = null);
+    // Technical Service Bulletins & Recall Campaigns (Btl_Bulletin, Btl_BulletinDtl, Btl_Bulletin_VIN)
+    Task<List<Bulletin>> BulletinsAsync(BulletinStatus? status, string? q, bool? activeOnly = null);
+    Task<Bulletin?> GetBulletinAsync(int id);
+    Task<int> CreateBulletinAsync(Bulletin bulletin, List<BulletinDetail> details, List<BulletinVin> vins);
+    Task<(bool ok, string msg)> ToggleBulletinActiveAsync(int id);
+    Task<(bool ok, string msg)> TransitionBulletinStatusAsync(int id, BulletinStatus to);
+    Task<(bool ok, string msg)> DeleteBulletinAsync(int id);
+    Task<List<BulletinVin>> CheckVinBulletinsAsync(string vin);
+    Task<(bool ok, string msg)> UpdateBulletinVinStatusAsync(int vinId, BulletinVinStatus status, string? doneBy = null, int? roId = null, string? roNo = null);
+    Task<(bool ok, string msg, int itemsAdded)> ApplyBulletinToROAsync(int bulletinId, int roId);
+    Task<(bool ok, string msg)> AddVinsToBulletinAsync(int bulletinId, List<string> vinList, string? model = null, string? dealerCode = null);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -214,6 +226,14 @@ public class RoService(AppDbContext db) : IRoService
     {
         CampaignMarketingStatus.Draft => [CampaignMarketingStatus.Active, CampaignMarketingStatus.Cancelled],
         CampaignMarketingStatus.Active => [CampaignMarketingStatus.Finished, CampaignMarketingStatus.Cancelled],
+        _ => []
+    };
+
+    /// <summary>Chuyển trạng thái Bản tin kỹ thuật theo Btl_Bulletin idn.CarService.</summary>
+    public static BulletinStatus[] AllowedNextBulletin(BulletinStatus s) => s switch
+    {
+        BulletinStatus.Draft => [BulletinStatus.Active, BulletinStatus.Cancelled],
+        BulletinStatus.Active => [BulletinStatus.Finished, BulletinStatus.Cancelled],
         _ => []
     };
 
@@ -386,6 +406,7 @@ public class RoService(AppDbContext db) : IRoService
           .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet)
           .Include(r => r.AssignmentWorks).ThenInclude(a => a.Engineers).ThenInclude(e => e.Engineer)
           .Include(r => r.InsuranceClaims).ThenInclude(c => c.InsuranceCompany)
+          .Include(r => r.Bulletin).ThenInclude(b => b!.Items)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -487,6 +508,23 @@ public class RoService(AppDbContext db) : IRoService
                     CreatedBy = "system"
                 };
                 db.CustomerCareMaces.Add(mace);
+            }
+            // Tự động hoàn tất Bản tin kỹ thuật / Triệu hồi xe nếu có liên kết số VIN
+            var car = await db.Cars.FirstOrDefaultAsync(c => c.Id == ro.CarId);
+            if (car != null && !string.IsNullOrWhiteSpace(car.Vin))
+            {
+                var cleanVin = car.Vin.Trim().ToUpperInvariant();
+                var targetVins = await db.BulletinVins
+                    .Where(v => v.Status == BulletinVinStatus.Pending && v.VinNo.ToUpper() == cleanVin && (ro.BulletinId == null || v.BulletinId == ro.BulletinId))
+                    .ToListAsync();
+                foreach (var bvin in targetVins)
+                {
+                    bvin.Status = BulletinVinStatus.Completed;
+                    bvin.DateDone = DateTime.Now;
+                    bvin.ROId = ro.Id;
+                    bvin.RONo = ro.Code;
+                    bvin.DoneBy = ro.Technician ?? "KTV";
+                }
             }
         }
         await db.SaveChangesAsync();
@@ -595,6 +633,9 @@ public class RoService(AppDbContext db) : IRoService
         var discrepancyStockAdjs = await db.StockAdjs.Include(s => s.Items)
             .CountAsync(s => s.Status == StockAdjStatus.Executing && s.Items.Any(i => i.ActualQuantity != i.SystemQuantity));
 
+        var activeBulletins = await db.Bulletins.CountAsync(b => b.IsActive && b.Status == BulletinStatus.Active);
+        var pendingBulletinVins = await db.BulletinVins.CountAsync(v => v.Status == BulletinVinStatus.Pending && v.Bulletin.IsActive);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -637,7 +678,9 @@ public class RoService(AppDbContext db) : IRoService
             bookedCareMaces,
             byStatus,
             pendingStockAdjs,
-            discrepancyStockAdjs);
+            discrepancyStockAdjs,
+            activeBulletins,
+            pendingBulletinVins);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -3846,5 +3889,216 @@ public class RoService(AppDbContext db) : IRoService
             query = query.Where(p => p.Code.ToLower().Contains(term) || p.Name.ToLower().Contains(term));
         }
         return query.OrderBy(p => p.Code).ToListAsync();
+    }
+
+    // --- Technical Service Bulletins & Recall Campaigns (Btl_Bulletin, Btl_BulletinDtl, Btl_Bulletin_VIN) ---
+    public async Task<List<Bulletin>> BulletinsAsync(BulletinStatus? status, string? q, bool? activeOnly = null)
+    {
+        var query = db.Bulletins
+            .Include(b => b.Items).ThenInclude(i => i.Part)
+            .Include(b => b.TargetVins)
+            .Include(b => b.AppliedROs)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(b => b.Status == status.Value);
+        if (activeOnly == true) query = query.Where(b => b.IsActive && b.Status == BulletinStatus.Active);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(b => b.BulletinNo.ToLower().Contains(term)
+                || (b.BulletinNoHMC != null && b.BulletinNoHMC.ToLower().Contains(term))
+                || b.Title.ToLower().Contains(term)
+                || (b.Remark != null && b.Remark.ToLower().Contains(term))
+                || (b.Solution != null && b.Solution.ToLower().Contains(term)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(b => b.CreateDate).ThenByDescending(b => b.Id).ToList();
+    }
+
+    public Task<Bulletin?> GetBulletinAsync(int id) =>
+        db.Bulletins
+            .Include(b => b.Items).ThenInclude(i => i.Part)
+            .Include(b => b.TargetVins).ThenInclude(v => v.RO).ThenInclude(r => r!.Car)
+            .Include(b => b.AppliedROs).ThenInclude(r => r.Car)
+            .FirstOrDefaultAsync(b => b.Id == id);
+
+    public async Task<int> CreateBulletinAsync(Bulletin bulletin, List<BulletinDetail> details, List<BulletinVin> vins)
+    {
+        if (string.IsNullOrWhiteSpace(bulletin.Title))
+            throw new InvalidOperationException("Vui lòng nhập tiêu đề Bản tin kỹ thuật.");
+
+        if (string.IsNullOrWhiteSpace(bulletin.BulletinNo))
+        {
+            var count = await db.Bulletins.CountAsync();
+            bulletin.BulletinNo = $"TSB-{DateTime.Today:yyMMdd}-{count + 1:D3}";
+        }
+
+        bulletin.CreatedAt = DateTime.Now;
+        bulletin.Items = details;
+        bulletin.TargetVins = vins;
+
+        db.Bulletins.Add(bulletin);
+        await db.SaveChangesAsync();
+        return bulletin.Id;
+    }
+
+    public async Task<(bool ok, string msg)> ToggleBulletinActiveAsync(int id)
+    {
+        var b = await db.Bulletins.FirstOrDefaultAsync(x => x.Id == id);
+        if (b == null) return (false, "Không tìm thấy bản tin kỹ thuật.");
+
+        b.IsActive = !b.IsActive;
+        await db.SaveChangesAsync();
+        return (true, b.IsActive ? $"Đã kích hoạt bản tin {b.BulletinNo}." : $"Đã tạm dừng bản tin {b.BulletinNo}.");
+    }
+
+    public async Task<(bool ok, string msg)> TransitionBulletinStatusAsync(int id, BulletinStatus to)
+    {
+        var b = await db.Bulletins.FirstOrDefaultAsync(x => x.Id == id);
+        if (b == null) return (false, "Không tìm thấy bản tin kỹ thuật.");
+
+        var allowed = AllowedNextBulletin(b.Status);
+        if (!allowed.Contains(to))
+            return (false, $"Không thể chuyển trạng thái từ '{Ui.BulletinStatus(b.Status).text}' sang '{Ui.BulletinStatus(to).text}'.");
+
+        b.Status = to;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trạng thái bản tin {b.BulletinNo} sang '{Ui.BulletinStatus(to).text}'.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteBulletinAsync(int id)
+    {
+        var b = await db.Bulletins
+            .Include(x => x.Items)
+            .Include(x => x.TargetVins)
+            .Include(x => x.AppliedROs)
+            .FirstOrDefaultAsync(x => x.Id == id);
+
+        if (b == null) return (false, "Không tìm thấy bản tin kỹ thuật.");
+        if (b.AppliedROs.Any())
+            return (false, "Không thể xóa bản tin đã áp dụng vào Lệnh sửa chữa RO.");
+
+        db.BulletinDetails.RemoveRange(b.Items);
+        db.BulletinVins.RemoveRange(b.TargetVins);
+        db.Bulletins.Remove(b);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa bản tin kỹ thuật {b.BulletinNo}.");
+    }
+
+    public async Task<List<BulletinVin>> CheckVinBulletinsAsync(string vin)
+    {
+        if (string.IsNullOrWhiteSpace(vin)) return [];
+        var cleanVin = vin.Trim().ToUpperInvariant();
+
+        return await db.BulletinVins
+            .Include(v => v.Bulletin).ThenInclude(b => b.Items).ThenInclude(i => i.Part)
+            .Include(v => v.RO)
+            .Where(v => v.VinNo.ToUpper() == cleanVin && v.Bulletin.IsActive)
+            .OrderByDescending(v => v.Bulletin.CreateDate)
+            .ToListAsync();
+    }
+
+    public async Task<(bool ok, string msg)> UpdateBulletinVinStatusAsync(int vinId, BulletinVinStatus status, string? doneBy = null, int? roId = null, string? roNo = null)
+    {
+        var vin = await db.BulletinVins.Include(v => v.Bulletin).FirstOrDefaultAsync(v => v.Id == vinId);
+        if (vin == null) return (false, "Không tìm thấy số khung xe trong bản tin.");
+
+        vin.Status = status;
+        if (status == BulletinVinStatus.Completed)
+        {
+            vin.DateDone = DateTime.Now;
+            vin.DoneBy = !string.IsNullOrWhiteSpace(doneBy) ? doneBy.Trim() : "KTV";
+            if (roId.HasValue) vin.ROId = roId;
+            if (!string.IsNullOrWhiteSpace(roNo)) vin.RONo = roNo.Trim();
+        }
+        else
+        {
+            vin.DateDone = null;
+            vin.DoneBy = null;
+            vin.ROId = null;
+            vin.RONo = null;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trạng thái VIN {vin.VinNo} sang '{Ui.BulletinVinStatus(status).text}'.");
+    }
+
+    public async Task<(bool ok, string msg, int itemsAdded)> ApplyBulletinToROAsync(int bulletinId, int roId)
+    {
+        var b = await db.Bulletins.Include(x => x.Items).ThenInclude(i => i.Part).FirstOrDefaultAsync(x => x.Id == bulletinId);
+        if (b == null) return (false, "Không tìm thấy bản tin kỹ thuật.", 0);
+        if (!b.IsActive) return (false, "Bản tin kỹ thuật hiện đang tạm dừng, không thể áp dụng.", 0);
+
+        var ro = await db.ROs.Include(r => r.Lines).Include(r => r.Car).FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa RO.", 0);
+        if (ro.Status is ROStatus.Finished or ROStatus.Rejected or ROStatus.NotResponding)
+            return (false, "Không thể thêm hạng mục vào RO đã đóng hoặc đã hủy.", 0);
+
+        ro.BulletinId = b.Id;
+
+        int addedCount = 0;
+        foreach (var item in b.Items)
+        {
+            var exists = ro.Lines.Any(l => l.Name == item.Name && l.Type == item.Type);
+            if (!exists)
+            {
+                ro.Lines.Add(new RepairLine
+                {
+                    Type = item.Type,
+                    ExpenseType = ExpenseType.Warranty, // Bảo hành hãng HTC chi trả 100%
+                    Name = item.Name,
+                    Quantity = item.Quantity,
+                    UnitPrice = item.UnitPrice,
+                    PartId = item.PartId
+                });
+                addedCount++;
+            }
+        }
+
+        // Cập nhật trạng thái số VIN nếu trùng với xe của RO
+        if (!string.IsNullOrWhiteSpace(ro.Car?.Vin))
+        {
+            var vinItem = await db.BulletinVins.FirstOrDefaultAsync(v => v.BulletinId == bulletinId && v.VinNo.ToUpper() == ro.Car.Vin.ToUpper());
+            if (vinItem != null)
+            {
+                vinItem.ROId = ro.Id;
+                vinItem.RONo = ro.Code;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã nạp {addedCount} hạng mục từ bản tin kỹ thuật '{b.BulletinNo}' vào Lệnh RO {ro.Code} (Loại bảo hành hãng).", addedCount);
+    }
+
+    public async Task<(bool ok, string msg)> AddVinsToBulletinAsync(int bulletinId, List<string> vinList, string? model = null, string? dealerCode = null)
+    {
+        var b = await db.Bulletins.Include(x => x.TargetVins).FirstOrDefaultAsync(x => x.Id == bulletinId);
+        if (b == null) return (false, "Không tìm thấy bản tin kỹ thuật.");
+
+        int count = 0;
+        foreach (var rawVin in vinList)
+        {
+            var clean = rawVin?.Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(clean)) continue;
+            if (b.TargetVins.Any(v => v.VinNo.Equals(clean, StringComparison.OrdinalIgnoreCase))) continue;
+
+            // Tìm thông tin xe trong hệ thống nếu có
+            var car = await db.Cars.FirstOrDefaultAsync(c => c.Vin != null && c.Vin.ToUpper() == clean);
+
+            b.TargetVins.Add(new BulletinVin
+            {
+                VinNo = clean,
+                PlateNo = car?.Plate,
+                Model = !string.IsNullOrWhiteSpace(model) ? model : car?.Model,
+                DealerCode = !string.IsNullOrWhiteSpace(dealerCode) ? dealerCode : "HYUNDAI-MAIN",
+                Status = BulletinVinStatus.Pending
+            });
+            count++;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã bổ sung {count} số khung VIN vào bản tin kỹ thuật {b.BulletinNo}.");
     }
 }

@@ -1776,13 +1776,96 @@ public static class Seeder
             db.StockAdjs.AddRange(adj1, adj2, adj3);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.Bulletins.AnyAsync())
+        {
+            var pSpark = await db.Parts.FirstOrDefaultAsync(p => p.Code == "18846-11070");
+            var carAccent = await db.Cars.FirstOrDefaultAsync(c => c.Plate == "30A-123.45");
+            var carTucson = await db.Cars.FirstOrDefaultAsync(c => c.Plate == "51G-678.90");
+
+            var b1 = new Bulletin
+            {
+                BulletinNo = "TSB-2026-001",
+                BulletinNoHMC = "HMC-TSB-24-01-002",
+                Title = "Chiến dịch nâng cấp phần mềm điều khiển hộp số & Kiểm tra cụm bugi đánh lửa xe Tucson 2023",
+                Remark = "Một số xe Tucson 2023 có hiện tượng rung giật nhẹ khi chuyển số 2 sang 3 ở tốc độ thấp. Hãng Hyundai Thành Công ban hành bản tin kỹ thuật cập nhật phần mềm TCU và thay thế bộ bugi Iridium nếu phát hiện hao mòn bất thường.",
+                Solution = "1. Kết nối máy chẩn đoán GDS Mobile cập nhật phần mềm hộp số TCU lên phiên bản v2.4.\n2. Kiểm tra bộ 4 bugi đánh lửa, thay mới bộ bugi chính hãng mã 18846-11070 nếu phát hiện đóng muội than hoặc khe hở điện cực > 1.1mm.\n3. Chạy thử xe và xác nhận không còn mã lỗi P0300.",
+                CreateDate = DateTime.Today.AddDays(-20),
+                DateExpired = DateTime.Today.AddMonths(5),
+                IsActive = true,
+                Status = BulletinStatus.Active,
+                UserCreate = "Phòng Kỹ thuật Dịch vụ HTC",
+                FileNameAttachment = "TSB-2026-001_TCU_Software_Update.pdf",
+                CreatedBy = "seed",
+                Items = [
+                    new BulletinDetail { Type = LineType.Labor, Code = "CV-TSB-TCU", Name = "Công nâng cấp phần mềm điều khiển TCU bằng GDS Mobile", Unit = "Lần", Quantity = 1, UnitPrice = 0, Note = "Miễn phí theo chính sách bảo hành HTC" },
+                    new BulletinDetail { Type = LineType.Part, PartId = pSpark?.Id ?? 5, Code = "18846-11070", Name = "Bugi đánh lửa Iridium cao cấp", Unit = "Cái", Quantity = 4, UnitPrice = 220000, Note = "Bồi hoàn theo giá niêm yết bảo hành" }
+                ],
+                TargetVins = [
+                    new BulletinVin { VinNo = "RLHXXTC002", PlateNo = carTucson?.Plate ?? "51G-678.90", Model = "Hyundai Tucson 2023", DealerCode = "HYUNDAI-MAIN", Status = BulletinVinStatus.Pending, Note = "Xe đang làm dịch vụ tại xưởng, cần xử lý trong lệnh sửa chữa" },
+                    new BulletinVin { VinNo = "RLHXXTC003", PlateNo = "51H-992.11", Model = "Hyundai Tucson 2023", DealerCode = "HYUNDAI-MAIN", Status = BulletinVinStatus.Pending, Note = "Chờ xe vào xưởng kiểm tra" },
+                    new BulletinVin { VinNo = "RLHXXTC004", PlateNo = "51K-123.88", Model = "Hyundai Tucson 2023", DealerCode = "HYUNDAI-MAIN", Status = BulletinVinStatus.Completed, DateDone = DateTime.Today.AddDays(-5), DoneBy = "KTV Hùng", RONo = "RO-TC004-DONE", Note = "Đã cập nhật TCU và thay 4 bugi thành công" }
+                ]
+            };
+
+            var b2 = new Bulletin
+            {
+                BulletinNo = "CAM-RECALL-HYU01",
+                BulletinNoHMC = "HMC-RC-23-08-015",
+                Title = "Chiến dịch triệu hồi kiểm tra & thay thế chốt khóa nắp ca-pô an toàn xe Hyundai Accent 2022",
+                Remark = "Hãng Hyundai thông báo chương trình triệu hồi an toàn kiểm tra cụm cơ cấu lò xo chốt phụ nắp ca-pô có thể bị kẹt rỉ sét sau thời gian dài vận hành trong điều kiện khí hậu nóng ẩm.",
+                Solution = "Kiểm tra cơ cấu ngàm khóa nắp ca-pô. Thay thế cụm chốt khóa an toàn mới đã xử lý chống ăn mòn và tra mỡ bôi trơn chuyên dụng chịu nhiệt.",
+                CreateDate = DateTime.Today.AddDays(-40),
+                DateExpired = DateTime.Today.AddMonths(3),
+                IsActive = true,
+                Status = BulletinStatus.Active,
+                UserCreate = "Cục Đăng kiểm & HTC",
+                FileNameAttachment = "RECALL_CAPO_ACCENT_2022.pdf",
+                CreatedBy = "seed",
+                Items = [
+                    new BulletinDetail { Type = LineType.Labor, Code = "CV-RC-CAPO", Name = "Công kiểm tra & thay thế cụm chốt khóa an toàn nắp ca-pô", Unit = "Lần", Quantity = 1, UnitPrice = 0, Note = "Triệu hồi an toàn miễn phí 100%" },
+                    new BulletinDetail { Type = LineType.Part, Code = "81140-1R000", Name = "Cụm chốt khóa an toàn nắp ca-pô chính hãng cải tiến", Unit = "Bộ", Quantity = 1, UnitPrice = 180000, Note = "Hãng cấp miễn phí" }
+                ],
+                TargetVins = [
+                    new BulletinVin { VinNo = "RLHXXAC001", PlateNo = carAccent?.Plate ?? "30A-123.45", Model = "Hyundai Accent 2022", DealerCode = "HYUNDAI-MAIN", Status = BulletinVinStatus.Pending, Note = "Xe Accent trong danh sách triệu hồi, cần liên hệ khách hàng hoặc làm ngay khi vào xưởng" },
+                    new BulletinVin { VinNo = "RLHXXAC007", PlateNo = "30E-881.23", Model = "Hyundai Accent 2022", DealerCode = "HYUNDAI-MAIN", Status = BulletinVinStatus.Pending, Note = "Đang chờ liên hệ" },
+                    new BulletinVin { VinNo = "RLHXXAC008", PlateNo = "30F-445.67", Model = "Hyundai Accent 2022", DealerCode = "HYUNDAI-MAIN", Status = BulletinVinStatus.Completed, DateDone = DateTime.Today.AddDays(-12), DoneBy = "KTV Trọng", RONo = "RO-AC008-RC", Note = "Đã thay thế chốt khóa cải tiến" }
+                ]
+            };
+
+            var b3 = new Bulletin
+            {
+                BulletinNo = "TSB-2025-012",
+                BulletinNoHMC = "HMC-TSB-23-11-008",
+                Title = "Thông báo kỹ thuật: Kiểm tra siết lực bu-lông càng A trước xe Hyundai Santa Fe",
+                Remark = "Kiểm tra mô-men siết bu-lông liên kết càng chữ A phía trước đạt tiêu chuẩn 135 Nm để loại trừ tiếng kêu lục cục khi đánh lái hết lái qua gờ giảm tốc.",
+                Solution = "Dùng cần siết lực chuyên dụng kiểm tra và siết chặt lại bu-lông càng chữ A theo đúng thông số kỹ thuật xuất xưởng.",
+                CreateDate = DateTime.Today.AddDays(-120),
+                DateExpired = DateTime.Today.AddDays(-10),
+                IsActive = false,
+                Status = BulletinStatus.Finished,
+                UserCreate = "Phòng Kỹ thuật Dịch vụ HTC",
+                FileNameAttachment = "TSB_SANTAFE_CANGA_TORQUE.pdf",
+                CreatedBy = "seed",
+                Items = [
+                    new BulletinDetail { Type = LineType.Labor, Code = "CV-TSB-CANGA", Name = "Công kiểm tra siết lực bu-lông càng A trước", Unit = "Lần", Quantity = 1, UnitPrice = 0, Note = "Đã hoàn thành đợt kiểm tra" }
+                ],
+                TargetVins = [
+                    new BulletinVin { VinNo = "RLHXXSF001", PlateNo = "30H-111.22", Model = "Hyundai Santa Fe 2023", DealerCode = "HYUNDAI-MAIN", Status = BulletinVinStatus.Completed, DateDone = DateTime.Today.AddDays(-30), DoneBy = "KTV Hùng", RONo = "RO-SF001-TSB" },
+                    new BulletinVin { VinNo = "RLHXXSF002", PlateNo = "30H-333.44", Model = "Hyundai Santa Fe 2023", DealerCode = "HYUNDAI-MAIN", Status = BulletinVinStatus.Completed, DateDone = DateTime.Today.AddDays(-25), DoneBy = "KTV Hùng", RONo = "RO-SF002-TSB" }
+                ]
+            };
+
+            db.Bulletins.AddRange(b1, b2, b3);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -1792,6 +1875,7 @@ public static class Seeder
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"ReceptionSheetId\" integer NULL",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CampaignMarketingId\" integer NULL",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CampaignDiscountAmount\" numeric(18,2) NOT NULL DEFAULT 0",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"BulletinId\" integer NULL",
             "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"ReceptionSheetId\" integer NULL",
             "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"CustomerCareMaceId\" integer NULL",
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
@@ -2432,7 +2516,59 @@ public static class Seeder
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""StockAdjId"") REFERENCES ""StockAdjs"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
-            );"
+            );",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""BulletinId"" INTEGER NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""Bulletins"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""BulletinNo"" TEXT NOT NULL,
+                ""BulletinNoHMC"" TEXT NULL,
+                ""Title"" TEXT NOT NULL,
+                ""Remark"" TEXT NULL,
+                ""Solution"" TEXT NULL,
+                ""CreateDate"" TEXT NOT NULL,
+                ""DateExpired"" TEXT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""UserCreate"" TEXT NOT NULL,
+                ""FileNameAttachment"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Bulletins_OrgId_BulletinNo"" ON ""Bulletins"" (""OrgId"", ""BulletinNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""BulletinDetails"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""BulletinId"" INTEGER NOT NULL,
+                ""Type"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NULL,
+                ""Code"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""BulletinId"") REFERENCES ""Bulletins"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE TABLE IF NOT EXISTS ""BulletinVins"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""BulletinId"" INTEGER NOT NULL,
+                ""VinNo"" TEXT NOT NULL,
+                ""PlateNo"" TEXT NULL,
+                ""Model"" TEXT NULL,
+                ""DealerCode"" TEXT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""DateDone"" TEXT NULL,
+                ""DoneBy"" TEXT NULL,
+                ""ROId"" INTEGER NULL,
+                ""RONo"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""BulletinId"") REFERENCES ""Bulletins"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE INDEX IF NOT EXISTS ""IX_BulletinVins_OrgId_BulletinId_VinNo"" ON ""BulletinVins"" (""OrgId"", ""BulletinId"", ""VinNo"");"
         };
 
         foreach (var sql in sqls)

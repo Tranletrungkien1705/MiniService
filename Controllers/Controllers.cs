@@ -115,7 +115,18 @@ public class ROController(IRoService svc) : Controller
         ViewBag.Parts = await svc.PartsForSelectAsync();
         ViewBag.ServicePackages = await svc.ServicePackagesForSelectAsync();
         ViewBag.EligibleCampaigns = await svc.GetEligibleCampaignsForCarAsync(ro.CarId);
+        ViewBag.PendingBulletins = (!string.IsNullOrWhiteSpace(ro.Car?.Vin))
+            ? await svc.CheckVinBulletinsAsync(ro.Car.Vin)
+            : new List<BulletinVin>();
         return View(ro);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyBulletin(int id, int bulletinId)
+    {
+        var (ok, msg, _) = await svc.ApplyBulletinToROAsync(bulletinId, id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -2295,6 +2306,197 @@ public class StockAdjController(IRoService svc) : Controller
     public async Task<IActionResult> Delete(int id)
     {
         var (ok, msg) = await svc.DeleteStockAdjAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
+public class BulletinController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(BulletinStatus? status, string? q, bool? activeOnly, string? checkVin)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.ActiveOnly = activeOnly;
+        ViewBag.CheckVin = checkVin;
+
+        if (!string.IsNullOrWhiteSpace(checkVin))
+        {
+            ViewBag.MatchedVins = await svc.CheckVinBulletinsAsync(checkVin);
+        }
+
+        var list = await svc.BulletinsAsync(status, q, activeOnly);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var item = await svc.GetBulletinAsync(id);
+        if (item == null) return NotFound();
+        ViewBag.EligibleROs = await svc.ROsAsync(null, null);
+        return View(item);
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        string? bulletinNo, string? bulletinNoHMC, string title, string? remark, string? solution,
+        DateTime createDate, DateTime? dateExpired, string? userCreate, string? fileNameAttachment,
+        LineType[]? itemTypes, int[]? itemPartIds, string[]? itemCodes, string[]? itemNames, string[]? itemUnits, decimal[]? itemQuantities, decimal[]? itemUnitPrices, string[]? itemNotes,
+        string? vinListRaw, string? targetModel)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            TempData["Error"] = "Vui lòng nhập tiêu đề Bản tin kỹ thuật.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+
+        try
+        {
+            var bulletin = new Bulletin
+            {
+                BulletinNo = bulletinNo?.Trim() ?? "",
+                BulletinNoHMC = bulletinNoHMC?.Trim(),
+                Title = title.Trim(),
+                Remark = remark?.Trim(),
+                Solution = solution?.Trim(),
+                CreateDate = createDate != default ? createDate : DateTime.Today,
+                DateExpired = dateExpired,
+                UserCreate = string.IsNullOrWhiteSpace(userCreate) ? "Hyundai Thành Công (HTC)" : userCreate.Trim(),
+                FileNameAttachment = fileNameAttachment?.Trim(),
+                IsActive = true,
+                Status = BulletinStatus.Active,
+                CreatedBy = "web"
+            };
+
+            var details = new List<BulletinDetail>();
+            if (itemNames != null && itemNames.Length > 0)
+            {
+                for (int i = 0; i < itemNames.Length; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(itemNames[i])) continue;
+                    var type = (itemTypes != null && i < itemTypes.Length) ? itemTypes[i] : LineType.Labor;
+                    var partId = (itemPartIds != null && i < itemPartIds.Length && itemPartIds[i] > 0) ? (int?)itemPartIds[i] : null;
+                    var code = (itemCodes != null && i < itemCodes.Length) ? itemCodes[i]?.Trim() ?? "" : "";
+                    var unit = (itemUnits != null && i < itemUnits.Length) ? itemUnits[i]?.Trim() ?? "Cái" : "Cái";
+                    var qty = (itemQuantities != null && i < itemQuantities.Length) ? itemQuantities[i] : 1;
+                    var price = (itemUnitPrices != null && i < itemUnitPrices.Length) ? itemUnitPrices[i] : 0;
+                    var note = (itemNotes != null && i < itemNotes.Length) ? itemNotes[i]?.Trim() : null;
+
+                    details.Add(new BulletinDetail
+                    {
+                        Type = type,
+                        PartId = partId,
+                        Code = code,
+                        Name = itemNames[i].Trim(),
+                        Unit = unit,
+                        Quantity = qty <= 0 ? 1 : qty,
+                        UnitPrice = price < 0 ? 0 : price,
+                        Note = note
+                    });
+                }
+            }
+
+            var vins = new List<BulletinVin>();
+            if (!string.IsNullOrWhiteSpace(vinListRaw))
+            {
+                var rawTokens = vinListRaw.Split(new[] { '\r', '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                var cars = await svc.CarsAsync(null);
+
+                foreach (var tok in rawTokens)
+                {
+                    var clean = tok.Trim().ToUpperInvariant();
+                    if (string.IsNullOrWhiteSpace(clean)) continue;
+                    if (vins.Any(v => v.VinNo == clean)) continue;
+
+                    var matchedCar = cars.FirstOrDefault(c => c.Vin != null && c.Vin.ToUpper() == clean);
+                    vins.Add(new BulletinVin
+                    {
+                        VinNo = clean,
+                        PlateNo = matchedCar?.Plate,
+                        Model = !string.IsNullOrWhiteSpace(targetModel) ? targetModel.Trim() : (matchedCar?.Model ?? ""),
+                        DealerCode = "HYUNDAI-MAIN",
+                        Status = BulletinVinStatus.Pending
+                    });
+                }
+            }
+
+            var id = await svc.CreateBulletinAsync(bulletin, details, vins);
+            TempData["Success"] = $"Đã ban hành bản tin kỹ thuật {bulletin.BulletinNo} thành công (Áp dụng cho {vins.Count} xe theo số VIN).";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleActive(int id)
+    {
+        var (ok, msg) = await svc.ToggleBulletinActiveAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, BulletinStatus to)
+    {
+        var (ok, msg) = await svc.TransitionBulletinStatusAsync(id, to);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateVinStatus(int vinId, BulletinVinStatus status, int bulletinId, string? doneBy)
+    {
+        var (ok, msg) = await svc.UpdateBulletinVinStatusAsync(vinId, status, doneBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id = bulletinId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddVins(int bulletinId, string vinListRaw, string? targetModel)
+    {
+        if (string.IsNullOrWhiteSpace(vinListRaw))
+        {
+            TempData["Error"] = "Vui lòng nhập ít nhất một số VIN.";
+            return RedirectToAction(nameof(Detail), new { id = bulletinId });
+        }
+
+        var tokens = vinListRaw.Split(new[] { '\r', '\n', ',', ';' }, StringSplitOptions.RemoveEmptyEntries).ToList();
+        var (ok, msg) = await svc.AddVinsToBulletinAsync(bulletinId, tokens, targetModel);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id = bulletinId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyToRO(int bulletinId, int roId)
+    {
+        var (ok, msg, _) = await svc.ApplyBulletinToROAsync(bulletinId, roId);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction("Detail", "RO", new { id = roId });
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var item = await svc.GetBulletinAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteBulletinAsync(id);
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Index));
     }
