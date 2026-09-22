@@ -130,6 +130,16 @@ public enum PaymentMethod
     Internal = 4      // Nội bộ đại lý hỗ trợ
 }
 
+/// <summary>Trạng thái Báo giá phụ tùng & dịch vụ — theo Ser_Inv_Quote idn.CarService.</summary>
+public enum QuoteStatus
+{
+    Draft = 0,     // 1: Mới tạo (Chờ gửi khách hàng)
+    Sent = 1,      // 2: Đã gửi khách hàng xem xét
+    Confirmed = 2, // 3: Khách hàng chấp thuận báo giá
+    Converted = 3, // 4: Đã chuyển đổi thành Xuất kho hoặc Lệnh sửa chữa (RO)
+    Rejected = 4   // 5: Khách từ chối / Hủy báo giá
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -139,6 +149,7 @@ public class Customer : IOrgOwned
     public string? Phone { get; set; }
     public string? Email { get; set; }
     public List<Car> Cars { get; set; } = [];
+    public List<Quote> Quotes { get; set; } = [];
 }
 
 public class Car : IOrgOwned
@@ -179,6 +190,7 @@ public class RepairOrder : IOrgOwned
     public List<StockOut> StockOuts { get; set; } = [];
     public List<CustomerCare> CustomerCares { get; set; } = [];
     public List<Payment> Payments { get; set; } = [];
+    public List<Quote> Quotes { get; set; } = [];
 
     public decimal Total => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
@@ -373,6 +385,7 @@ public class StockOut : IOrgOwned
     public int? ROId { get; set; }                          // Lệnh sửa chữa gắn liền (nếu có)
     public int? CustomerId { get; set; }                    // Khách hàng nhận / chủ xe
     public int? CarId { get; set; }                         // Xe nhận phụ tùng
+    public int? QuoteId { get; set; }                       // Báo giá phụ tùng gốc nếu chuyển từ báo giá
     public string? RecipientName { get; set; }              // Người nhận hàng / Kỹ thuật viên / Khách
     public string? Description { get; set; }                // Diễn giải / Lý do xuất kho
     public string CreatedBy { get; set; } = "web";          // Người lập phiếu
@@ -383,6 +396,7 @@ public class StockOut : IOrgOwned
     public RepairOrder? RO { get; set; }
     public Customer? Customer { get; set; }
     public Car? Car { get; set; }
+    public Quote? Quote { get; set; }
     public List<StockOutDetail> Items { get; set; } = [];
 
     public decimal SubTotal => Items.Sum(i => i.Quantity * i.UnitPrice);
@@ -475,4 +489,67 @@ public class Payment : IOrgOwned
     public RepairOrder RO { get; set; } = null!;
     public Customer Customer { get; set; } = null!;
     public Car Car { get; set; } = null!;
+}
+
+/// <summary>Báo giá phụ tùng & dịch vụ — Ser_Inv_Quote trong idn.CarService.</summary>
+public class Quote : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string QuoteNo { get; set; } = "";             // Số báo giá (VD: BG260427-001)
+    public DateTime QuoteDate { get; set; } = DateTime.Today; // Ngày lập báo giá
+    public DateTime? ValidUntil { get; set; }             // Hiệu lực báo giá đến ngày
+    public int? CustomerId { get; set; }                  // Khách hàng trong hệ thống (nếu có)
+    public string CustomerName { get; set; } = "";        // Tên khách hàng / Tên doanh nghiệp
+    public string? CustomerPhone { get; set; }            // Số điện thoại
+    public string? CustomerAddress { get; set; }          // Địa chỉ khách hàng
+    public int? CarId { get; set; }                       // Xe liên quan nếu có
+    public string? RecipientName { get; set; }            // Người nhận báo giá (ReceiveName)
+    public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.Cash; // Hình thức thanh toán dự kiến
+    public QuoteStatus Status { get; set; } = QuoteStatus.Draft; // Trạng thái báo giá
+    public string? Remark { get; set; }                   // Điều khoản thanh toán & hiệu lực (Remark)
+    public string? Note { get; set; }                     // Ghi chú tư vấn kỹ thuật (Note)
+    public int? StockOutId { get; set; }                  // Phiếu xuất kho sinh ra từ báo giá (nếu đã chuyển xuất kho)
+    public int? ROId { get; set; }                        // Lệnh sửa chữa sinh ra từ báo giá (nếu chuyển RO)
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ConfirmedAt { get; set; }            // Ngày khách hàng chấp thuận
+
+    public Customer? Customer { get; set; }
+    public Car? Car { get; set; }
+    public StockOut? StockOut { get; set; }
+    public RepairOrder? RO { get; set; }
+    public List<QuoteItem> Items { get; set; } = [];
+
+    public decimal SubTotal => Items.Sum(i => i.Quantity * i.UnitPrice);
+    public decimal TotalDiscount => Items.Sum(i => i.DiscountAmount);
+    public decimal TotalVat => Items.Sum(i => i.VatAmount);
+    public decimal Total => Items.Sum(i => i.Amount);
+    public int ItemCount => Items.Count;
+}
+
+/// <summary>Chi tiết phụ tùng / hạng mục báo giá — Ser_Inv_QuotePartItems trong idn.CarService.</summary>
+public class QuoteItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int QuoteId { get; set; }
+    public int? PartId { get; set; }                      // ID phụ tùng trong kho (nếu có)
+    public string PartCode { get; set; } = "";            // Mã phụ tùng (PartCode)
+    public string PartName { get; set; } = "";            // Tên phụ tùng (VieName)
+    public string Unit { get; set; } = "Cái";             // Đơn vị tính (Unit)
+    public decimal Quantity { get; set; } = 1;            // Số lượng báo giá (Quantity)
+    public decimal UnitPrice { get; set; }                // Đơn giá bán trước thuế/chiết khấu (Price)
+    public decimal DiscountPercent { get; set; } = 0;     // Chiết khấu dòng (%)
+    public decimal VatPercent { get; set; } = 8;          // Thuế suất VAT (%)
+    public string? Note { get; set; }                     // Ghi chú phụ tùng
+
+    public Quote Quote { get; set; } = null!;
+    public Part? Part { get; set; }
+
+    public decimal LineTotal => Quantity * UnitPrice;
+    public decimal DiscountAmount => Math.Round(LineTotal * (DiscountPercent / 100m), 2);
+    public decimal TaxableAmount => LineTotal - DiscountAmount;
+    public decimal VatAmount => Math.Round(TaxableAmount * (VatPercent / 100m), 2);
+    public decimal Amount => TaxableAmount + VatAmount;
 }

@@ -1,0 +1,168 @@
+@model List<Quote>
+@{
+    ViewData["Title"] = "Quản lý Báo giá dịch vụ & phụ tùng (Quotation)";
+    var curStatus = (QuoteStatus?)ViewBag.Status;
+    var totalCount = Model.Count;
+    var pendingCount = Model.Count(q => q.Status is QuoteStatus.Draft or QuoteStatus.Sent);
+    var confirmedCount = Model.Count(q => q.Status == QuoteStatus.Confirmed);
+    var convertedCount = Model.Count(q => q.Status == QuoteStatus.Converted);
+    var totalConfirmedValue = Model.Where(q => q.Status is QuoteStatus.Confirmed or QuoteStatus.Converted).Sum(q => q.Total);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số báo giá</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Mới tạo / Chờ gửi khách</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Khách đồng ý (Confirmed)</div>
+            <div class="stat-num text-info">@confirmedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã chuyển đổi (Xuất kho/RO)</div>
+            <div class="stat-num text-success">@convertedCount</div>
+        </div></div>
+    </div>
+    <div class="col-12 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Doanh thu chốt báo giá</div>
+            <div class="stat-num" style="color:#2563eb;font-size:20px">@totalConfirmedValue.ToString("N0") <span class="fs-6 fw-normal text-muted">đ</span></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Số BG / Khách hàng / SĐT / Xe / Ghi chú..." style="max-width:260px" />
+                <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" title="Từ ngày" style="max-width:145px" />
+                <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" title="Đến ngày" style="max-width:145px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (QuoteStatus s in Enum.GetValues(typeof(QuoteStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.QuoteStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curStatus.HasValue || !string.IsNullOrEmpty(ViewBag.Q) || !string.IsNullOrEmpty(ViewBag.FromDate) || !string.IsNullOrEmpty(ViewBag.ToDate))
+                {
+                    <a href="/Quote" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/Part" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Kho phụ tùng</a>
+                <a href="/Quote/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập báo giá mới</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã báo giá</th>
+                        <th>Ngày lập</th>
+                        <th>Khách hàng</th>
+                        <th>Xe liên kết</th>
+                        <th>Số món</th>
+                        <th>Tổng tiền (có VAT)</th>
+                        <th>Liên kết chứng từ</th>
+                        <th>Trạng thái</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var q in Model)
+                    {
+                        var (stText, stCode, stCss) = Ui.QuoteStatus(q.Status);
+                        var (payText, payIcon, payCss) = Ui.PaymentMethod(q.PaymentMethod);
+                        <tr>
+                            <td>
+                                <a href="/Quote/Detail/@q.Id" class="fw-bold text-decoration-none">@q.QuoteNo</a>
+                                <div class="text-muted" style="font-size:11px">Lập bởi: @q.CreatedBy</div>
+                            </td>
+                            <td>
+                                <div>@q.QuoteDate.ToString("dd/MM/yyyy")</div>
+                                @if (q.ValidUntil.HasValue)
+                                {
+                                    <div class="text-muted" style="font-size:11px">Hạn: @q.ValidUntil.Value.ToString("dd/MM/yyyy")</div>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@q.CustomerName</div>
+                                @if (!string.IsNullOrWhiteSpace(q.CustomerPhone))
+                                {
+                                    <div class="text-muted" style="font-size:11px"><i class="bi bi-telephone me-1"></i>@q.CustomerPhone</div>
+                                }
+                            </td>
+                            <td>
+                                @if (q.Car != null)
+                                {
+                                    <div class="badge bg-light text-dark border"><i class="bi bi-car-front me-1"></i>@q.Car.Plate</div>
+                                    <div class="small text-muted" style="font-size:11px">@q.Car.Model</div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Khách mua ngoài / Vãng lai</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis">@q.ItemCount mặt hàng</span>
+                            </td>
+                            <td>
+                                <div class="fw-bold text-dark">@q.Total.ToString("N0") <span class="text-muted fw-normal" style="font-size:11px">đ</span></div>
+                                @if (q.TotalDiscount > 0)
+                                {
+                                    <div class="text-danger" style="font-size:11px">CK: -@q.TotalDiscount.ToString("N0")đ</div>
+                                }
+                            </td>
+                            <td>
+                                @if (q.StockOut != null)
+                                {
+                                    <div><a href="/StockOut/Detail/@q.StockOut.Id" class="badge bg-success-subtle text-success-emphasis text-decoration-none"><i class="bi bi-box-arrow-up-right me-1"></i>@q.StockOut.StockOutNo</a></div>
+                                }
+                                @if (q.RO != null)
+                                {
+                                    <div><a href="/RO/Detail/@q.RO.Id" class="badge bg-info-subtle text-info-emphasis text-decoration-none"><i class="bi bi-clipboard2-pulse me-1"></i>@q.RO.Code</a></div>
+                                }
+                                @if (q.StockOut == null && q.RO == null)
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-@stCss">@stCode — @stText</span>
+                            </td>
+                            <td class="text-end">
+                                <a href="/Quote/Print/@q.Id" class="btn btn-sm btn-outline-secondary me-1" title="In phiếu báo giá" target="_blank"><i class="bi bi-printer"></i></a>
+                                <a href="/Quote/Detail/@q.Id" class="btn btn-sm btn-outline-primary" title="Xem chi tiết"><i class="bi bi-eye"></i></a>
+                            </td>
+                        </tr>
+                    }
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-2 d-block mb-1"></i>
+                                Không tìm thấy báo giá nào phù hợp với điều kiện tìm kiếm.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

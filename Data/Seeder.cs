@@ -550,18 +550,121 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        if (!await db.Quotes.AnyAsync())
+        {
+            var car1 = await db.Cars.Include(c => c.Customer).FirstAsync();
+            var car2 = await db.Cars.Include(c => c.Customer).OrderByDescending(c => c.Id).FirstAsync();
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+            var pFilter = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pAir = await db.Parts.FirstOrDefaultAsync(p => p.Code == "28113-1R100");
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+            var pSpark = await db.Parts.FirstOrDefaultAsync(p => p.Code == "18846-11070");
+            var stockOut1 = await db.StockOuts.FirstOrDefaultAsync(s => s.StockOutNo == "XK260427-001");
+
+            var quotes = new List<Quote>();
+
+            // 1. Báo giá mới lập (Draft) - Tư vấn phụ tùng bảo dưỡng cấp trung bình
+            var q1 = new Quote
+            {
+                QuoteNo = "BG260427-001",
+                QuoteDate = DateTime.Today,
+                ValidUntil = DateTime.Today.AddDays(15),
+                CustomerId = car1.CustomerId,
+                CustomerName = car1.Customer.Name,
+                CustomerPhone = car1.Customer.Phone,
+                CustomerAddress = "Cầu Giấy, Hà Nội",
+                CarId = car1.Id,
+                RecipientName = car1.Customer.Name,
+                PaymentMethod = PaymentMethod.Cash,
+                Status = QuoteStatus.Draft,
+                Remark = "Báo giá có giá trị trong 15 ngày kể từ ngày lập. Phụ tùng chính hãng bảo hành 12 tháng hoặc 20.000km.",
+                Note = "Khách hàng tham khảo chi phí bảo dưỡng định kỳ tiếp theo.",
+                CreatedBy = "CVDV Tuấn",
+                CreatedAt = DateTime.Now.AddHours(-3),
+                Items = [
+                    new QuoteItem { PartId = pOil?.Id, PartCode = pOil?.Code ?? "05100-00441", PartName = pOil?.Name ?? "Dầu nhớt động cơ Hyundai 5W-30", Unit = pOil?.Unit ?? "Can", Quantity = 1, UnitPrice = pOil?.SalePrice ?? 650000, DiscountPercent = 5, VatPercent = 8, Note = "Giảm giá 5% thành viên" },
+                    new QuoteItem { PartId = pFilter?.Id, PartCode = pFilter?.Code ?? "26300-35505", PartName = pFilter?.Name ?? "Lọc dầu động cơ chính hãng", Unit = pFilter?.Unit ?? "Cái", Quantity = 1, UnitPrice = pFilter?.SalePrice ?? 180000, DiscountPercent = 0, VatPercent = 8, Note = "Thay mới theo dầu" },
+                    new QuoteItem { PartId = pAir?.Id, PartCode = pAir?.Code ?? "28113-1R100", PartName = pAir?.Name ?? "Lọc gió động cơ Accent", Unit = pAir?.Unit ?? "Cái", Quantity = 1, UnitPrice = pAir?.SalePrice ?? 240000, DiscountPercent = 0, VatPercent = 8, Note = "Vệ sinh hoặc thay thế" }
+                ]
+            };
+            quotes.Add(q1);
+
+            // 2. Báo giá đã được khách hàng đồng ý (Confirmed) - Chờ xuất kho hoặc đưa xe vào xưởng
+            var q2 = new Quote
+            {
+                QuoteNo = "BG260427-002",
+                QuoteDate = DateTime.Today,
+                ValidUntil = DateTime.Today.AddDays(10),
+                CustomerId = car2.CustomerId,
+                CustomerName = car2.Customer.Name,
+                CustomerPhone = car2.Customer.Phone,
+                CustomerAddress = "Thanh Xuân, Hà Nội",
+                CarId = car2.Id,
+                RecipientName = car2.Customer.Name,
+                PaymentMethod = PaymentMethod.BankTransfer,
+                Status = QuoteStatus.Confirmed,
+                Remark = "Giá đã bao gồm phụ tùng chính hãng Mobis và thuế GTGT 8%. Cam kết phụ tùng mới 100%.",
+                Note = "Khách xác nhận thay má phanh và 4 bugi đánh lửa, hẹn chiều mang xe qua xưởng.",
+                CreatedBy = "CVDV Hương",
+                CreatedAt = DateTime.Now.AddHours(-2),
+                ConfirmedAt = DateTime.Now.AddHours(-1),
+                Items = [
+                    new QuoteItem { PartId = pBrake?.Id, PartCode = pBrake?.Code ?? "58101-C1A00", PartName = pBrake?.Name ?? "Bộ má phanh đĩa trước", Unit = pBrake?.Unit ?? "Bộ", Quantity = 1, UnitPrice = pBrake?.SalePrice ?? 1350000, DiscountPercent = 0, VatPercent = 8, Note = "Má phanh chính hãng" },
+                    new QuoteItem { PartId = pSpark?.Id, PartCode = pSpark?.Code ?? "18846-11070", PartName = pSpark?.Name ?? "Bugi đánh lửa Iridium cao cấp", Unit = pSpark?.Unit ?? "Cái", Quantity = 4, UnitPrice = pSpark?.SalePrice ?? 220000, DiscountPercent = 5, VatPercent = 8, Note = "Chiết khấu combo bugi 5%" }
+                ]
+            };
+            quotes.Add(q2);
+
+            // 3. Báo giá đã chuyển đổi thành Phiếu xuất kho (Converted)
+            var q3 = new Quote
+            {
+                QuoteNo = "BG260420-003",
+                QuoteDate = DateTime.Today.AddDays(-7),
+                ValidUntil = DateTime.Today.AddDays(7),
+                CustomerId = car1.CustomerId,
+                CustomerName = car1.Customer.Name,
+                CustomerPhone = car1.Customer.Phone,
+                CustomerAddress = "Cầu Giấy, Hà Nội",
+                CarId = car1.Id,
+                RecipientName = "Thợ Hùng",
+                PaymentMethod = PaymentMethod.Cash,
+                Status = QuoteStatus.Converted,
+                StockOutId = stockOut1?.Id,
+                Remark = "Đã xuất kho theo phiếu XK260427-001.",
+                Note = "Báo giá vật tư bảo dưỡng đã xuất kho cho xe vào bảo dưỡng cấp 20.000km.",
+                CreatedBy = "CVDV Tuấn",
+                CreatedAt = DateTime.Now.AddDays(-7),
+                ConfirmedAt = DateTime.Now.AddDays(-7).AddHours(1),
+                Items = [
+                    new QuoteItem { PartId = pOil?.Id, PartCode = pOil?.Code ?? "05100-00441", PartName = pOil?.Name ?? "Dầu nhờn động cơ Hyundai 5W-30", Unit = pOil?.Unit ?? "Can", Quantity = 1, UnitPrice = pOil?.SalePrice ?? 650000, DiscountPercent = 0, VatPercent = 8, Note = "Dầu động cơ 4L" },
+                    new QuoteItem { PartId = pFilter?.Id, PartCode = pFilter?.Code ?? "26300-35505", PartName = pFilter?.Name ?? "Lọc dầu động cơ", Unit = pFilter?.Unit ?? "Cái", Quantity = 1, UnitPrice = pFilter?.SalePrice ?? 180000, DiscountPercent = 0, VatPercent = 8, Note = "Lọc dầu chính hãng" }
+                ]
+            };
+            quotes.Add(q3);
+
+            db.Quotes.AddRange(quotes);
+            await db.SaveChangesAsync();
+
+            if (stockOut1 != null)
+            {
+                stockOut1.QuoteId = q3.Id;
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Orgs_ApiKey\" ON miniservice.\"Orgs\" (\"ApiKey\")",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"AppointmentId\" integer NULL",
+            "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -763,7 +866,51 @@ public static class Seeder
                 FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT,
                 FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE RESTRICT
             );",
-            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Payments_OrgId_PaymentNo"" ON ""Payments"" (""OrgId"", ""PaymentNo"");"
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Payments_OrgId_PaymentNo"" ON ""Payments"" (""OrgId"", ""PaymentNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""Quotes"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""QuoteNo"" TEXT NOT NULL,
+                ""QuoteDate"" TEXT NOT NULL,
+                ""ValidUntil"" TEXT NULL,
+                ""CustomerId"" INTEGER NULL,
+                ""CustomerName"" TEXT NOT NULL,
+                ""CustomerPhone"" TEXT NULL,
+                ""CustomerAddress"" TEXT NULL,
+                ""CarId"" INTEGER NULL,
+                ""RecipientName"" TEXT NULL,
+                ""PaymentMethod"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""Remark"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                ""StockOutId"" INTEGER NULL,
+                ""ROId"" INTEGER NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ConfirmedAt"" TEXT NULL,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""StockOutId"") REFERENCES ""StockOuts"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Quotes_OrgId_QuoteNo"" ON ""Quotes"" (""OrgId"", ""QuoteNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""QuoteItems"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""QuoteId"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NULL,
+                ""PartCode"" TEXT NOT NULL,
+                ""PartName"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""DiscountPercent"" TEXT NOT NULL,
+                ""VatPercent"" TEXT NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""QuoteId"") REFERENCES ""Quotes"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE SET NULL
+            );",
+            @"ALTER TABLE ""StockOuts"" ADD COLUMN ""QuoteId"" INTEGER NULL;"
         };
 
         foreach (var sql in sqls)

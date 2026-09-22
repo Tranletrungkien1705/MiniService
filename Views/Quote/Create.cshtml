@@ -1,0 +1,339 @@
+@{
+    ViewData["Title"] = "Lập Báo giá dịch vụ & phụ tùng";
+    var customers = (List<Customer>)ViewBag.Customers;
+    var cars = (List<Car>)ViewBag.Cars;
+    var parts = (List<Part>)ViewBag.Parts;
+    var selectedCustomerId = (int?)ViewBag.SelectedCustomerId;
+    var selectedCarId = (int?)ViewBag.SelectedCarId;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-11">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-plus me-2 text-primary"></i>Lập Báo giá dịch vụ &amp; phụ tùng (Quotation)</h5>
+                        <div class="text-muted small">Tư vấn báo giá phụ tùng, dầu nhớt và vật tư sửa chữa cho khách hàng theo Ser_Inv_Quote</div>
+                    </div>
+                    <a href="/Quote" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách báo giá</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/Quote/Create" id="quoteForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Chọn khách hàng có sẵn</label>
+                            <select name="customerId" id="customerSelect" class="form-select" onchange="onCustomerSelect(this)">
+                                <option value="">— Khách vãng lai / Nhập mới —</option>
+                                @foreach (var c in customers)
+                                {
+                                    <option value="@c.Id" selected="@(selectedCustomerId == c.Id)"
+                                            data-name="@c.Name"
+                                            data-phone="@(c.Phone ?? "")"
+                                            data-cars='@Html.Raw(System.Text.Json.JsonSerializer.Serialize(c.Cars.Select(car => new { id = car.Id, plate = car.Plate, model = car.Model })))'>
+                                        [@c.Code] @c.Name @(string.IsNullOrEmpty(c.Phone) ? "" : $"({c.Phone})")
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text text-muted small">Chọn để tự động điền họ tên, số điện thoại và danh sách xe.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Tên khách hàng / Tổ chức <span class="text-danger">*</span></label>
+                            <input name="customerName" id="customerNameInput" class="form-control" placeholder="VD: Nguyễn Văn A..." required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Số điện thoại</label>
+                            <input name="customerPhone" id="customerPhoneInput" class="form-control" placeholder="VD: 0912345678" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Xe liên kết (tùy chọn)</label>
+                            <select name="carId" id="carSelect" class="form-select">
+                                <option value="">— Không liên kết xe / Mua phụ tùng ngoài —</option>
+                                @foreach (var car in cars)
+                                {
+                                    <option value="@car.Id" selected="@(selectedCarId == car.Id)" data-customer-id="@car.CustomerId">
+                                        @car.Plate — @car.Model (@car.Customer.Name)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Người nhận báo giá (ReceiveName)</label>
+                            <input name="recipientName" id="recipientNameInput" class="form-control" placeholder="VD: Anh Nam / Phòng Kế toán..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Phương thức thanh toán dự kiến</label>
+                            <select name="paymentMethod" class="form-select">
+                                @foreach (PaymentMethod m in Enum.GetValues(typeof(PaymentMethod)))
+                                {
+                                    var (mText, _, _) = Ui.PaymentMethod(m);
+                                    <option value="@((int)m)">@mText</option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Ngày lập báo giá <span class="text-danger">*</span></label>
+                            <input type="date" name="quoteDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Hiệu lực đến ngày</label>
+                            <input type="date" name="validUntil" class="form-control" value="@DateTime.Today.AddDays(15).ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Địa chỉ khách hàng</label>
+                            <input name="customerAddress" id="customerAddressInput" class="form-control" placeholder="VD: Số 123 Đường Cầu Giấy, Hà Nội..." />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Điều khoản thanh toán &amp; bảo hành (Remark)</label>
+                            <input name="remark" class="form-control" value="Báo giá có hiệu lực trong 15 ngày. Phụ tùng chính hãng bảo hành tiêu chuẩn 12 tháng hoặc 20.000km." />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ghi chú tư vấn kỹ thuật (Note)</label>
+                            <input name="note" class="form-control" placeholder="VD: Khách yêu cầu báo giá trước để xin duyệt ngân sách công ty..." />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <h6 class="fw-bold mb-0"><i class="bi bi-list-check me-1 text-primary"></i>Danh mục phụ tùng / Hạng mục dịch vụ báo giá</h6>
+                            <span class="text-muted small">Chọn từ danh mục kho để lấy giá niêm yết hoặc nhập mặt hàng tùy chỉnh</span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()">
+                            <i class="bi bi-plus-lg me-1"></i>Thêm dòng phụ tùng
+                        </button>
+                    </div>
+
+                    <div class="table-responsive mb-3">
+                        <table class="table table-bordered align-middle" id="itemsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:32%">Phụ tùng / Hạng mục <span class="text-danger">*</span></th>
+                                    <th style="width:7%">ĐVT</th>
+                                    <th style="width:10%">Tồn kho</th>
+                                    <th style="width:10%">Số lượng <span class="text-danger">*</span></th>
+                                    <th style="width:14%">Đơn giá (VNĐ) <span class="text-danger">*</span></th>
+                                    <th style="width:9%">CK (%)</th>
+                                    <th style="width:8%">VAT (%)</th>
+                                    <th style="width:14%" class="text-end">Thành tiền (có VAT)</th>
+                                    <th style="width:4%"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                <!-- Dynamic rows inserted by JavaScript -->
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <td colspan="7" class="text-end fw-semibold">Tổng tiền hàng trước chiết khấu:</td>
+                                    <td class="text-end fw-bold" id="totalSubTotal">0 đ</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="7" class="text-end fw-semibold text-danger">Tổng chiết khấu giảm giá:</td>
+                                    <td class="text-end fw-bold text-danger" id="totalDiscount">0 đ</td>
+                                    <td></td>
+                                </tr>
+                                <tr>
+                                    <td colspan="7" class="text-end fw-semibold text-muted">Tổng thuế GTGT (VAT):</td>
+                                    <td class="text-end fw-bold text-muted" id="totalVat">0 đ</td>
+                                    <td></td>
+                                </tr>
+                                <tr class="table-primary">
+                                    <td colspan="7" class="text-end fw-bold fs-6">TỔNG CỘNG THANH TOÁN (VNĐ):</td>
+                                    <td class="text-end fw-bold fs-5 text-primary" id="totalGrand">0 đ</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="text-muted small">
+                            <i class="bi bi-info-circle me-1"></i>Sau khi tạo, báo giá có thể chuyển thẳng thành <b>Phiếu xuất kho</b> hoặc <b>Lệnh sửa chữa (RO)</b> khi khách duyệt.
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="/Quote" class="btn btn-outline-secondary">Hủy bỏ</a>
+                            <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i>Lập báo giá</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="rowTemplate">
+    <tr class="item-row">
+        <td>
+            <select name="partIds" class="form-select form-select-sm part-select" onchange="onPartChange(this)" required>
+                <option value="">— Chọn phụ tùng từ kho —</option>
+                @foreach (var p in parts)
+                {
+                    <option value="@p.Id"
+                            data-code="@p.Code"
+                            data-name="@p.Name"
+                            data-unit="@p.Unit"
+                            data-price="@p.SalePrice"
+                            data-stock="@p.InStock"
+                            data-model="@(p.Model ?? "")">
+                        [@p.Code] @p.Name (Tồn: @p.InStock @p.Unit) — @p.SalePrice.ToString("N0")đ
+                    </option>
+                }
+            </select>
+            <input type="hidden" name="customCodes" class="custom-code" value="" />
+            <input type="hidden" name="customNames" class="custom-name" value="" />
+        </td>
+        <td>
+            <input name="units" class="form-control form-control-sm text-center unit-input" value="Cái" />
+        </td>
+        <td class="text-center">
+            <span class="stock-badge badge bg-secondary-subtle text-secondary-emphasis">—</span>
+        </td>
+        <td>
+            <input type="number" name="quantities" class="form-control form-control-sm text-center qty-input" value="1" min="0.1" step="any" oninput="calcRow(this)" required />
+        </td>
+        <td>
+            <input type="number" name="unitPrices" class="form-control form-control-sm text-end price-input" value="0" min="0" step="any" oninput="calcRow(this)" required />
+        </td>
+        <td>
+            <input type="number" name="discountPercents" class="form-control form-control-sm text-center disc-input" value="0" min="0" max="100" step="any" oninput="calcRow(this)" />
+        </td>
+        <td>
+            <input type="number" name="vatPercents" class="form-control form-control-sm text-center vat-input" value="8" min="0" max="100" step="any" oninput="calcRow(this)" />
+        </td>
+        <td class="text-end fw-semibold row-amount">0 đ</td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1" onclick="removeRow(this)"><i class="bi bi-x"></i></button>
+        </td>
+    </tr>
+</template>
+
+@section Scripts {
+<script>
+    function onCustomerSelect(sel) {
+        const opt = sel.options[sel.selectedIndex];
+        if (!opt || !opt.value) return;
+
+        const name = opt.getAttribute('data-name');
+        const phone = opt.getAttribute('data-phone');
+        const carsData = opt.getAttribute('data-cars');
+
+        if (name) {
+            document.getElementById('customerNameInput').value = name;
+            document.getElementById('recipientNameInput').value = name;
+        }
+        if (phone) {
+            document.getElementById('customerPhoneInput').value = phone;
+        }
+
+        const carSelect = document.getElementById('carSelect');
+        if (carsData) {
+            try {
+                const carsList = JSON.parse(carsData);
+                if (carsList && carsList.length > 0) {
+                    carSelect.value = carsList[0].id;
+                }
+            } catch(e) {}
+        }
+    }
+
+    function addRow() {
+        const tpl = document.getElementById('rowTemplate');
+        const clone = tpl.content.cloneNode(true);
+        document.getElementById('itemsBody').appendChild(clone);
+    }
+
+    function removeRow(btn) {
+        const row = btn.closest('tr');
+        const tbody = document.getElementById('itemsBody');
+        if (tbody.querySelectorAll('.item-row').length > 1) {
+            row.remove();
+            calcTotals();
+        } else {
+            alert('Báo giá cần có ít nhất 1 dòng mặt hàng.');
+        }
+    }
+
+    function onPartChange(sel) {
+        const row = sel.closest('tr');
+        const opt = sel.options[sel.selectedIndex];
+        if (!opt || !opt.value) {
+            row.querySelector('.stock-badge').textContent = '—';
+            row.querySelector('.stock-badge').className = 'stock-badge badge bg-secondary-subtle text-secondary-emphasis';
+            return;
+        }
+
+        const unit = opt.getAttribute('data-unit') || 'Cái';
+        const price = parseFloat(opt.getAttribute('data-price') || 0);
+        const stock = parseFloat(opt.getAttribute('data-stock') || 0);
+        const code = opt.getAttribute('data-code') || '';
+        const name = opt.getAttribute('data-name') || '';
+
+        row.querySelector('.unit-input').value = unit;
+        row.querySelector('.price-input').value = price;
+        row.querySelector('.custom-code').value = code;
+        row.querySelector('.custom-name').value = name;
+
+        const badge = row.querySelector('.stock-badge');
+        badge.textContent = `${stock} ${unit}`;
+        badge.className = stock > 0 ? 'stock-badge badge bg-success-subtle text-success-emphasis' : 'stock-badge badge bg-danger-subtle text-danger-emphasis';
+
+        calcRow(sel);
+    }
+
+    function calcRow(elem) {
+        const row = elem.closest('tr');
+        const qty = parseFloat(row.querySelector('.qty-input').value) || 0;
+        const price = parseFloat(row.querySelector('.price-input').value) || 0;
+        const disc = parseFloat(row.querySelector('.disc-input').value) || 0;
+        const vat = parseFloat(row.querySelector('.vat-input').value) || 0;
+
+        const lineTotal = qty * price;
+        const discAmount = Math.round(lineTotal * (disc / 100));
+        const taxable = lineTotal - discAmount;
+        const vatAmount = Math.round(taxable * (vat / 100));
+        const grand = taxable + vatAmount;
+
+        row.querySelector('.row-amount').textContent = grand.toLocaleString('vi-VN') + ' đ';
+        calcTotals();
+    }
+
+    function calcTotals() {
+        let sub = 0, disc = 0, vat = 0, grand = 0;
+        document.querySelectorAll('.item-row').forEach(row => {
+            const q = parseFloat(row.querySelector('.qty-input').value) || 0;
+            const p = parseFloat(row.querySelector('.price-input').value) || 0;
+            const d = parseFloat(row.querySelector('.disc-input').value) || 0;
+            const v = parseFloat(row.querySelector('.vat-input').value) || 0;
+
+            const lineTotal = q * p;
+            const discAmount = Math.round(lineTotal * (d / 100));
+            const taxable = lineTotal - discAmount;
+            const vatAmount = Math.round(taxable * (v / 100));
+
+            sub += lineTotal;
+            disc += discAmount;
+            vat += vatAmount;
+            grand += (taxable + vatAmount);
+        });
+
+        document.getElementById('totalSubTotal').textContent = sub.toLocaleString('vi-VN') + ' đ';
+        document.getElementById('totalDiscount').textContent = (disc > 0 ? '-' : '') + disc.toLocaleString('vi-VN') + ' đ';
+        document.getElementById('totalVat').textContent = vat.toLocaleString('vi-VN') + ' đ';
+        document.getElementById('totalGrand').textContent = grand.toLocaleString('vi-VN') + ' đ';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        addRow();
+        const custSel = document.getElementById('customerSelect');
+        if (custSel && custSel.value) {
+            onCustomerSelect(custSel);
+        }
+    });
+</script>
+}

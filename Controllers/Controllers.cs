@@ -728,6 +728,170 @@ public class PaymentController(IRoService svc) : Controller
     }
 }
 
+public class QuoteController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(QuoteStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+        var list = await svc.QuotesAsync(status, q, fromDate, toDate);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? customerId, int? carId)
+    {
+        ViewBag.Customers = await svc.CustomersForSelectAsync();
+        ViewBag.Cars = await svc.CarsForSelectAsync();
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.SelectedCustomerId = customerId;
+        ViewBag.SelectedCarId = carId;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int? customerId, string customerName, string? customerPhone, string? customerAddress,
+        int? carId, string? recipientName, PaymentMethod paymentMethod, DateTime? quoteDate, DateTime? validUntil,
+        string? remark, string? note, int[]? partIds, string[]? customCodes, string[]? customNames, string[]? units,
+        decimal[]? quantities, decimal[]? unitPrices, decimal[]? discountPercents, decimal[]? vatPercents, string[]? itemNotes)
+    {
+        if (string.IsNullOrWhiteSpace(customerName))
+        {
+            TempData["Error"] = "Vui lòng nhập tên khách hàng.";
+            ViewBag.Customers = await svc.CustomersForSelectAsync();
+            ViewBag.Cars = await svc.CarsForSelectAsync();
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+
+        if (partIds == null || partIds.Length == 0)
+        {
+            TempData["Error"] = "Vui lòng thêm ít nhất một phụ tùng / dịch vụ vào báo giá.";
+            ViewBag.Customers = await svc.CustomersForSelectAsync();
+            ViewBag.Cars = await svc.CarsForSelectAsync();
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+
+        try
+        {
+            var quote = new Quote
+            {
+                CustomerId = (customerId.HasValue && customerId.Value > 0) ? customerId : null,
+                CustomerName = customerName.Trim(),
+                CustomerPhone = customerPhone?.Trim(),
+                CustomerAddress = customerAddress?.Trim(),
+                CarId = (carId.HasValue && carId.Value > 0) ? carId : null,
+                RecipientName = recipientName?.Trim(),
+                PaymentMethod = paymentMethod,
+                QuoteDate = quoteDate ?? DateTime.Today,
+                ValidUntil = validUntil ?? DateTime.Today.AddDays(15),
+                Remark = remark?.Trim(),
+                Note = note?.Trim(),
+                CreatedBy = "web"
+            };
+
+            var items = new List<QuoteItem>();
+            for (int i = 0; i < partIds.Length; i++)
+            {
+                var pid = partIds[i];
+                var qty = (quantities != null && quantities.Length > i && quantities[i] > 0) ? quantities[i] : 1;
+                var price = (unitPrices != null && unitPrices.Length > i && unitPrices[i] >= 0) ? unitPrices[i] : 0;
+                var disc = (discountPercents != null && discountPercents.Length > i && discountPercents[i] >= 0) ? discountPercents[i] : 0;
+                var vat = (vatPercents != null && vatPercents.Length > i && vatPercents[i] >= 0) ? vatPercents[i] : 8;
+                var n = (itemNotes != null && itemNotes.Length > i) ? itemNotes[i]?.Trim() : null;
+
+                var item = new QuoteItem
+                {
+                    PartId = pid > 0 ? pid : null,
+                    Quantity = qty,
+                    UnitPrice = price,
+                    DiscountPercent = disc,
+                    VatPercent = vat,
+                    Note = n
+                };
+
+                if (pid <= 0)
+                {
+                    item.PartCode = (customCodes != null && customCodes.Length > i) ? customCodes[i]?.Trim() ?? "PRT" : "PRT";
+                    item.PartName = (customNames != null && customNames.Length > i) ? customNames[i]?.Trim() ?? "Phụ tùng / Dịch vụ" : "Phụ tùng / Dịch vụ";
+                    item.Unit = (units != null && units.Length > i) ? units[i]?.Trim() ?? "Cái" : "Cái";
+                }
+
+                items.Add(item);
+            }
+
+            var id = await svc.CreateQuoteAsync(quote, items);
+            TempData["Success"] = $"Đã lập Báo giá {quote.QuoteNo} thành công (Tổng tiền: {quote.Total:N0}đ).";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Customers = await svc.CustomersForSelectAsync();
+            ViewBag.Cars = await svc.CarsForSelectAsync();
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var quote = await svc.GetQuoteAsync(id);
+        if (quote == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextQuote(quote.Status);
+        return View(quote);
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var quote = await svc.GetQuoteAsync(id);
+        if (quote == null) return NotFound();
+        return View(quote);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, QuoteStatus to)
+    {
+        var (ok, msg) = await svc.TransitionQuoteStatusAsync(id, to);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConvertToStockOut(int id)
+    {
+        var (ok, msg, stockOutId) = await svc.ConvertQuoteToStockOutAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok && stockOutId.HasValue)
+        {
+            return RedirectToAction("Detail", "StockOut", new { id = stockOutId.Value });
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConvertToRO(int id, string? technician)
+    {
+        var (ok, msg, roId) = await svc.ConvertQuoteToROAsync(id, technician);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok && roId.HasValue)
+        {
+            return RedirectToAction("Detail", "RO", new { id = roId.Value });
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteQuoteAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

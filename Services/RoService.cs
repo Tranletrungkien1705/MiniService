@@ -11,6 +11,7 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingStockOuts, decimal MonthStockOutValue,
     int PendingCustomerCares, int FeedbackCustomerCares,
     int PendingPayments, decimal MonthPaymentRevenue,
+    int PendingQuotes, decimal MonthQuoteValue,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -76,6 +77,15 @@ public interface IRoService
     Task<(bool ok, string msg)> TransitionPaymentStatusAsync(int id, PaymentStatus to, string? cashier = null, string? note = null);
     Task<(bool ok, string msg)> DeletePaymentAsync(int id);
     Task<List<RepairOrder>> ROsForPaymentAsync();
+    // quotation (Ser_Inv_Quote)
+    Task<List<Quote>> QuotesAsync(QuoteStatus? status, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<Quote?> GetQuoteAsync(int id);
+    Task<int> CreateQuoteAsync(Quote quote, List<QuoteItem> items);
+    Task<(bool ok, string msg)> TransitionQuoteStatusAsync(int id, QuoteStatus to);
+    Task<(bool ok, string msg, int? stockOutId)> ConvertQuoteToStockOutAsync(int id, string? approvedBy = null);
+    Task<(bool ok, string msg, int? roId)> ConvertQuoteToROAsync(int id, string? technician = null);
+    Task<(bool ok, string msg)> DeleteQuoteAsync(int id);
+    Task<List<Customer>> CustomersForSelectAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -137,6 +147,15 @@ public class RoService(AppDbContext db) : IRoService
     {
         PaymentStatus.Draft => [PaymentStatus.Completed, PaymentStatus.Cancelled],
         PaymentStatus.Completed => [PaymentStatus.Cancelled],
+        _ => []
+    };
+
+    /// <summary>Chuyển trạng thái Báo giá theo Ser_Inv_Quote idn.CarService.</summary>
+    public static QuoteStatus[] AllowedNextQuote(QuoteStatus s) => s switch
+    {
+        QuoteStatus.Draft => [QuoteStatus.Sent, QuoteStatus.Confirmed, QuoteStatus.Rejected],
+        QuoteStatus.Sent => [QuoteStatus.Confirmed, QuoteStatus.Rejected],
+        QuoteStatus.Confirmed => [QuoteStatus.Converted, QuoteStatus.Rejected],
         _ => []
     };
 
@@ -362,6 +381,12 @@ public class RoService(AppDbContext db) : IRoService
             .ToListAsync();
         var monthPaymentRevenue = monthPayments.Sum(p => p.PaymentAmount);
 
+        var pendingQuotes = await db.Quotes.CountAsync(q => q.Status == QuoteStatus.Draft || q.Status == QuoteStatus.Sent);
+        var monthQuotes = await db.Quotes.Include(q => q.Items)
+            .Where(q => (q.Status == QuoteStatus.Confirmed || q.Status == QuoteStatus.Converted) && q.QuoteDate >= monthStart)
+            .ToListAsync();
+        var monthQuoteValue = monthQuotes.Sum(q => q.Total);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -382,6 +407,8 @@ public class RoService(AppDbContext db) : IRoService
             feedbackCustomerCares,
             pendingPayments,
             monthPaymentRevenue,
+            pendingQuotes,
+            monthQuoteValue,
             byStatus);
     }
 
@@ -1198,4 +1225,241 @@ public class RoService(AppDbContext db) : IRoService
             .OrderByDescending(r => r.Status == ROStatus.CheckEnd || r.Status == ROStatus.Repaired)
             .ThenByDescending(r => r.CreatedAt)
             .ToListAsync();
+
+    // --- Quotation Management (Ser_Inv_Quote & Ser_Inv_QuotePartItems) ---
+    public Task<List<Customer>> CustomersForSelectAsync() =>
+        db.Customers.Include(c => c.Cars).OrderBy(c => c.Name).ToListAsync();
+
+    public async Task<List<Quote>> QuotesAsync(QuoteStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.Quotes
+            .Include(x => x.Customer)
+            .Include(x => x.Car)
+            .Include(x => x.Items)
+            .Include(x => x.StockOut)
+            .Include(x => x.RO)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+        if (fromDate.HasValue) query = query.Where(x => x.QuoteDate.Date >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(x => x.QuoteDate.Date <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(x => x.QuoteNo.ToLower().Contains(kw)
+                || x.CustomerName.ToLower().Contains(kw)
+                || (x.CustomerPhone != null && x.CustomerPhone.Contains(kw))
+                || (x.RecipientName != null && x.RecipientName.ToLower().Contains(kw))
+                || (x.Car != null && x.Car.Plate.ToLower().Contains(kw))
+                || (x.Note != null && x.Note.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(x => x.QuoteDate).ThenByDescending(x => x.CreatedAt).ToList();
+    }
+
+    public Task<Quote?> GetQuoteAsync(int id) =>
+        db.Quotes
+            .Include(q => q.Customer).ThenInclude(c => c!.Cars)
+            .Include(q => q.Car)
+            .Include(q => q.Items).ThenInclude(i => i.Part)
+            .Include(q => q.StockOut)
+            .Include(q => q.RO)
+            .FirstOrDefaultAsync(q => q.Id == id);
+
+    public async Task<int> CreateQuoteAsync(Quote quote, List<QuoteItem> items)
+    {
+        if (string.IsNullOrWhiteSpace(quote.CustomerName))
+            throw new InvalidOperationException("Vui lòng nhập tên khách hàng.");
+
+        if (items.Count == 0)
+            throw new InvalidOperationException("Vui lòng thêm ít nhất một phụ tùng/hạng mục vào báo giá.");
+
+        if (string.IsNullOrWhiteSpace(quote.QuoteNo))
+        {
+            var countToday = await db.Quotes.CountAsync();
+            quote.QuoteNo = $"BG{DateTime.Today:yyMMdd}-{countToday + 1:D3}";
+        }
+        quote.Status = QuoteStatus.Draft;
+        quote.CreatedAt = DateTime.Now;
+
+        foreach (var item in items)
+        {
+            if (item.PartId.HasValue && item.PartId.Value > 0)
+            {
+                var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == item.PartId.Value);
+                if (part != null)
+                {
+                    item.PartCode = part.Code;
+                    item.PartName = part.Name;
+                    item.Unit = string.IsNullOrWhiteSpace(item.Unit) ? part.Unit : item.Unit;
+                    if (item.UnitPrice <= 0) item.UnitPrice = part.SalePrice;
+                }
+            }
+            quote.Items.Add(item);
+        }
+
+        db.Quotes.Add(quote);
+        await db.SaveChangesAsync();
+        return quote.Id;
+    }
+
+    public async Task<(bool ok, string msg)> TransitionQuoteStatusAsync(int id, QuoteStatus to)
+    {
+        var quote = await db.Quotes.FirstOrDefaultAsync(q => q.Id == id);
+        if (quote == null) return (false, "Không tìm thấy báo giá.");
+
+        if (!AllowedNextQuote(quote.Status).Contains(to))
+            return (false, $"Không thể chuyển từ '{Ui.QuoteStatus(quote.Status).text}' sang '{Ui.QuoteStatus(to).text}'.");
+
+        quote.Status = to;
+        if (to == QuoteStatus.Confirmed)
+        {
+            quote.ConfirmedAt = DateTime.Now;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trạng thái báo giá {quote.QuoteNo} sang: {Ui.QuoteStatus(to).text}.");
+    }
+
+    public async Task<(bool ok, string msg, int? stockOutId)> ConvertQuoteToStockOutAsync(int id, string? approvedBy = null)
+    {
+        var quote = await db.Quotes.Include(q => q.Items).ThenInclude(i => i.Part).FirstOrDefaultAsync(q => q.Id == id);
+        if (quote == null) return (false, "Không tìm thấy báo giá.", null);
+
+        if (quote.Status == QuoteStatus.Converted)
+            return (false, "Báo giá này đã được chuyển đổi trước đó.", quote.StockOutId);
+
+        if (quote.Items.Count == 0)
+            return (false, "Báo giá không có mặt hàng phụ tùng nào.", null);
+
+        // Tạo phiếu xuất kho loại Normal (Bán lẻ theo báo giá)
+        var stockOut = new StockOut
+        {
+            Type = StockOutType.Normal,
+            Status = StockOutStatus.Pending,
+            StockOutDate = DateTime.Today,
+            StockOutNo = $"XK{DateTime.Today:yyMMdd}-{await db.StockOuts.CountAsync() + 1:D3}",
+            CustomerId = quote.CustomerId,
+            CarId = quote.CarId,
+            QuoteId = quote.Id,
+            RecipientName = !string.IsNullOrWhiteSpace(quote.RecipientName) ? quote.RecipientName : quote.CustomerName,
+            Description = $"Xuất kho bán lẻ phụ tùng theo Báo giá số {quote.QuoteNo}.",
+            CreatedBy = quote.CreatedBy,
+            CreatedAt = DateTime.Now
+        };
+
+        foreach (var item in quote.Items)
+        {
+            var partId = item.PartId ?? 0;
+            if (partId == 0)
+            {
+                var p = await db.Parts.FirstOrDefaultAsync(p => p.Code == item.PartCode);
+                if (p != null) partId = p.Id;
+            }
+
+            if (partId > 0)
+            {
+                var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == partId);
+                stockOut.Items.Add(new StockOutDetail
+                {
+                    PartId = partId,
+                    PartCode = item.PartCode,
+                    PartName = item.PartName,
+                    Unit = item.Unit,
+                    Quantity = item.Quantity,
+                    UnitPrice = item.UnitPrice,
+                    VatPercent = item.VatPercent,
+                    Location = part?.Location,
+                    Note = $"Xuất từ Báo giá {quote.QuoteNo}"
+                });
+            }
+        }
+
+        if (stockOut.Items.Count == 0)
+            return (false, "Các phụ tùng trong báo giá chưa được định danh trong danh mục kho.", null);
+
+        db.StockOuts.Add(stockOut);
+        await db.SaveChangesAsync();
+
+        quote.Status = QuoteStatus.Converted;
+        quote.StockOutId = stockOut.Id;
+        await db.SaveChangesAsync();
+
+        return (true, $"Đã chuyển Báo giá {quote.QuoteNo} thành Phiếu xuất kho {stockOut.StockOutNo}.", stockOut.Id);
+    }
+
+    public async Task<(bool ok, string msg, int? roId)> ConvertQuoteToROAsync(int id, string? technician = null)
+    {
+        var quote = await db.Quotes.Include(q => q.Items).Include(q => q.Car).FirstOrDefaultAsync(q => q.Id == id);
+        if (quote == null) return (false, "Không tìm thấy báo giá.", null);
+
+        if (quote.Status == QuoteStatus.Converted)
+            return (false, "Báo giá này đã được chuyển đổi trước đó.", quote.ROId);
+
+        if (!quote.CarId.HasValue || quote.CarId.Value <= 0)
+        {
+            // Kiểm tra xem khách hàng có xe nào không
+            if (quote.CustomerId.HasValue)
+            {
+                var firstCar = await db.Cars.FirstOrDefaultAsync(c => c.CustomerId == quote.CustomerId.Value);
+                if (firstCar != null) quote.CarId = firstCar.Id;
+            }
+        }
+
+        if (!quote.CarId.HasValue || quote.CarId.Value <= 0)
+            return (false, "Báo giá chưa liên kết thông tin xe để lập Lệnh sửa chữa (RO). Vui lòng cập nhật thông tin xe.", null);
+
+        var car = await db.Cars.FirstOrDefaultAsync(c => c.Id == quote.CarId.Value);
+        if (car == null) return (false, "Xe không tồn tại trong hệ thống.", null);
+
+        var ro = new RepairOrder
+        {
+            CarId = car.Id,
+            CustomerId = car.CustomerId,
+            Code = $"RO{DateTime.Now:yyMMdd}-{await db.ROs.CountAsync() + 1:D3}",
+            Status = ROStatus.Created,
+            IntakeNote = $"Lập Lệnh sửa chữa từ Báo giá {quote.QuoteNo}. {(string.IsNullOrWhiteSpace(quote.Note) ? "" : "Ghi chú: " + quote.Note)}",
+            Technician = string.IsNullOrWhiteSpace(technician) ? "Thợ tiếp nhận" : technician.Trim(),
+            CreatedBy = quote.CreatedBy,
+            CreatedAt = DateTime.Now
+        };
+
+        foreach (var item in quote.Items)
+        {
+            ro.Lines.Add(new RepairLine
+            {
+                Type = LineType.Part,
+                ExpenseType = ExpenseType.Customer,
+                PartId = item.PartId,
+                Name = item.PartName,
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice
+            });
+        }
+
+        db.ROs.Add(ro);
+        await db.SaveChangesAsync();
+
+        quote.Status = QuoteStatus.Converted;
+        quote.ROId = ro.Id;
+        await db.SaveChangesAsync();
+
+        return (true, $"Đã chuyển Báo giá {quote.QuoteNo} thành Lệnh sửa chữa {ro.Code}.", ro.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeleteQuoteAsync(int id)
+    {
+        var quote = await db.Quotes.Include(q => q.Items).FirstOrDefaultAsync(q => q.Id == id);
+        if (quote == null) return (false, "Không tìm thấy báo giá.");
+
+        if (quote.Status == QuoteStatus.Converted)
+            return (false, "Không thể xóa báo giá đã chuyển đổi thành Phiếu xuất kho hoặc Lệnh sửa chữa.");
+
+        db.QuoteItems.RemoveRange(quote.Items);
+        db.Quotes.Remove(quote);
+        await db.SaveChangesAsync();
+        return (true, "Đã xóa báo giá thành công.");
+    }
 }

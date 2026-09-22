@@ -1,0 +1,297 @@
+@model Quote
+@{
+    ViewData["Title"] = $"Báo giá {Model.QuoteNo}";
+    var (stText, stCode, stCss) = Ui.QuoteStatus(Model.Status);
+    var (payText, payIcon, payCss) = Ui.PaymentMethod(Model.PaymentMethod);
+    var nextStatuses = (QuoteStatus[])ViewBag.Next;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="fw-bold mb-0">@Model.QuoteNo</h4>
+            <span class="badge bg-@stCss fs-6">@stCode — @stText</span>
+            @if (Model.Status == QuoteStatus.Converted)
+            {
+                <span class="badge bg-success"><i class="bi bi-check2-circle me-1"></i>Đã chốt dịch vụ</span>
+            }
+        </div>
+        <div class="text-muted small">
+            Lập ngày @Model.QuoteDate.ToString("dd/MM/yyyy") bởi <b>@Model.CreatedBy</b>
+            @if (Model.ValidUntil.HasValue)
+            {
+                <span>· Hiệu lực đến <b>@Model.ValidUntil.Value.ToString("dd/MM/yyyy")</b></span>
+            }
+        </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/Quote" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+        <a href="/Quote/Print/@Model.Id" class="btn btn-outline-dark" target="_blank"><i class="bi bi-printer me-1"></i>In báo giá</a>
+
+        @if (Model.Status != QuoteStatus.Converted && Model.Status != QuoteStatus.Rejected)
+        {
+            <div class="dropdown">
+                <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-arrow-repeat me-1"></i>Chuyển trạng thái
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    @foreach (var next in nextStatuses)
+                    {
+                        var (nText, nCode, _) = Ui.QuoteStatus(next);
+                        <li>
+                            <form method="post" action="/Quote/Transition/@Model.Id" class="d-inline">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="to" value="@((int)next)" />
+                                <button type="submit" class="dropdown-item">
+                                    Chuyển sang: <b>[@nCode] @nText</b>
+                                </button>
+                            </form>
+                        </li>
+                    }
+                </ul>
+            </div>
+
+            @if (Model.Status is QuoteStatus.Confirmed or QuoteStatus.Sent or QuoteStatus.Draft)
+            {
+                <form method="post" action="/Quote/ConvertToStockOut/@Model.Id" class="d-inline" onsubmit="return confirm('Chuyển báo giá này thành Phiếu xuất kho phụ tùng?');">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Xuất kho phụ tùng
+                    </button>
+                </form>
+
+                @if (Model.CarId.HasValue || Model.Customer?.Cars.Count > 0)
+                {
+                    <button type="button" class="btn btn-info text-dark" data-bs-toggle="modal" data-bs-target="#convertRoModal">
+                        <i class="bi bi-clipboard2-pulse me-1"></i>Chuyển thành Lệnh sửa chữa (RO)
+                    </button>
+                }
+            }
+        }
+
+        @if (Model.Status != QuoteStatus.Converted)
+        {
+            <form method="post" action="/Quote/Delete/@Model.Id" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa báo giá này?');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+        }
+    </div>
+</div>
+
+@if (Model.StockOut != null || Model.RO != null)
+{
+    <div class="alert alert-info d-flex align-items-center gap-2">
+        <i class="bi bi-link-45deg fs-4"></i>
+        <div>
+            <b>Báo giá đã được chuyển đổi:</b>
+            @if (Model.StockOut != null)
+            {
+                <span class="ms-2">Phiếu xuất kho: <a href="/StockOut/Detail/@Model.StockOut.Id" class="fw-bold text-decoration-none">@Model.StockOut.StockOutNo</a> (Trạng thái: @Ui.StockOutStatus(Model.StockOut.Status).text)</span>
+            }
+            @if (Model.RO != null)
+            {
+                <span class="ms-2">Lệnh sửa chữa (RO): <a href="/RO/Detail/@Model.RO.Id" class="fw-bold text-decoration-none">@Model.RO.Code</a> (Trạng thái: @Ui.Status(Model.RO.Status).text)</span>
+            }
+        </div>
+    </div>
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-white py-2 fw-bold"><i class="bi bi-person me-2 text-primary"></i>Thông tin khách hàng &amp; Người nhận</div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted" style="width:35%">Khách hàng / Doanh nghiệp:</td>
+                        <td class="fw-bold">
+                            @if (Model.Customer != null)
+                            {
+                                <a href="/Customer" class="text-decoration-none">@Model.Customer.Name</a>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis ms-1">@Model.Customer.Code</span>
+                            }
+                            else
+                            {
+                                <span>@Model.CustomerName</span>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Số điện thoại:</td>
+                        <td>@(string.IsNullOrWhiteSpace(Model.CustomerPhone) ? "—" : Model.CustomerPhone)</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Địa chỉ:</td>
+                        <td>@(string.IsNullOrWhiteSpace(Model.CustomerAddress) ? "—" : Model.CustomerAddress)</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Người nhận báo giá:</td>
+                        <td class="fw-semibold">@(string.IsNullOrWhiteSpace(Model.RecipientName) ? Model.CustomerName : Model.RecipientName)</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Hình thức thanh toán:</td>
+                        <td><span class="badge bg-@payCss"><i class="bi @payIcon me-1"></i>@payText</span></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-white py-2 fw-bold"><i class="bi bi-car-front me-2 text-primary"></i>Thông tin xe &amp; Điều khoản báo giá</div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted" style="width:35%">Xe làm dịch vụ:</td>
+                        <td>
+                            @if (Model.Car != null)
+                            {
+                                <span class="badge bg-primary fs-6">@Model.Car.Plate</span>
+                                <span class="ms-1 fw-semibold">@Model.Car.Model (@Model.Car.Year)</span>
+                                @if (!string.IsNullOrWhiteSpace(Model.Car.Vin))
+                                {
+                                    <div class="text-muted small">VIN: @Model.Car.Vin</div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-muted">Khách vãng lai / Bán lẻ phụ tùng</span>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Ngày xác nhận:</td>
+                        <td>@(Model.ConfirmedAt.HasValue ? Model.ConfirmedAt.Value.ToString("dd/MM/yyyy HH:mm") : "Chưa xác nhận")</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Điều khoản (Remark):</td>
+                        <td>@(string.IsNullOrWhiteSpace(Model.Remark) ? "—" : Model.Remark)</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Ghi chú (Note):</td>
+                        <td>@(string.IsNullOrWhiteSpace(Model.Note) ? "—" : Model.Note)</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+        <div>
+            <h6 class="fw-bold mb-0"><i class="bi bi-list-check me-2 text-primary"></i>Chi tiết danh mục phụ tùng &amp; Hạng mục dịch vụ (@Model.ItemCount món)</h6>
+            <span class="text-muted small">Chi tiết đơn giá, chiết khấu và thuế giá trị gia tăng</span>
+        </div>
+        <div class="text-muted small">Đơn vị tiền tệ: <b>VNĐ</b></div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:4%" class="text-center">STT</th>
+                        <th style="width:14%">Mã phụ tùng</th>
+                        <th style="width:26%">Tên phụ tùng / Hạng mục</th>
+                        <th style="width:7%" class="text-center">ĐVT</th>
+                        <th style="width:9%" class="text-center">Tồn kho</th>
+                        <th style="width:8%" class="text-center">Số lượng</th>
+                        <th style="width:11%" class="text-end">Đơn giá</th>
+                        <th style="width:7%" class="text-center">CK (%)</th>
+                        <th style="width:6%" class="text-center">VAT</th>
+                        <th style="width:12%" class="text-end">Thành tiền</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int idx = 1; }
+                    @foreach (var item in Model.Items)
+                    {
+                        <tr>
+                            <td class="text-center">@(idx++)</td>
+                            <td><span class="badge bg-light text-dark border font-monospace">@item.PartCode</span></td>
+                            <td>
+                                <div class="fw-semibold">@item.PartName</div>
+                                @if (!string.IsNullOrWhiteSpace(item.Note))
+                                {
+                                    <div class="text-muted" style="font-size:11px">@item.Note</div>
+                                }
+                            </td>
+                            <td class="text-center">@item.Unit</td>
+                            <td class="text-center">
+                                @if (item.Part != null)
+                                {
+                                    <span class="badge @(item.Part.InStock >= item.Quantity ? "bg-success-subtle text-success-emphasis" : "bg-danger-subtle text-danger-emphasis")">
+                                        @item.Part.InStock @item.Part.Unit
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td class="text-center fw-bold">@item.Quantity.ToString("G29")</td>
+                            <td class="text-end">@item.UnitPrice.ToString("N0")</td>
+                            <td class="text-center">@(item.DiscountPercent > 0 ? $"{item.DiscountPercent}%" : "—")</td>
+                            <td class="text-center">@item.VatPercent%</td>
+                            <td class="text-end fw-bold">@item.Amount.ToString("N0") đ</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot class="table-light">
+                    <tr>
+                        <td colspan="8" class="text-end fw-semibold">Tổng tiền hàng trước chiết khấu:</td>
+                        <td colspan="2" class="text-end fw-bold">@Model.SubTotal.ToString("N0") đ</td>
+                    </tr>
+                    @if (Model.TotalDiscount > 0)
+                    {
+                        <tr>
+                            <td colspan="8" class="text-end fw-semibold text-danger">Tổng chiết khấu giảm giá:</td>
+                            <td colspan="2" class="text-end fw-bold text-danger">-@Model.TotalDiscount.ToString("N0") đ</td>
+                        </tr>
+                    }
+                    <tr>
+                        <td colspan="8" class="text-end fw-semibold text-muted">Tổng thuế giá trị gia tăng (VAT):</td>
+                        <td colspan="2" class="text-end fw-bold text-muted">+@Model.TotalVat.ToString("N0") đ</td>
+                    </tr>
+                    <tr class="table-primary">
+                        <td colspan="8" class="text-end fw-bold fs-6">TỔNG CỘNG THANH TOÁN (ĐÃ BAO GỒM VAT):</td>
+                        <td colspan="2" class="text-end fw-bold fs-5 text-primary">@Model.Total.ToString("N0") đ</td>
+                    </tr>
+                    <tr>
+                        <td colspan="10" class="text-end fst-italic text-muted small py-2">
+                            Số tiền viết bằng chữ: <b>@Ui.MoneyToWords(Model.Total)</b>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Chuyển thành RO -->
+<div class="modal fade" id="convertRoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/Quote/ConvertToRO/@Model.Id">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-clipboard2-pulse me-2 text-primary"></i>Lập Lệnh sửa chữa (RO) từ Báo giá</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-3">Hệ thống sẽ tự động tạo Lệnh sửa chữa mới và chuyển toàn bộ các hạng mục phụ tùng từ báo giá sang RO.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Kỹ thuật viên / Thợ phụ trách tiếp nhận</label>
+                        <input name="technician" class="form-control" value="Thợ tiếp nhận" placeholder="VD: KTV Hùng / KTV Tuấn..." />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Tạo Lệnh sửa chữa</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

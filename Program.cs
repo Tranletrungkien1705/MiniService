@@ -726,6 +726,168 @@ app.MapDelete("/api/payments/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Báo giá phụ tùng & dịch vụ (Ser_Inv_Quote & Ser_Inv_QuotePartItems)
+app.MapGet("/api/quotes", async (QuoteStatus? status, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.QuotesAsync(status, q, fromDate, toDate);
+    return Results.Ok(list.Select(quote => new
+    {
+        quote.Id,
+        quote.QuoteNo,
+        quote.QuoteDate,
+        quote.ValidUntil,
+        customerId = quote.CustomerId,
+        customerName = quote.CustomerName,
+        customerPhone = quote.CustomerPhone,
+        plate = quote.Car?.Plate,
+        model = quote.Car?.Model,
+        quote.RecipientName,
+        paymentMethod = Ui.PaymentMethod(quote.PaymentMethod).text,
+        paymentMethodValue = (int)quote.PaymentMethod,
+        status = Ui.QuoteStatus(quote.Status).text,
+        statusCode = Ui.QuoteStatus(quote.Status).code,
+        statusValue = (int)quote.Status,
+        quote.ItemCount,
+        quote.SubTotal,
+        quote.TotalDiscount,
+        quote.TotalVat,
+        quote.Total,
+        stockOutId = quote.StockOutId,
+        stockOutNo = quote.StockOut?.StockOutNo,
+        roId = quote.ROId,
+        roCode = quote.RO?.Code,
+        quote.CreatedBy,
+        quote.CreatedAt,
+        quote.ConfirmedAt
+    }));
+});
+
+app.MapGet("/api/quotes/{id:int}", async (int id, IRoService svc) =>
+{
+    var quote = await svc.GetQuoteAsync(id);
+    if (quote == null) return Results.NotFound(new { error = "Không tìm thấy báo giá." });
+    return Results.Ok(new
+    {
+        quote.Id,
+        quote.QuoteNo,
+        quote.QuoteDate,
+        quote.ValidUntil,
+        customer = quote.Customer != null ? new { quote.Customer.Id, quote.Customer.Code, quote.Customer.Name, quote.Customer.Phone, quote.Customer.Email } : null,
+        quote.CustomerName,
+        quote.CustomerPhone,
+        quote.CustomerAddress,
+        car = quote.Car != null ? new { quote.Car.Id, quote.Car.Plate, quote.Car.Model, quote.Car.Vin, quote.Car.Year } : null,
+        quote.RecipientName,
+        paymentMethod = Ui.PaymentMethod(quote.PaymentMethod).text,
+        paymentMethodValue = (int)quote.PaymentMethod,
+        status = Ui.QuoteStatus(quote.Status).text,
+        statusCode = Ui.QuoteStatus(quote.Status).code,
+        statusValue = (int)quote.Status,
+        quote.Remark,
+        quote.Note,
+        quote.ItemCount,
+        quote.SubTotal,
+        quote.TotalDiscount,
+        quote.TotalVat,
+        quote.Total,
+        stockOut = quote.StockOut != null ? new { quote.StockOut.Id, quote.StockOut.StockOutNo, quote.StockOut.Status } : null,
+        ro = quote.RO != null ? new { quote.RO.Id, quote.RO.Code, quote.RO.Status } : null,
+        quote.CreatedBy,
+        quote.CreatedAt,
+        quote.ConfirmedAt,
+        items = quote.Items.Select(i => new
+        {
+            i.Id,
+            i.PartId,
+            i.PartCode,
+            i.PartName,
+            i.Unit,
+            i.Quantity,
+            i.UnitPrice,
+            i.DiscountPercent,
+            i.DiscountAmount,
+            i.TaxableAmount,
+            i.VatPercent,
+            i.VatAmount,
+            i.Amount,
+            i.Note,
+            inStock = i.Part?.InStock
+        })
+    });
+});
+
+app.MapPost("/api/quotes", async (CreateQuoteDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.CustomerName))
+            return Results.BadRequest(new { error = "Vui lòng nhập tên khách hàng (CustomerName)." });
+
+        if (dto.Items == null || dto.Items.Count == 0)
+            return Results.BadRequest(new { error = "Cần danh sách phụ tùng báo giá (Items)." });
+
+        var quote = new Quote
+        {
+            CustomerId = (dto.CustomerId.HasValue && dto.CustomerId.Value > 0) ? dto.CustomerId : null,
+            CustomerName = dto.CustomerName.Trim(),
+            CustomerPhone = dto.CustomerPhone?.Trim(),
+            CustomerAddress = dto.CustomerAddress?.Trim(),
+            CarId = (dto.CarId.HasValue && dto.CarId.Value > 0) ? dto.CarId : null,
+            RecipientName = dto.RecipientName?.Trim(),
+            PaymentMethod = dto.PaymentMethod,
+            QuoteDate = dto.QuoteDate ?? DateTime.Today,
+            ValidUntil = dto.ValidUntil ?? DateTime.Today.AddDays(15),
+            Remark = dto.Remark?.Trim(),
+            Note = dto.Note?.Trim(),
+            CreatedBy = "api"
+        };
+
+        var items = dto.Items.Select(i => new QuoteItem
+        {
+            PartId = (i.PartId.HasValue && i.PartId.Value > 0) ? i.PartId : null,
+            PartCode = i.PartCode ?? "PRT",
+            PartName = i.PartName ?? "Phụ tùng",
+            Unit = i.Unit ?? "Cái",
+            Quantity = i.Quantity <= 0 ? 1 : i.Quantity,
+            UnitPrice = i.UnitPrice ?? 0,
+            DiscountPercent = i.DiscountPercent ?? 0,
+            VatPercent = i.VatPercent ?? 8,
+            Note = i.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateQuoteAsync(quote, items);
+        return Results.Ok(new { quoteId = id, quoteNo = quote.QuoteNo, total = quote.Total, message = "Đã lập Báo giá thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/quotes/{id:int}/status", async (int id, TransitionQuoteDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionQuoteStatusAsync(id, dto.ToStatus);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/quotes/{id:int}/convert-stockout", async (int id, IRoService svc) =>
+{
+    var (ok, msg, stockOutId) = await svc.ConvertQuoteToStockOutAsync(id);
+    return ok ? Results.Ok(new { message = msg, stockOutId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/quotes/{id:int}/convert-ro", async (int id, ConvertQuoteRoDto dto, IRoService svc) =>
+{
+    var (ok, msg, roId) = await svc.ConvertQuoteToROAsync(id, dto.Technician);
+    return ok ? Results.Ok(new { message = msg, roId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/quotes/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteQuoteAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -754,3 +916,7 @@ record CreateCustomerCareDto(int RoId, string? InternalNote, string? CreatedBy);
 record SubmitCareSurveyDto(CustomerCareStatus Status, bool HasCarProblem, int? QualityRating, int? StaffRating, bool? WillingToReturn, int? FacilityRating, string? CustomerFeedback, string? InternalNote, string? ContactedBy);
 record CreatePaymentDto(int RoId, DateTime? PaymentDate, PaymentMethod Method, PaymentStatus? Status, string? PayPersonName, string? PayPersonPhone, string? PayPersonIdCard, decimal? DiscountAmount, decimal? PaymentAmount, string? TransactionRef, string? Note, string? Cashier);
 record TransitionPaymentDto(PaymentStatus ToStatus, string? Cashier, string? Note);
+record CreateQuoteDto(int? CustomerId, string CustomerName, string? CustomerPhone, string? CustomerAddress, int? CarId, string? RecipientName, PaymentMethod PaymentMethod, DateTime? QuoteDate, DateTime? ValidUntil, string? Remark, string? Note, List<CreateQuoteItemDto> Items);
+record CreateQuoteItemDto(int? PartId, string? PartCode, string? PartName, string? Unit, decimal Quantity, decimal? UnitPrice, decimal? DiscountPercent, decimal? VatPercent, string? Note);
+record TransitionQuoteDto(QuoteStatus ToStatus);
+record ConvertQuoteRoDto(string? Technician);

@@ -141,6 +141,16 @@ public static class Ui
         _ => (m.ToString(), "bi-cash", "secondary")
     };
 
+    public static (string text, string code, string css) QuoteStatus(QuoteStatus s) => s switch
+    {
+        Models.QuoteStatus.Draft => ("Mới tạo", "CREA", "secondary"),
+        Models.QuoteStatus.Sent => ("Đã gửi KH", "SENT", "info"),
+        Models.QuoteStatus.Confirmed => ("Khách đồng ý", "CONF", "primary"),
+        Models.QuoteStatus.Converted => ("Đã chuyển đổi", "CONV", "success"),
+        Models.QuoteStatus.Rejected => ("Đã hủy", "REJ", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
     public static string MoneyToWords(decimal total)
     {
         if (total <= 0) return "Không đồng";

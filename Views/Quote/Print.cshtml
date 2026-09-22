@@ -1,0 +1,204 @@
+@model Quote
+@{
+    Layout = null;
+    var (stText, stCode, _) = Ui.QuoteStatus(Model.Status);
+    var (payText, _, _) = Ui.PaymentMethod(Model.PaymentMethod);
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Báo giá @Model.QuoteNo — MiniService</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+        body { font-family: "Be Vietnam Pro", sans-serif; font-size: 13px; color: #1e293b; background: #fff; }
+        .print-container { max-width: 860px; margin: 0 auto; padding: 32px 24px; }
+        .quote-header { border-bottom: 2px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }
+        .quote-title { font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #0f172a; }
+        .table-quote th { background: #f1f5f9 !important; font-size: 12px; text-transform: uppercase; font-weight: 700; }
+        .table-quote td, .table-quote th { padding: 7px 10px; border-color: #cbd5e1; }
+        .sign-box { height: 90px; }
+        @@media print {
+            .no-print { display: none !important; }
+            body { padding: 0; background: #fff; }
+            .print-container { max-width: 100%; padding: 0; }
+            @@page { margin: 1.5cm; size: A4; }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-container">
+        <!-- Floating Print Action -->
+        <div class="no-print d-flex justify-content-between align-items-center bg-light p-3 rounded mb-4 border">
+            <div>
+                <a href="/Quote/Detail/@Model.Id" class="btn btn-sm btn-outline-secondary me-2"><i class="bi bi-arrow-left me-1"></i>Quay lại chi tiết</a>
+                <span class="text-muted small">Xem trước bản in Báo giá chuẩn đại lý ô tô Hyundai.</span>
+            </div>
+            <button onclick="window.print()" class="btn btn-sm btn-primary px-4"><i class="bi bi-printer me-1"></i>In ngay (Ctrl + P)</button>
+        </div>
+
+        <!-- Dealership Header -->
+        <div class="quote-header">
+            <div class="row align-items-center">
+                <div class="col-8">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <i class="bi bi-tools fs-3 text-primary"></i>
+                        <span class="fs-5 fw-bold text-uppercase">TRUNG TÂM DỊCH VỤ Ô TÔ — HYUNDAI SERVICE</span>
+                    </div>
+                    <div class="text-muted small">Địa chỉ: Km 10, Quốc lộ 1A, TP. Hà Nội · Hotline DV: 1900 8888</div>
+                    <div class="text-muted small">Website: https://hyundai-service.vn · MST: 0101234567</div>
+                </div>
+                <div class="col-4 text-end">
+                    <div class="fw-bold fs-5 text-primary">@Model.QuoteNo</div>
+                    <div class="small text-muted">Ngày: @Model.QuoteDate.ToString("dd/MM/yyyy")</div>
+                    @if (Model.ValidUntil.HasValue)
+                    {
+                        <div class="small text-danger">Hiệu lực: @Model.ValidUntil.Value.ToString("dd/MM/yyyy")</div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Document Title -->
+        <div class="text-center mb-4">
+            <h4 class="quote-title mb-1">BẢNG BÁO GIÁ DỊCH VỤ &amp; PHỤ TÙNG CHÍNH HÃNG</h4>
+            <div class="text-muted small fst-italic">Kính gửi: Quý khách hàng / Cơ quan, Doanh nghiệp</div>
+        </div>
+
+        <!-- Customer & Vehicle Info -->
+        <div class="row g-3 mb-4 p-3 bg-light rounded border">
+            <div class="col-6">
+                <div><b>Khách hàng:</b> @Model.CustomerName</div>
+                <div><b>Điện thoại:</b> @(string.IsNullOrWhiteSpace(Model.CustomerPhone) ? "—" : Model.CustomerPhone)</div>
+                <div><b>Địa chỉ:</b> @(string.IsNullOrWhiteSpace(Model.CustomerAddress) ? "—" : Model.CustomerAddress)</div>
+                <div><b>Người nhận báo giá:</b> @(string.IsNullOrWhiteSpace(Model.RecipientName) ? Model.CustomerName : Model.RecipientName)</div>
+            </div>
+            <div class="col-6">
+                <div>
+                    <b>Xe làm dịch vụ:</b>
+                    @if (Model.Car != null)
+                    {
+                        <span class="fw-bold text-primary">@Model.Car.Plate</span>
+                        <span>(@Model.Car.Model - @Model.Car.Year)</span>
+                    }
+                    else
+                    {
+                        <span class="text-muted">Khách vãng lai / Mua phụ tùng ngoài</span>
+                    }
+                </div>
+                @if (Model.Car != null && !string.IsNullOrWhiteSpace(Model.Car.Vin))
+                {
+                    <div><b>Số khung (VIN):</b> @Model.Car.Vin</div>
+                }
+                <div><b>Phương thức thanh toán:</b> @payText</div>
+                <div><b>Cố vấn dịch vụ lập:</b> @Model.CreatedBy</div>
+            </div>
+        </div>
+
+        <!-- Parts & Service Items Table -->
+        <div class="table-responsive mb-4">
+            <table class="table table-bordered table-quote align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:5%" class="text-center">STT</th>
+                        <th style="width:16%">Mã phụ tùng</th>
+                        <th style="width:31%">Tên phụ tùng / Hạng mục dịch vụ</th>
+                        <th style="width:7%" class="text-center">ĐVT</th>
+                        <th style="width:8%" class="text-center">Số lượng</th>
+                        <th style="width:12%" class="text-end">Đơn giá (VNĐ)</th>
+                        <th style="width:7%" class="text-center">CK (%)</th>
+                        <th style="width:14%" class="text-end">Thành tiền (có VAT)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int stt = 1; }
+                    @foreach (var item in Model.Items)
+                    {
+                        <tr>
+                            <td class="text-center">@(stt++)</td>
+                            <td class="font-monospace">@item.PartCode</td>
+                            <td>
+                                <div class="fw-semibold">@item.PartName</div>
+                                @if (!string.IsNullOrWhiteSpace(item.Note))
+                                {
+                                    <div class="text-muted small" style="font-size:11px">@item.Note</div>
+                                }
+                            </td>
+                            <td class="text-center">@item.Unit</td>
+                            <td class="text-center fw-bold">@item.Quantity.ToString("G29")</td>
+                            <td class="text-end">@item.UnitPrice.ToString("N0")</td>
+                            <td class="text-center">@(item.DiscountPercent > 0 ? $"{item.DiscountPercent}%" : "0")</td>
+                            <td class="text-end fw-bold">@item.Amount.ToString("N0")</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="6" class="text-end fw-semibold">Tổng tiền hàng trước chiết khấu:</td>
+                        <td colspan="2" class="text-end fw-bold">@Model.SubTotal.ToString("N0") đ</td>
+                    </tr>
+                    @if (Model.TotalDiscount > 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="text-end fw-semibold text-danger">Tổng chiết khấu giảm giá:</td>
+                            <td colspan="2" class="text-end fw-bold text-danger">-@Model.TotalDiscount.ToString("N0") đ</td>
+                        </tr>
+                    }
+                    <tr>
+                        <td colspan="6" class="text-end fw-semibold text-muted">Tổng thuế giá trị gia tăng (VAT):</td>
+                        <td colspan="2" class="text-end fw-bold text-muted">+@Model.TotalVat.ToString("N0") đ</td>
+                    </tr>
+                    <tr class="table-light">
+                        <td colspan="6" class="text-end fw-bold text-uppercase fs-6">TỔNG CỘNG THANH TOÁN:</td>
+                        <td colspan="2" class="text-end fw-bold fs-6 text-primary">@Model.Total.ToString("N0") đ</td>
+                    </tr>
+                    <tr>
+                        <td colspan="8" class="text-end fst-italic py-2">
+                            Số tiền viết bằng chữ: <b>@Ui.MoneyToWords(Model.Total)</b>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <!-- Terms & Notes -->
+        <div class="mb-4 p-3 bg-light rounded border small">
+            <div class="fw-bold mb-1"><i class="bi bi-shield-check me-1 text-primary"></i>Điều khoản bảo hành &amp; Cam kết dịch vụ:</div>
+            <ul class="mb-0 ps-3">
+                <li>Báo giá có giá trị đến hết ngày <b>@(Model.ValidUntil.HasValue ? Model.ValidUntil.Value.ToString("dd/MM/yyyy") : DateTime.Today.AddDays(15).ToString("dd/MM/yyyy"))</b>. Sau thời hạn trên, giá có thể thay đổi theo chính sách hãng.</li>
+                <li>Phụ tùng chính hãng được bảo hành 12 tháng hoặc 20.000 km tùy điều kiện nào đến trước.</li>
+                <li>Thời gian giao hàng / hoàn thiện sửa chữa: Dự kiến trong ngày sau khi khách hàng xác nhận duyệt báo giá.</li>
+                @if (!string.IsNullOrWhiteSpace(Model.Remark))
+                {
+                    <li><b>Ghi chú điều khoản:</b> @Model.Remark</li>
+                }
+            </ul>
+        </div>
+
+        <!-- Signatures -->
+        <div class="row text-center mt-4 pt-2">
+            <div class="col-4">
+                <div class="fw-bold">KHÁCH HÀNG XÁC NHẬN</div>
+                <div class="text-muted small fst-italic">(Ký &amp; ghi rõ họ tên)</div>
+                <div class="sign-box"></div>
+                <div class="fw-semibold">@Model.CustomerName</div>
+            </div>
+            <div class="col-4">
+                <div class="fw-bold">CỐ VẤN DỊCH VỤ</div>
+                <div class="text-muted small fst-italic">(Ký &amp; ghi rõ họ tên)</div>
+                <div class="sign-box"></div>
+                <div class="fw-semibold">@Model.CreatedBy</div>
+            </div>
+            <div class="col-4">
+                <div class="fw-bold">GIÁM ĐỐC DỊCH VỤ / ĐẠI LÝ</div>
+                <div class="text-muted small fst-italic">(Ký tên &amp; đóng dấu)</div>
+                <div class="sign-box"></div>
+                <div class="fw-semibold">Ban Giám Đốc</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
