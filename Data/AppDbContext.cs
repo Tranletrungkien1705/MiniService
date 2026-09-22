@@ -17,6 +17,8 @@ public class AppDbContext : DbContext
     public DbSet<WarrantyReport> WarrantyReports => Set<WarrantyReport>();
     public DbSet<WarrantyReportItem> WarrantyReportItems => Set<WarrantyReportItem>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
+    public DbSet<StockIn> StockIns => Set<StockIn>();
+    public DbSet<StockInDetail> StockInDetails => Set<StockInDetail>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -85,6 +87,22 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.RO).WithMany().HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StockIn>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.StockInNo }).IsUnique();
+            e.Ignore(x => x.SubTotal); e.Ignore(x => x.TotalVat); e.Ignore(x => x.Total); e.Ignore(x => x.ItemCount);
+            e.HasMany(x => x.Items).WithOne(x => x.StockIn).HasForeignKey(x => x.StockInId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StockInDetail>(e =>
+        {
+            e.Ignore(x => x.SubTotal); e.Ignore(x => x.VatAmount); e.Ignore(x => x.Amount);
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.Property(x => x.VatPercent).HasPrecision(5, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

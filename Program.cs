@@ -258,6 +258,125 @@ app.MapPost("/api/appointments/{id:int}/checkin", async (int id, CheckInAppointm
     return ok ? Results.Ok(new { message = msg, roId }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Nhập kho phụ tùng (Ser_Inv_StockIn & Ser_Inv_StockInDetail)
+app.MapGet("/api/stockin", async (StockInStatus? status, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.StockInsAsync(status, q, fromDate, toDate);
+    return Results.Ok(list.Select(s => new
+    {
+        s.Id,
+        s.StockInNo,
+        s.StockInDate,
+        s.SupplierName,
+        s.BillNo,
+        type = Ui.StockInType(s.Type),
+        typeValue = (int)s.Type,
+        status = Ui.StockInStatus(s.Status).text,
+        statusCode = Ui.StockInStatus(s.Status).code,
+        statusValue = (int)s.Status,
+        s.Description,
+        s.CreatedBy,
+        s.ApprovedBy,
+        s.CreatedAt,
+        s.FinishedAt,
+        s.ItemCount,
+        s.SubTotal,
+        s.TotalVat,
+        s.Total
+    }));
+});
+
+app.MapGet("/api/stockin/{id:int}", async (int id, IRoService svc) =>
+{
+    var s = await svc.GetStockInAsync(id);
+    if (s == null) return Results.NotFound(new { error = "Không tìm thấy phiếu nhập kho." });
+    return Results.Ok(new
+    {
+        s.Id,
+        s.StockInNo,
+        s.StockInDate,
+        s.SupplierName,
+        s.BillNo,
+        type = Ui.StockInType(s.Type),
+        typeValue = (int)s.Type,
+        status = Ui.StockInStatus(s.Status).text,
+        statusCode = Ui.StockInStatus(s.Status).code,
+        statusValue = (int)s.Status,
+        s.Description,
+        s.CreatedBy,
+        s.ApprovedBy,
+        s.CreatedAt,
+        s.FinishedAt,
+        s.SubTotal,
+        s.TotalVat,
+        s.Total,
+        items = s.Items.Select(i => new
+        {
+            i.Id,
+            i.PartId,
+            i.PartCode,
+            i.PartName,
+            i.Unit,
+            i.Quantity,
+            i.UnitPrice,
+            i.VatPercent,
+            i.SubTotal,
+            i.VatAmount,
+            i.Amount,
+            i.Location,
+            i.Note,
+            currentInStock = i.Part?.InStock
+        })
+    });
+});
+
+app.MapPost("/api/stockin", async (CreateStockInDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.Items == null || dto.Items.Count == 0)
+            return Results.BadRequest(new { error = "Cần danh sách phụ tùng nhập kho (Items)." });
+
+        var stockIn = new StockIn
+        {
+            SupplierName = dto.SupplierName?.Trim() ?? "",
+            BillNo = dto.BillNo?.Trim(),
+            StockInDate = dto.StockInDate ?? DateTime.Today,
+            Type = dto.Type,
+            Description = dto.Description?.Trim(),
+            CreatedBy = "api"
+        };
+
+        var details = dto.Items.Select(i => new StockInDetail
+        {
+            PartId = i.PartId,
+            Quantity = i.Quantity <= 0 ? 1 : i.Quantity,
+            UnitPrice = i.UnitPrice ?? 0,
+            VatPercent = i.VatPercent ?? 8,
+            Note = i.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateStockInAsync(stockIn, details);
+        return Results.Ok(new { stockInId = id, stockInNo = stockIn.StockInNo, message = "Đã lập phiếu nhập kho thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/stockin/{id:int}/transition", async (int id, TransitionStockInDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionStockInStatusAsync(id, dto.ToStatus, dto.ApprovedBy, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/stockin/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteStockInAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -276,3 +395,6 @@ record TransitionWarrantyDto(WarrantyStatus ToStatus, decimal? ApprovedAmount, s
 record CreateAppointmentDto(int CarId, DateTime AppointmentDate, AppointmentServiceType ServiceType, string? Advisor, string? Cavity, string? CustomerRequest, string? Note, string? Source);
 record TransitionAppointmentDto(AppointmentStatus ToStatus, string? Reason);
 record CheckInAppointmentDto(int Odometer, string? Technician);
+record CreateStockInDto(string SupplierName, string? BillNo, DateTime? StockInDate, StockInType Type, string? Description, List<CreateStockInItemDto> Items);
+record CreateStockInItemDto(int PartId, decimal Quantity, decimal? UnitPrice, decimal? VatPercent, string? Note);
+record TransitionStockInDto(StockInStatus ToStatus, string? ApprovedBy, string? Note);

@@ -1,0 +1,302 @@
+@model StockIn
+@{
+    ViewData["Title"] = $"Phiếu nhập kho {Model.StockInNo}";
+    var (stText, stCode, stCss) = Ui.StockInStatus(Model.Status);
+    var typeText = Ui.StockInType(Model.Type);
+    var next = (StockInStatus[])ViewBag.Next;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="mb-0 fw-bold text-primary"><i class="bi bi-box-arrow-in-down me-2"></i>@Model.StockInNo</h4>
+            <span class="badge bg-@stCss fs-6">@stCode — @stText</span>
+            <span class="badge bg-light text-dark border">@typeText</span>
+        </div>
+        <div class="text-muted small mt-1">
+            Ngày nhập: <b>@Model.StockInDate.ToString("dd/MM/yyyy")</b> · Lập bởi: <b>@Model.CreatedBy</b> (@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm"))
+            @if (Model.FinishedAt.HasValue)
+            {
+                <span> · Duyệt lúc: <b>@Model.FinishedAt.Value.ToString("dd/MM/yyyy HH:mm")</b> (@(Model.ApprovedBy ?? "Thủ kho"))</span>
+            }
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/StockIn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Sổ phiếu nhập</a>
+        <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()"><i class="bi bi-printer me-1"></i>In phiếu</button>
+    </div>
+</div>
+
+@if (Model.Status == StockInStatus.Finished)
+{
+    <div class="alert alert-success d-flex align-items-center mb-3">
+        <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+        <div>
+            <b>Phiếu nhập kho đã hoàn tất!</b> Toàn bộ <b>@Model.ItemCount</b> mặt hàng phụ tùng đã được cộng dồn vào tồn kho thực tế và cập nhật giá vốn nhập mới nhất vào hệ thống.
+        </div>
+    </div>
+}
+else if (Model.Status == StockInStatus.Pending)
+{
+    <div class="alert alert-warning d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-clock-history fs-4 me-3"></i>
+            <div>
+                <b>Phiếu nhập đang chờ duyệt kho (Pending).</b> Tồn kho chưa thay đổi. Vui lòng kiểm đếm phụ tùng thực tế trước khi bấm "Duyệt nhập kho".
+            </div>
+        </div>
+        <div class="d-flex gap-2">
+            <form method="post" action="/StockIn/Transition/@Model.Id">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="to" value="@((int)StockInStatus.Executing)" />
+                <button type="submit" class="btn btn-sm btn-outline-info">Bắt đầu kiểm hàng</button>
+            </form>
+            <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#approveModal">
+                <i class="bi bi-check-lg me-1"></i>Duyệt nhập kho ngay
+            </button>
+        </div>
+    </div>
+}
+else if (Model.Status == StockInStatus.Executing)
+{
+    <div class="alert alert-info d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-gear-wide-connected fs-4 me-3"></i>
+            <div>
+                <b>Đang tiến hành kiểm đếm phụ tùng (Executing).</b> Kiểm tra quy cách, nhãn mác HTC/Mobis và số lượng thực nhập.
+            </div>
+        </div>
+        <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#approveModal">
+            <i class="bi bi-check-lg me-1"></i>Hoàn tất &amp; Nhập kho
+        </button>
+    </div>
+}
+else if (Model.Status == StockInStatus.Rejected)
+{
+    <div class="alert alert-danger d-flex align-items-center mb-3">
+        <i class="bi bi-x-circle-fill fs-4 me-3"></i>
+        <div>
+            <b>Phiếu nhập kho đã bị hủy.</b> Hàng hóa không được nhập vào kho.
+        </div>
+    </div>
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-building me-1 text-primary"></i>Thông tin nhà cung cấp &amp; Chứng từ</h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="text-muted small">Nhà cung cấp:</div>
+                        <div class="fw-bold fs-6 text-dark">@Model.SupplierName</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-muted small">Số hóa đơn / Phiếu giao:</div>
+                        <div class="fw-semibold">@(Model.BillNo ?? "—")</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-muted small">Hình thức nhập kho:</div>
+                        <div><span class="badge bg-light text-dark border">@typeText</span></div>
+                    </div>
+                    <div class="col-12">
+                        <div class="text-muted small">Diễn giải / Ghi chú:</div>
+                        <div class="text-secondary fst-italic">@(string.IsNullOrWhiteSpace(Model.Description) ? "Không có ghi chú." : Model.Description)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-box-seam me-1 text-primary"></i>Danh sách phụ tùng nhập kho (@Model.ItemCount mặt hàng)</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:5%">#</th>
+                                <th>Mã phụ tùng</th>
+                                <th>Tên phụ tùng</th>
+                                <th>ĐVT</th>
+                                <th class="text-center">Số lượng</th>
+                                <th class="text-end">Đơn giá nhập</th>
+                                <th class="text-center">VAT</th>
+                                <th class="text-end pe-3">Thành tiền</th>
+                                <th class="text-center">Tồn kho hiện tại</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        @{ int idx = 1; }
+                        @foreach (var it in Model.Items)
+                        {
+                            <tr>
+                                <td class="text-muted">@(idx++)</td>
+                                <td class="fw-semibold text-primary font-monospace">@it.PartCode</td>
+                                <td>
+                                    <div class="fw-semibold">@it.PartName</div>
+                                    @if (!string.IsNullOrEmpty(it.Note))
+                                    {
+                                        <div class="text-muted small">@it.Note</div>
+                                    }
+                                </td>
+                                <td>@it.Unit</td>
+                                <td class="text-center fw-bold">@it.Quantity.ToString("N0")</td>
+                                <td class="text-end">@it.UnitPrice.ToString("N0") đ</td>
+                                <td class="text-center"><span class="badge bg-light text-dark border">@it.VatPercent%</span></td>
+                                <td class="text-end fw-semibold text-primary pe-3">@it.Amount.ToString("N0") đ</td>
+                                <td class="text-center">
+                                    @if (it.Part != null)
+                                    {
+                                        <span class="badge @(it.Part.IsLowStock ? "bg-warning text-dark" : "bg-light text-secondary border")">
+                                            @it.Part.InStock.ToString("N0") @it.Part.Unit
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-cash-stack me-1 text-primary"></i>Tổng kết giá trị nhập kho</h6>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Tiền hàng trước thuế:</span>
+                    <span class="fw-semibold">@Model.SubTotal.ToString("N0") đ</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted">Tiền thuế VAT:</span>
+                    <span class="fw-semibold">@Model.TotalVat.ToString("N0") đ</span>
+                </div>
+                <hr />
+                <div class="d-flex justify-content-between align-items-center mb-0">
+                    <span class="fs-6 fw-bold">Tổng thanh toán:</span>
+                    <span class="fs-5 fw-bold" style="color:#0f766e">@Model.Total.ToString("N0") đ</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-white py-2">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-sliders me-1 text-primary"></i>Xử lý nghiệp vụ</h6>
+            </div>
+            <div class="card-body">
+                @if (next.Length > 0)
+                {
+                    <div class="d-grid gap-2 mb-3">
+                        @if (next.Contains(StockInStatus.Finished))
+                        {
+                            <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#approveModal">
+                                <i class="bi bi-check2-circle me-1"></i>Duyệt nhập kho (FNS)
+                            </button>
+                        }
+                        @if (next.Contains(StockInStatus.Executing))
+                        {
+                            <form method="post" action="/StockIn/Transition/@Model.Id">
+                                @Html.AntiForgeryToken()
+                                <input type="hidden" name="to" value="@((int)StockInStatus.Executing)" />
+                                <button type="submit" class="btn btn-outline-info w-100">
+                                    <i class="bi bi-arrow-repeat me-1"></i>Bắt đầu kiểm hàng (EXEC)
+                                </button>
+                            </form>
+                        }
+                        @if (next.Contains(StockInStatus.Rejected))
+                        {
+                            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#rejectModal">
+                                <i class="bi bi-x-circle me-1"></i>Hủy phiếu nhập (REJ)
+                            </button>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted small text-center py-2 mb-3">
+                        <i class="bi bi-lock me-1"></i>Phiếu đã kết thúc quy trình, không thể chuyển tiếp trạng thái.
+                    </div>
+                }
+
+                @if (Model.Status is StockInStatus.Pending or StockInStatus.Rejected)
+                {
+                    <form method="post" action="/StockIn/Delete/@Model.Id" onsubmit="return confirm('Bạn chắc chắn muốn xóa phiếu nhập kho này?');">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-outline-secondary btn-sm w-100 text-danger border-danger">
+                            <i class="bi bi-trash me-1"></i>Xóa phiếu nhập
+                        </button>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Duyet Nhap Kho -->
+<div class="modal fade" id="approveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/StockIn/Transition/@Model.Id">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="to" value="@((int)StockInStatus.Finished)" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-success"><i class="bi bi-check-circle me-2"></i>Xác nhận Duyệt nhập kho</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">Bạn đang duyệt phiếu nhập kho <b>@Model.StockInNo</b> với tổng giá trị <b>@Model.Total.ToString("N0") đ</b>.</p>
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="bi bi-info-circle me-1"></i>Hệ thống sẽ tự động cập nhật số lượng tồn kho (InStock) cho <b>@Model.ItemCount</b> phụ tùng và cập nhật giá vốn nhập mới nhất.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ghi chú xác nhận nhập kho:</label>
+                        <input name="note" class="form-control" placeholder="Đã kiểm đếm đủ phụ tùng theo hóa đơn..." />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-success px-3">Xác nhận Nhập kho</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Huy Phieu -->
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/StockIn/Transition/@Model.Id">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="to" value="@((int)StockInStatus.Rejected)" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-danger"><i class="bi bi-x-circle me-2"></i>Hủy phiếu nhập kho</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3">Bạn chắc chắn muốn hủy phiếu nhập <b>@Model.StockInNo</b>?</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do hủy phiếu <span class="text-danger">*</span>:</label>
+                        <input name="note" class="form-control" placeholder="Hàng giao sai quy cách / NCC hủy giao..." required />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-danger px-3">Xác nhận Hủy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

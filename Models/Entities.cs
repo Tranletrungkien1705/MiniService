@@ -68,6 +68,23 @@ public enum AppointmentServiceType
     Care = 4            // Chăm sóc & Làm đẹp xe
 }
 
+/// <summary>Trạng thái Phiếu Nhập kho — theo Ser_Inv_StockIn idn.CarService.</summary>
+public enum StockInStatus
+{
+    Pending = 0,     // 1: Pending   — Mới tạo / Chờ kiểm tra & duyệt
+    Executing = 1,   // 2: Executing — Đang kiểm hàng / Tiến hành nhập
+    Finished = 2,    // 3: Finished  — Hoàn tất / Đã nhập kho (tăng tồn kho & giá vốn)
+    Rejected = 3     // 5: Reject    — Đã hủy phiếu nhập
+}
+
+/// <summary>Hình thức nhập kho phụ tùng — theo Ser_Inv_StockInType idn.CarService.</summary>
+public enum StockInType
+{
+    Normal = 0,      // 1: Nomarl      — Nhập mua hàng (Chính hãng HTC / Nhà cung cấp ngoài)
+    Adjustment = 1,  // 2: StockInAdj  — Nhập điều chỉnh sau kiểm kê kho
+    Return = 2       // 3: Return      — Nhập thu hồi / hoàn trả từ xưởng dịch vụ
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -243,4 +260,53 @@ public class Appointment : IOrgOwned
     public Car Car { get; set; } = null!;
     public Customer Customer { get; set; } = null!;
     public RepairOrder? RO { get; set; }
+}
+
+/// <summary>Phiếu Nhập kho phụ tùng — Ser_Inv_StockIn trong idn.CarService.</summary>
+public class StockIn : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string StockInNo { get; set; } = "";             // Số phiếu nhập (VD: NK260427-001)
+    public DateTime StockInDate { get; set; } = DateTime.Today; // Ngày nhập kho
+    public string SupplierName { get; set; } = "";          // Tên nhà cung cấp (SupplierName)
+    public string? BillNo { get; set; }                     // Số hóa đơn / Số chứng từ giao hàng (BillNo)
+    public StockInType Type { get; set; } = StockInType.Normal; // Loại phiếu nhập (StockInType)
+    public StockInStatus Status { get; set; } = StockInStatus.Pending; // Trạng thái phiếu nhập
+    public string? Description { get; set; }                // Diễn giải / Ghi chú (Description)
+    public string CreatedBy { get; set; } = "web";          // Người tạo phiếu
+    public DateTime CreatedAt { get; set; } = DateTime.Now; // Ngày tạo
+    public DateTime? FinishedAt { get; set; }               // Ngày duyệt nhập kho
+    public string? ApprovedBy { get; set; }                 // Người duyệt nhập kho
+
+    public List<StockInDetail> Items { get; set; } = [];
+
+    public decimal SubTotal => Items.Sum(i => i.Quantity * i.UnitPrice);
+    public decimal TotalVat => Items.Sum(i => i.VatAmount);
+    public decimal Total => Items.Sum(i => i.Amount);
+    public int ItemCount => Items.Count;
+}
+
+/// <summary>Chi tiết phụ tùng nhập kho — Ser_Inv_StockInDetail trong idn.CarService.</summary>
+public class StockInDetail : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int StockInId { get; set; }
+    public int PartId { get; set; }                         // ID phụ tùng trong danh mục
+    public string PartCode { get; set; } = "";              // Mã phụ tùng (PartCode)
+    public string PartName { get; set; } = "";              // Tên phụ tùng (VieName)
+    public string Unit { get; set; } = "Cái";               // Đơn vị tính (Unit)
+    public decimal Quantity { get; set; } = 1;              // Số lượng nhập (Quantity)
+    public decimal UnitPrice { get; set; }                  // Đơn giá nhập trước thuế (Price)
+    public decimal VatPercent { get; set; } = 8;            // Thuế suất VAT % (VAT)
+    public string? Location { get; set; }                   // Vị trí lưu kho thực tế (ActualLocation)
+    public string? Note { get; set; }                       // Ghi chú dòng (Description)
+
+    public StockIn StockIn { get; set; } = null!;
+    public Part Part { get; set; } = null!;
+
+    public decimal SubTotal => Quantity * UnitPrice;
+    public decimal VatAmount => Math.Round(SubTotal * (VatPercent / 100m), 2);
+    public decimal Amount => SubTotal + VatAmount;
 }

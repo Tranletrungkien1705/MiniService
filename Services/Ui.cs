@@ -61,4 +61,21 @@ public static class Ui
         AppointmentServiceType.Care => "Chăm sóc làm đẹp",
         _ => t.ToString()
     };
+
+    public static (string text, string code, string css) StockInStatus(StockInStatus s) => s switch
+    {
+        Models.StockInStatus.Pending => ("Chờ duyệt kho", "PEND", "warning"),
+        Models.StockInStatus.Executing => ("Đang kiểm hàng", "EXEC", "info"),
+        Models.StockInStatus.Finished => ("Đã nhập kho", "FNS", "success"),
+        Models.StockInStatus.Rejected => ("Đã hủy", "REJ", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static string StockInType(StockInType t) => t switch
+    {
+        Models.StockInType.Normal => "Nhập mua hàng",
+        Models.StockInType.Adjustment => "Nhập điều chỉnh",
+        Models.StockInType.Return => "Nhập hoàn trả",
+        _ => t.ToString()
+    };
 }

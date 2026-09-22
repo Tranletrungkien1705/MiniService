@@ -1,0 +1,133 @@
+@model List<StockIn>
+@{
+    ViewData["Title"] = "Quản lý Nhập kho phụ tùng (Stock In)";
+    var curStatus = (StockInStatus?)ViewBag.Status;
+    var totalCount = Model.Count;
+    var pendingCount = Model.Count(s => s.Status is StockInStatus.Pending or StockInStatus.Executing);
+    var finishedCount = Model.Count(s => s.Status == StockInStatus.Finished);
+    var totalImportValue = Model.Where(s => s.Status == StockInStatus.Finished).Sum(s => s.Total);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số phiếu nhập</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ duyệt / Đang kiểm hàng</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã nhập kho thành công</div>
+            <div class="stat-num text-success">@finishedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng giá trị đã nhập</div>
+            <div class="stat-num" style="color:#0f766e;font-size:20px">@totalImportValue.ToString("N0") <span class="fs-6 fw-normal text-muted">đ</span></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã phiếu / Nhà cung cấp / Hóa đơn..." style="max-width:240px" />
+                <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" title="Từ ngày" style="max-width:145px" />
+                <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" title="Đến ngày" style="max-width:145px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (StockInStatus s in Enum.GetValues(typeof(StockInStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.StockInStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curStatus.HasValue || !string.IsNullOrEmpty(ViewBag.Q) || !string.IsNullOrEmpty(ViewBag.FromDate) || !string.IsNullOrEmpty(ViewBag.ToDate))
+                {
+                    <a href="/StockIn" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/Part" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Kho phụ tùng</a>
+                <a href="/StockIn/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập phiếu nhập kho</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã phiếu nhập</th>
+                        <th>Ngày nhập</th>
+                        <th>Nhà cung cấp</th>
+                        <th>Số hóa đơn</th>
+                        <th>Hình thức</th>
+                        <th>Số lượng mặt hàng</th>
+                        <th>Tổng tiền (VAT)</th>
+                        <th>Trạng thái</th>
+                        <th>Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var s in Model)
+                {
+                    var (txt, code, css) = Ui.StockInStatus(s.Status);
+                    var typeText = Ui.StockInType(s.Type);
+                    <tr style="cursor:pointer" onclick="location.href='/StockIn/Detail/@s.Id'">
+                        <td class="fw-semibold text-primary">
+                            <i class="bi bi-box-arrow-in-down me-1"></i>@s.StockInNo
+                        </td>
+                        <td>
+                            <b>@s.StockInDate.ToString("dd/MM/yyyy")</b>
+                            <div class="text-muted small">Tạo lúc: @s.CreatedAt.ToString("HH:mm")</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@s.SupplierName</div>
+                            @if (!string.IsNullOrEmpty(s.Description))
+                            {
+                                <div class="text-muted small text-truncate" style="max-width:220px">@s.Description</div>
+                            }
+                        </td>
+                        <td>
+                            @(s.BillNo ?? "—")
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">@typeText</span>
+                        </td>
+                        <td>
+                            <b>@s.ItemCount</b> phụ tùng
+                        </td>
+                        <td class="fw-semibold text-end pe-3" style="color:#0f766e">
+                            @s.Total.ToString("N0") đ
+                        </td>
+                        <td>
+                            <span class="badge bg-@css">@code — @txt</span>
+                        </td>
+                        <td onclick="event.stopPropagation()">
+                            <a href="/StockIn/Detail/@s.Id" class="btn btn-sm btn-outline-primary py-0 px-2" title="Xem chi tiết">Chi tiết</a>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox fs-2 d-block mb-1"></i>
+                            Không có phiếu nhập kho nào phù hợp điều kiện lọc.
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

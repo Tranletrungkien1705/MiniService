@@ -7,6 +7,7 @@ namespace MiniService.Services;
 public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMonth, int Cars, int Parts, int LowStockParts,
     int PendingWarranty, decimal ApprovedWarrantyAmount,
     int TodayAppointments, int PendingAppointments,
+    int PendingStockIns, decimal MonthStockInValue,
     List<(ROStatus Status, int Count)> ByStatus);
 
 public interface IRoService
@@ -45,6 +46,12 @@ public interface IRoService
     Task<(bool ok, string msg)> TransitionAppointmentStatusAsync(int id, AppointmentStatus to, string? cancelReason = null);
     Task<(bool ok, string msg, int? roId)> CheckInAppointmentAsync(int id, int odometer, string? technician);
     Task<(bool ok, string msg)> DeleteAppointmentAsync(int id);
+    // stock-in (Ser_Inv_StockIn)
+    Task<List<StockIn>> StockInsAsync(StockInStatus? status, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<StockIn?> GetStockInAsync(int id);
+    Task<int> CreateStockInAsync(StockIn stockIn, List<StockInDetail> items);
+    Task<(bool ok, string msg)> TransitionStockInStatusAsync(int id, StockInStatus to, string? approvedBy = null, string? note = null);
+    Task<(bool ok, string msg)> DeleteStockInAsync(int id);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -82,6 +89,14 @@ public class RoService(AppDbContext db) : IRoService
         AppointmentStatus.Pending => [AppointmentStatus.Contacted, AppointmentStatus.Confirmed, AppointmentStatus.Cancelled],
         AppointmentStatus.Contacted => [AppointmentStatus.Confirmed, AppointmentStatus.Cancelled],
         AppointmentStatus.Confirmed => [AppointmentStatus.CheckedIn, AppointmentStatus.Cancelled],
+        _ => []
+    };
+
+    /// <summary>Chuyển trạng thái Phiếu Nhập kho theo Ser_Inv_StockIn idn.CarService.</summary>
+    public static StockInStatus[] AllowedNextStockIn(StockInStatus s) => s switch
+    {
+        StockInStatus.Pending => [StockInStatus.Executing, StockInStatus.Finished, StockInStatus.Rejected],
+        StockInStatus.Executing => [StockInStatus.Finished, StockInStatus.Rejected],
         _ => []
     };
 
@@ -267,6 +282,12 @@ public class RoService(AppDbContext db) : IRoService
         var pendingAppointments = await db.Appointments.CountAsync(a =>
             a.Status == AppointmentStatus.Pending || a.Status == AppointmentStatus.Contacted || a.Status == AppointmentStatus.Confirmed);
 
+        var pendingStockIns = await db.StockIns.CountAsync(s => s.Status == StockInStatus.Pending || s.Status == StockInStatus.Executing);
+        var monthStockInItems = await db.StockIns.Include(s => s.Items)
+            .Where(s => s.Status == StockInStatus.Finished && s.StockInDate >= monthStart)
+            .ToListAsync();
+        var monthStockInValue = monthStockInItems.Sum(s => s.Total);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -279,6 +300,8 @@ public class RoService(AppDbContext db) : IRoService
             approvedWarranty,
             todayAppointments,
             pendingAppointments,
+            pendingStockIns,
+            monthStockInValue,
             byStatus);
     }
 
@@ -552,5 +575,135 @@ public class RoService(AppDbContext db) : IRoService
         db.Appointments.Remove(app);
         await db.SaveChangesAsync();
         return (true, "Đã xóa lịch hẹn thành công.");
+    }
+
+    // --- Stock-In Management (Ser_Inv_StockIn & Ser_Inv_StockInDetail) ---
+    public async Task<List<StockIn>> StockInsAsync(StockInStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.StockIns.Include(s => s.Items).ThenInclude(i => i.Part).AsQueryable();
+
+        if (status.HasValue) query = query.Where(s => s.Status == status.Value);
+        if (fromDate.HasValue) query = query.Where(s => s.StockInDate.Date >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(s => s.StockInDate.Date <= toDate.Value.Date);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(s => s.StockInNo.ToLower().Contains(kw)
+                || s.SupplierName.ToLower().Contains(kw)
+                || (s.BillNo != null && s.BillNo.ToLower().Contains(kw))
+                || (s.Description != null && s.Description.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(s => s.StockInDate).ThenByDescending(s => s.CreatedAt).ToList();
+    }
+
+    public Task<StockIn?> GetStockInAsync(int id) =>
+        db.StockIns.Include(s => s.Items).ThenInclude(i => i.Part).FirstOrDefaultAsync(s => s.Id == id);
+
+    public async Task<int> CreateStockInAsync(StockIn stockIn, List<StockInDetail> items)
+    {
+        if (string.IsNullOrWhiteSpace(stockIn.SupplierName))
+            throw new InvalidOperationException("Vui lòng nhập tên nhà cung cấp (SupplierName).");
+
+        if (items.Count == 0)
+            throw new InvalidOperationException("Vui lòng thêm ít nhất một phụ tùng vào phiếu nhập kho.");
+
+        if (string.IsNullOrWhiteSpace(stockIn.StockInNo))
+        {
+            var countToday = await db.StockIns.CountAsync();
+            stockIn.StockInNo = $"NK{DateTime.Today:yyMMdd}-{countToday + 1:D3}";
+        }
+        stockIn.Status = StockInStatus.Pending;
+        stockIn.CreatedAt = DateTime.Now;
+
+        foreach (var item in items)
+        {
+            var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == item.PartId)
+                ?? throw new InvalidOperationException($"Phụ tùng ID={item.PartId} không tồn tại.");
+
+            item.PartCode = part.Code;
+            item.PartName = part.Name;
+            item.Unit = string.IsNullOrWhiteSpace(item.Unit) ? part.Unit : item.Unit;
+            if (item.UnitPrice <= 0) item.UnitPrice = part.CostPrice > 0 ? part.CostPrice : part.SalePrice;
+            if (string.IsNullOrWhiteSpace(item.Location)) item.Location = part.Location;
+            stockIn.Items.Add(item);
+        }
+
+        db.StockIns.Add(stockIn);
+        await db.SaveChangesAsync();
+        return stockIn.Id;
+    }
+
+    public async Task<(bool ok, string msg)> TransitionStockInStatusAsync(int id, StockInStatus to, string? approvedBy = null, string? note = null)
+    {
+        var stockIn = await db.StockIns.Include(s => s.Items).ThenInclude(i => i.Part).FirstOrDefaultAsync(s => s.Id == id);
+        if (stockIn == null) return (false, "Không tìm thấy phiếu nhập kho.");
+
+        if (!AllowedNextStockIn(stockIn.Status).Contains(to))
+            return (false, $"Không thể chuyển từ '{Ui.StockInStatus(stockIn.Status).text}' sang '{Ui.StockInStatus(to).text}'.");
+
+        if (to == StockInStatus.Finished)
+        {
+            if (stockIn.Items.Count == 0)
+                return (false, "Phiếu nhập kho chưa có phụ tùng nào, không thể duyệt nhập kho.");
+
+            // Tự động tăng tồn kho và cập nhật giá vốn theo Ser_Inv_StockIn_StatusUpdateToFinished
+            foreach (var item in stockIn.Items)
+            {
+                var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == item.PartId);
+                if (part != null)
+                {
+                    part.InStock += item.Quantity;
+                    if (item.UnitPrice > 0)
+                    {
+                        part.CostPrice = item.UnitPrice; // Cập nhật giá vốn nhập mới nhất
+                    }
+                }
+            }
+            stockIn.Status = StockInStatus.Finished;
+            stockIn.FinishedAt = DateTime.Now;
+            stockIn.ApprovedBy = string.IsNullOrWhiteSpace(approvedBy) ? "Kế toán kho" : approvedBy.Trim();
+            if (!string.IsNullOrWhiteSpace(note))
+                stockIn.Description = string.IsNullOrWhiteSpace(stockIn.Description) ? note.Trim() : $"{stockIn.Description} | {note.Trim()}";
+
+            await db.SaveChangesAsync();
+            return (true, $"Đã duyệt nhập kho {stockIn.StockInNo}! Tồn kho và giá vốn phụ tùng đã được cập nhật thành công.");
+        }
+        else if (to == StockInStatus.Executing)
+        {
+            stockIn.Status = StockInStatus.Executing;
+            if (!string.IsNullOrWhiteSpace(note))
+                stockIn.Description = string.IsNullOrWhiteSpace(stockIn.Description) ? note.Trim() : $"{stockIn.Description} | {note.Trim()}";
+
+            await db.SaveChangesAsync();
+            return (true, $"Đã chuyển phiếu {stockIn.StockInNo} sang trạng thái: {Ui.StockInStatus(to).text}.");
+        }
+        else if (to == StockInStatus.Rejected)
+        {
+            stockIn.Status = StockInStatus.Rejected;
+            if (!string.IsNullOrWhiteSpace(note))
+                stockIn.Description = string.IsNullOrWhiteSpace(stockIn.Description) ? $"[Hủy: {note.Trim()}]" : $"{stockIn.Description} [Hủy: {note.Trim()}]";
+
+            await db.SaveChangesAsync();
+            return (true, $"Đã hủy phiếu nhập kho {stockIn.StockInNo}.");
+        }
+
+        return (false, "Trạng thái không hợp lệ.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteStockInAsync(int id)
+    {
+        var stockIn = await db.StockIns.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == id);
+        if (stockIn == null) return (false, "Không tìm thấy phiếu nhập kho.");
+
+        // Guard theo Ser_Inv_StockIn idn.CarService: Chỉ được xóa khi Pending hoặc Rejected, KHÔNG được xóa khi Finished
+        if (stockIn.Status == StockInStatus.Finished)
+            return (false, "Không thể xóa phiếu nhập kho đã hoàn tất (Finished).");
+
+        db.StockInDetails.RemoveRange(stockIn.Items);
+        db.StockIns.Remove(stockIn);
+        await db.SaveChangesAsync();
+        return (true, "Đã xóa phiếu nhập kho.");
     }
 }

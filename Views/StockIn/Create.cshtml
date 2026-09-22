@@ -1,0 +1,227 @@
+@{
+    ViewData["Title"] = "Lập phiếu nhập kho phụ tùng";
+    var parts = (List<Part>)ViewBag.Parts;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-11">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0 fw-bold"><i class="bi bi-box-arrow-in-down me-2 text-primary"></i>Lập phiếu nhập kho phụ tùng (Stock In)</h5>
+                        <div class="text-muted small">Nhập hàng từ nhà phân phối Hyundai Thành Công hoặc nhà cung cấp linh kiện</div>
+                    </div>
+                    <a href="/StockIn" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách phiếu</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/StockIn/Create" id="stockInForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-5">
+                            <label class="form-label fw-semibold">Nhà cung cấp <span class="text-danger">*</span></label>
+                            <input name="supplierName" id="supplierNameInput" class="form-control" list="supplierSuggestions" placeholder="Nhập hoặc chọn nhà cung cấp..." required />
+                            <datalist id="supplierSuggestions">
+                                <option value="Công ty CP Liên doanh Ô tô Hyundai Thành Công Việt Nam (HTC)" />
+                                <option value="Công ty TNHH Phụ tùng Mobis Việt Nam" />
+                                <option value="Công ty TNHH Dầu nhớt Shell Auto Việt Nam" />
+                                <option value="Công ty TNHH Castrol BP Petco" />
+                                <option value="Công ty TNHH Ắc quy GS Việt Nam" />
+                            </datalist>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Số hóa đơn / Phiếu giao hàng</label>
+                            <input name="billNo" class="form-control" placeholder="VD: HD-2026/012984" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Ngày nhập kho <span class="text-danger">*</span></label>
+                            <input type="date" name="stockInDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Hình thức nhập</label>
+                            <select name="type" class="form-select">
+                                <option value="@((int)StockInType.Normal)">Nhập mua hàng</option>
+                                <option value="@((int)StockInType.Adjustment)">Nhập điều chỉnh</option>
+                                <option value="@((int)StockInType.Return)">Nhập hoàn trả</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Ghi chú / Diễn giải</label>
+                            <input name="description" class="form-control" placeholder="VD: Nhập định kỳ phụ tùng bảo dưỡng đợt 1 tháng 4 theo hợp đồng nguyên tắc..." />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="fw-bold mb-0"><i class="bi bi-list-check me-1 text-primary"></i>Danh mục phụ tùng nhập kho</h6>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()">
+                            <i class="bi bi-plus-lg me-1"></i>Thêm dòng phụ tùng
+                        </button>
+                    </div>
+
+                    <div class="table-responsive mb-3">
+                        <table class="table table-bordered align-middle" id="itemsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:35%">Phụ tùng <span class="text-danger">*</span></th>
+                                    <th style="width:10%">ĐVT</th>
+                                    <th style="width:12%">Số lượng <span class="text-danger">*</span></th>
+                                    <th style="width:16%">Đơn giá nhập (VNĐ) <span class="text-danger">*</span></th>
+                                    <th style="width:10%">VAT (%)</th>
+                                    <th style="width:17%" class="text-end">Thành tiền (có VAT)</th>
+                                    <th style="width:5%"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                <!-- Dynamic rows inserted by JavaScript -->
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <th colspan="5" class="text-end">Tiền hàng trước thuế:</th>
+                                    <th class="text-end" id="sumSubTotal">0 đ</th>
+                                    <th></th>
+                                </tr>
+                                <tr>
+                                    <th colspan="5" class="text-end">Tiền thuế VAT:</th>
+                                    <th class="text-end" id="sumVat">0 đ</th>
+                                    <th></th>
+                                </tr>
+                                <tr class="table-primary">
+                                    <th colspan="5" class="text-end fs-6">TỔNG CỘNG THANH TOÁN:</th>
+                                    <th class="text-end fs-6 text-primary" id="sumTotal">0 đ</th>
+                                    <th></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                        <a href="/StockIn" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="bi bi-check2-circle me-1"></i>Lập phiếu nhập kho
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="rowTemplate">
+    <tr class="item-row">
+        <td>
+            <select name="partIds" class="form-select form-select-sm part-select" onchange="onPartChange(this)" required>
+                <option value="">— Chọn phụ tùng —</option>
+                @foreach (var p in parts)
+                {
+                    <option value="@p.Id" data-code="@p.Code" data-unit="@p.Unit" data-cost="@p.CostPrice" data-stock="@p.InStock" data-name="@p.Name">
+                        @p.Code — @p.Name (Tồn: @p.InStock.ToString("N0") @p.Unit)
+                    </option>
+                }
+            </select>
+        </td>
+        <td>
+            <span class="unit-text text-muted small">—</span>
+        </td>
+        <td>
+            <input type="number" name="quantities" class="form-control form-control-sm qty-input" min="1" step="1" value="1" oninput="calcRow(this)" required />
+        </td>
+        <td>
+            <input type="number" name="unitPrices" class="form-control form-control-sm price-input" min="0" step="1000" value="0" oninput="calcRow(this)" required />
+        </td>
+        <td>
+            <select name="vatPercents" class="form-select form-select-sm vat-input" onchange="calcRow(this)">
+                <option value="8" selected>8%</option>
+                <option value="10">10%</option>
+                <option value="0">0%</option>
+            </select>
+        </td>
+        <td class="text-end fw-semibold row-amount text-primary pe-2">
+            0 đ
+        </td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-link text-danger p-0" onclick="removeRow(this)" title="Xóa dòng">
+                <i class="bi bi-trash"></i>
+            </button>
+        </td>
+    </tr>
+</template>
+
+@section Scripts {
+<script>
+    function addRow() {
+        const tmpl = document.getElementById('rowTemplate');
+        const clone = tmpl.content.cloneNode(true);
+        document.getElementById('itemsBody').appendChild(clone);
+        recalcAll();
+    }
+
+    function removeRow(btn) {
+        const rows = document.querySelectorAll('.item-row');
+        if (rows.length <= 1) {
+            alert('Phiếu nhập kho cần tối thiểu 1 phụ tùng.');
+            return;
+        }
+        btn.closest('tr').remove();
+        recalcAll();
+    }
+
+    function onPartChange(sel) {
+        const row = sel.closest('tr');
+        const opt = sel.selectedOptions[0];
+        if (opt && opt.value) {
+            row.querySelector('.unit-text').textContent = opt.dataset.unit || 'Cái';
+            const cost = parseFloat(opt.dataset.cost) || 0;
+            const priceInput = row.querySelector('.price-input');
+            if (priceInput && (!priceInput.value || parseFloat(priceInput.value) === 0)) {
+                priceInput.value = cost;
+            }
+        } else {
+            row.querySelector('.unit-text').textContent = '—';
+        }
+        calcRow(sel);
+    }
+
+    function calcRow(el) {
+        const row = el.closest('tr');
+        const qty = parseFloat(row.querySelector('.qty-input').value) || 0;
+        const price = parseFloat(row.querySelector('.price-input').value) || 0;
+        const vat = parseFloat(row.querySelector('.vat-input').value) || 0;
+
+        const subTotal = qty * price;
+        const vatAmount = subTotal * (vat / 100);
+        const total = subTotal + vatAmount;
+
+        row.querySelector('.row-amount').textContent = total.toLocaleString('vi-VN') + ' đ';
+        recalcAll();
+    }
+
+    function recalcAll() {
+        let sumSub = 0;
+        let sumVat = 0;
+        let sumTot = 0;
+
+        document.querySelectorAll('.item-row').forEach(row => {
+            const qty = parseFloat(row.querySelector('.qty-input')?.value) || 0;
+            const price = parseFloat(row.querySelector('.price-input')?.value) || 0;
+            const vat = parseFloat(row.querySelector('.vat-input')?.value) || 0;
+
+            const sub = qty * price;
+            const vatAmt = sub * (vat / 100);
+            sumSub += sub;
+            sumVat += vatAmt;
+            sumTot += (sub + vatAmt);
+        });
+
+        document.getElementById('sumSubTotal').textContent = sumSub.toLocaleString('vi-VN') + ' đ';
+        document.getElementById('sumVat').textContent = sumVat.toLocaleString('vi-VN') + ' đ';
+        document.getElementById('sumTotal').textContent = sumTot.toLocaleString('vi-VN') + ' đ';
+    }
+
+    // Initialize with 1 empty row
+    document.addEventListener('DOMContentLoaded', () => {
+        addRow();
+    });
+</script>
+}

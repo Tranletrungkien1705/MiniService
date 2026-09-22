@@ -223,13 +223,65 @@ public static class Seeder
             db.Appointments.AddRange(app2, app3, app4);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.StockIns.AnyAsync())
+        {
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+            var pFilter = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pAir = await db.Parts.FirstOrDefaultAsync(p => p.Code == "28113-1R100");
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+
+            if (pOil != null && pFilter != null && pAir != null && pBrake != null)
+            {
+                // 1. Phiếu nhập kho đã hoàn tất (Finished) từ Hyundai Thành Công
+                var s1 = new StockIn
+                {
+                    StockInNo = "NK260420-001",
+                    StockInDate = DateTime.Today.AddDays(-7),
+                    SupplierName = "Công ty CP Liên doanh Ô tô Hyundai Thành Công Việt Nam (HTC)",
+                    BillNo = "HD-2026/004812",
+                    Type = StockInType.Normal,
+                    Status = StockInStatus.Finished,
+                    Description = "Nhập định kỳ phụ tùng bảo dưỡng tiêu chuẩn theo đơn đặt hàng PO-2604-01.",
+                    CreatedBy = "Thủ kho Tuấn",
+                    CreatedAt = DateTime.Now.AddDays(-7).AddHours(-4),
+                    ApprovedBy = "Kế toán trưởng",
+                    FinishedAt = DateTime.Now.AddDays(-7).AddHours(-2),
+                    Items = [
+                        new StockInDetail { PartId = pOil.Id, PartCode = pOil.Code, PartName = pOil.Name, Unit = pOil.Unit, Quantity = 20, UnitPrice = 420000, VatPercent = 8, Location = pOil.Location, Note = "Dầu nhớt chính hãng theo lô HTC-2026-04" },
+                        new StockInDetail { PartId = pFilter.Id, PartCode = pFilter.Code, PartName = pFilter.Name, Unit = pFilter.Unit, Quantity = 30, UnitPrice = 90000, VatPercent = 8, Location = pFilter.Location, Note = "Lọc dầu động cơ tiêu chuẩn" },
+                        new StockInDetail { PartId = pAir.Id, PartCode = pAir.Code, PartName = pAir.Name, Unit = pAir.Unit, Quantity = 15, UnitPrice = 120000, VatPercent = 8, Location = pAir.Location, Note = "Lọc gió động cơ Accent" }
+                    ]
+                };
+
+                // 2. Phiếu nhập kho đang chờ kiểm hàng (Pending) từ Mobis
+                var s2 = new StockIn
+                {
+                    StockInNo = "NK260427-002",
+                    StockInDate = DateTime.Today,
+                    SupplierName = "Công ty TNHH Phụ tùng Mobis Việt Nam",
+                    BillNo = "MBS-88219/26",
+                    Type = StockInType.Normal,
+                    Status = StockInStatus.Pending,
+                    Description = "Bổ sung má phanh gấp cho xe làm dịch vụ trong tuần.",
+                    CreatedBy = "Thủ kho Tuấn",
+                    CreatedAt = DateTime.Now.AddHours(-2),
+                    Items = [
+                        new StockInDetail { PartId = pBrake.Id, PartCode = pBrake.Code, PartName = pBrake.Name, Unit = pBrake.Unit, Quantity = 10, UnitPrice = 850000, VatPercent = 8, Location = pBrake.Location, Note = "Má phanh trước chính hãng Mobis" }
+                    ]
+                };
+
+                db.StockIns.AddRange(s1, s2);
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -314,7 +366,39 @@ public static class Seeder
                 FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
             );",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Appointments_OrgId_AppNo"" ON ""Appointments"" (""OrgId"", ""AppNo"");",
-            @"ALTER TABLE ""ROs"" ADD COLUMN ""AppointmentId"" INTEGER NULL;"
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""AppointmentId"" INTEGER NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""StockIns"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""StockInNo"" TEXT NOT NULL,
+                ""StockInDate"" TEXT NOT NULL,
+                ""SupplierName"" TEXT NOT NULL,
+                ""BillNo"" TEXT NULL,
+                ""Type"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""Description"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""FinishedAt"" TEXT NULL,
+                ""ApprovedBy"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_StockIns_OrgId_StockInNo"" ON ""StockIns"" (""OrgId"", ""StockInNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""StockInDetails"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""StockInId"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""PartCode"" TEXT NOT NULL,
+                ""PartName"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""VatPercent"" TEXT NOT NULL,
+                ""Location"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""StockInId"") REFERENCES ""StockIns"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"" ) REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
+            );"
         };
 
         foreach (var sql in sqls)

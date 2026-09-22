@@ -319,6 +319,117 @@ public class AppointmentController(IRoService svc) : Controller
     }
 }
 
+public class StockInController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(StockInStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+        var list = await svc.StockInsAsync(status, q, fromDate, toDate);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string supplierName, string? billNo, DateTime stockInDate, StockInType type, string? description,
+        int[] partIds, decimal[] quantities, decimal[] unitPrices, decimal[] vatPercents, string[]? notes)
+    {
+        if (string.IsNullOrWhiteSpace(supplierName))
+        {
+            TempData["Error"] = "Vui lòng nhập tên nhà cung cấp (SupplierName).";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+
+        if (partIds == null || partIds.Length == 0)
+        {
+            TempData["Error"] = "Vui lòng chọn ít nhất một phụ tùng nhập kho.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+
+        try
+        {
+            var stockIn = new StockIn
+            {
+                SupplierName = supplierName.Trim(),
+                BillNo = billNo?.Trim(),
+                StockInDate = stockInDate != default ? stockInDate : DateTime.Today,
+                Type = type,
+                Description = description?.Trim(),
+                CreatedBy = "web"
+            };
+
+            var items = new List<StockInDetail>();
+            for (int i = 0; i < partIds.Length; i++)
+            {
+                if (partIds[i] <= 0) continue;
+                var qty = (quantities != null && i < quantities.Length) ? quantities[i] : 1;
+                var price = (unitPrices != null && i < unitPrices.Length) ? unitPrices[i] : 0;
+                var vat = (vatPercents != null && i < vatPercents.Length) ? vatPercents[i] : 8;
+                var note = (notes != null && i < notes.Length) ? notes[i] : null;
+
+                items.Add(new StockInDetail
+                {
+                    PartId = partIds[i],
+                    Quantity = qty <= 0 ? 1 : qty,
+                    UnitPrice = price,
+                    VatPercent = vat < 0 ? 0 : vat,
+                    Note = note?.Trim()
+                });
+            }
+
+            if (items.Count == 0)
+            {
+                TempData["Error"] = "Chưa có dòng phụ tùng hợp lệ.";
+                ViewBag.Parts = await svc.PartsForSelectAsync();
+                return View();
+            }
+
+            var id = await svc.CreateStockInAsync(stockIn, items);
+            TempData["Success"] = $"Đã lập phiếu nhập kho {stockIn.StockInNo} thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var stockIn = await svc.GetStockInAsync(id);
+        if (stockIn == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextStockIn(stockIn.Status);
+        return View(stockIn);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, StockInStatus to, string? note)
+    {
+        var (ok, msg) = await svc.TransitionStockInStatusAsync(id, to, "Kế toán kho", note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteStockInAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()
