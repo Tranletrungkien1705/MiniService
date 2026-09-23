@@ -6910,6 +6910,56 @@ public class ModelAuditImageController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+/// <summary>Quản lý Tham số hệ thống (System Parameters) — Mst_Param trong idn.CarService.
+/// Nguồn: Mst_Param_Get_HQ / _Get_DL / _Save (BizCarSv.Master.cs).
+/// Khóa nghiệp vụ (DealerCode, ParamType); lưu = upsert theo khóa.</summary>
+public class SystemParamController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? dealerCode, SystemParamType? type, string? q)
+    {
+        ViewBag.DealerCode = dealerCode;
+        ViewBag.Type = type;
+        ViewBag.Q = q;
+        ViewBag.Dealers = await svc.GetDistinctSystemParamDealersAsync();
+        ViewBag.Summary = await svc.GetSystemParamSummaryAsync();
+        var list = await svc.SystemParamsAsync(dealerCode, type, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var row = await svc.GetSystemParamAsync(id);
+        if (row == null) return NotFound();
+        return View(row);
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string paramCode, string dealerCode, SystemParamType type, string? paramValue)
+    {
+        var (ok, msg, id) = await svc.SaveSystemParamAsync(null, paramCode, dealerCode, type, paramValue ?? "", "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string paramCode, string dealerCode, SystemParamType type, string? paramValue)
+    {
+        var (ok, msg, _) = await svc.SaveSystemParamAsync(id, paramCode, dealerCode, type, paramValue ?? "", "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSystemParamAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
 /// <summary>Hệ số giá phụ tùng theo loại khách hàng (Customer Part Factor) — Ser_Mst_CusPartFactor trong idn.CarService.
 /// Nguồn: Ser_Mst_CusPartFactor_Get_HQ / _Get_DL / _Update (BizCarSv.Master.cs).
 /// Giá hiệu lực = Part.SalePrice × COALESCE(Factor, CusType.CusFactor, 1).</summary>

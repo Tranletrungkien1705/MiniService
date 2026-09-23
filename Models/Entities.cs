@@ -3707,3 +3707,44 @@ public class ModelAuditImageSummaryDto
     public int ModelCount { get; set; }                       // Số dòng xe (ModelCode) khác nhau
     public int AudTypeCount { get; set; }                     // Số đầu mục kiểm tra (ReceptionFAudType) khác nhau
 }
+
+/// <summary>Nhóm tham số hệ thống — theo ParamType trong Mst_Param idn.CarService.
+/// Phân loại tham số cấu hình theo mục đích sử dụng (kết nối hệ thống ngoài, báo cáo, gửi mail...).</summary>
+public enum SystemParamType
+{
+    General = 0,        // Tham số chung (PARAM1/PARAM2/PARAM3)
+    Integration = 1,    // Kết nối hệ thống ngoài (URL / tài khoản gateway / WA)
+    Report = 2,         // Cấu hình máy chủ báo cáo (ReportServer)
+    Email = 3,          // Cấu hình gửi mail (API / APIKey / MailFrom)
+    Invoice = 4,        // Cấu hình hóa đơn điện tử / khai thuế (QInvoice)
+    Other = 5           // Tham số khác
+}
+
+/// <summary>Tham số hệ thống (System Parameter) — Mst_Param trong idn.CarService.
+/// Mỗi dòng là một cặp khóa–giá trị cấu hình (ParamCode → ParamValue) áp dụng cho một đại lý (DealerCode)
+/// và thuộc một nhóm (ParamType). Khóa nghiệp vụ là cặp (DealerCode, ParamType).
+/// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH) / đại lý (Dealer).
+/// Nghiệp vụ: Mst_Param_Get_HQ / _Get_DL / _Save (lưu = xóa theo (DealerCode, ParamType) rồi chèn lại — upsert).</summary>
+public class SystemParam : IOrgOwned
+{
+    public int Id { get; set; }                               // Khóa chính nội bộ
+    public Guid OrgId { get; set; }
+    public string ParamCode { get; set; } = "";               // Mã tham số (ParamCode) — VD: PARAM_MAILFROM
+    public string DealerCode { get; set; } = "";              // Mã đại lý áp dụng (DealerCode) — khóa nghiệp vụ
+    public SystemParamType ParamType { get; set; } = SystemParamType.General; // Nhóm tham số (ParamType) — khóa nghiệp vụ
+    public string ParamValue { get; set; } = "";              // Giá trị tham số (ParamValue)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo (CreatedDate)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục Tham số hệ thống — phục vụ màn hình quản lý SystemParam.</summary>
+public class SystemParamSummaryDto
+{
+    public int TotalParams { get; set; }                      // Tổng số tham số
+    public int DealerCount { get; set; }                      // Số đại lý (DealerCode) khác nhau
+    public int TypeCount { get; set; }                        // Số nhóm tham số (ParamType) khác nhau
+    public int IntegrationCount { get; set; }                 // Số tham số nhóm kết nối hệ thống ngoài
+    public int EmptyValueCount { get; set; }                  // Số tham số chưa có giá trị (ParamValue rỗng)
+}

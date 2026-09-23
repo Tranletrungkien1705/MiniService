@@ -771,5 +771,17 @@ public static class Ui
         inStock > minStock
             ? ("Tồn dư — có thể chia sẻ", "success", "bi-box-seam")
             : ("Dưới mức tối thiểu", "warning", "bi-exclamation-triangle");
+
+    /// <summary>Nhãn nhóm tham số hệ thống (Mst_Param.ParamType).</summary>
+    public static (string text, string code, string css) SystemParamType(SystemParamType t) => t switch
+    {
+        Models.SystemParamType.General => ("Tham số chung", "GEN", "secondary"),
+        Models.SystemParamType.Integration => ("Kết nối hệ thống ngoài", "INT", "primary"),
+        Models.SystemParamType.Report => ("Máy chủ báo cáo", "RPT", "info"),
+        Models.SystemParamType.Email => ("Cấu hình gửi mail", "MAIL", "warning"),
+        Models.SystemParamType.Invoice => ("Hóa đơn điện tử / Khai thuế", "INV", "success"),
+        Models.SystemParamType.Other => ("Tham số khác", "OTH", "dark"),
+        _ => (t.ToString(), "", "secondary")
+    };
 }
 

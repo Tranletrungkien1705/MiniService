@@ -2675,6 +2675,22 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Tham số hệ thống (Mst_Param) — cấu hình mẫu cho đại lý VS058
+        if (!await db.SystemParams.AnyAsync())
+        {
+            db.SystemParams.AddRange(
+                new SystemParam { ParamCode = "PARAM_MAILFROM", DealerCode = "VS058", ParamType = SystemParamType.Email, ParamValue = "no-reply@hyundai-vs058.vn", CreatedBy = "Hệ thống HTC" },
+                new SystemParam { ParamCode = "PARAM_MAILAPI", DealerCode = "VS058", ParamType = SystemParamType.Email, ParamValue = "https://api.mailgateway.vn/v1/send", CreatedBy = "Hệ thống HTC" },
+                new SystemParam { ParamCode = "PARAM_REPORTSERVER", DealerCode = "VS058", ParamType = SystemParamType.Report, ParamValue = "http://report.hyundai-vs058.vn/ReportServer", CreatedBy = "Hệ thống HTC" },
+                new SystemParam { ParamCode = "PARAM_QINVOICE_URL", DealerCode = "VS058", ParamType = SystemParamType.Invoice, ParamValue = "https://hoadon.vn/api/v1", CreatedBy = "Hệ thống HTC" },
+                new SystemParam { ParamCode = "PARAM_QINVOICE_TAXCODE", DealerCode = "VS058", ParamType = SystemParamType.Invoice, ParamValue = "0101234567", CreatedBy = "Hệ thống HTC" },
+                new SystemParam { ParamCode = "PARAM_WA_GATEWAY", DealerCode = "VS058", ParamType = SystemParamType.Integration, ParamValue = "https://gateway.zalo.vn/zns", CreatedBy = "Hệ thống HTC" },
+                new SystemParam { ParamCode = "PARAM_TST_ENDPOINT", DealerCode = "VS058", ParamType = SystemParamType.Integration, ParamValue = "https://tst.hyundai.com.vn/api", CreatedBy = "Hệ thống HTC" },
+                new SystemParam { ParamCode = "PARAM_DEALER_NAME", DealerCode = "VS058", ParamType = SystemParamType.General, ParamValue = "Hyundai VS058", CreatedBy = "Hệ thống HTC" }
+            );
+            await db.SaveChangesAsync();
+        }
+
         // Seed Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
         if (!await db.Boms.AnyAsync())
         {
@@ -5411,6 +5427,9 @@ public static class Seeder
             "CREATE TABLE IF NOT EXISTS miniservice.\"ModelAuditImages\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ModelCode\" text NOT NULL, \"ReceptionFAudType\" text NOT NULL, \"FilePath\" text NOT NULL, \"Remark\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ModelAuditImages_OrgId_ModelCode_ReceptionFAudType\" ON miniservice.\"ModelAuditImages\" (\"OrgId\", \"ModelCode\", \"ReceptionFAudType\")",
             "CREATE INDEX IF NOT EXISTS \"IX_ModelAuditImages_OrgId_ModelCode\" ON miniservice.\"ModelAuditImages\" (\"OrgId\", \"ModelCode\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"SystemParams\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ParamCode\" text NOT NULL, \"DealerCode\" text NOT NULL DEFAULT '', \"ParamType\" integer NOT NULL, \"ParamValue\" text NOT NULL DEFAULT '', \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SystemParams_OrgId_DealerCode_ParamType\" ON miniservice.\"SystemParams\" (\"OrgId\", \"DealerCode\", \"ParamType\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_SystemParams_OrgId_ParamCode\" ON miniservice.\"SystemParams\" (\"OrgId\", \"ParamCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"Suppliers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Address\" text NULL, \"Phone\" text NULL, \"Email\" text NULL, \"ContactName\" text NULL, \"ContactPhone\" text NULL, \"TaxCode\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankAccount\" text NULL",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankName\" text NULL",
@@ -7156,6 +7175,17 @@ public static class Seeder
                     "CREATE INDEX IF NOT EXISTS \"IX_ModelAuditImages_OrgId_ModelCode\" ON \"ModelAuditImages\" (\"OrgId\", \"ModelCode\");"
                 };
                 foreach (var sql in modelAudImageSqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+                // Tham số hệ thống (Mst_Param) — SQLite
+                var systemParamSqls = new[]
+                {
+                    "CREATE TABLE IF NOT EXISTS \"SystemParams\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"ParamCode\" TEXT NOT NULL, \"DealerCode\" TEXT NOT NULL DEFAULT '', \"ParamType\" INTEGER NOT NULL, \"ParamValue\" TEXT NOT NULL DEFAULT '', \"CreatedBy\" TEXT NOT NULL DEFAULT 'web', \"CreatedAt\" TEXT NOT NULL, \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SystemParams_OrgId_DealerCode_ParamType\" ON \"SystemParams\" (\"OrgId\", \"DealerCode\", \"ParamType\");",
+                    "CREATE INDEX IF NOT EXISTS \"IX_SystemParams_OrgId_ParamCode\" ON \"SystemParams\" (\"OrgId\", \"ParamCode\");"
+                };
+                foreach (var sql in systemParamSqls)
                 {
                     try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
                 }

@@ -1,0 +1,125 @@
+@model SystemParam
+@{
+    ViewData["Title"] = $"Chi tiết tham số [{Model.Id}] {Model.ParamCode}";
+    var (typeText, typeCode, typeCss) = Ui.SystemParamType(Model.ParamType);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/SystemParam" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Tham số hệ thống</a>
+        <h5 class="mb-0 fw-bold mt-1">
+            <span class="font-monospace text-primary">#@Model.Id</span> - @Model.ParamCode
+        </h5>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editParamModal">
+            <i class="bi bi-pencil me-1"></i>Chỉnh sửa
+        </button>
+        <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Bạn có chắc muốn xóa tham số này?');">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin tham số</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">ID</dt>
+                    <dd class="col-sm-7 font-monospace fw-bold">@Model.Id</dd>
+
+                    <dt class="col-sm-5 text-muted small">Mã tham số (ParamCode)</dt>
+                    <dd class="col-sm-7 font-monospace">@Model.ParamCode</dd>
+
+                    <dt class="col-sm-5 text-muted small">Mã đại lý (DealerCode)</dt>
+                    <dd class="col-sm-7 font-monospace">@Model.DealerCode</dd>
+
+                    <dt class="col-sm-5 text-muted small">Nhóm tham số (ParamType)</dt>
+                    <dd class="col-sm-7">
+                        <span class="badge bg-@typeCss-subtle text-@typeCss border-@typeCss-subtle">@typeText</span>
+                        <span class="text-muted small font-monospace ms-1">(@typeCode)</span>
+                    </dd>
+
+                    <dt class="col-sm-5 text-muted small">Giá trị (ParamValue)</dt>
+                    <dd class="col-sm-7">
+                        @if (string.IsNullOrWhiteSpace(Model.ParamValue))
+                        {
+                            <span class="text-muted small fst-italic">(chưa có giá trị)</span>
+                        }
+                        else
+                        {
+                            <span class="font-monospace">@Model.ParamValue</span>
+                        }
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-clock-history me-1 text-secondary"></i>Lịch sử cập nhật</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Người tạo (CreatedBy)</dt>
+                    <dd class="col-sm-7">@Model.CreatedBy</dd>
+
+                    <dt class="col-sm-5 text-muted small">Ngày tạo (CreatedDate)</dt>
+                    <dd class="col-sm-7">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</dd>
+
+                    <dt class="col-sm-5 text-muted small">Người cập nhật cuối (LogLUBy)</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(Model.LogLUBy) ? "-" : Model.LogLUBy)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Cập nhật cuối (LogLUDateTime)</dt>
+                    <dd class="col-sm-7">@(Model.LogLUDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "-")</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Chỉnh sửa tham số -->
+<div class="modal fade" id="editParamModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Update" asp-route-id="@Model.Id" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2 text-primary"></i>Chỉnh sửa tham số #@Model.Id</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mã tham số (ParamCode) <span class="text-danger">*</span></label>
+                            <input name="paramCode" class="form-control font-monospace" value="@Model.ParamCode" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mã đại lý (DealerCode) <span class="text-danger">*</span></label>
+                            <input name="dealerCode" class="form-control font-monospace" value="@Model.DealerCode" style="text-transform:uppercase" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Nhóm tham số (ParamType) <span class="text-danger">*</span></label>
+                            <select name="type" class="form-select">
+                                @foreach (SystemParamType t in Enum.GetValues<SystemParamType>())
+                                {
+                                    <option value="@((int)t)" selected="@(Model.ParamType == t)">@Ui.SystemParamType(t).text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Giá trị tham số (ParamValue)</label>
+                            <textarea name="paramValue" class="form-control font-monospace" rows="3">@Model.ParamValue</textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu thay đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

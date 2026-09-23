@@ -581,6 +581,14 @@ public interface IRoService
     Task<ModelAuditImageSummaryDto> GetModelAuditImageSummaryAsync();
     Task<List<string>> GetDistinctModelAuditImageModelsAsync();
     Task<List<string>> GetDistinctModelAuditImageAudTypesAsync();
+    // System Param — Tham số hệ thống (Mst_Param)
+    Task<List<SystemParam>> SystemParamsAsync(string? dealerCode, SystemParamType? type, string? q);
+    Task<SystemParam?> GetSystemParamAsync(int id);
+    Task<SystemParam?> GetSystemParamByKeyAsync(string dealerCode, SystemParamType type);
+    Task<(bool ok, string msg, int id)> SaveSystemParamAsync(int? id, string paramCode, string dealerCode, SystemParamType type, string paramValue, string user);
+    Task<(bool ok, string msg)> DeleteSystemParamAsync(int id);
+    Task<SystemParamSummaryDto> GetSystemParamSummaryAsync();
+    Task<List<string>> GetDistinctSystemParamDealersAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -12114,5 +12122,103 @@ public class RoService(AppDbContext db) : IRoService
         if (System.Text.RegularExpressions.Regex.IsMatch(row.FilePath, @"[^a-zA-Z0-9._\-/]"))
             throw new InvalidOperationException("Đường dẫn ảnh (FilePath) chỉ được chứa chữ, số và các ký tự . _ - /");
     }
+
+    // --- System Param — Tham số hệ thống (Mst_Param) ---
+    public async Task<List<SystemParam>> SystemParamsAsync(string? dealerCode, SystemParamType? type, string? q)
+    {
+        var query = db.SystemParams.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim().ToUpperInvariant();
+            query = query.Where(p => p.DealerCode == dc);
+        }
+        if (type.HasValue) query = query.Where(p => p.ParamType == type.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(p => p.ParamCode.ToLower().Contains(s)
+                || p.ParamValue.ToLower().Contains(s));
+        }
+        return await query.OrderBy(p => p.DealerCode).ThenBy(p => p.ParamType).ThenBy(p => p.ParamCode).ToListAsync();
+    }
+
+    public Task<SystemParam?> GetSystemParamAsync(int id) =>
+        db.SystemParams.FirstOrDefaultAsync(p => p.Id == id);
+
+    public Task<SystemParam?> GetSystemParamByKeyAsync(string dealerCode, SystemParamType type)
+    {
+        var dc = (dealerCode ?? "").Trim().ToUpperInvariant();
+        return db.SystemParams.FirstOrDefaultAsync(p => p.DealerCode == dc && p.ParamType == type);
+    }
+
+    /// <summary>Lưu tham số hệ thống — theo Mst_Param_Save: khóa nghiệp vụ (DealerCode, ParamType),
+    /// lưu = xóa bản ghi cũ theo khóa rồi chèn lại (upsert).</summary>
+    public async Task<(bool ok, string msg, int id)> SaveSystemParamAsync(int? id, string paramCode, string dealerCode, SystemParamType type, string paramValue, string user)
+    {
+        if (string.IsNullOrWhiteSpace(paramCode))
+            return (false, "Vui lòng nhập Mã tham số (ParamCode).", 0);
+        if (string.IsNullOrWhiteSpace(dealerCode))
+            return (false, "Vui lòng nhập Mã đại lý (DealerCode).", 0);
+
+        var code = paramCode.Trim();
+        var dc = dealerCode.Trim().ToUpperInvariant();
+        var value = (paramValue ?? "").Trim();
+        var now = DateTime.Now;
+
+        // Khóa nghiệp vụ (DealerCode, ParamType) — nếu đã tồn tại thì cập nhật bản ghi đó (upsert).
+        var existing = await db.SystemParams.FirstOrDefaultAsync(p => p.DealerCode == dc && p.ParamType == type);
+        if (existing != null)
+        {
+            existing.ParamCode = code;
+            existing.ParamValue = value;
+            existing.LogLUBy = user;
+            existing.LogLUDateTime = now;
+            await db.SaveChangesAsync();
+            return (true, $"Đã cập nhật tham số [{existing.Id}] {code} cho đại lý {dc}.", existing.Id);
+        }
+
+        var row = new SystemParam
+        {
+            ParamCode = code,
+            DealerCode = dc,
+            ParamType = type,
+            ParamValue = value,
+            CreatedBy = user,
+            CreatedAt = now,
+            LogLUBy = user,
+            LogLUDateTime = now
+        };
+        db.SystemParams.Add(row);
+        await db.SaveChangesAsync();
+        return (true, $"Đã thêm tham số [{row.Id}] {code} cho đại lý {dc}.", row.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeleteSystemParamAsync(int id)
+    {
+        var existing = await db.SystemParams.FirstOrDefaultAsync(p => p.Id == id);
+        if (existing == null) return (false, "Không tìm thấy tham số hệ thống.");
+        db.SystemParams.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa tham số [{id}] {existing.ParamCode}.");
+    }
+
+    public async Task<SystemParamSummaryDto> GetSystemParamSummaryAsync()
+    {
+        var all = await db.SystemParams.ToListAsync();
+        return new SystemParamSummaryDto
+        {
+            TotalParams = all.Count,
+            DealerCount = all.Select(p => p.DealerCode).Distinct().Count(),
+            TypeCount = all.Select(p => p.ParamType).Distinct().Count(),
+            IntegrationCount = all.Count(p => p.ParamType == SystemParamType.Integration),
+            EmptyValueCount = all.Count(p => string.IsNullOrWhiteSpace(p.ParamValue))
+        };
+    }
+
+    public Task<List<string>> GetDistinctSystemParamDealersAsync() =>
+        db.SystemParams.Select(p => p.DealerCode)
+            .Distinct()
+            .OrderBy(p => p)
+            .ToListAsync();
 }
 

@@ -6884,6 +6884,68 @@ app.MapDelete("/api/part-types/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Tham số hệ thống (Mst_Param)
+app.MapGet("/api/system-params", async (string? dealerCode, SystemParamType? type, string? q, IRoService svc) =>
+{
+    var list = await svc.SystemParamsAsync(dealerCode, type, q);
+    return Results.Ok(list.Select(p => new
+    {
+        p.Id,
+        p.ParamCode,
+        p.DealerCode,
+        type = Ui.SystemParamType(p.ParamType).text,
+        typeValue = (int)p.ParamType,
+        p.ParamValue,
+        p.CreatedBy,
+        p.CreatedAt,
+        p.LogLUBy,
+        p.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/system-params/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetSystemParamSummaryAsync();
+    return Results.Ok(new { s.TotalParams, s.DealerCount, s.TypeCount, s.IntegrationCount, s.EmptyValueCount });
+});
+
+app.MapGet("/api/system-params/{id:int}", async (int id, IRoService svc) =>
+{
+    var p = await svc.GetSystemParamAsync(id);
+    if (p == null) return Results.NotFound(new { error = "Không tìm thấy tham số hệ thống." });
+    return Results.Ok(new
+    {
+        p.Id,
+        p.ParamCode,
+        p.DealerCode,
+        type = Ui.SystemParamType(p.ParamType).text,
+        typeValue = (int)p.ParamType,
+        p.ParamValue,
+        p.CreatedBy,
+        p.CreatedAt,
+        p.LogLUBy,
+        p.LogLUDateTime
+    });
+});
+
+app.MapPost("/api/system-params", async (SaveSystemParamDto dto, IRoService svc) =>
+{
+    var (ok, msg, id) = await svc.SaveSystemParamAsync(null, dto.ParamCode ?? "", dto.DealerCode ?? "", dto.Type, dto.ParamValue ?? "", dto.User ?? "api");
+    return ok ? Results.Ok(new { systemParamId = id, message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPut("/api/system-params/{id:int}", async (int id, SaveSystemParamDto dto, IRoService svc) =>
+{
+    var (ok, msg, _) = await svc.SaveSystemParamAsync(id, dto.ParamCode ?? "", dto.DealerCode ?? "", dto.Type, dto.ParamValue ?? "", dto.User ?? "api");
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/system-params/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSystemParamAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 // API Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
 app.MapGet("/api/part-prices", async (string? q, bool? isActive, DateTime? dateFrom, DateTime? dateTo, int? partId, IRoService svc) =>
 {
@@ -7488,6 +7550,9 @@ record UpdatePartGroupDto(string GroupCode, string GroupName, string? DealerCode
 // Danh mục Loại hàng / Loại phụ tùng (Ser_MST_PartType)
 record CreatePartTypeDto(string TypeName, string? DealerCode, string? TypeCodeTST, string? CreatedBy);
 record UpdatePartTypeDto(string TypeName, string? DealerCode, string? TypeCodeTST, bool? IsActive, string? UpdatedBy);
+
+// Tham số hệ thống (Mst_Param)
+record SaveSystemParamDto(string? ParamCode, string? DealerCode, SystemParamType Type, string? ParamValue, string? User);
 
 // Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
 record CreatePartPriceDto(int PartId, decimal Price, DateTime? DateEffect, string? Remark, string? CreatedBy);
