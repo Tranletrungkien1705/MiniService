@@ -3843,6 +3843,219 @@ public static class Seeder
             db.PartPriceRequests.AddRange(requests);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.ComplaintDiagnosticErrors.AnyAsync())
+        {
+            var errors = new List<ComplaintDiagnosticError>
+            {
+                // 1. Phàn nàn của khách hàng (PN) - Động cơ & Nhiên liệu
+                new()
+                {
+                    ErrorCode = "PN-ENG-01",
+                    ErrorName = "Động cơ rung giật khi nổ cầm chừng (Idle Vibration)",
+                    ErrorType = ComplaintErrorType.Complaint,
+                    SystemGroup = VehicleSystemGroup.Engine,
+                    ErrorDesc = "Khách hàng phàn nàn xe rung giật mạnh ở vô lăng và cần số khi dừng đèn đỏ nổ không tải (garanti), vòng tua máy không đều dao động từ 600 - 900 RPM.",
+                    Remark = "Kiểm tra họng hút, van không tải ISC, bugi đánh lửa, bô-bin và cao su chân máy/chân số giảm chấn.",
+                    FlagActive = true,
+                    UsageCount = 14,
+                    CreatedBy = "Quản đốc xưởng"
+                },
+                new()
+                {
+                    ErrorCode = "PN-ENG-02",
+                    ErrorName = "Động cơ khó khởi động buổi sáng hoặc để qua đêm",
+                    ErrorType = ComplaintErrorType.Complaint,
+                    SystemGroup = VehicleSystemGroup.Engine,
+                    ErrorDesc = "Xe đề dai, quay máy lâu mới nổ hoặc phải đề 2-3 lần mới khởi động được, máy nổ lịm rồi mới lên ga.",
+                    Remark = "Đo áp suất bơm xăng trong bình (chuẩn 3.5 - 4.0 bar), kiểm tra van một chiều bơm xăng, lọc xăng bẩn và ắc quy sụt áp khi đề.",
+                    FlagActive = true,
+                    UsageCount = 9,
+                    CreatedBy = "Quản đốc xưởng"
+                },
+                new()
+                {
+                    ErrorCode = "PN-ENG-03",
+                    ErrorName = "Máy bị hụt ga, ì máy khi tăng tốc vượt dốc",
+                    ErrorType = ComplaintErrorType.Complaint,
+                    SystemGroup = VehicleSystemGroup.Engine,
+                    ErrorDesc = "Đạp thốc chân ga để vượt xe hoặc lên dốc xe bị trễ 2-3 giây, nghe tiếng gõ rốc máy nhẹ ở khoang động cơ rồi mới tăng tốc từ từ.",
+                    Remark = "Kiểm tra cảm biến lưu lượng gió MAF/MAP, kim phun nhiên liệu bị nghẹt đầu phun, bướm ga điện tử ETC và chất lượng nhiên liệu.",
+                    FlagActive = true,
+                    UsageCount = 11,
+                    CreatedBy = "CVDV Tuấn"
+                },
+
+                // 2. Phàn nàn của khách hàng (PN) - Hộp số
+                new()
+                {
+                    ErrorCode = "PN-TRANS-01",
+                    ErrorName = "Hộp số bị giật cục khi chuyển số N sang D hoặc sang R",
+                    ErrorType = ComplaintErrorType.Complaint,
+                    SystemGroup = VehicleSystemGroup.Transmission,
+                    ErrorDesc = "Khi dừng xe gạt cần số từ vị trí N sang D hoặc lùi R nghe tiếng cạch và cả xe giật nảy người, đặc biệt khi máy đang nguội.",
+                    Remark = "Kiểm tra mức dầu và phẩm cấp dầu hộp số tự động ATF, cập nhật phần mềm hộp số TCM, kiểm tra vỉ van điện tử và cao su chân hộp số.",
+                    FlagActive = true,
+                    UsageCount = 8,
+                    CreatedBy = "Quản đốc xưởng"
+                },
+
+                // 3. Phàn nàn của khách hàng (PN) - Khung gầm & Phanh/Lái
+                new()
+                {
+                    ErrorCode = "PN-CHAS-01",
+                    ErrorName = "Tiếng kêu lục cục ở gầm trước khi qua gờ giảm tốc",
+                    ErrorType = ComplaintErrorType.Complaint,
+                    SystemGroup = VehicleSystemGroup.Chassis,
+                    ErrorDesc = "Xe đi qua gờ giảm tốc, ổ gà hoặc đường mấp mô phát ra tiếng kêu lục cục, cọc cọc ở khu vực bánh trước bên phụ.",
+                    Remark = "Kiểm tra rotuyn thanh cân bằng trước, cao su càng A, giảm xóc trước có hiện tượng chảy dầu phớt ty và bát bèo đầu giảm xóc.",
+                    FlagActive = true,
+                    UsageCount = 18,
+                    CreatedBy = "CVDV Hoàng"
+                },
+                new()
+                {
+                    ErrorCode = "PN-CHAS-02",
+                    ErrorName = "Vô lăng bị nhao lái lệch sang phải khi buông tay",
+                    ErrorType = ComplaintErrorType.Complaint,
+                    SystemGroup = VehicleSystemGroup.Chassis,
+                    ErrorDesc = "Chạy thẳng trên đường phẳng tốc độ 50-80 km/h, thả nhẹ tay lái thì xe tự động dạt về lề đường bên phải sau 3-5 giây.",
+                    Remark = "Kiểm tra độ chụm bánh xe và góc đặt bánh xe trên máy cân chỉnh Hunter 3D, kiểm tra độ mòn lệch hoa lốp và áp suất 4 lốp.",
+                    FlagActive = true,
+                    UsageCount = 12,
+                    CreatedBy = "Quản đốc xưởng"
+                },
+
+                // 4. Phàn nàn của khách hàng (PN) - Điện & Điều hòa & Thân vỏ
+                new()
+                {
+                    ErrorCode = "PN-ELEC-01",
+                    ErrorName = "Đèn cảnh báo kiểm tra động cơ Check Engine sáng màu vàng",
+                    ErrorType = ComplaintErrorType.Complaint,
+                    SystemGroup = VehicleSystemGroup.Electrical,
+                    ErrorDesc = "Đèn cảnh báo hình động cơ (cá vàng) sáng liên tục trên màn hình taplo kể từ khi khởi động, xe vẫn vận hành được bình thường.",
+                    Remark = "Cắm máy chẩn đoán GDS Mobile đọc mã lỗi DTC được lưu trong bộ nhớ ECU để xác định chính xác nguyên nhân.",
+                    FlagActive = true,
+                    UsageCount = 25,
+                    CreatedBy = "CVDV Tuấn"
+                },
+                new()
+                {
+                    ErrorCode = "PN-HVAC-01",
+                    ErrorName = "Điều hòa không mát sâu, phả hơi nóng khi dừng đỗ garanti",
+                    ErrorType = ComplaintErrorType.Complaint,
+                    SystemGroup = VehicleSystemGroup.HVAC,
+                    ErrorDesc = "Xe chạy nhanh trên cao tốc gió lạnh sâu, nhưng khi dừng đỗ đèn đỏ hoặc tắc đường giữa trưa nắng thì cửa gió thổi ra hơi nóng ẩm.",
+                    Remark = "Kiểm tra quạt giải nhiệt két làm mát giàn nóng, đo áp suất gas lạnh đường cao áp/hạ áp, vệ sinh bề mặt giàn nóng két nước.",
+                    FlagActive = true,
+                    UsageCount = 16,
+                    CreatedBy = "CVDV Lan"
+                },
+                new()
+                {
+                    ErrorCode = "PN-BODY-01",
+                    ErrorName = "Cửa kính bên lái bị kẹt, phát tiếng rít ken két khi lên xuống",
+                    ErrorType = ComplaintErrorType.Complaint,
+                    SystemGroup = VehicleSystemGroup.BodyPaint,
+                    ErrorDesc = "Bấm công tắc kính cửa sổ tài xế kính di chuyển giật cục, chậm chạp và phát ra tiếng rít ken két khó chịu, thỉnh thoảng tụt kẹt giữa chừng.",
+                    Remark = "Vệ sinh bôi trơn rãnh gioăng dẫn hướng kính bằng xịt silicon chuyên dụng, kiểm tra dây cáp và mô tơ nâng hạ kính cửa xe.",
+                    FlagActive = true,
+                    UsageCount = 7,
+                    CreatedBy = "CVDV Thắng"
+                },
+
+                // 5. Chuẩn đoán kỹ thuật viên (CD) - Động cơ & Nhiên liệu
+                new()
+                {
+                    ErrorCode = "CD-P0300",
+                    ErrorName = "Mã DTC P0300 - Phát hiện bỏ lửa ngẫu nhiên nhiều xi-lanh",
+                    ErrorType = ComplaintErrorType.Diagnostic,
+                    SystemGroup = VehicleSystemGroup.Engine,
+                    ErrorDesc = "ECU động cơ ghi nhận xung gia tốc trục khuỷu CKP không đồng đều trên nhiều xi-lanh liên tiếp. Hiện tượng kèm theo rung giật khi tăng ga.",
+                    Remark = "Thay thế bộ bugi Iridium theo định kỳ, kiểm tra điện áp kích mở bô-bin đánh lửa, đo áp suất buồng đốt và súc rửa kim phun nhiên liệu.",
+                    FlagActive = true,
+                    UsageCount = 15,
+                    CreatedBy = "KTV Đức"
+                },
+                new()
+                {
+                    ErrorCode = "CD-P0171",
+                    ErrorName = "Mã DTC P0171 - Hòa khí quá nghèo dãy xi-lanh 1 (System Too Lean)",
+                    ErrorType = ComplaintErrorType.Diagnostic,
+                    SystemGroup = VehicleSystemGroup.Engine,
+                    ErrorDesc = "Cảm biến oxy băng rộng (Air-Fuel Ratio Sensor) trước bầu xúc tác báo tỷ lệ hòa khí thiếu xăng kéo dài, chỉ số Short/Long Term Fuel Trim > +20%.",
+                    Remark = "Thử khói phát hiện rò rỉ đường ống hút chân không sau bướm ga, kiểm tra áp suất bơm xăng, làm sạch cảm biến lưu lượng gió MAF.",
+                    FlagActive = true,
+                    UsageCount = 10,
+                    CreatedBy = "KTV Quang"
+                },
+                new()
+                {
+                    ErrorCode = "CD-P0420",
+                    ErrorName = "Mã DTC P0420 - Hiệu suất bộ chuyển đổi xúc tác thấp hơn ngưỡng",
+                    ErrorType = ComplaintErrorType.Diagnostic,
+                    SystemGroup = VehicleSystemGroup.Engine,
+                    ErrorDesc = "Tín hiệu dao động điện áp cảm biến oxy số 2 (sau bộ xúc tác) bám sát theo cảm biến số 1, chứng tỏ khả năng lưu trữ oxy của tổ ong xúc tác suy giảm.",
+                    Remark = "Kiểm tra tổ ong bầu xúc tác có bị vỡ nứt hoặc nhiễm bẩn dầu nhớt, kiểm tra rò rỉ khí xả cổ góp trước khi đề xuất thay cụm bầu xúc tác.",
+                    FlagActive = true,
+                    UsageCount = 6,
+                    CreatedBy = "KTV Đức"
+                },
+
+                // 6. Chuẩn đoán kỹ thuật viên (CD) - Hộp số & Gầm phanh & Điện & Điều hòa
+                new()
+                {
+                    ErrorCode = "CD-P0700",
+                    ErrorName = "Mã DTC P0700 - Lỗi hệ thống điều khiển hộp số tự động TCM",
+                    ErrorType = ComplaintErrorType.Diagnostic,
+                    SystemGroup = VehicleSystemGroup.Transmission,
+                    ErrorDesc = "Hộp điều khiển hộp số TCM gửi tín hiệu MIL Request yêu cầu ECM bật đèn Check Engine do phát hiện trượt ly hợp hoặc lỗi van điện từ.",
+                    Remark = "Dùng máy chẩn đoán GDS truy cập module TCM đọc các mã lỗi con (P0731, P0741...), đo điện trở các cụm Solenoid van dầu và kiểm tra mạt kim loại trong đáy các-te dầu số.",
+                    FlagActive = true,
+                    UsageCount = 5,
+                    CreatedBy = "KTV Đức"
+                },
+                new()
+                {
+                    ErrorCode = "CD-C1201",
+                    ErrorName = "Mã DTC C1201 - Lỗi tín hiệu cảm biến tốc độ bánh xe trước bên lái",
+                    ErrorType = ComplaintErrorType.Diagnostic,
+                    SystemGroup = VehicleSystemGroup.Chassis,
+                    ErrorDesc = "Hộp điều khiển phanh ABS/ESC không nhận được tín hiệu xung điện từ cảm biến Wheel Speed Sensor bánh trước trái khi xe di chuyển > 10 km/h.",
+                    Remark = "Đo điện trở cuộn dây cảm biến tốc độ bánh xe (chuẩn 1.0 - 1.3 kOhm), kiểm tra khe hở từ tính và vệ sinh mạt sắt bám trên vành răng xung ABS.",
+                    FlagActive = true,
+                    UsageCount = 13,
+                    CreatedBy = "KTV Trọng"
+                },
+                new()
+                {
+                    ErrorCode = "CD-B1346",
+                    ErrorName = "Mã DTC B1346 - Điện trở ngòi nổ túi khí vô lăng cao ngoài giới hạn",
+                    ErrorType = ComplaintErrorType.Diagnostic,
+                    SystemGroup = VehicleSystemGroup.Electrical,
+                    ErrorDesc = "Hộp điều khiển túi khí SRSCM báo điện trở mạch ngòi nổ túi khí người lái (DAB) > 4.2 Ohm (chuẩn 1.8 - 3.2 Ohm), đèn túi khí Airbag sáng đỏ.",
+                    Remark = "Đo thông mạch cáp cuộn còi vô lăng (Clock Spring) khi xoay hết lái trái/phải để phát hiện đứt ngậm dây cáp bẹ, thay cuộn cáp còi mới.",
+                    FlagActive = true,
+                    UsageCount = 8,
+                    CreatedBy = "KTV Nam"
+                },
+                new()
+                {
+                    ErrorCode = "CD-HVAC-LEAK",
+                    ErrorName = "Chẩn đoán xì rò rỉ môi chất lạnh gas R134a tại dàn lạnh điều hòa",
+                    ErrorType = ComplaintErrorType.Diagnostic,
+                    SystemGroup = VehicleSystemGroup.HVAC,
+                    ErrorDesc = "Nén khí nitơ áp suất 250 psi thử kín hệ thống lạnh phát hiện tụt áp 15 psi sau 30 phút. Dùng camera nội soi và đèn cực tím soi thấy vết dầu nhuộm huỳnh quang rò rỉ ở góc đáy dàn lạnh.",
+                    Remark = "Tháo taplo hạ cụm hộp gió điều hòa để thay thế giàn lạnh (Evaporator Core) mới chính hãng, thay phin lọc ga và hút chân không nạp lại 500g gas R134a chuẩn.",
+                    FlagActive = true,
+                    UsageCount = 12,
+                    CreatedBy = "KTV Quốc Hưng"
+                }
+            };
+
+            db.ComplaintDiagnosticErrors.AddRange(errors);
+            await db.SaveChangesAsync();
+        }
     }
 
 
@@ -3883,7 +4096,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -3933,6 +4146,9 @@ public static class Seeder
             "ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"CustomerGroupId\" integer NULL",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CustomerGroupId\" integer NULL",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CustomerGroupDiscountAmount\" numeric(18,2) NOT NULL DEFAULT 0",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"ErrorCodePN\" text NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"ErrorCodeCD\" text NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"DiagnosticResult\" text NULL",
             "CREATE TABLE IF NOT EXISTS miniservice.\"CustomerGroups\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"GroupNo\" text NOT NULL, \"GroupName\" text NOT NULL, \"TaxCode\" text NULL, \"Address\" text NULL, \"Telephone\" text NULL, \"Fax\" text NULL, \"Email\" text NULL, \"ContactPerson\" text NULL, \"ContactPhone\" text NULL, \"Description\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"DiscountPercentLabor\" numeric(5,2) NOT NULL DEFAULT 0, \"DiscountPercentPart\" numeric(5,2) NOT NULL DEFAULT 0, \"CreditLimit\" numeric(18,2) NOT NULL DEFAULT 0, \"PaymentTermDays\" integer NOT NULL DEFAULT 30, \"ContractNo\" text NULL, \"ContractStartDate\" timestamp NULL, \"ContractEndDate\" timestamp NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"UpdatedAt\" timestamp NULL)",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CustomerGroups_OrgId_GroupNo\" ON miniservice.\"CustomerGroups\" (\"OrgId\", \"GroupNo\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"CustomerGroupMembers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"CustomerGroupId\" integer NOT NULL, \"CustomerId\" integer NULL, \"CarId\" integer NOT NULL, \"PlateNo\" text NOT NULL, \"DriverName\" text NULL, \"DriverPhone\" text NULL, \"Note\" text NULL, \"JoinedDate\" timestamp NOT NULL DEFAULT now(), \"IsActive\" boolean NOT NULL DEFAULT true)",
@@ -3943,6 +4159,10 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PartPriceRequests_OrgId_ReqPartPriceNo\" ON miniservice.\"PartPriceRequests\" (\"OrgId\", \"ReqPartPriceNo\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"PartPriceRequestLines\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"PartPriceRequestId\" integer NOT NULL, \"PartId\" integer NULL, \"DMSPartCode\" text NOT NULL, \"VieName\" text NOT NULL, \"VINCode\" text NULL, \"DeliveryForm\" integer NOT NULL, \"Quantity\" numeric(18,2) NOT NULL, \"Unit\" text NOT NULL, \"Remark\" text NULL, \"TSTPartCode\" text NULL, \"TSTPrice\" numeric(18,2) NOT NULL DEFAULT 0, \"DateEffect\" timestamp NULL, \"Status\" integer NOT NULL DEFAULT 0)",
             "CREATE INDEX IF NOT EXISTS \"IX_PartPriceRequestLines_OrgId_PartPriceRequestId\" ON miniservice.\"PartPriceRequestLines\" (\"OrgId\", \"PartPriceRequestId\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"ComplaintDiagnosticErrors\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ErrorCode\" text NOT NULL, \"ErrorName\" text NOT NULL, \"ErrorType\" integer NOT NULL, \"SystemGroup\" integer NOT NULL, \"ErrorDesc\" text NULL, \"Remark\" text NULL, \"FlagActive\" boolean NOT NULL DEFAULT true, \"UsageCount\" integer NOT NULL DEFAULT 0, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"UpdatedAt\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ComplaintDiagnosticErrors_OrgId_ErrorCode\" ON miniservice.\"ComplaintDiagnosticErrors\" (\"OrgId\", \"ErrorCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_ComplaintDiagnosticErrors_OrgId_ErrorType\" ON miniservice.\"ComplaintDiagnosticErrors\" (\"OrgId\", \"ErrorType\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_ComplaintDiagnosticErrors_OrgId_SystemGroup\" ON miniservice.\"ComplaintDiagnosticErrors\" (\"OrgId\", \"SystemGroup\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -5119,7 +5339,28 @@ public static class Seeder
                 FOREIGN KEY (""PartPriceRequestId"") REFERENCES ""PartPriceRequests"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE SET NULL
             );",
-            @"CREATE INDEX IF NOT EXISTS ""IX_PartPriceRequestLines_OrgId_PartPriceRequestId"" ON ""PartPriceRequestLines"" (""OrgId"", ""PartPriceRequestId"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_PartPriceRequestLines_OrgId_PartPriceRequestId"" ON ""PartPriceRequestLines"" (""OrgId"", ""PartPriceRequestId"");",
+            @"CREATE TABLE IF NOT EXISTS ""ComplaintDiagnosticErrors"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ErrorCode"" TEXT NOT NULL,
+                ""ErrorName"" TEXT NOT NULL,
+                ""ErrorType"" INTEGER NOT NULL,
+                ""SystemGroup"" INTEGER NOT NULL,
+                ""ErrorDesc"" TEXT NULL,
+                ""Remark"" TEXT NULL,
+                ""FlagActive"" INTEGER NOT NULL DEFAULT 1,
+                ""UsageCount"" INTEGER NOT NULL DEFAULT 0,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""UpdatedAt"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ComplaintDiagnosticErrors_OrgId_ErrorCode"" ON ""ComplaintDiagnosticErrors"" (""OrgId"", ""ErrorCode"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_ComplaintDiagnosticErrors_OrgId_ErrorType"" ON ""ComplaintDiagnosticErrors"" (""OrgId"", ""ErrorType"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_ComplaintDiagnosticErrors_OrgId_SystemGroup"" ON ""ComplaintDiagnosticErrors"" (""OrgId"", ""SystemGroup"");",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""ErrorCodePN"" TEXT NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""ErrorCodeCD"" TEXT NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""DiagnosticResult"" TEXT NULL;"
         };
 
         foreach (var sql in sqls)

@@ -1,0 +1,102 @@
+@model ComplaintDiagnosticError
+@{
+    ViewData["Title"] = $"Chỉnh sửa mã lỗi: {Model.ErrorCode}";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-primary">
+                        <i class="bi bi-pencil-square me-1"></i> Cập nhật Mã lỗi: <span class="font-monospace">@Model.ErrorCode</span>
+                    </h6>
+                    <div class="btn-group btn-group-sm">
+                        <a href="/ComplaintDiagnostic/Detail/@Model.Id" class="btn btn-outline-secondary">
+                            <i class="bi bi-eye"></i> Xem chi tiết
+                        </a>
+                        <a href="/ComplaintDiagnostic" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Danh sách
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="/ComplaintDiagnostic/Edit/@Model.Id">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mã lỗi (ErrorCode) <span class="text-danger">*</span></label>
+                            <input type="text" asp-for="ErrorCode" class="form-control font-monospace text-uppercase" required />
+                            <span asp-validation-for="ErrorCode" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Phân loại mã lỗi <span class="text-danger">*</span></label>
+                            <select asp-for="ErrorType" class="form-select" required>
+                                <option value="1">Phàn nàn của khách hàng (PN - Symptom Code)</option>
+                                <option value="2">Chuẩn đoán kỹ thuật viên (CD - Diagnostic / DTC)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Phân nhóm hệ thống trên xe <span class="text-danger">*</span></label>
+                            <select asp-for="SystemGroup" class="form-select" required>
+                                <option value="1">Động cơ &amp; Hệ thống nhiên liệu (Engine)</option>
+                                <option value="2">Hộp số &amp; Hệ dẫn động (Transmission)</option>
+                                <option value="3">Khung gầm, Phanh &amp; Hệ thống lái (Chassis)</option>
+                                <option value="4">Điện - Điện tử &amp; Cảm biến (Electrical)</option>
+                                <option value="5">Điều hòa không khí &amp; Thông gió (HVAC)</option>
+                                <option value="6">Thân vỏ, Cửa sổ &amp; Đồng sơn (Body &amp; Paint)</option>
+                                <option value="7">Hệ thống tổng hợp / Khác (General)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Lượt đã sử dụng trong xưởng</label>
+                            <input type="text" class="form-control bg-light" value="@Model.UsageCount lượt gắn vào RO/Bảo hành" readonly />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên lỗi / Hiện tượng hư hỏng <span class="text-danger">*</span></label>
+                        <input type="text" asp-for="ErrorName" class="form-control" required />
+                        <span asp-validation-for="ErrorName" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mô tả chi tiết triệu chứng &amp; Phương pháp kiểm tra (ErrorDesc)</label>
+                        <textarea asp-for="ErrorDesc" class="form-control" rows="4"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ghi chú kỹ thuật &amp; Hướng xử lý khuyến cáo (Remark)</label>
+                        <textarea asp-for="Remark" class="form-control" rows="3"></textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" asp-for="FlagActive" id="flagActiveSwitch">
+                            <label class="form-check-label fw-semibold" for="flagActiveSwitch">Hiệu lực sử dụng trong xưởng</label>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="text-muted small">
+                            Tạo bởi: <strong>@Model.CreatedBy</strong> lúc @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")
+                            @if (Model.UpdatedAt.HasValue)
+                            {
+                                <span> · Sửa đổi: @Model.UpdatedAt.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                            }
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="/ComplaintDiagnostic/Detail/@Model.Id" class="btn btn-secondary">Hủy bỏ</a>
+                            <button type="submit" class="btn btn-primary px-4"><i class="bi bi-save me-1"></i> Lưu thay đổi</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

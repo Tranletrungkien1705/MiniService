@@ -1,0 +1,90 @@
+@model ComplaintDiagnosticError
+@{
+    ViewData["Title"] = "Thêm mới Mã lỗi Phàn nàn / Chẩn đoán Kỹ thuật";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold text-primary">
+                        <i class="bi bi-plus-circle me-1"></i> Khai báo Mã lỗi &amp; Chẩn đoán mới (Ser_MST_ROComplaintDiagnosticError)
+                    </h6>
+                    <a href="/ComplaintDiagnostic" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Quay lại danh sách
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="/ComplaintDiagnostic/Create">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mã lỗi (ErrorCode) <span class="text-danger">*</span></label>
+                            <input type="text" asp-for="ErrorCode" class="form-control font-monospace text-uppercase" placeholder="VD: PN-ENG-01, CD-P0300..." required autofocus />
+                            <div class="form-text">Mã định danh duy nhất (VD: PN-xxx cho Phàn nàn, CD-Pxxxx cho Chuẩn đoán DTC).</div>
+                            <span asp-validation-for="ErrorCode" class="text-danger small"></span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Phân loại mã lỗi <span class="text-danger">*</span></label>
+                            <select asp-for="ErrorType" class="form-select" required>
+                                <option value="1">Phàn nàn của khách hàng (PN - Symptom Code)</option>
+                                <option value="2">Chuẩn đoán kỹ thuật viên (CD - Diagnostic / DTC)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Phân nhóm hệ thống trên xe <span class="text-danger">*</span></label>
+                            <select asp-for="SystemGroup" class="form-select" required>
+                                <option value="1">Động cơ &amp; Hệ thống nhiên liệu (Engine)</option>
+                                <option value="2">Hộp số &amp; Hệ dẫn động (Transmission)</option>
+                                <option value="3">Khung gầm, Phanh &amp; Hệ thống lái (Chassis)</option>
+                                <option value="4">Điện - Điện tử &amp; Cảm biến (Electrical)</option>
+                                <option value="5">Điều hòa không khí &amp; Thông gió (HVAC)</option>
+                                <option value="6">Thân vỏ, Cửa sổ &amp; Đồng sơn (Body &amp; Paint)</option>
+                                <option value="7">Hệ thống tổng hợp / Khác (General)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Người tạo / Cố vấn đề xuất</label>
+                            <input type="text" asp-for="CreatedBy" class="form-control" placeholder="Quản đốc / CVDV..." />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tên lỗi / Hiện tượng hư hỏng <span class="text-danger">*</span></label>
+                        <input type="text" asp-for="ErrorName" class="form-control" placeholder="Tên hiện tượng hoặc mô tả mã DTC..." required />
+                        <span asp-validation-for="ErrorName" class="text-danger small"></span>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Mô tả chi tiết triệu chứng &amp; Phương pháp kiểm tra (ErrorDesc)</label>
+                        <textarea asp-for="ErrorDesc" class="form-control" rows="4" placeholder="Mô tả cụ thể biểu hiện bất thường khi vận hành, điều kiện phát sinh hiện tượng (tốc độ, nhiệt độ, vòng tua máy), các bước đo kiểm bằng đồng hồ hoặc máy chẩn đoán GDS..."></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ghi chú kỹ thuật &amp; Hướng xử lý khuyến cáo (Remark)</label>
+                        <textarea asp-for="Remark" class="form-control" rows="3" placeholder="Khuyến cáo quy trình sửa chữa chuẩn từ hãng Hyundai, mã phụ tùng hay hỏng, lưu ý an toàn kỹ thuật..."></textarea>
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" asp-for="FlagActive" checked id="flagActiveSwitch">
+                            <label class="form-check-label fw-semibold" for="flagActiveSwitch">Kích hoạt hiệu lực sử dụng trong xưởng</label>
+                        </div>
+                        <div class="form-text">Khi kích hoạt, mã lỗi sẽ xuất hiện trong danh sách gợi ý khi lập Lệnh sửa chữa (RO) và Báo cáo bảo hành.</div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="/ComplaintDiagnostic" class="btn btn-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary px-4"><i class="bi bi-save me-1"></i> Lưu mã lỗi</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

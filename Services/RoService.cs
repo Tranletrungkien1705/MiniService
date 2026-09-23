@@ -28,7 +28,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingPartOOs = 0, int StockAvailablePartOOs = 0,
     int ActiveCusDebits = 0, decimal TotalCusDebitBalance = 0, int OverdueCusDebits = 0,
     int TotalCustomerGroups = 0, int ActiveCustomerGroups = 0, int TotalFleetCars = 0,
-    int PendingPartPriceRequests = 0, int RespondedPartPriceRequests = 0);
+    int PendingPartPriceRequests = 0, int RespondedPartPriceRequests = 0,
+    int TotalComplaintDiagnosticErrors = 0, int TotalComplaintCodes = 0, int TotalDiagnosticCodes = 0);
 
 public interface IRoService
 {
@@ -364,6 +365,19 @@ public interface IRoService
     Task<(bool ok, string msg)> CancelPartPriceRequestAsync(int id, string? reason = null);
     Task<(bool ok, string msg)> DeletePartPriceRequestAsync(int id);
     Task<List<RepairOrder>> ROsForPartPriceRequestSelectAsync();
+    // Complaint & Diagnostic Errors (Ser_MST_ROComplaintDiagnosticError / MNU_QT_DL_QUANLYMALOIPHANNANVACHANDOAN)
+    Task<List<ComplaintDiagnosticError>> ComplaintDiagnosticErrorsAsync(ComplaintErrorType? type, VehicleSystemGroup? group, string? q, bool? isActive);
+    Task<ComplaintDiagnosticSummaryDto> GetComplaintDiagnosticSummaryAsync();
+    Task<ComplaintDiagnosticError?> GetComplaintDiagnosticErrorAsync(int id);
+    Task<ComplaintDiagnosticError?> GetComplaintDiagnosticErrorByCodeAsync(string code);
+    Task<int> CreateComplaintDiagnosticErrorAsync(ComplaintDiagnosticError error);
+    Task<(bool ok, string msg)> UpdateComplaintDiagnosticErrorAsync(int id, ComplaintDiagnosticError input);
+    Task<(bool ok, string msg)> ToggleComplaintDiagnosticErrorActiveAsync(int id);
+    Task<(bool ok, string msg)> DeleteComplaintDiagnosticErrorAsync(int id);
+    Task<List<ComplaintDiagnosticError>> GetActiveComplaintsAsync(VehicleSystemGroup? group = null);
+    Task<List<ComplaintDiagnosticError>> GetActiveDiagnosticsAsync(VehicleSystemGroup? group = null);
+    Task<(bool ok, string msg)> ApplyErrorToROAsync(int roId, int errorId, string target);
+    Task<List<RepairOrder>> ROsForErrorAssignmentAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -875,6 +889,10 @@ public class RoService(AppDbContext db) : IRoService
         var pendingPartPriceRequests = await db.PartPriceRequests.CountAsync(r => r.DMSStatus == DMSReqPartPriceStatus.Draft || r.DMSStatus == DMSReqPartPriceStatus.Sent);
         var respondedPartPriceRequests = await db.PartPriceRequests.CountAsync(r => r.DMSStatus == DMSReqPartPriceStatus.Responded);
 
+        var totalComplaintDiagnosticErrors = await db.ComplaintDiagnosticErrors.CountAsync();
+        var totalComplaintCodes = await db.ComplaintDiagnosticErrors.CountAsync(e => e.ErrorType == ComplaintErrorType.Complaint && e.FlagActive);
+        var totalDiagnosticCodes = await db.ComplaintDiagnosticErrors.CountAsync(e => e.ErrorType == ComplaintErrorType.Diagnostic && e.FlagActive);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -933,7 +951,10 @@ public class RoService(AppDbContext db) : IRoService
             activeCustomerGroups,
             totalFleetCars,
             pendingPartPriceRequests,
-            respondedPartPriceRequests);
+            respondedPartPriceRequests,
+            totalComplaintDiagnosticErrors,
+            totalComplaintCodes,
+            totalDiagnosticCodes);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -8141,6 +8162,210 @@ public class RoService(AppDbContext db) : IRoService
             .Where(r => r.Status != ROStatus.Rejected && r.Status != ROStatus.Finished)
             .OrderByDescending(r => r.CreatedAt)
             .Take(40)
+            .ToListAsync();
+
+    // --- Complaint & Diagnostic Errors (Ser_MST_ROComplaintDiagnosticError / MNU_QT_DL_QUANLYMALOIPHANNANVACHANDOAN) ---
+    public async Task<List<ComplaintDiagnosticError>> ComplaintDiagnosticErrorsAsync(ComplaintErrorType? type, VehicleSystemGroup? group, string? q, bool? isActive)
+    {
+        var query = db.ComplaintDiagnosticErrors.AsQueryable();
+
+        if (type.HasValue) query = query.Where(e => e.ErrorType == type.Value);
+        if (group.HasValue) query = query.Where(e => e.SystemGroup == group.Value);
+        if (isActive.HasValue) query = query.Where(e => e.FlagActive == isActive.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(e => e.ErrorCode.ToLower().Contains(term)
+                || e.ErrorName.ToLower().Contains(term)
+                || (e.ErrorDesc != null && e.ErrorDesc.ToLower().Contains(term))
+                || (e.Remark != null && e.Remark.ToLower().Contains(term)));
+        }
+
+        return await query
+            .OrderByDescending(e => e.UsageCount)
+            .ThenBy(e => e.ErrorCode)
+            .ToListAsync();
+    }
+
+    public async Task<ComplaintDiagnosticSummaryDto> GetComplaintDiagnosticSummaryAsync()
+    {
+        var all = await db.ComplaintDiagnosticErrors.ToListAsync();
+        return new ComplaintDiagnosticSummaryDto
+        {
+            TotalErrors = all.Count,
+            ComplaintCount = all.Count(e => e.ErrorType == ComplaintErrorType.Complaint),
+            DiagnosticCount = all.Count(e => e.ErrorType == ComplaintErrorType.Diagnostic),
+            ActiveCount = all.Count(e => e.FlagActive),
+            InactiveCount = all.Count(e => !e.FlagActive),
+            EngineCount = all.Count(e => e.SystemGroup == VehicleSystemGroup.Engine),
+            TransmissionCount = all.Count(e => e.SystemGroup == VehicleSystemGroup.Transmission),
+            ChassisCount = all.Count(e => e.SystemGroup == VehicleSystemGroup.Chassis),
+            ElectricalCount = all.Count(e => e.SystemGroup == VehicleSystemGroup.Electrical),
+            HvacCount = all.Count(e => e.SystemGroup == VehicleSystemGroup.HVAC),
+            BodyPaintCount = all.Count(e => e.SystemGroup == VehicleSystemGroup.BodyPaint),
+            TotalUsageCount = all.Sum(e => e.UsageCount),
+            TopUsedErrors = all.OrderByDescending(e => e.UsageCount).Take(5).ToList()
+        };
+    }
+
+    public Task<ComplaintDiagnosticError?> GetComplaintDiagnosticErrorAsync(int id) =>
+        db.ComplaintDiagnosticErrors.FirstOrDefaultAsync(e => e.Id == id);
+
+    public Task<ComplaintDiagnosticError?> GetComplaintDiagnosticErrorByCodeAsync(string code)
+    {
+        var cleanCode = code.Trim().ToUpperInvariant();
+        return db.ComplaintDiagnosticErrors.FirstOrDefaultAsync(e => e.ErrorCode.ToUpper() == cleanCode);
+    }
+
+    public async Task<int> CreateComplaintDiagnosticErrorAsync(ComplaintDiagnosticError error)
+    {
+        if (string.IsNullOrWhiteSpace(error.ErrorCode))
+            throw new ArgumentException("Mã lỗi (ErrorCode) không được để trống.");
+
+        if (string.IsNullOrWhiteSpace(error.ErrorName))
+            throw new ArgumentException("Tên mã lỗi (ErrorName) không được để trống.");
+
+        error.ErrorCode = error.ErrorCode.Trim().ToUpperInvariant();
+        error.ErrorName = error.ErrorName.Trim();
+        if (error.ErrorDesc != null) error.ErrorDesc = error.ErrorDesc.Trim();
+        if (error.Remark != null) error.Remark = error.Remark.Trim();
+
+        var exists = await db.ComplaintDiagnosticErrors.AnyAsync(e => e.ErrorCode == error.ErrorCode);
+        if (exists)
+            throw new InvalidOperationException($"Mã lỗi '{error.ErrorCode}' đã tồn tại trong danh mục.");
+
+        error.CreatedAt = DateTime.Now;
+        db.ComplaintDiagnosticErrors.Add(error);
+        await db.SaveChangesAsync();
+        return error.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateComplaintDiagnosticErrorAsync(int id, ComplaintDiagnosticError input)
+    {
+        var error = await db.ComplaintDiagnosticErrors.FirstOrDefaultAsync(e => e.Id == id);
+        if (error == null) return (false, "Không tìm thấy mã lỗi cần cập nhật.");
+
+        var cleanCode = input.ErrorCode.Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(cleanCode)) return (false, "Mã lỗi không được để trống.");
+        if (string.IsNullOrWhiteSpace(input.ErrorName)) return (false, "Tên mã lỗi không được để trống.");
+
+        if (error.ErrorCode != cleanCode)
+        {
+            var exists = await db.ComplaintDiagnosticErrors.AnyAsync(e => e.ErrorCode == cleanCode && e.Id != id);
+            if (exists) return (false, $"Mã lỗi '{cleanCode}' đã được sử dụng bởi bản ghi khác.");
+            error.ErrorCode = cleanCode;
+        }
+
+        error.ErrorName = input.ErrorName.Trim();
+        error.ErrorType = input.ErrorType;
+        error.SystemGroup = input.SystemGroup;
+        error.ErrorDesc = input.ErrorDesc?.Trim();
+        error.Remark = input.Remark?.Trim();
+        error.FlagActive = input.FlagActive;
+        error.UpdatedAt = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật thông tin mã lỗi '{error.ErrorCode}' thành công.");
+    }
+
+    public async Task<(bool ok, string msg)> ToggleComplaintDiagnosticErrorActiveAsync(int id)
+    {
+        var error = await db.ComplaintDiagnosticErrors.FirstOrDefaultAsync(e => e.Id == id);
+        if (error == null) return (false, "Không tìm thấy mã lỗi.");
+
+        error.FlagActive = !error.FlagActive;
+        error.UpdatedAt = DateTime.Now;
+        await db.SaveChangesAsync();
+
+        var statusText = error.FlagActive ? "Đang hiệu lực" : "Ngừng sử dụng";
+        return (true, $"Đã chuyển trạng thái mã lỗi '{error.ErrorCode}' sang '{statusText}'.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteComplaintDiagnosticErrorAsync(int id)
+    {
+        var error = await db.ComplaintDiagnosticErrors.FirstOrDefaultAsync(e => e.Id == id);
+        if (error == null) return (false, "Không tìm thấy mã lỗi.");
+
+        if (error.UsageCount > 0)
+        {
+            error.FlagActive = false;
+            error.UpdatedAt = DateTime.Now;
+            await db.SaveChangesAsync();
+            return (true, $"Mã lỗi '{error.ErrorCode}' đã được sử dụng {error.UsageCount} lần trong RO/Warranty, đã tự động chuyển sang trạng thái Ngừng sử dụng thay vì xóa.");
+        }
+
+        db.ComplaintDiagnosticErrors.Remove(error);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa mã lỗi '{error.ErrorCode}' khỏi hệ thống.");
+    }
+
+    public Task<List<ComplaintDiagnosticError>> GetActiveComplaintsAsync(VehicleSystemGroup? group = null)
+    {
+        var q = db.ComplaintDiagnosticErrors
+            .Where(e => e.ErrorType == ComplaintErrorType.Complaint && e.FlagActive);
+
+        if (group.HasValue) q = q.Where(e => e.SystemGroup == group.Value);
+
+        return q.OrderBy(e => e.ErrorCode).ToListAsync();
+    }
+
+    public Task<List<ComplaintDiagnosticError>> GetActiveDiagnosticsAsync(VehicleSystemGroup? group = null)
+    {
+        var q = db.ComplaintDiagnosticErrors
+            .Where(e => e.ErrorType == ComplaintErrorType.Diagnostic && e.FlagActive);
+
+        if (group.HasValue) q = q.Where(e => e.SystemGroup == group.Value);
+
+        return q.OrderBy(e => e.ErrorCode).ToListAsync();
+    }
+
+    public async Task<(bool ok, string msg)> ApplyErrorToROAsync(int roId, int errorId, string target)
+    {
+        var ro = await db.ROs.Include(r => r.Car).FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa RO.");
+
+        var err = await db.ComplaintDiagnosticErrors.FirstOrDefaultAsync(e => e.Id == errorId);
+        if (err == null) return (false, "Không tìm thấy mã lỗi tương ứng.");
+
+        var cleanTarget = (target ?? "PN").Trim().ToUpperInvariant();
+        if (cleanTarget == "PN" || (cleanTarget == "AUTO" && err.ErrorType == ComplaintErrorType.Complaint))
+        {
+            ro.ErrorCodePN = err.ErrorCode;
+            if (string.IsNullOrWhiteSpace(ro.IntakeNote))
+            {
+                ro.IntakeNote = $"{err.ErrorName}. {err.ErrorDesc}".Trim();
+            }
+            else
+            {
+                ro.IntakeNote += $" | [{err.ErrorCode}] {err.ErrorName}";
+            }
+        }
+        else if (cleanTarget == "CD" || (cleanTarget == "AUTO" && err.ErrorType == ComplaintErrorType.Diagnostic))
+        {
+            ro.ErrorCodeCD = err.ErrorCode;
+            if (string.IsNullOrWhiteSpace(ro.DiagnosticResult))
+            {
+                ro.DiagnosticResult = $"{err.ErrorName}. {err.Remark}".Trim();
+            }
+            else
+            {
+                ro.DiagnosticResult += $" | [{err.ErrorCode}] {err.ErrorName}";
+            }
+        }
+
+        err.UsageCount++;
+        await db.SaveChangesAsync();
+        return (true, $"Đã áp dụng mã lỗi {err.ErrorCode} ({err.ErrorName}) vào Lệnh sửa chữa {ro.Code}.");
+    }
+
+    public Task<List<RepairOrder>> ROsForErrorAssignmentAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Where(r => r.Status != ROStatus.Rejected && r.Status != ROStatus.Finished && r.Status != ROStatus.Paid)
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(30)
             .ToListAsync();
 }
 

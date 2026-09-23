@@ -1,0 +1,266 @@
+@model List<ComplaintDiagnosticError>
+@{
+    ViewData["Title"] = "Từ điển Mã lỗi Phàn nàn & Chẩn đoán Hư hỏng (DTC / Symptoms)";
+    var summary = ViewBag.Summary as ComplaintDiagnosticSummaryDto ?? new ComplaintDiagnosticSummaryDto();
+    var openROs = ViewBag.OpenROs as List<RepairOrder> ?? [];
+    ComplaintErrorType? curType = ViewBag.Type;
+    VehicleSystemGroup? curGroup = ViewBag.Group;
+    bool? curActive = ViewBag.IsActive;
+    string? curQ = ViewBag.Q;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng mã lỗi trong từ điển</div>
+                <div class="stat-num text-primary">@summary.TotalErrors</div>
+                <div class="text-muted" style="font-size:11.5px">Mã hiện tượng &amp; chuẩn đoán kỹ thuật</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Phàn nàn của KH (PN)</div>
+                <div class="stat-num text-warning">@summary.ComplaintCount <span class="fs-6 fw-normal text-muted">mã triệu chứng</span></div>
+                <div class="text-muted" style="font-size:11.5px">Khách hàng ghi nhận khi tiếp nhận xe</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Chuẩn đoán kỹ thuật (CD/DTC)</div>
+                <div class="stat-num text-info">@summary.DiagnosticCount <span class="fs-6 fw-normal text-muted">mã đo kiểm</span></div>
+                <div class="text-muted" style="font-size:11.5px">Quét máy GDS / Chẩn đoán xưởng</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng lượt gắn vào RO / Bảo hành</div>
+                <div class="stat-num text-success">@summary.TotalUsageCount <span class="fs-6 fw-normal text-muted">lượt</span></div>
+                <div class="text-muted" style="font-size:11.5px">Đã liên kết hồ sơ sửa chữa &amp; BH</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body p-3">
+        <form method="get" class="row g-2 align-items-center">
+            <div class="col-md-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="text" name="q" value="@curQ" class="form-control" placeholder="Mã lỗi, tên lỗi, triệu chứng..." />
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select name="type" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Tất cả loại mã --</option>
+                    <option value="1" selected="@(curType == ComplaintErrorType.Complaint)">Phàn nàn KH (PN)</option>
+                    <option value="2" selected="@(curType == ComplaintErrorType.Diagnostic)">Chuẩn đoán KT (CD)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="group" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Tất cả hệ thống --</option>
+                    <option value="1" selected="@(curGroup == VehicleSystemGroup.Engine)">Động cơ &amp; Nhiên liệu</option>
+                    <option value="2" selected="@(curGroup == VehicleSystemGroup.Transmission)">Hộp số &amp; Dẫn động</option>
+                    <option value="3" selected="@(curGroup == VehicleSystemGroup.Chassis)">Khung gầm &amp; Phanh/Lái</option>
+                    <option value="4" selected="@(curGroup == VehicleSystemGroup.Electrical)">Điện - Điện tử &amp; Cảm biến</option>
+                    <option value="5" selected="@(curGroup == VehicleSystemGroup.HVAC)">Điều hòa cabin (AC)</option>
+                    <option value="6" selected="@(curGroup == VehicleSystemGroup.BodyPaint)">Thân vỏ &amp; Sơn</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="isActive" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Trạng thái --</option>
+                    <option value="true" selected="@(curActive == true)">Đang hiệu lực</option>
+                    <option value="false" selected="@(curActive == false)">Ngừng sử dụng</option>
+                </select>
+            </div>
+            <div class="col-md-3 d-flex justify-content-end gap-1">
+                <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-filter"></i> Lọc</button>
+                <a href="/ComplaintDiagnostic" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i> Đặt lại</a>
+                <a href="/ComplaintDiagnostic/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-circle"></i> Thêm mã lỗi</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size:13px">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:120px">Mã lỗi</th>
+                    <th>Tên hiện tượng / Mô tả lỗi</th>
+                    <th style="width:130px">Phân loại</th>
+                    <th style="width:160px">Hệ thống xe</th>
+                    <th>Triệu chứng &amp; Hướng xử lý</th>
+                    <th class="text-center" style="width:80px">Lượt dùng</th>
+                    <th class="text-center" style="width:100px">Trạng thái</th>
+                    <th class="text-end" style="width:160px">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="8" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-2 d-block mb-1"></i>
+                            Không tìm thấy mã lỗi nào phù hợp với bộ lọc tìm kiếm.
+                        </td>
+                    </tr>
+                }
+                @foreach (var item in Model)
+                {
+                    <tr>
+                        <td class="fw-bold font-monospace">
+                            <a href="/ComplaintDiagnostic/Detail/@item.Id" class="text-decoration-none">@item.ErrorCode</a>
+                        </td>
+                        <td>
+                            <a href="/ComplaintDiagnostic/Detail/@item.Id" class="text-decoration-none fw-semibold text-dark">
+                                @item.ErrorName
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge @item.BadgeTypeClass">
+                                @(item.ErrorType == ComplaintErrorType.Complaint ? "Phàn nàn (PN)" : "Chuẩn đoán (CD)")
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge @item.BadgeGroupClass">
+                                @item.SystemGroupName
+                            </span>
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(item.ErrorDesc))
+                            {
+                                <div class="text-truncate" style="max-width:280px" title="@item.ErrorDesc">
+                                    <span class="text-muted small">TC:</span> @item.ErrorDesc
+                                </div>
+                            }
+                            @if (!string.IsNullOrEmpty(item.Remark))
+                            {
+                                <div class="text-truncate text-secondary small" style="max-width:280px" title="@item.Remark">
+                                    <span class="text-info">XL:</span> @item.Remark
+                                </div>
+                            }
+                        </td>
+                        <td class="text-center">
+                            @if (item.UsageCount > 0)
+                            {
+                                <span class="badge bg-light text-dark border fw-bold">@item.UsageCount</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">0</span>
+                            }
+                        </td>
+                        <td class="text-center">
+                            @if (item.FlagActive)
+                            {
+                                <span class="badge bg-success">Hiệu lực</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Tạm ngưng</span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/ComplaintDiagnostic/Detail/@item.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="/ComplaintDiagnostic/Print/@item.Id" target="_blank" class="btn btn-outline-secondary" title="In phiếu thẻ kỹ thuật">
+                                    <i class="bi bi-printer"></i>
+                                </a>
+                                <button type="button" class="btn btn-outline-primary" title="Gán vào RO" data-bs-toggle="modal" data-bs-target="#assignModal" data-error-id="@item.Id" data-error-code="@item.ErrorCode" data-error-name="@item.ErrorName" data-error-type="@item.ErrorTypeCode">
+                                    <i class="bi bi-link-45deg"></i>
+                                </button>
+                                <a href="/ComplaintDiagnostic/Edit/@item.Id" class="btn btn-outline-warning" title="Chỉnh sửa">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal Gán nhanh Mã lỗi vào Lệnh sửa chữa RO -->
+<div class="modal fade" id="assignModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" id="assignForm" action="">
+            @Html.AntiForgeryToken()
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold"><i class="bi bi-link-45deg me-1"></i> Áp dụng Mã lỗi vào Lệnh sửa chữa (RO)</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Mã lỗi được chọn</label>
+                        <div class="p-2 bg-light border rounded font-monospace fw-bold" id="modalErrorDisplay">-</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Chọn Lệnh sửa chữa (RO đang mở) <span class="text-danger">*</span></label>
+                        <select name="roId" class="form-select" required>
+                            <option value="">-- Chọn lệnh RO đang sửa chữa --</option>
+                            @foreach (var ro in openROs)
+                            {
+                                <option value="@ro.Id">@ro.Code — Xe: @(ro.Car?.Plate ?? "N/A") (@(ro.Car?.Model ?? "")) — @(ro.Customer?.Name ?? "")</option>
+                            }
+                        </select>
+                        <div class="form-text">Mã lỗi sẽ được gắn vào trường ErrorCodePN hoặc ErrorCodeCD của RO.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Vị trí gán mã</label>
+                        <select name="target" class="form-select" id="modalTargetSelect">
+                            <option value="AUTO">Tự động theo loại mã (PN -> Phàn nàn, CD -> Chuẩn đoán)</option>
+                            <option value="PN">Gán vào Mã phàn nàn của KH (ErrorCodePN)</option>
+                            <option value="CD">Gán vào Mã chẩn đoán kỹ thuật (ErrorCodeCD)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check2"></i> Xác nhận gán</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    var assignModal = document.getElementById('assignModal');
+    if (assignModal) {
+        assignModal.addEventListener('show.bs.modal', function (event) {
+            var button = event.relatedTarget;
+            var errorId = button.getAttribute('data-error-id');
+            var errorCode = button.getAttribute('data-error-code');
+            var errorName = button.getAttribute('data-error-name');
+            var errorType = button.getAttribute('data-error-type');
+
+            document.getElementById('modalErrorDisplay').innerText = errorCode + ' — ' + errorName + ' [' + errorType + ']';
+            document.getElementById('assignForm').action = '/ComplaintDiagnostic/ApplyToRO/' + errorId;
+            
+            var targetSelect = document.getElementById('modalTargetSelect');
+            if (errorType === 'PN') {
+                targetSelect.value = 'PN';
+            } else if (errorType === 'CD') {
+                targetSelect.value = 'CD';
+            } else {
+                targetSelect.value = 'AUTO';
+            }
+        });
+    }
+</script>
+}

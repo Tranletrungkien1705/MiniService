@@ -73,6 +73,7 @@ public class AppDbContext : DbContext
     public DbSet<CustomerGroupMember> CustomerGroupMembers => Set<CustomerGroupMember>();
     public DbSet<PartPriceRequest> PartPriceRequests => Set<PartPriceRequest>();
     public DbSet<PartPriceRequestLine> PartPriceRequestLines => Set<PartPriceRequestLine>();
+    public DbSet<ComplaintDiagnosticError> ComplaintDiagnosticErrors => Set<ComplaintDiagnosticError>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -745,6 +746,18 @@ public class AppDbContext : DbContext
             e.Property(x => x.TSTPrice).HasPrecision(18, 2);
             e.Ignore(x => x.Amount);
             e.HasOne(x => x.Part).WithMany(p => p.PartPriceRequestLines).HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ComplaintDiagnosticError>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ErrorCode }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.ErrorType });
+            e.HasIndex(x => new { x.OrgId, x.SystemGroup });
+            e.Ignore(x => x.ErrorTypeCode);
+            e.Ignore(x => x.ErrorTypeName);
+            e.Ignore(x => x.SystemGroupName);
+            e.Ignore(x => x.BadgeTypeClass);
+            e.Ignore(x => x.BadgeGroupClass);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

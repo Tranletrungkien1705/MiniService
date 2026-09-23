@@ -1,0 +1,166 @@
+@model ComplaintDiagnosticError
+@{
+    ViewData["Title"] = $"Chi tiết mã lỗi: {Model.ErrorCode} - {Model.ErrorName}";
+    var openROs = ViewBag.OpenROs as List<RepairOrder> ?? [];
+}
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <div>
+                    <span class="badge @Model.BadgeTypeClass me-2">@Model.ErrorTypeName</span>
+                    <span class="badge @Model.BadgeGroupClass">@Model.SystemGroupName</span>
+                    <h5 class="mb-0 mt-2 fw-bold font-monospace text-primary">@Model.ErrorCode</h5>
+                </div>
+                <div class="text-end">
+                    @if (Model.FlagActive)
+                    {
+                        <span class="badge bg-success fs-6"><i class="bi bi-check-circle me-1"></i> Đang hiệu lực</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary fs-6"><i class="bi bi-pause-circle me-1"></i> Tạm ngưng sử dụng</span>
+                    }
+                    <div class="text-muted small mt-1">Lượt gắn RO: <strong>@Model.UsageCount</strong> lần</div>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3 text-dark fs-5">@Model.ErrorName</h6>
+
+                <div class="mb-4">
+                    <label class="fw-bold text-muted small text-uppercase d-block mb-2">
+                        <i class="bi bi-card-text me-1 text-primary"></i> Mô tả Triệu chứng &amp; Phương pháp kiểm tra (ErrorDesc)
+                    </label>
+                    <div class="p-3 bg-light rounded border" style="line-height:1.6;font-size:14px">
+                        @if (!string.IsNullOrWhiteSpace(Model.ErrorDesc))
+                        {
+                            @Model.ErrorDesc
+                        }
+                        else
+                        {
+                            <span class="text-muted fst-italic">Chưa có mô tả chi tiết triệu chứng.</span>
+                        }
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="fw-bold text-muted small text-uppercase d-block mb-2">
+                        <i class="bi bi-tools me-1 text-warning"></i> Ghi chú Kỹ thuật &amp; Khuyến nghị Xử lý (Remark)
+                    </label>
+                    <div class="p-3 rounded border border-warning-subtle" style="background-color:#fffbeb;line-height:1.6;font-size:14px">
+                        @if (!string.IsNullOrWhiteSpace(Model.Remark))
+                        {
+                            @Model.Remark
+                        }
+                        else
+                        {
+                            <span class="text-muted fst-italic">Chưa có khuyến nghị xử lý từ hãng.</span>
+                        }
+                    </div>
+                </div>
+
+                <div class="row g-3 p-3 bg-white border rounded">
+                    <div class="col-md-6">
+                        <div class="text-muted small">Người khởi tạo mã:</div>
+                        <div class="fw-semibold">@Model.CreatedBy</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">Thời điểm tạo:</div>
+                        <div class="fw-semibold">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm:ss")</div>
+                    </div>
+                    @if (Model.UpdatedAt.HasValue)
+                    {
+                        <div class="col-md-6">
+                            <div class="text-muted small">Cập nhật lần cuối:</div>
+                            <div class="fw-semibold">@Model.UpdatedAt.Value.ToString("dd/MM/yyyy HH:mm:ss")</div>
+                        </div>
+                    }
+                </div>
+            </div>
+            <div class="card-footer bg-white py-3 d-flex justify-content-between align-items-center">
+                <a href="/ComplaintDiagnostic" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Quay lại từ điển
+                </a>
+                <div class="d-flex gap-2">
+                    <a href="/ComplaintDiagnostic/Print/@Model.Id" target="_blank" class="btn btn-outline-dark">
+                        <i class="bi bi-printer me-1"></i> In thẻ chẩn đoán
+                    </a>
+                    <a href="/ComplaintDiagnostic/Edit/@Model.Id" class="btn btn-outline-warning">
+                        <i class="bi bi-pencil me-1"></i> Chỉnh sửa
+                    </a>
+                    <form method="post" action="/ComplaintDiagnostic/ToggleActive/@Model.Id" class="d-inline">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn @(Model.FlagActive ? "btn-outline-secondary" : "btn-outline-success")">
+                            @(Model.FlagActive ? "Tạm ngưng" : "Kích hoạt lại")
+                        </button>
+                    </form>
+                    <form method="post" action="/ComplaintDiagnostic/Delete/@Model.Id" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa/ngưng sử dụng mã lỗi này?');">
+                        @Html.AntiForgeryToken()
+                        <button type="submit" class="btn btn-outline-danger">
+                            <i class="bi bi-trash"></i> Xóa
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold text-dark">
+                    <i class="bi bi-link-45deg me-1 text-primary"></i> Áp dụng vào Lệnh sửa chữa (RO)
+                </h6>
+            </div>
+            <div class="card-body p-3">
+                <p class="small text-muted mb-3">
+                    Chọn nhanh một Lệnh sửa chữa đang mở để áp dụng mã lỗi này vào phần mô tả và mã hiện tượng:
+                </p>
+                <form method="post" action="/ComplaintDiagnostic/ApplyToRO/@Model.Id">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Lệnh sửa chữa (RO)</label>
+                        <select name="roId" class="form-select form-select-sm" required>
+                            <option value="">-- Chọn lệnh RO --</option>
+                            @foreach (var ro in openROs)
+                            {
+                                <option value="@ro.Id">@ro.Code — @(ro.Car?.Plate ?? "Xe") (@(ro.Car?.Model ?? ""))</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Gán vào trường nào?</label>
+                        <select name="target" class="form-select form-select-sm">
+                            <option value="AUTO">Tự động (@Model.ErrorTypeCode)</option>
+                            <option value="PN">ErrorCodePN (Phàn nàn KH)</option>
+                            <option value="CD">ErrorCodeCD (Chuẩn đoán KT)</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary w-100">
+                        <i class="bi bi-check2-circle me-1"></i> Áp dụng ngay vào RO
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold text-dark">
+                    <i class="bi bi-info-circle me-1 text-info"></i> Thông tin chuẩn Hyundai Motor
+                </h6>
+            </div>
+            <div class="card-body p-3 small text-muted">
+                <div class="mb-2">
+                    <strong class="text-dark">Quy chuẩn mã PN:</strong> Khách hàng mô tả các triệu chứng trực quan khi tiếp nhận tại bàn CVDV.
+                </div>
+                <div class="mb-2">
+                    <strong class="text-dark">Quy chuẩn mã CD:</strong> Mã lỗi chẩn đoán tiêu chuẩn SAE/ISO OBD-II hoặc mã lỗi phân loại chuyên biệt của hệ thống xưởng đại lý Hyundai.
+                </div>
+                <div>
+                    <strong class="text-dark">Bảo hành xe (Warranty):</strong> Khi lập hồ sơ đề nghị bồi hoàn gửi hãng Hyundai HTC, việc khai báo đầy đủ ErrorCodePN và ErrorCodeCD là bắt buộc theo quy định kiểm toán bảo hành.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

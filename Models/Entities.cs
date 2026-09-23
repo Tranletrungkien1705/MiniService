@@ -514,6 +514,9 @@ public class RepairOrder : IOrgOwned
     public ROStatus Status { get; set; } = ROStatus.Created;
     public int Odometer { get; set; }             // số km
     public string? IntakeNote { get; set; }       // ghi nhận tình trạng khi nhận xe
+    public string? ErrorCodePN { get; set; }      // Mã lỗi phàn nàn của khách hàng (PN)
+    public string? ErrorCodeCD { get; set; }      // Mã chuẩn đoán kỹ thuật viên (CD / DTC)
+    public string? DiagnosticResult { get; set; } // Kết quả chuẩn đoán kỹ thuật xưởng
     public string? Technician { get; set; }       // thợ phụ trách
     public string CreatedBy { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.Now;
@@ -2451,8 +2454,82 @@ public class PartPriceRequestLine : IOrgOwned
     public decimal Amount => Quantity * TSTPrice;
 }
 
+/// <summary>Phân loại mã lỗi dịch vụ ô tô — Ser_MST_ROComplaintDiagnosticError_ErrorTypeCode (PN: Phàn nàn KH, CD: Chuẩn đoán KT).</summary>
+public enum ComplaintErrorType
+{
+    Complaint = 1,   // PN: Khách hàng phàn nàn / Hiện tượng sự cố (Customer Complaint / Symptom)
+    Diagnostic = 2   // CD: Kỹ thuật viên chuẩn đoán / Mã chẩn đoán máy quét (Diagnostic Trouble Code / DTC)
+}
 
+/// <summary>Phân loại nhóm hệ thống kỹ thuật xe ô tô tiêu chuẩn xưởng dịch vụ.</summary>
+public enum VehicleSystemGroup
+{
+    Engine = 1,         // Động cơ & Hệ thống nhiên liệu
+    Transmission = 2,   // Hộp số & Hệ thống dẫn động
+    Chassis = 3,        // Khung gầm, Phanh & Hệ thống lái
+    Electrical = 4,     // Điện - Điện tử, Đèn còi & Cảm biến
+    HVAC = 5,           // Điều hòa không khí & Thông gió cabin
+    BodyPaint = 6,      // Thân vỏ, Cửa kính & Sơn xe
+    General = 7         // Hệ thống tổng hợp / Khác
+}
 
+/// <summary>Từ điển Mã lỗi phàn nàn & Chẩn đoán kỹ thuật xưởng dịch vụ — Ser_MST_ROComplaintDiagnosticError trong idn.CarService (MNU_QT_DL_QUANLYMALOIPHANNANVACHANDOAN).</summary>
+public class ComplaintDiagnosticError : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ErrorCode { get; set; } = "";                     // Mã lỗi duy nhất (VD: PN-ENG-01, CD-P0300)
+    public string ErrorName { get; set; } = "";                     // Tên lỗi / Mô tả tóm tắt hiện tượng (ErrorName)
+    public ComplaintErrorType ErrorType { get; set; } = ComplaintErrorType.Complaint; // Loại lỗi (PN / CD)
+    public VehicleSystemGroup SystemGroup { get; set; } = VehicleSystemGroup.Engine;   // Phân nhóm hệ thống
+    public string? ErrorDesc { get; set; }                          // Mô tả chi tiết triệu chứng & phương pháp kiểm tra (ErrorDesc)
+    public string? Remark { get; set; }                             // Ghi chú kỹ thuật, nguyên nhân & khuyến cáo khắc phục (Remark)
+    public bool FlagActive { get; set; } = true;                    // Trạng thái hiệu lực (FlagActive = 1/0)
+    public int UsageCount { get; set; } = 0;                        // Tần suất xuất hiện trên Lệnh sửa chữa RO / Báo cáo BH
+    public string CreatedBy { get; set; } = "Quản đốc";             // Người lập mã
+    public DateTime CreatedAt { get; set; } = DateTime.Now;         // Ngày tạo
+    public DateTime? UpdatedAt { get; set; }                        // Ngày cập nhật gần nhất
 
+    // Helper properties hiển thị giao diện UI
+    public string ErrorTypeCode => ErrorType == ComplaintErrorType.Complaint ? "PN" : "CD";
+    public string ErrorTypeName => ErrorType == ComplaintErrorType.Complaint ? "Phàn nàn của KH (PN)" : "Chuẩn đoán kỹ thuật (CD)";
+    public string SystemGroupName => SystemGroup switch
+    {
+        VehicleSystemGroup.Engine => "Động cơ & Nhiên liệu",
+        VehicleSystemGroup.Transmission => "Hộp số & Dẫn động",
+        VehicleSystemGroup.Chassis => "Khung gầm & Phanh/Lái",
+        VehicleSystemGroup.Electrical => "Điện - Điện tử & Cảm biến",
+        VehicleSystemGroup.HVAC => "Điều hòa cabin (AC)",
+        VehicleSystemGroup.BodyPaint => "Thân vỏ & Đồng sơn",
+        _ => "Tổng hợp / Khác"
+    };
+    public string BadgeTypeClass => ErrorType == ComplaintErrorType.Complaint ? "bg-warning text-dark" : "bg-primary text-white";
+    public string BadgeGroupClass => SystemGroup switch
+    {
+        VehicleSystemGroup.Engine => "bg-danger text-white",
+        VehicleSystemGroup.Transmission => "bg-info text-dark",
+        VehicleSystemGroup.Chassis => "bg-secondary text-white",
+        VehicleSystemGroup.Electrical => "bg-warning text-dark",
+        VehicleSystemGroup.HVAC => "bg-success text-white",
+        VehicleSystemGroup.BodyPaint => "bg-dark text-white",
+        _ => "bg-light text-dark"
+    };
+}
 
-
+/// <summary>DTO Tổng hợp chỉ số từ điển mã lỗi phàn nàn & chẩn đoán xưởng dịch vụ.</summary>
+public class ComplaintDiagnosticSummaryDto
+{
+    public int TotalErrors { get; set; }
+    public int ComplaintCount { get; set; } // PN
+    public int DiagnosticCount { get; set; } // CD
+    public int ActiveCount { get; set; }
+    public int InactiveCount { get; set; }
+    public int EngineCount { get; set; }
+    public int TransmissionCount { get; set; }
+    public int ChassisCount { get; set; }
+    public int ElectricalCount { get; set; }
+    public int HvacCount { get; set; }
+    public int BodyPaintCount { get; set; }
+    public int TotalUsageCount { get; set; }
+    public List<ComplaintDiagnosticError> TopUsedErrors { get; set; } = [];
+}

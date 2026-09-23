@@ -5092,6 +5092,175 @@ app.MapDelete("/api/part-price-requests/{id:int}", async (int id, IRoService svc
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// =========================================================================
+// MINIMAL APIS — TỪ ĐIỂN MÃ LỖI PHÀN NÀN & CHẨN ĐOÁN DỊCH VỤ XE
+// (Ser_MST_ROComplaintDiagnosticError - MNU_QT_DL_QUANLYMALOIPHANNANVACHANDOAN)
+// =========================================================================
+
+app.MapGet("/api/complaint-diagnostic-errors", async (ComplaintErrorType? type, VehicleSystemGroup? group, string? q, bool? isActive, IRoService svc) =>
+{
+    var list = await svc.ComplaintDiagnosticErrorsAsync(type, group, q, isActive);
+    return Results.Ok(list.Select(e => new
+    {
+        e.Id,
+        e.ErrorCode,
+        e.ErrorName,
+        errorType = e.ErrorTypeName,
+        errorTypeCode = e.ErrorTypeCode,
+        errorTypeValue = (int)e.ErrorType,
+        systemGroup = e.SystemGroupName,
+        systemGroupValue = (int)e.SystemGroup,
+        e.ErrorDesc,
+        e.Remark,
+        e.FlagActive,
+        e.UsageCount,
+        e.CreatedBy,
+        e.CreatedAt,
+        e.UpdatedAt
+    }));
+});
+
+app.MapGet("/api/complaint-diagnostic-errors/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetComplaintDiagnosticSummaryAsync();
+    return Results.Ok(s);
+});
+
+app.MapGet("/api/complaint-diagnostic-errors/complaints", async (VehicleSystemGroup? group, IRoService svc) =>
+{
+    var list = await svc.GetActiveComplaintsAsync(group);
+    return Results.Ok(list.Select(e => new
+    {
+        e.Id,
+        e.ErrorCode,
+        e.ErrorName,
+        systemGroup = e.SystemGroupName,
+        e.ErrorDesc,
+        e.UsageCount
+    }));
+});
+
+app.MapGet("/api/complaint-diagnostic-errors/diagnostics", async (VehicleSystemGroup? group, IRoService svc) =>
+{
+    var list = await svc.GetActiveDiagnosticsAsync(group);
+    return Results.Ok(list.Select(e => new
+    {
+        e.Id,
+        e.ErrorCode,
+        e.ErrorName,
+        systemGroup = e.SystemGroupName,
+        e.ErrorDesc,
+        e.Remark,
+        e.UsageCount
+    }));
+});
+
+app.MapGet("/api/complaint-diagnostic-errors/{id:int}", async (int id, IRoService svc) =>
+{
+    var e = await svc.GetComplaintDiagnosticErrorAsync(id);
+    if (e == null) return Results.NotFound(new { error = "Không tìm thấy mã lỗi." });
+    return Results.Ok(new
+    {
+        e.Id,
+        e.ErrorCode,
+        e.ErrorName,
+        errorType = e.ErrorTypeName,
+        errorTypeCode = e.ErrorTypeCode,
+        errorTypeValue = (int)e.ErrorType,
+        systemGroup = e.SystemGroupName,
+        systemGroupValue = (int)e.SystemGroup,
+        e.ErrorDesc,
+        e.Remark,
+        e.FlagActive,
+        e.UsageCount,
+        e.CreatedBy,
+        e.CreatedAt,
+        e.UpdatedAt
+    });
+});
+
+app.MapGet("/api/complaint-diagnostic-errors/by-code/{code}", async (string code, IRoService svc) =>
+{
+    var e = await svc.GetComplaintDiagnosticErrorByCodeAsync(code);
+    if (e == null) return Results.NotFound(new { error = $"Không tìm thấy mã lỗi '{code}'." });
+    return Results.Ok(new
+    {
+        e.Id,
+        e.ErrorCode,
+        e.ErrorName,
+        errorType = e.ErrorTypeName,
+        errorTypeCode = e.ErrorTypeCode,
+        errorTypeValue = (int)e.ErrorType,
+        systemGroup = e.SystemGroupName,
+        systemGroupValue = (int)e.SystemGroup,
+        e.ErrorDesc,
+        e.Remark,
+        e.FlagActive,
+        e.UsageCount,
+        e.CreatedBy,
+        e.CreatedAt,
+        e.UpdatedAt
+    });
+});
+
+app.MapPost("/api/complaint-diagnostic-errors", async (CreateComplaintDiagnosticErrorDto dto, IRoService svc) =>
+{
+    try
+    {
+        var err = new ComplaintDiagnosticError
+        {
+            ErrorCode = dto.ErrorCode,
+            ErrorName = dto.ErrorName,
+            ErrorType = dto.ErrorType,
+            SystemGroup = dto.SystemGroup,
+            ErrorDesc = dto.ErrorDesc,
+            Remark = dto.Remark,
+            FlagActive = dto.FlagActive ?? true,
+            CreatedBy = string.IsNullOrWhiteSpace(dto.CreatedBy) ? "API" : dto.CreatedBy.Trim()
+        };
+        var id = await svc.CreateComplaintDiagnosticErrorAsync(err);
+        return Results.Created($"/api/complaint-diagnostic-errors/{id}", new { id, err.ErrorCode, message = "Đã tạo mã lỗi thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/complaint-diagnostic-errors/{id:int}", async (int id, UpdateComplaintDiagnosticErrorDto dto, IRoService svc) =>
+{
+    var update = new ComplaintDiagnosticError
+    {
+        ErrorCode = dto.ErrorCode,
+        ErrorName = dto.ErrorName,
+        ErrorType = dto.ErrorType,
+        SystemGroup = dto.SystemGroup,
+        ErrorDesc = dto.ErrorDesc,
+        Remark = dto.Remark,
+        FlagActive = dto.FlagActive
+    };
+    var (ok, msg) = await svc.UpdateComplaintDiagnosticErrorAsync(id, update);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/complaint-diagnostic-errors/{id:int}/toggle-active", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ToggleComplaintDiagnosticErrorActiveAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/complaint-diagnostic-errors/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteComplaintDiagnosticErrorAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/complaint-diagnostic-errors/apply-to-ro", async (ApplyErrorToRoDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ApplyErrorToROAsync(dto.RoId, dto.ErrorId, dto.Target ?? "AUTO");
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -5229,6 +5398,10 @@ record SimulatePartPriceLineItemDto(int LineId, string? TSTPartCode, decimal TST
 record ApprovePartPriceRequestDto(string? ApprovedBy, bool? SyncToCatalog);
 record ConvertPriceRequestToOrderDto(string? CreatedBy);
 record CancelPartPriceRequestDto(string? Reason);
+
+record CreateComplaintDiagnosticErrorDto(string ErrorCode, string ErrorName, ComplaintErrorType ErrorType, VehicleSystemGroup SystemGroup, string? ErrorDesc, string? Remark, bool? FlagActive, string? CreatedBy);
+record UpdateComplaintDiagnosticErrorDto(string ErrorCode, string ErrorName, ComplaintErrorType ErrorType, VehicleSystemGroup SystemGroup, string? ErrorDesc, string? Remark, bool FlagActive);
+record ApplyErrorToRoDto(int RoId, int ErrorId, string? Target);
 
 
 

@@ -1,0 +1,143 @@
+@model ComplaintDiagnosticError
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Thẻ Chẩn đoán Kỹ thuật - @Model.ErrorCode</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #f8f9fa; color: #111; font-size: 13.5px; }
+        .print-container { max-width: 800px; margin: 20px auto; background: #fff; padding: 35px 45px; border-radius: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .header-logo { font-size: 22px; font-weight: 800; letter-spacing: 1px; color: #002c5f; }
+        .header-sub { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; }
+        .doc-title { text-align: center; margin: 25px 0 20px; font-weight: 800; font-size: 19px; color: #002c5f; text-transform: uppercase; border-bottom: 2px solid #002c5f; padding-bottom: 8px; }
+        .info-box { border: 1px solid #dee2e6; border-radius: 4px; padding: 12px 16px; margin-bottom: 16px; background-color: #fafbfc; }
+        .info-label { font-weight: 600; color: #495057; width: 180px; }
+        .section-header { font-size: 14px; font-weight: 700; color: #002c5f; text-transform: uppercase; margin-top: 20px; margin-bottom: 8px; border-left: 4px solid #002c5f; padding-left: 8px; }
+        .tech-box { border: 1px solid #ced4da; padding: 12px 14px; border-radius: 4px; line-height: 1.6; min-height: 80px; }
+        .sign-box { text-align: center; margin-top: 40px; }
+        .sign-title { font-weight: 700; font-size: 12.5px; text-transform: uppercase; margin-bottom: 70px; }
+        @@media print {
+            body { background: #fff; }
+            .print-container { box-shadow: none; padding: 0; margin: 0; max-width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container text-center my-3 no-print">
+        <button onclick="window.print()" class="btn btn-primary btn-sm me-2"><i class="bi bi-printer"></i> In thẻ chẩn đoán</button>
+        <button onclick="window.close()" class="btn btn-secondary btn-sm">Đóng cửa sổ</button>
+    </div>
+
+    <div class="print-container">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <div class="header-logo">HYUNDAI SERVICE WORKSHOP</div>
+                <div class="header-sub">Hệ thống Đại lý Ủy quyền Hyundai Toàn quốc</div>
+            </div>
+            <div class="text-end">
+                <div class="fw-bold text-uppercase" style="font-size:11px;color:#777">Biểu mẫu kỹ thuật tiêu chuẩn</div>
+                <div class="badge bg-dark font-monospace fs-6">DTC-CARD</div>
+            </div>
+        </div>
+
+        <div class="doc-title">
+            THẺ CHUẨN ĐOÁN &amp; PHÂN TÍCH LỖI KỸ THUẬT XE
+            <div style="font-size:12px;font-weight:normal;color:#666;text-transform:none;margin-top:3px">
+                (Standard Symptom &amp; Diagnostic Trouble Code Sheet)
+            </div>
+        </div>
+
+        <!-- Meta info -->
+        <div class="info-box">
+            <div class="row g-2">
+                <div class="col-6 d-flex">
+                    <span class="info-label">Mã số lỗi (Code):</span>
+                    <span class="fw-bold font-monospace text-primary fs-6">@Model.ErrorCode</span>
+                </div>
+                <div class="col-6 d-flex">
+                    <span class="info-label">Phân loại lỗi:</span>
+                    <span class="fw-bold">@Model.ErrorTypeName</span>
+                </div>
+                <div class="col-6 d-flex">
+                    <span class="info-label">Hệ thống kỹ thuật:</span>
+                    <span class="fw-bold">@Model.SystemGroupName</span>
+                </div>
+                <div class="col-6 d-flex">
+                    <span class="info-label">Trạng thái hiệu lực:</span>
+                    <span>@(Model.FlagActive ? "Đang áp dụng trong toàn hệ thống" : "Tạm ngưng áp dụng")</span>
+                </div>
+                <div class="col-12 d-flex mt-2 pt-2 border-top">
+                    <span class="info-label">Tên lỗi / Hiện tượng:</span>
+                    <span class="fw-bold fs-6 text-dark">@Model.ErrorName</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Description -->
+        <div class="section-header">1. Mô tả chi tiết triệu chứng &amp; Phương pháp kiểm tra</div>
+        <div class="tech-box">
+            @if (!string.IsNullOrWhiteSpace(Model.ErrorDesc))
+            {
+                @Model.ErrorDesc
+            }
+            else
+            {
+                <span class="text-muted">Chưa ghi nhận mô tả chi tiết phương pháp kiểm tra.</span>
+            }
+        </div>
+
+        <!-- Remedial Guidance -->
+        <div class="section-header">2. Hướng dẫn xử lý kỹ thuật &amp; Khuyến cáo từ Hãng</div>
+        <div class="tech-box" style="background-color:#fffdf7">
+            @if (!string.IsNullOrWhiteSpace(Model.Remark))
+            {
+                @Model.Remark
+            }
+            else
+            {
+                <span class="text-muted">Chưa có khuyến nghị quy trình sửa chữa riêng.</span>
+            }
+        </div>
+
+        <!-- Practical Workshop Record -->
+        <div class="section-header">3. Ghi nhận kiểm tra thực tế trên xe (Dành cho KTV)</div>
+        <div class="border rounded p-3 mb-3">
+            <div class="row g-2 small">
+                <div class="col-4">Biển số xe: .......................................</div>
+                <div class="col-4">Số khung (VIN): ................................</div>
+                <div class="col-4">Số Km hiện tại: ..........................</div>
+                <div class="col-6 mt-3">Mã máy quét G-Scan/GDS: ...........................................</div>
+                <div class="col-6 mt-3">Áp suất / Điện áp đo thực tế: ....................................</div>
+                <div class="col-12 mt-3">Kết luận nguyên nhân hư hỏng: ....................................................................................................................</div>
+            </div>
+        </div>
+
+        <!-- Signature -->
+        <div class="row sign-box">
+            <div class="col-4">
+                <div class="sign-title">Cố vấn dịch vụ</div>
+                <div class="text-muted small">@Model.CreatedBy</div>
+            </div>
+            <div class="col-4">
+                <div class="sign-title">Kỹ thuật viên kiểm tra</div>
+                <div class="text-muted small">(Ký &amp; ghi rõ họ tên)</div>
+            </div>
+            <div class="col-4">
+                <div class="sign-title">Quản đốc xưởng</div>
+                <div class="text-muted small">(Xác nhận nghiệm thu)</div>
+            </div>
+        </div>
+
+        <div class="text-center text-muted mt-5 pt-3 border-top" style="font-size:11px">
+            Ngày in phiếu: @DateTime.Now.ToString("dd/MM/yyyy HH:mm") · Phần mềm Quản lý Dịch vụ Xe MiniService · Tiêu chuẩn Hyundai Motor
+        </div>
+    </div>
+</body>
+</html>

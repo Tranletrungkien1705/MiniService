@@ -4919,3 +4919,135 @@ public class PartPriceRequestController(IRoService svc) : Controller
     }
 }
 
+public class ComplaintDiagnosticController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(ComplaintErrorType? type, VehicleSystemGroup? group, string? q, bool? isActive)
+    {
+        ViewBag.Type = type;
+        ViewBag.Group = group;
+        ViewBag.Q = q;
+        ViewBag.IsActive = isActive;
+
+        var list = await svc.ComplaintDiagnosticErrorsAsync(type, group, q, isActive);
+        var summary = await svc.GetComplaintDiagnosticSummaryAsync();
+        ViewBag.Summary = summary;
+        ViewBag.OpenROs = await svc.ROsForErrorAssignmentAsync();
+
+        return View(list);
+    }
+
+    public IActionResult Create(ComplaintErrorType? type = null, VehicleSystemGroup? group = null)
+    {
+        var model = new ComplaintDiagnosticError
+        {
+            ErrorType = type ?? ComplaintErrorType.Complaint,
+            SystemGroup = group ?? VehicleSystemGroup.Engine,
+            CreatedBy = "Quản đốc xưởng",
+            FlagActive = true
+        };
+        return View(model);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(ComplaintDiagnosticError model)
+    {
+        if (string.IsNullOrWhiteSpace(model.ErrorCode))
+        {
+            ModelState.AddModelError("ErrorCode", "Vui lòng nhập Mã lỗi (ErrorCode).");
+        }
+        if (string.IsNullOrWhiteSpace(model.ErrorName))
+        {
+            ModelState.AddModelError("ErrorName", "Vui lòng nhập Tên mã lỗi (ErrorName).");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        try
+        {
+            var id = await svc.CreateComplaintDiagnosticErrorAsync(model);
+            TempData["Success"] = $"Đã thêm thành công mã lỗi {model.ErrorCode.Trim().ToUpperInvariant()} vào từ điển.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return View(model);
+        }
+    }
+
+    public async Task<IActionResult> Edit(int id)
+    {
+        var model = await svc.GetComplaintDiagnosticErrorAsync(id);
+        if (model == null) return NotFound();
+        return View(model);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, ComplaintDiagnosticError model)
+    {
+        if (string.IsNullOrWhiteSpace(model.ErrorCode))
+        {
+            ModelState.AddModelError("ErrorCode", "Vui lòng nhập Mã lỗi (ErrorCode).");
+        }
+        if (string.IsNullOrWhiteSpace(model.ErrorName))
+        {
+            ModelState.AddModelError("ErrorName", "Vui lòng nhập Tên mã lỗi (ErrorName).");
+        }
+
+        if (!ModelState.IsValid)
+        {
+            return View(model);
+        }
+
+        var (ok, msg) = await svc.UpdateComplaintDiagnosticErrorAsync(id, model);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (!ok) return View(model);
+
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var model = await svc.GetComplaintDiagnosticErrorAsync(id);
+        if (model == null) return NotFound();
+
+        ViewBag.OpenROs = await svc.ROsForErrorAssignmentAsync();
+        return View(model);
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var model = await svc.GetComplaintDiagnosticErrorAsync(id);
+        if (model == null) return NotFound();
+        return View(model);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleActive(int id)
+    {
+        var (ok, msg) = await svc.ToggleComplaintDiagnosticErrorActiveAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteComplaintDiagnosticErrorAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyToRO(int id, int roId, string target)
+    {
+        var (ok, msg) = await svc.ApplyErrorToROAsync(roId, id, target);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
+
