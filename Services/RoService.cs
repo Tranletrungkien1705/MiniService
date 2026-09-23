@@ -311,6 +311,15 @@ public interface IRoService
     Task<(bool ok, string msg, int? debitId)> CreateSupplierDebitFromStockInAsync(int stockInId, int? supplierId, DateTime? dueDate, string? note);
     Task<List<Supplier>> SuppliersForDebitSelectAsync();
     Task<List<StockIn>> StockInsForDebitSelectAsync();
+    // Dealer Repair History Share (DealerHistoryShareMng - Quản lý tra cứu & chia sẻ lịch sử sửa chữa toàn hệ thống đại lý)
+    Task<List<DealerHistoryRecord>> SearchDealerHistoryAsync(string? q, string? dealer, DateTime? fromDate, DateTime? toDate);
+    Task<VehicleHistorySummaryDto?> GetVehicleServiceSummaryAsync(string plateOrVin);
+    Task<DealerHistoryRecord?> GetDealerHistoryRecordAsync(int id);
+    Task<int> CreateDealerHistoryRecordAsync(DealerHistoryRecord record, List<DealerHistoryItem> items);
+    Task<(bool ok, string msg, int? recordId)> SyncLocalRoToHistoryAsync(int roId);
+    Task<(bool ok, string msg)> DeleteDealerHistoryRecordAsync(int id);
+    Task<List<string>> GetDistinctDealerCodesAsync();
+    Task<List<Car>> CarsWithPlateOrVinAsync(string? q = null);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -6620,4 +6629,308 @@ public class RoService(AppDbContext db) : IRoService
             .Take(30)
             .ToListAsync();
     }
+
+    // =========================================================================
+    // QUẢN LÝ TRA CỨU & CHIA SẺ LỊCH SỬ SỬA CHỮA TOÀN HỆ THỐNG ĐẠI LÝ (DealerHistoryShareMng)
+    // =========================================================================
+
+    public async Task<List<DealerHistoryRecord>> SearchDealerHistoryAsync(string? q, string? dealer, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.DealerHistoryRecords
+            .Include(r => r.Items)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(dealer))
+        {
+            var d = dealer.Trim().ToLower();
+            query = query.Where(r => r.DealerCode.ToLower() == d || r.DealerName.ToLower().Contains(d));
+        }
+
+        if (fromDate.HasValue)
+            query = query.Where(r => r.CheckInDate >= fromDate.Value.Date);
+
+        if (toDate.HasValue)
+            query = query.Where(r => r.CheckInDate <= toDate.Value.Date.AddDays(1).AddTicks(-1));
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(r =>
+                r.PlateNo.ToLower().Contains(term) ||
+                r.FrameNo.ToLower().Contains(term) ||
+                (r.EngineNo != null && r.EngineNo.ToLower().Contains(term)) ||
+                r.CusName.ToLower().Contains(term) ||
+                (r.CusPhone != null && r.CusPhone.Contains(term)) ||
+                r.RONo.ToLower().Contains(term) ||
+                r.ModelName.ToLower().Contains(term) ||
+                (r.CustomerRequest != null && r.CustomerRequest.ToLower().Contains(term)));
+        }
+
+        return await query.OrderByDescending(r => r.CheckInDate).ThenByDescending(r => r.CreatedAt).ToListAsync();
+    }
+
+    public async Task<VehicleHistorySummaryDto?> GetVehicleServiceSummaryAsync(string plateOrVin)
+    {
+        if (string.IsNullOrWhiteSpace(plateOrVin)) return null;
+        var term = plateOrVin.Trim().ToUpperInvariant();
+
+        // 1. Tìm trong DealerHistoryRecords
+        var records = await db.DealerHistoryRecords
+            .Include(r => r.Items)
+            .Where(r => r.PlateNo.ToUpper() == term || r.FrameNo.ToUpper() == term || r.PlateNo.ToUpper().Contains(term) || r.FrameNo.ToUpper().Contains(term))
+            .OrderByDescending(r => r.CheckInDate)
+            .ToListAsync();
+
+        // 2. Tìm xe trong local database để kiểm tra bổ sung lịch sử từ RO nội bộ
+        var localCar = await db.Cars
+            .Include(c => c.Customer)
+            .FirstOrDefaultAsync(c => c.Plate.ToUpper() == term || (c.Vin != null && c.Vin.ToUpper() == term) || c.Plate.ToUpper().Contains(term) || (c.Vin != null && c.Vin.ToUpper().Contains(term)));
+
+        if (localCar != null)
+        {
+            // Kiểm tra các RO local của xe này đã được sync sang DealerHistory chưa
+            var existingRoIds = records.Where(r => r.ROId.HasValue).Select(r => r.ROId!.Value).ToHashSet();
+            var localRos = await db.ROs
+                .Include(r => r.Car)
+                .Include(r => r.Customer)
+                .Include(r => r.Lines).ThenInclude(l => l.Part)
+                .Include(r => r.Lines).ThenInclude(l => l.ServiceItem)
+                .Include(r => r.WarrantyReports)
+                .Where(r => r.CarId == localCar.Id && !existingRoIds.Contains(r.Id))
+                .ToListAsync();
+
+            foreach (var ro in localRos)
+            {
+                var (_, _, recId) = await SyncLocalRoToHistoryAsync(ro.Id);
+                if (recId.HasValue)
+                {
+                    var newRec = await db.DealerHistoryRecords.Include(r => r.Items).FirstOrDefaultAsync(r => r.Id == recId.Value);
+                    if (newRec != null) records.Add(newRec);
+                }
+            }
+            records = records.OrderByDescending(r => r.CheckInDate).ToList();
+        }
+
+        if (records.Count == 0 && localCar == null) return null;
+
+        var firstRec = records.FirstOrDefault();
+        var plate = firstRec?.PlateNo ?? localCar?.Plate ?? term;
+        var vin = firstRec?.FrameNo ?? localCar?.Vin ?? "";
+        var model = firstRec?.ModelName ?? localCar?.Model ?? "";
+        var year = firstRec?.ProductYear ?? localCar?.Year ?? DateTime.Now.Year;
+        var engine = firstRec?.EngineNo;
+        var color = firstRec?.ColorCode;
+        var cusName = firstRec?.CusName ?? localCar?.Customer.Name ?? "";
+        var cusPhone = firstRec?.CusPhone ?? localCar?.Customer.Phone ?? "";
+        var cusAddress = firstRec?.CusAddress;
+
+        var totalSpent = records.Sum(r => r.TotalAmount);
+        var totalClaims = records.Count(r => r.FlagClaim);
+        var maxKm = records.Count > 0 ? records.Max(r => r.Odometer) : 0;
+        var firstDate = records.Count > 0 ? records.Min(r => r.CheckInDate) : (DateTime?)null;
+        var lastDate = records.Count > 0 ? records.Max(r => r.CheckInDate) : (DateTime?)null;
+        var lastDealer = firstRec?.DealerName;
+        var lastAdvisor = firstRec?.ServiceAdvisor;
+
+        return new VehicleHistorySummaryDto
+        {
+            PlateNo = plate,
+            FrameNo = vin,
+            EngineNo = engine,
+            TradeMarkName = "Hyundai",
+            ModelName = model,
+            ColorCode = color,
+            ProductYear = year,
+            CusName = cusName,
+            CusPhone = cusPhone,
+            CusAddress = cusAddress,
+            CurrentKm = maxKm,
+            TotalVisits = records.Count,
+            TotalSpent = totalSpent,
+            TotalClaims = totalClaims,
+            FirstVisitDate = firstDate,
+            LastVisitDate = lastDate,
+            LastDealerName = lastDealer,
+            LastServiceAdvisor = lastAdvisor,
+            Records = records
+        };
+    }
+
+    public Task<DealerHistoryRecord?> GetDealerHistoryRecordAsync(int id) =>
+        db.DealerHistoryRecords
+            .Include(r => r.Items)
+            .FirstOrDefaultAsync(r => r.Id == id);
+
+    public async Task<int> CreateDealerHistoryRecordAsync(DealerHistoryRecord record, List<DealerHistoryItem> items)
+    {
+        if (string.IsNullOrWhiteSpace(record.PlateNo))
+            throw new InvalidOperationException("Vui lòng nhập Biển số xe.");
+        if (string.IsNullOrWhiteSpace(record.DealerName))
+            throw new InvalidOperationException("Vui lòng nhập Tên đại lý thực hiện.");
+        if (string.IsNullOrWhiteSpace(record.RONo))
+            throw new InvalidOperationException("Vui lòng nhập Số lệnh sửa chữa (RONo).");
+
+        record.PlateNo = record.PlateNo.Trim().ToUpperInvariant();
+        record.FrameNo = !string.IsNullOrWhiteSpace(record.FrameNo) ? record.FrameNo.Trim().ToUpperInvariant() : "";
+        record.ModelName = record.ModelName.Trim();
+        record.CusName = record.CusName.Trim();
+        record.CheckInDate = record.CheckInDate == default ? DateTime.Now : record.CheckInDate;
+        record.CreatedAt = DateTime.Now;
+
+        if (string.IsNullOrWhiteSpace(record.RecordNo))
+        {
+            var count = await db.DealerHistoryRecords.CountAsync() + 1;
+            record.RecordNo = $"DHR{DateTime.Today:yyMMdd}-{count:D3}";
+        }
+
+        foreach (var item in items)
+        {
+            item.Amount = item.Quantity * item.UnitPrice;
+            record.Items.Add(item);
+        }
+
+        record.TotalLaborAmount = record.Items.Where(i => i.ItemType == LineType.Labor).Sum(i => i.Amount);
+        record.TotalPartAmount = record.Items.Where(i => i.ItemType == LineType.Part).Sum(i => i.Amount);
+        record.TotalAmount = record.TotalLaborAmount + record.TotalPartAmount;
+
+        db.DealerHistoryRecords.Add(record);
+        await db.SaveChangesAsync();
+        return record.Id;
+    }
+
+    public async Task<(bool ok, string msg, int? recordId)> SyncLocalRoToHistoryAsync(int roId)
+    {
+        var ro = await db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines).ThenInclude(l => l.Part)
+            .Include(r => r.Lines).ThenInclude(l => l.ServiceItem)
+            .Include(r => r.WarrantyReports)
+            .FirstOrDefaultAsync(r => r.Id == roId);
+
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa.", null);
+
+        var existing = await db.DealerHistoryRecords.Include(r => r.Items).FirstOrDefaultAsync(r => r.ROId == roId);
+        if (existing != null)
+        {
+            existing.ActualDeliveryDate = ro.FinishedAt;
+            existing.Odometer = ro.Odometer;
+            existing.ServiceAdvisor = string.IsNullOrWhiteSpace(ro.CreatedBy) ? "CVDV" : ro.CreatedBy;
+            existing.Technician = ro.Technician;
+            existing.CustomerRequest = ro.IntakeNote;
+            existing.TotalLaborAmount = ro.LaborTotal;
+            existing.TotalPartAmount = ro.PartTotal;
+            existing.TotalAmount = ro.Total;
+            existing.FlagClaim = ro.WarrantyReports.Any();
+            existing.ClaimNo = ro.WarrantyReports.FirstOrDefault()?.ReportNo;
+            existing.ClaimStatus = ro.WarrantyReports.FirstOrDefault() != null ? Ui.WarrantyStatus(ro.WarrantyReports.First().Status).code : null;
+
+            existing.Items.Clear();
+            foreach (var line in ro.Lines)
+            {
+                existing.Items.Add(new DealerHistoryItem
+                {
+                    ItemType = line.Type,
+                    Code = line.Type == LineType.Part ? (line.Part?.Code ?? "PRT") : (line.ServiceItem?.Code ?? "LABOR"),
+                    Name = line.Name,
+                    Unit = line.Type == LineType.Part ? (line.Part?.Unit ?? "Cái") : "Giờ",
+                    Quantity = line.Quantity,
+                    UnitPrice = line.UnitPrice,
+                    Amount = line.Amount,
+                    ExpenseType = line.ExpenseType,
+                    Technician = ro.Technician,
+                    Result = "Đạt tiêu chuẩn kỹ thuật xuất xưởng",
+                    Remark = line.Type == LineType.Part ? (line.Part?.Location) : null
+                });
+            }
+
+            await db.SaveChangesAsync();
+            return (true, $"Đã cập nhật lịch sử sửa chữa {existing.RecordNo} cho RO {ro.Code}.", existing.Id);
+        }
+
+        var today = DateTime.Today;
+        var count = await db.DealerHistoryRecords.CountAsync(r => r.RecordNo.StartsWith($"DHR{today:yyMMdd}-")) + 1;
+        var record = new DealerHistoryRecord
+        {
+            RecordNo = $"DHR{today:yyMMdd}-{count:D3}",
+            DealerCode = "HTC-MAIN",
+            DealerName = "Hyundai Service Workshop (Đại lý hiện tại)",
+            PlateNo = ro.Car.Plate,
+            FrameNo = !string.IsNullOrWhiteSpace(ro.Car.Vin) ? ro.Car.Vin : "RLHXX" + ro.Car.Plate.Replace("-", "").Replace(".", ""),
+            ModelName = ro.Car.Model,
+            ProductYear = ro.Car.Year > 0 ? ro.Car.Year : DateTime.Today.Year,
+            TradeMarkName = "Hyundai",
+            CusName = ro.Customer.Name,
+            CusPhone = ro.Customer.Phone,
+            RONo = ro.Code,
+            ROId = ro.Id,
+            CheckInDate = ro.IntakeAt ?? ro.CreatedAt,
+            ActualDeliveryDate = ro.FinishedAt,
+            Odometer = ro.Odometer,
+            ServiceAdvisor = string.IsNullOrWhiteSpace(ro.CreatedBy) ? "CVDV Tiếp nhận" : ro.CreatedBy,
+            Technician = ro.Technician,
+            CustomerRequest = !string.IsNullOrWhiteSpace(ro.IntakeNote) ? ro.IntakeNote : "Bảo dưỡng & sửa chữa định kỳ",
+            CarStatus = "Tiếp nhận xe vào xưởng theo quy trình chuẩn",
+            RepairResult = ro.Status == ROStatus.Finished ? "Đã sửa xong và nghiệm thu bàn giao xe hoàn hảo" : "Đang thực hiện dịch vụ",
+            TotalLaborAmount = ro.LaborTotal,
+            TotalPartAmount = ro.PartTotal,
+            TotalAmount = ro.Total,
+            FlagClaim = ro.WarrantyReports.Any(),
+            ClaimNo = ro.WarrantyReports.FirstOrDefault()?.ReportNo,
+            ClaimStatus = ro.WarrantyReports.FirstOrDefault() != null ? Ui.WarrantyStatus(ro.WarrantyReports.First().Status).code : null,
+            CreatedBy = "sync_ro",
+            CreatedAt = DateTime.Now
+        };
+
+        foreach (var line in ro.Lines)
+        {
+            record.Items.Add(new DealerHistoryItem
+            {
+                ItemType = line.Type,
+                Code = line.Type == LineType.Part ? (line.Part?.Code ?? "PRT") : (line.ServiceItem?.Code ?? "LABOR"),
+                Name = line.Name,
+                Unit = line.Type == LineType.Part ? (line.Part?.Unit ?? "Cái") : "Giờ",
+                Quantity = line.Quantity,
+                UnitPrice = line.UnitPrice,
+                Amount = line.Amount,
+                ExpenseType = line.ExpenseType,
+                Technician = ro.Technician,
+                Result = "Đạt tiêu chuẩn kỹ thuật",
+                Remark = line.Type == LineType.Part ? (line.Part?.Location) : null
+            });
+        }
+
+        db.DealerHistoryRecords.Add(record);
+        await db.SaveChangesAsync();
+        return (true, $"Đã đồng bộ Lệnh sửa chữa {ro.Code} vào Hệ thống tra cứu lịch sử sửa chữa toàn quốc.", record.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeleteDealerHistoryRecordAsync(int id)
+    {
+        var record = await db.DealerHistoryRecords.FirstOrDefaultAsync(r => r.Id == id);
+        if (record == null) return (false, "Không tìm thấy hồ sơ lịch sử.");
+
+        db.DealerHistoryRecords.Remove(record);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa hồ sơ lịch sử sửa chữa {record.RecordNo}.");
+    }
+
+    public Task<List<string>> GetDistinctDealerCodesAsync() =>
+        db.DealerHistoryRecords
+            .Select(r => r.DealerName)
+            .Distinct()
+            .OrderBy(d => d)
+            .ToListAsync();
+
+    public async Task<List<Car>> CarsWithPlateOrVinAsync(string? q = null)
+    {
+        var query = db.Cars.Include(c => c.Customer).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(c => c.Plate.ToLower().Contains(s) || (c.Vin != null && c.Vin.ToLower().Contains(s)) || c.Customer.Name.ToLower().Contains(s));
+        }
+        return await query.OrderBy(c => c.Plate).Take(20).ToListAsync();
+    }
 }
+

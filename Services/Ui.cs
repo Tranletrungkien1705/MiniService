@@ -538,4 +538,21 @@ public static class Ui
         Models.SupplierDebitType.Other => ("Phát sinh khác", "bi-three-dots", "secondary"),
         _ => (t.ToString(), "bi-tag", "secondary")
     };
+
+    public static (string text, string css) DealerBadge(string dealerCode) => dealerCode switch
+    {
+        "HTC-CG" => ("Hyundai Cầu Giấy", "primary"),
+        "HTC-PDV" => ("Hyundai Phạm Văn Đồng", "info"),
+        "HTC-DD" => ("Hyundai Đông Đô", "success"),
+        "HTC-HD" => ("Hyundai Hà Đông", "warning"),
+        "HTC-SG" => ("Hyundai Sài Gòn 1S", "danger"),
+        "HTC-MAIN" => ("Đại lý hiện tại", "dark"),
+        _ => (dealerCode, "secondary")
+    };
+
+    public static (string text, string css) ClaimBadge(bool flagClaim, string? claimNo) =>
+        flagClaim
+            ? (!string.IsNullOrWhiteSpace(claimNo) ? ($"Bảo hành: {claimNo}", "warning") : ("Hồ sơ bảo hành", "warning"))
+            : ("Dịch vụ thường", "secondary");
 }
+

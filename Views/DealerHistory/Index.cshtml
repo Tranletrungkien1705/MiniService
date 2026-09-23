@@ -1,0 +1,352 @@
+@model List<DealerHistoryRecord>
+@{
+    ViewData["Title"] = "Tra cứu Lịch sử Sửa chữa Toàn Hệ thống Đại lý";
+    var summary = ViewBag.Summary as VehicleHistorySummaryDto;
+    var currentQ = ViewBag.Q as string;
+    var currentDealer = ViewBag.Dealer as string;
+    var fromDate = ViewBag.FromDate as string;
+    var toDate = ViewBag.ToDate as string;
+    var dealers = ViewBag.Dealers as List<string> ?? [];
+
+    var totalRecords = Model.Count;
+    var totalAmount = Model.Sum(r => r.TotalAmount);
+    var claimCount = Model.Count(r => r.FlagClaim);
+    var uniqueCars = Model.Select(r => r.PlateNo).Distinct().Count();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-0">
+            <i class="bi bi-clock-history text-primary me-2"></i>Tra cứu &amp; Chia sẻ Lịch sử Sửa chữa Toàn Hệ thống (Dealer History Share)
+        </h5>
+        <div class="text-muted small">
+            Tra cứu toàn diện hồ sơ kỹ thuật, các mốc bảo dưỡng, phụ tùng thay thế và bảo hành xe trên toàn mạng lưới đại lý Hyundai (DealerHistoryShareMng - idn.CarService).
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        @if (summary != null)
+        {
+            <a href="/DealerHistory/Print?plateOrVin=@Uri.EscapeDataString(summary.PlateNo)" target="_blank" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-printer me-1"></i>In Sổ Bảo Dưỡng (@summary.PlateNo)
+            </a>
+        }
+        <a href="/DealerHistory/Create" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg me-1"></i>Ghi nhận hồ sơ đại lý ngoài
+        </a>
+    </div>
+</div>
+
+<!-- Thanh tra cứu trung tâm theo Biển số xe / Số khung VIN -->
+<div class="card mb-3 shadow-sm border-primary">
+    <div class="card-body p-3">
+        <form method="get" action="/DealerHistory" class="row g-2 align-items-center">
+            <div class="col-lg-4 col-md-6">
+                <label class="form-label small fw-bold text-muted mb-1">
+                    <i class="bi bi-search me-1"></i>Biển số xe hoặc Số khung VIN <span class="text-danger">*</span>
+                </label>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="bi bi-car-front text-primary"></i></span>
+                    <input name="q" value="@currentQ" class="form-control" placeholder="VD: 30A-123.45, 51G-678.90, RLHXXAC001..." autocomplete="off" />
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6">
+                <label class="form-label small fw-bold text-muted mb-1">
+                    <i class="bi bi-building me-1"></i>Đại lý thực hiện
+                </label>
+                <select name="dealer" class="form-select form-select-sm">
+                    <option value="">-- Tất cả đại lý toàn quốc --</option>
+                    @foreach (var d in dealers)
+                    {
+                        <option value="@d" selected="@(currentDealer == d)">@d</option>
+                    }
+                </select>
+            </div>
+            <div class="col-lg-2 col-md-3 col-6">
+                <label class="form-label small fw-bold text-muted mb-1">Từ ngày</label>
+                <input name="fromDate" type="date" value="@fromDate" class="form-control form-control-sm" />
+            </div>
+            <div class="col-lg-2 col-md-3 col-6">
+                <label class="form-label small fw-bold text-muted mb-1">Đến ngày</label>
+                <input name="toDate" type="date" value="@toDate" class="form-control form-control-sm" />
+            </div>
+            <div class="col-lg-1 col-md-12 d-flex gap-1 align-self-end">
+                <button type="submit" class="btn btn-primary btn-sm w-100" title="Tra cứu">
+                    <i class="bi bi-search"></i> Tìm
+                </button>
+            </div>
+        </form>
+
+        <!-- Gợi ý nhanh các biển số xe mẫu -->
+        <div class="d-flex align-items-center gap-2 mt-2 pt-2 border-top">
+            <span class="small text-muted" style="font-size:11.5px"><i class="bi bi-lightning-charge text-warning me-1"></i>Tra cứu nhanh xe mẫu:</span>
+            <a href="/DealerHistory?q=30A-123.45" class="badge bg-light text-dark border text-decoration-none py-1 px-2">30A-123.45 (Accent)</a>
+            <a href="/DealerHistory?q=51G-678.90" class="badge bg-light text-dark border text-decoration-none py-1 px-2">51G-678.90 (Tucson)</a>
+            <a href="/DealerHistory?q=30E-888.99" class="badge bg-light text-dark border text-decoration-none py-1 px-2">30E-888.99 (Santa Fe)</a>
+            <a href="/DealerHistory?q=RLHXXAC001" class="badge bg-light text-dark border text-decoration-none py-1 px-2">VIN: RLHXXAC001</a>
+            @if (!string.IsNullOrWhiteSpace(currentQ) || !string.IsNullOrWhiteSpace(currentDealer) || !string.IsNullOrWhiteSpace(fromDate))
+            {
+                <a href="/DealerHistory" class="text-danger small ms-auto text-decoration-none"><i class="bi bi-x-circle me-1"></i>Xóa bộ lọc</a>
+            }
+        </div>
+    </div>
+</div>
+
+@if (summary != null)
+{
+    <!-- Card Hồ sơ thông số kỹ thuật xe & Tổng quan dịch vụ khi tra cứu cụ thể -->
+    <div class="card mb-3 border-0 shadow-sm" style="background: linear-gradient(135deg, #0b1531 0%, #1e3a8a 100%); color: #fff;">
+        <div class="card-body p-3">
+            <div class="row align-items-center g-3">
+                <div class="col-lg-4 col-md-6 border-end border-light border-opacity-25">
+                    <div class="d-flex align-items-center gap-2 mb-1">
+                        <span class="badge bg-warning text-dark fs-6 fw-bold px-2 py-1">@summary.PlateNo</span>
+                        <span class="badge bg-light bg-opacity-25 text-white">@summary.TradeMarkName @summary.ModelName</span>
+                        @if (summary.ProductYear > 0)
+                        {
+                            <span class="badge bg-light bg-opacity-10 text-white-50">Năm @summary.ProductYear</span>
+                        }
+                    </div>
+                    <div class="small text-white-50 mt-1">
+                        <div><i class="bi bi-upc-scan me-1"></i>Số khung (VIN): <strong class="text-white">@(string.IsNullOrEmpty(summary.FrameNo) ? "Chưa có" : summary.FrameNo)</strong></div>
+                        @if (!string.IsNullOrWhiteSpace(summary.EngineNo))
+                        {
+                            <div><i class="bi bi-cpu me-1"></i>Số máy: <strong class="text-white">@summary.EngineNo</strong></div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(summary.ColorCode))
+                        {
+                            <div><i class="bi bi-palette me-1"></i>Màu sơn: <span class="text-white">@summary.ColorCode</span></div>
+                        }
+                    </div>
+                </div>
+
+                <div class="col-lg-3 col-md-6 border-end border-light border-opacity-25">
+                    <div class="small text-white-50 text-uppercase fw-semibold" style="font-size:11px">Chủ xe &amp; Khách hàng</div>
+                    <div class="fw-bold fs-6 mt-1 text-white">@(string.IsNullOrEmpty(summary.CusName) ? "Chưa cập nhật" : summary.CusName)</div>
+                    <div class="small text-white-50">
+                        @if (!string.IsNullOrWhiteSpace(summary.CusPhone))
+                        {
+                            <div><i class="bi bi-telephone me-1"></i>@summary.CusPhone</div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(summary.CusAddress))
+                        {
+                            <div class="text-truncate" style="max-width:240px"><i class="bi bi-geo-alt me-1"></i>@summary.CusAddress</div>
+                        }
+                    </div>
+                </div>
+
+                <div class="col-lg-5 col-md-12">
+                    <div class="row g-2 text-center">
+                        <div class="col-3">
+                            <div class="bg-white bg-opacity-10 rounded p-2">
+                                <div class="text-white-50" style="font-size:10.5px">LƯỢT VÀO XƯỞNG</div>
+                                <div class="fs-4 fw-bold text-white">@summary.TotalVisits</div>
+                                <div class="text-white-50" style="font-size:10px">Toàn hệ thống</div>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="bg-white bg-opacity-10 rounded p-2">
+                                <div class="text-white-50" style="font-size:10.5px">KM GẦN NHẤT</div>
+                                <div class="fs-4 fw-bold text-warning">@(summary.CurrentKm > 0 ? summary.CurrentKm.ToString("N0") : "—")</div>
+                                <div class="text-white-50" style="font-size:10px">Odometer</div>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="bg-white bg-opacity-10 rounded p-2">
+                                <div class="text-white-50" style="font-size:10.5px">TỔNG CHI PHÍ</div>
+                                <div class="fs-6 fw-bold text-success mt-1">@summary.TotalSpent.ToString("N0") <span style="font-size:10px">đ</span></div>
+                                <div class="text-white-50" style="font-size:10px">Tích lũy</div>
+                            </div>
+                        </div>
+                        <div class="col-3">
+                            <div class="bg-white bg-opacity-10 rounded p-2">
+                                <div class="text-white-50" style="font-size:10.5px">BẢO HÀNH</div>
+                                <div class="fs-4 fw-bold text-info">@summary.TotalClaims</div>
+                                <div class="text-white-50" style="font-size:10px">Vụ claim hãng</div>
+                            </div>
+                        </div>
+                    </div>
+                    @if (summary.LastVisitDate.HasValue)
+                    {
+                        <div class="text-white-50 mt-2 text-end" style="font-size:11.5px">
+                            <i class="bi bi-clock-history me-1"></i>Lần sửa chữa gần nhất: <strong class="text-white">@summary.LastVisitDate.Value.ToString("dd/MM/yyyy")</strong> tại <strong class="text-white">@(summary.LastDealerName ?? "Hyundai")</strong>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <!-- KPI Tổng quan toàn mạng lưới -->
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card p-3 shadow-sm border-0">
+                <div class="text-muted small">Tổng lượt sửa chữa chia sẻ</div>
+                <div class="stat-num text-primary">@totalRecords</div>
+                <div class="text-muted" style="font-size:11px">Lệnh RO toàn hệ thống</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3 shadow-sm border-0">
+                <div class="text-muted small">Số xe đã ghi nhận lịch sử</div>
+                <div class="stat-num text-info">@uniqueCars</div>
+                <div class="text-muted" style="font-size:11px">Xe Hyundai trong mạng lưới</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3 shadow-sm border-0">
+                <div class="text-muted small">Lượt bồi hoàn / Bảo hành</div>
+                <div class="stat-num text-warning">@claimCount</div>
+                <div class="text-muted" style="font-size:11px">Hồ sơ Claim bảo hành hãng</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card p-3 shadow-sm border-0">
+                <div class="text-muted small">Tổng giá trị dịch vụ chia sẻ</div>
+                <div class="stat-num text-success fs-5 mt-1">@totalAmount.ToString("N0") đ</div>
+                <div class="text-muted" style="font-size:11px">Doanh thu tích lũy toàn quốc</div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Danh sách Timeline các Lệnh sửa chữa chia sẻ -->
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+            <div class="fw-bold">
+                <i class="bi bi-list-check text-primary me-2"></i>Dòng thời gian Lịch sử sửa chữa &amp; Bảo dưỡng (@Model.Count lượt ghi nhận)
+            </div>
+            <div class="small text-muted">
+                Dữ liệu đồng bộ trực tiếp từ các đại lý ủy quyền Hyundai Thành Công (HTC)
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:110px">Mã hồ sơ</th>
+                        <th>Đại lý thực hiện</th>
+                        <th>Biển số / Xe</th>
+                        <th>Lệnh RO / Ngày vào</th>
+                        <th>Km xe</th>
+                        <th>CVDV / Thợ</th>
+                        <th>Yêu cầu &amp; Tình trạng xe</th>
+                        <th class="text-center">Hạng mục</th>
+                        <th class="text-end">Quyết toán</th>
+                        <th class="text-center">Bảo hành</th>
+                        <th style="width:110px" class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var r in Model)
+                {
+                    var dBadge = Ui.DealerBadge(r.DealerCode);
+                    var cBadge = Ui.ClaimBadge(r.FlagClaim, r.ClaimNo);
+                    <tr>
+                        <td>
+                            <a href="/DealerHistory/Detail/@r.Id" class="fw-bold text-decoration-none">@r.RecordNo</a>
+                            @if (r.ROId.HasValue)
+                            {
+                                <span class="badge bg-light text-primary border" title="RO nội bộ đại lý"><i class="bi bi-house me-1"></i>Nội bộ</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge bg-@dBadge.css">@r.DealerName</span>
+                            <div class="small text-muted" style="font-size:11px">Mã: @r.DealerCode</div>
+                        </td>
+                        <td>
+                            <a href="/DealerHistory?q=@Uri.EscapeDataString(r.PlateNo)" class="fw-bold text-dark text-decoration-none">
+                                <i class="bi bi-search text-muted me-1" style="font-size:10px"></i>@r.PlateNo
+                            </a>
+                            <div class="small text-muted">@r.ModelName</div>
+                            @if (!string.IsNullOrWhiteSpace(r.FrameNo))
+                            {
+                                <div class="text-muted" style="font-size:10.5px">VIN: @r.FrameNo</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@r.RONo</div>
+                            <div class="small text-muted">@r.CheckInDate.ToString("dd/MM/yyyy HH:mm")</div>
+                            @if (r.ActualDeliveryDate.HasValue)
+                            {
+                                <div class="small text-success" style="font-size:11px"><i class="bi bi-check-circle me-1"></i>Giao: @r.ActualDeliveryDate.Value.ToString("dd/MM/yyyy")</div>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border">
+                                @(r.Odometer > 0 ? r.Odometer.ToString("N0") + " km" : "—")
+                            </span>
+                        </td>
+                        <td>
+                            <div class="small fw-semibold">@r.ServiceAdvisor</div>
+                            @if (!string.IsNullOrWhiteSpace(r.Technician))
+                            {
+                                <div class="small text-muted" style="font-size:11px"><i class="bi bi-wrench me-1"></i>@r.Technician</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="small fw-medium text-truncate" style="max-width:240px" title="@r.CustomerRequest">
+                                @r.CustomerRequest
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(r.RepairResult))
+                            {
+                                <div class="small text-muted text-truncate" style="max-width:240px; font-size:11px" title="@r.RepairResult">
+                                    <i class="bi bi-arrow-return-right me-1"></i>@r.RepairResult
+                                </div>
+                            }
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="Công lao động">
+                                @r.LaborCount công
+                            </span>
+                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle" title="Phụ tùng">
+                                @r.PartCount VT
+                            </span>
+                        </td>
+                        <td class="text-end fw-bold">
+                            @r.TotalAmount.ToString("N0") <span class="small fw-normal text-muted">đ</span>
+                        </td>
+                        <td class="text-center">
+                            @if (r.FlagClaim)
+                            {
+                                <span class="badge bg-warning text-dark border border-warning" title="Hồ sơ bảo hành">
+                                    <i class="bi bi-shield-check me-1"></i>@(string.IsNullOrEmpty(r.ClaimNo) ? "Claim" : r.ClaimNo)
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">—</span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/DealerHistory/Detail/@r.Id" class="btn btn-outline-primary" title="Xem chi tiết">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="/DealerHistory/Print?plateOrVin=@Uri.EscapeDataString(r.PlateNo)" target="_blank" class="btn btn-outline-secondary" title="In sổ bảo dưỡng">
+                                    <i class="bi bi-printer"></i>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="11" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-3 d-block mb-2 text-muted opacity-50"></i>
+                            Không tìm thấy hồ sơ lịch sử sửa chữa nào phù hợp với điều kiện tìm kiếm.
+                            <div class="mt-2">
+                                <a href="/DealerHistory" class="btn btn-sm btn-outline-secondary">Xem toàn bộ lịch sử</a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

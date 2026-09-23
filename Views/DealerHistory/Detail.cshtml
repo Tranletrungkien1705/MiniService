@@ -1,0 +1,363 @@
+@model DealerHistoryRecord
+@{
+    ViewData["Title"] = $"Hồ sơ {Model.RecordNo} — {Model.PlateNo} ({Model.DealerName})";
+    var summary = ViewBag.Summary as VehicleHistorySummaryDto;
+    var dBadge = Ui.DealerBadge(Model.DealerCode);
+    var laborItems = Model.Items.Where(i => i.ItemType == LineType.Labor).ToList();
+    var partItems = Model.Items.Where(i => i.ItemType == LineType.Part).ToList();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center gap-2">
+        <a href="/DealerHistory?q=@Uri.EscapeDataString(Model.PlateNo)" class="btn btn-outline-secondary btn-sm" title="Quay lại danh sách">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+        <div>
+            <h5 class="fw-bold mb-0">
+                <i class="bi bi-file-earmark-text text-primary me-2"></i>Chi tiết Lịch sử Sửa chữa đại lý: @Model.RecordNo
+            </h5>
+            <div class="text-muted small">
+                Lệnh sửa chữa <strong>@Model.RONo</strong> thực hiện tại <span class="badge bg-@dBadge.css">@Model.DealerName</span>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/DealerHistory/Print?plateOrVin=@Uri.EscapeDataString(Model.PlateNo)" target="_blank" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-printer me-1"></i>In Sổ Bảo Dưỡng (@Model.PlateNo)
+        </a>
+        @if (Model.ROId.HasValue)
+        {
+            <form method="post" action="/DealerHistory/SyncRo" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="roId" value="@Model.ROId.Value" />
+                <button type="submit" class="btn btn-outline-success btn-sm" title="Đồng bộ lại từ RO gốc">
+                    <i class="bi bi-arrow-repeat me-1"></i>Đồng bộ lại từ RO
+                </button>
+            </form>
+        }
+        <form method="post" action="/DealerHistory/Delete" onsubmit="return confirm('Bạn có chắc chắn muốn xóa hồ sơ lịch sử sửa chữa này?');" class="d-inline">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@Model.Id" />
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-trash"></i>
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Header Thông tin Tổng quan về Lần Sửa Chữa -->
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body p-3">
+        <div class="row g-3">
+            <div class="col-lg-3 col-md-6 border-end">
+                <div class="text-muted small text-uppercase fw-semibold" style="font-size:11px">Đơn vị &amp; Lệnh RO</div>
+                <div class="mt-1">
+                    <span class="badge bg-@dBadge.css fs-6">@Model.DealerName</span>
+                    <div class="small text-muted mt-1">Mã trạm: <strong>@Model.DealerCode</strong></div>
+                    <div class="fw-bold text-dark mt-1">Số RO: @Model.RONo</div>
+                    @if (Model.ROId.HasValue)
+                    {
+                        <div class="small text-primary"><i class="bi bi-link-45deg me-1"></i>Lệnh sửa chữa ID: @Model.ROId.Value</div>
+                    }
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6 border-end">
+                <div class="text-muted small text-uppercase fw-semibold" style="font-size:11px">Thời gian &amp; Số Km</div>
+                <div class="mt-1 small">
+                    <div><i class="bi bi-calendar-event me-1 text-primary"></i>Ngày tiếp nhận: <strong>@Model.CheckInDate.ToString("dd/MM/yyyy HH:mm")</strong></div>
+                    @if (Model.ActualDeliveryDate.HasValue)
+                    {
+                        <div class="text-success"><i class="bi bi-check-circle me-1"></i>Ngày giao xe: <strong>@Model.ActualDeliveryDate.Value.ToString("dd/MM/yyyy HH:mm")</strong></div>
+                    }
+                    else
+                    {
+                        <div class="text-muted"><i class="bi bi-clock me-1"></i>Ngày giao xe: Đang thực hiện</div>
+                    }
+                    <div class="mt-1">
+                        <i class="bi bi-speedometer2 me-1 text-warning"></i>Số Km vào xưởng:
+                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle fs-6">
+                            @(Model.Odometer > 0 ? Model.Odometer.ToString("N0") + " km" : "Chưa ghi nhận")
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6 border-end">
+                <div class="text-muted small text-uppercase fw-semibold" style="font-size:11px">Nhân sự phụ trách</div>
+                <div class="mt-1 small">
+                    <div><i class="bi bi-person-badge me-1 text-primary"></i>Cố vấn dịch vụ: <strong>@Model.ServiceAdvisor</strong></div>
+                    @if (!string.IsNullOrWhiteSpace(Model.Technician))
+                    {
+                        <div><i class="bi bi-person-gear me-1 text-info"></i>Kỹ thuật viên chính: <strong>@Model.Technician</strong></div>
+                    }
+                    <div><i class="bi bi-cloud-arrow-down me-1 text-muted"></i>Nguồn đồng bộ: <code>@Model.CreatedBy</code></div>
+                    <div class="text-muted" style="font-size:11px">Tạo lúc: @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6">
+                <div class="text-muted small text-uppercase fw-semibold" style="font-size:11px">Chi phí &amp; Bảo hành</div>
+                <div class="mt-1">
+                    <div class="fs-5 fw-bold text-primary">@Model.TotalAmount.ToString("N0") đ</div>
+                    <div class="small text-muted">
+                        Tiền công: @Model.TotalLaborAmount.ToString("N0") đ · Phụ tùng: @Model.TotalPartAmount.ToString("N0") đ
+                    </div>
+                    @if (Model.FlagClaim)
+                    {
+                        <div class="mt-1">
+                            <span class="badge bg-warning text-dark border border-warning">
+                                <i class="bi bi-shield-check me-1"></i>Bảo hành hãng: @(string.IsNullOrEmpty(Model.ClaimNo) ? "Claim" : Model.ClaimNo)
+                            </span>
+                            @if (!string.IsNullOrWhiteSpace(Model.ClaimStatus))
+                            {
+                                <span class="badge bg-success ms-1">@Model.ClaimStatus</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hồ sơ thông tin xe & Khách hàng -->
+<div class="row g-3 mb-3">
+    <div class="col-lg-7">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-car-front text-primary me-2"></i>Hồ sơ Định danh Xe (Vehicle Passport)</span>
+                <span class="badge bg-light text-dark border">@Model.TradeMarkName</span>
+            </div>
+            <div class="card-body p-3">
+                <div class="row g-2 small">
+                    <div class="col-sm-6">
+                        <div class="text-muted">Biển số đăng ký:</div>
+                        <div class="fw-bold fs-6 text-primary">@Model.PlateNo</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted">Mẫu xe / Phiên bản:</div>
+                        <div class="fw-bold text-dark">@Model.ModelName</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted">Số khung (VIN):</div>
+                        <div class="fw-semibold font-monospace">@(string.IsNullOrEmpty(Model.FrameNo) ? "Chưa có" : Model.FrameNo)</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted">Số máy (Engine No):</div>
+                        <div class="fw-semibold font-monospace">@(string.IsNullOrEmpty(Model.EngineNo) ? "Chưa ghi nhận" : Model.EngineNo)</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted">Màu sơn xe:</div>
+                        <div>@(string.IsNullOrEmpty(Model.ColorCode) ? "Tiêu chuẩn" : Model.ColorCode)</div>
+                    </div>
+                    <div class="col-sm-6">
+                        <div class="text-muted">Năm sản xuất:</div>
+                        <div>@(Model.ProductYear > 0 ? Model.ProductYear.ToString() : "—")</div>
+                    </div>
+                </div>
+
+                <hr class="my-2" />
+                <div class="small">
+                    <div class="text-muted mb-1"><i class="bi bi-chat-left-dots text-primary me-1"></i>Yêu cầu khách hàng / Hiện tượng tiếp nhận:</div>
+                    <div class="p-2 bg-light rounded text-dark">
+                        @(string.IsNullOrEmpty(Model.CustomerRequest) ? "Không có yêu cầu đặc biệt." : Model.CustomerRequest)
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(Model.RepairResult))
+                {
+                    <div class="small mt-2">
+                        <div class="text-muted mb-1"><i class="bi bi-clipboard2-check text-success me-1"></i>Kết quả kiểm tra &amp; Sửa chữa:</div>
+                        <div class="p-2 bg-success bg-opacity-10 text-success-emphasis rounded border border-success-subtle">
+                            @Model.RepairResult
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-person text-primary me-2"></i>Thông tin Chủ xe &amp; Khách hàng</span>
+                <span class="badge bg-light text-muted border">Chủ sở hữu</span>
+            </div>
+            <div class="card-body p-3 small">
+                <div class="mb-2">
+                    <div class="text-muted">Họ và tên khách hàng:</div>
+                    <div class="fw-bold fs-6 text-dark">@(string.IsNullOrEmpty(Model.CusName) ? "Chưa cập nhật" : Model.CusName)</div>
+                </div>
+                <div class="mb-2">
+                    <div class="text-muted">Số điện thoại liên hệ:</div>
+                    <div class="fw-semibold">
+                        @if (!string.IsNullOrWhiteSpace(Model.CusPhone))
+                        {
+                            <a href="tel:@Model.CusPhone" class="text-decoration-none"><i class="bi bi-telephone text-success me-1"></i>@Model.CusPhone</a>
+                        }
+                        else
+                        {
+                            <span class="text-muted">Chưa có SĐT</span>
+                        }
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="text-muted">Địa chỉ đăng ký:</div>
+                    <div>@(string.IsNullOrEmpty(Model.CusAddress) ? "Chưa cập nhật địa chỉ" : Model.CusAddress)</div>
+                </div>
+
+                @if (summary != null)
+                {
+                    <div class="p-2 bg-light rounded border">
+                        <div class="fw-semibold mb-1 text-primary"><i class="bi bi-info-circle me-1"></i>Hồ sơ tích lũy toàn hệ thống:</div>
+                        <div class="row g-1 text-muted" style="font-size:11.5px">
+                            <div class="col-6">Tổng lượt vào xưởng: <strong class="text-dark">@summary.TotalVisits</strong></div>
+                            <div class="col-6">Tổng chi phí: <strong class="text-dark">@summary.TotalSpent.ToString("N0") đ</strong></div>
+                            <div class="col-6">Số claim bảo hành: <strong class="text-dark">@summary.TotalClaims</strong></div>
+                            <div class="col-6">Km cao nhất: <strong class="text-dark">@summary.CurrentKm.ToString("N0") km</strong></div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chi tiết Hạng mục Công việc Lao động -->
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-wrench-adjustable text-primary me-2"></i>Hạng mục Công việc Lao động (@laborItems.Count công)</span>
+        <span class="fw-bold text-primary">Tổng tiền công: @Model.TotalLaborAmount.ToString("N0") đ</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 small">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:40px" class="text-center">#</th>
+                    <th style="width:110px">Mã CV</th>
+                    <th>Tên hạng mục công việc</th>
+                    <th style="width:70px" class="text-center">ĐVT</th>
+                    <th style="width:80px" class="text-center">Giờ công</th>
+                    <th style="width:110px" class="text-end">Đơn giá</th>
+                    <th style="width:120px" class="text-end">Thành tiền</th>
+                    <th style="width:110px" class="text-center">Chi phí</th>
+                    <th>Kỹ thuật viên</th>
+                    <th>Kết quả thực hiện</th>
+                </tr>
+            </thead>
+            <tbody>
+            @{ var idxL = 1; }
+            @foreach (var itm in laborItems)
+            {
+                var exp = Ui.Expense(itm.ExpenseType);
+                <tr>
+                    <td class="text-center text-muted">@(idxL++)</td>
+                    <td class="fw-semibold">@itm.Code</td>
+                    <td class="fw-medium text-dark">@itm.Name</td>
+                    <td class="text-center text-muted">@itm.Unit</td>
+                    <td class="text-center fw-semibold">@itm.Quantity.ToString("0.##")</td>
+                    <td class="text-end text-muted">@itm.UnitPrice.ToString("N0") đ</td>
+                    <td class="text-end fw-bold text-dark">@itm.Amount.ToString("N0") đ</td>
+                    <td class="text-center">
+                        <span class="badge bg-@exp.css">@exp.text</span>
+                    </td>
+                    <td>@(string.IsNullOrEmpty(itm.Technician) ? Model.Technician ?? "—" : itm.Technician)</td>
+                    <td>
+                        <span class="text-success"><i class="bi bi-check-circle me-1"></i>@(string.IsNullOrEmpty(itm.Result) ? "Đạt" : itm.Result)</span>
+                    </td>
+                </tr>
+            }
+            @if (laborItems.Count == 0)
+            {
+                <tr>
+                    <td colspan="10" class="text-center py-3 text-muted">Không có dữ liệu nhân công lao động.</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Chi tiết Danh mục Phụ tùng & Vật tư thay thế -->
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-box-seam text-primary me-2"></i>Danh mục Phụ tùng &amp; Vật tư đã thay thế (@partItems.Count mặt hàng)</span>
+        <span class="fw-bold text-success">Tổng tiền phụ tùng: @Model.TotalPartAmount.ToString("N0") đ</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 small">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:40px" class="text-center">#</th>
+                    <th style="width:130px">Mã phụ tùng</th>
+                    <th>Tên vật tư / Phụ tùng</th>
+                    <th style="width:70px" class="text-center">ĐVT</th>
+                    <th style="width:80px" class="text-center">Số lượng</th>
+                    <th style="width:110px" class="text-end">Đơn giá</th>
+                    <th style="width:120px" class="text-end">Thành tiền</th>
+                    <th style="width:110px" class="text-center">Đối tượng</th>
+                    <th>Ghi chú / Quy cách</th>
+                </tr>
+            </thead>
+            <tbody>
+            @{ var idxP = 1; }
+            @foreach (var itm in partItems)
+            {
+                var exp = Ui.Expense(itm.ExpenseType);
+                <tr>
+                    <td class="text-center text-muted">@(idxP++)</td>
+                    <td class="fw-semibold font-monospace">@itm.Code</td>
+                    <td class="fw-medium text-dark">@itm.Name</td>
+                    <td class="text-center text-muted">@itm.Unit</td>
+                    <td class="text-center fw-bold">@itm.Quantity.ToString("0.##")</td>
+                    <td class="text-end text-muted">@itm.UnitPrice.ToString("N0") đ</td>
+                    <td class="text-end fw-bold text-dark">@itm.Amount.ToString("N0") đ</td>
+                    <td class="text-center">
+                        <span class="badge bg-@exp.css">@exp.text</span>
+                    </td>
+                    <td class="text-muted">@(string.IsNullOrEmpty(itm.Remark) ? "Phụ tùng chính hãng Mobis" : itm.Remark)</td>
+                </tr>
+            }
+            @if (partItems.Count == 0)
+            {
+                <tr>
+                    <td colspan="9" class="text-center py-3 text-muted">Lần sửa chữa này không thay thế phụ tùng hoặc vật tư.</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tổng kết & Chữ ký xác nhận -->
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body p-3">
+        <div class="row align-items-center">
+            <div class="col-md-7">
+                <div class="small text-muted">
+                    <i class="bi bi-shield-check text-success me-1"></i>
+                    Bản ghi lịch sử dịch vụ xe được chia sẻ bảo mật qua cổng kết nối đại lý DMS của Hyundai Thành Công (HTC).
+                    Mọi thay đổi hoặc bổ sung được kiểm soát theo chuẩn quy trình xưởng dịch vụ ủy quyền.
+                </div>
+            </div>
+            <div class="col-md-5 text-end">
+                <div class="d-inline-block text-start p-2 bg-light rounded border" style="min-width:240px">
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>Tiền công:</span>
+                        <strong class="text-dark">@Model.TotalLaborAmount.ToString("N0") đ</strong>
+                    </div>
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>Phụ tùng / Vật tư:</span>
+                        <strong class="text-dark">@Model.TotalPartAmount.ToString("N0") đ</strong>
+                    </div>
+                    <hr class="my-1" />
+                    <div class="d-flex justify-content-between fw-bold fs-6 text-primary">
+                        <span>TỔNG QUYẾT TOÁN:</span>
+                        <span>@Model.TotalAmount.ToString("N0") đ</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

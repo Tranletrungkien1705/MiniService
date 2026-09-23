@@ -1,0 +1,344 @@
+@model DealerHistoryRecord
+@{
+    ViewData["Title"] = "Ghi nhận Hồ sơ Lịch sử Sửa chữa Đại lý ngoài";
+    var cars = ViewBag.Cars as List<Car> ?? [];
+    var prefillPlate = ViewBag.Plate as string;
+    var prefillVin = ViewBag.Vin as string;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center gap-2">
+        <a href="/DealerHistory" class="btn btn-outline-secondary btn-sm" title="Quay lại danh sách">
+            <i class="bi bi-arrow-left"></i>
+        </a>
+        <div>
+            <h5 class="fw-bold mb-0">
+                <i class="bi bi-file-earmark-plus text-primary me-2"></i>Ghi nhận Hồ sơ Lịch sử Sửa chữa Đại lý ngoài
+            </h5>
+            <div class="text-muted small">
+                Nhập hồ sơ sửa chữa / bảo dưỡng từ các đại lý ủy quyền Hyundai khác để hoàn thiện Sổ theo dõi dịch vụ xe (DealerHistoryShareMng).
+            </div>
+        </div>
+    </div>
+</div>
+
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+
+    <div class="row g-3">
+        <!-- Cột 1: Thông tin Đại lý & Lệnh sửa chữa -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white py-2 fw-semibold small">
+                    <i class="bi bi-building text-primary me-2"></i>1. Đơn vị Thực hiện &amp; Lệnh sửa chữa
+                </div>
+                <div class="card-body p-3">
+                    <div class="row g-2 mb-2">
+                        <div class="col-sm-5">
+                            <label class="form-label small fw-bold">Mã đại lý <span class="text-danger">*</span></label>
+                            <input name="DealerCode" id="dealerCodeInput" class="form-control form-control-sm" value="HTC-CG" list="dealerCodesList" required />
+                            <datalist id="dealerCodesList">
+                                <option value="HTC-CG">HTC-CG — Hyundai Cầu Giấy</option>
+                                <option value="HTC-PDV">HTC-PDV — Hyundai Phạm Văn Đồng</option>
+                                <option value="HTC-DD">HTC-DD — Hyundai Đông Đô</option>
+                                <option value="HTC-HD">HTC-HD — Hyundai Hà Đông</option>
+                                <option value="HTC-SG">HTC-SG — Hyundai Sài Gòn 1S</option>
+                                <option value="HTC-HP">HTC-HP — Hyundai Hải Phòng</option>
+                                <option value="HTC-DN">HTC-DN — Hyundai Đà Nẵng</option>
+                                <option value="HTC-BD">HTC-BD — Hyundai Bình Dương</option>
+                            </datalist>
+                        </div>
+                        <div class="col-sm-7">
+                            <label class="form-label small fw-bold">Tên đại lý thực hiện <span class="text-danger">*</span></label>
+                            <input name="DealerName" id="dealerNameInput" class="form-control form-control-sm" value="Hyundai Cầu Giấy" required />
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-sm-6">
+                            <label class="form-label small fw-bold">Số Lệnh sửa chữa (RO No) <span class="text-danger">*</span></label>
+                            <input name="RONo" class="form-control form-control-sm" placeholder="VD: RO-CG-240510..." required />
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label small fw-bold">Số Km xe (Odometer) <span class="text-danger">*</span></label>
+                            <div class="input-group input-group-sm">
+                                <input name="Odometer" type="number" class="form-control" placeholder="10000" required />
+                                <span class="input-group-text">km</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-sm-6">
+                            <label class="form-label small fw-bold">Ngày vào xưởng <span class="text-danger">*</span></label>
+                            <input name="CheckInDate" type="datetime-local" class="form-control form-control-sm" value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" required />
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label small">Ngày giao xe thực tế</label>
+                            <input name="ActualDeliveryDate" type="datetime-local" class="form-control form-control-sm" value="@DateTime.Now.AddHours(3).ToString("yyyy-MM-ddTHH:mm")" />
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-sm-6">
+                            <label class="form-label small">Cố vấn dịch vụ (CVDV)</label>
+                            <input name="ServiceAdvisor" class="form-control form-control-sm" placeholder="VD: CVDV Tuấn Hùng" />
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label small">Kỹ thuật viên chính</label>
+                            <input name="Technician" class="form-control form-control-sm" placeholder="VD: KTV Quang Vinh" />
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small">Yêu cầu của khách hàng / Hiện tượng tiếp nhận</label>
+                        <textarea name="CustomerRequest" class="form-control form-control-sm" rows="2" placeholder="VD: Bảo dưỡng định kỳ 20.000km, thay dầu động cơ, kiểm tra phanh..."></textarea>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small">Kết quả kiểm tra &amp; Sửa chữa</label>
+                        <textarea name="RepairResult" class="form-control form-control-sm" rows="2" placeholder="VD: Đã hoàn tất bảo dưỡng cấp 2, xe vận hành êm ái đạt chuẩn xuất xưởng..."></textarea>
+                    </div>
+
+                    <div class="p-2 bg-light rounded border">
+                        <div class="form-check form-switch mb-1">
+                            <input class="form-check-input" type="checkbox" name="FlagClaim" value="true" id="flagClaimCheck" onchange="toggleClaimFields(this.checked)" />
+                            <label class="form-check-label small fw-bold text-dark" for="flagClaimCheck">Lần sửa chữa này có hồ sơ Bảo hành / Khiếu nại hãng (Claim)</label>
+                        </div>
+                        <div id="claimFields" class="row g-2 mt-1" style="display:none">
+                            <div class="col-sm-6">
+                                <label class="form-label small text-muted">Mã số hồ sơ Claim</label>
+                                <input name="ClaimNo" class="form-control form-control-sm" placeholder="VD: WAR-CG-2401" />
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label small text-muted">Trạng thái bồi hoàn</label>
+                                <select name="ClaimStatus" class="form-select form-select-sm">
+                                    <option value="ACCE">ACCE — Chấp thuận bồi hoàn 100%</option>
+                                    <option value="CONF">CONF — Đang chờ HTC phê duyệt</option>
+                                    <option value="REJ">REJ — Từ chối bồi thường</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cột 2: Thông tin Xe & Chủ sở hữu -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-car-front text-primary me-2"></i>2. Thông tin Xe &amp; Khách hàng</span>
+                    @if (cars.Count > 0)
+                    {
+                        <span class="small text-muted">Chọn nhanh từ xe xưởng có sẵn:</span>
+                    }
+                </div>
+                <div class="card-body p-3">
+                    @if (cars.Count > 0)
+                    {
+                        <div class="mb-3 p-2 bg-light rounded border">
+                            <label class="form-label small fw-bold text-muted mb-1">Chọn xe có sẵn để điền tự động:</label>
+                            <select id="quickCarSelect" class="form-select form-select-sm" onchange="fillCarInfo(this)">
+                                <option value="">-- Chọn xe --</option>
+                                @foreach (var c in cars)
+                                {
+                                    <option value="@c.Id"
+                                            data-plate="@c.Plate"
+                                            data-vin="@c.Vin"
+                                            data-model="@c.Model"
+                                            data-year="@c.Year"
+                                            data-cusname="@c.Customer?.Name"
+                                            data-phone="@c.Customer?.Phone">
+                                        @c.Plate — @c.Model (@(c.Customer?.Name ?? "Chưa có tên"))
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    }
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-sm-6">
+                            <label class="form-label small fw-bold">Biển số xe <span class="text-danger">*</span></label>
+                            <input name="PlateNo" id="plateNoInput" class="form-control form-control-sm text-uppercase" placeholder="VD: 30A-123.45" value="@prefillPlate" required />
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label small fw-bold">Mẫu xe (Model) <span class="text-danger">*</span></label>
+                            <input name="ModelName" id="modelNameInput" class="form-control form-control-sm" placeholder="VD: Hyundai Accent 1.4 AT" required />
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-sm-6">
+                            <label class="form-label small">Số khung (VIN)</label>
+                            <input name="FrameNo" id="frameNoInput" class="form-control form-control-sm text-uppercase font-monospace" placeholder="VD: RLHXXAC001..." value="@prefillVin" />
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label small">Số máy (Engine No)</label>
+                            <input name="EngineNo" class="form-control form-control-sm font-monospace" placeholder="VD: G4LC-..." />
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-sm-4">
+                            <label class="form-label small">Hiệu xe</label>
+                            <input name="TradeMarkName" class="form-control form-control-sm" value="Hyundai" />
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label small">Năm sản xuất</label>
+                            <input name="ProductYear" id="yearInput" type="number" class="form-control form-control-sm" value="2022" />
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label small">Màu sơn xe</label>
+                            <input name="ColorCode" class="form-control form-control-sm" placeholder="VD: Trắng, Đen, Bạc..." />
+                        </div>
+                    </div>
+
+                    <hr class="my-2" />
+                    <div class="small fw-semibold text-muted mb-2"><i class="bi bi-person me-1"></i>Thông tin Chủ xe</div>
+
+                    <div class="row g-2 mb-2">
+                        <div class="col-sm-6">
+                            <label class="form-label small fw-bold">Tên chủ xe / Khách hàng <span class="text-danger">*</span></label>
+                            <input name="CusName" id="cusNameInput" class="form-control form-control-sm" placeholder="Họ và tên khách hàng" required />
+                        </div>
+                        <div class="col-sm-6">
+                            <label class="form-label small">Số điện thoại liên hệ</label>
+                            <input name="CusPhone" id="cusPhoneInput" class="form-control form-control-sm" placeholder="090..." />
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label small">Địa chỉ khách hàng</label>
+                        <input name="CusAddress" class="form-control form-control-sm" placeholder="Số nhà, đường, quận/huyện, tỉnh/thành phố..." />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dòng 2: Danh sách Công việc Lao động & Phụ tùng -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-wrench text-primary me-2"></i>3. Hạng mục Công việc Lao động</span>
+                    <span class="badge bg-light text-muted border">Mỗi dòng 1 mục</span>
+                </div>
+                <div class="card-body p-3 small">
+                    <div class="alert alert-info py-1 px-2 mb-2" style="font-size:11.5px">
+                        <i class="bi bi-info-circle me-1"></i>Nhập danh sách công việc thực hiện theo các dòng tương ứng dưới đây:
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold mb-1">Tên hạng mục công việc (Mỗi mục 1 dòng):</label>
+                        <textarea name="laborNames" class="form-control form-control-sm" rows="3" placeholder="Công bảo dưỡng định kỳ Cấp 2
+Công kiểm tra bảo dưỡng hệ thống phanh 4 bánh
+Công vệ sinh lọc gió và buồng đốt"></textarea>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="form-label small mb-1">Mã công việc:</label>
+                            <textarea name="laborCodes" class="form-control form-control-sm font-monospace" rows="3" placeholder="BDD-020
+SCC-BRK-01
+BDD-CL01"></textarea>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-1">Giờ định mức:</label>
+                            <textarea name="laborHours" class="form-control form-control-sm text-center" rows="3" placeholder="1.2
+0.8
+0.5"></textarea>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-1">Tiền công (đ):</label>
+                            <textarea name="laborPrices" class="form-control form-control-sm text-end" rows="3" placeholder="380000
+220000
+150000"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-white py-2 fw-semibold small d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-box-seam text-primary me-2"></i>4. Danh mục Phụ tùng / Vật tư thay thế</span>
+                    <span class="badge bg-light text-muted border">Mỗi dòng 1 mục</span>
+                </div>
+                <div class="card-body p-3 small">
+                    <div class="alert alert-info py-1 px-2 mb-2" style="font-size:11.5px">
+                        <i class="bi bi-info-circle me-1"></i>Nhập danh mục phụ tùng Mobis đã thay thế trong lần sửa chữa này:
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold mb-1">Tên phụ tùng / vật tư (Mỗi mục 1 dòng):</label>
+                        <textarea name="partNames" class="form-control form-control-sm" rows="3" placeholder="Dầu nhờn động cơ Hyundai 5W-30 (Can 4L)
+Lọc dầu động cơ chính hãng Hyundai
+Lọc gió điều hòa than hoạt tính"></textarea>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-4">
+                            <label class="form-label small mb-1">Mã phụ tùng:</label>
+                            <textarea name="partCodes" class="form-control form-control-sm font-monospace" rows="3" placeholder="05100-00441
+26300-35505
+97133-D3000"></textarea>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-1">Số lượng:</label>
+                            <textarea name="partQuantities" class="form-control form-control-sm text-center" rows="3" placeholder="1
+1
+1"></textarea>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label small mb-1">Đơn giá bán (đ):</label>
+                            <textarea name="partPrices" class="form-control form-control-sm text-end" rows="3" placeholder="610000
+180000
+280000"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nút hành động -->
+    <div class="d-flex justify-content-end gap-2 my-3">
+        <a href="/DealerHistory" class="btn btn-outline-secondary">Hủy bỏ</a>
+        <button type="submit" class="btn btn-primary px-4">
+            <i class="bi bi-check-lg me-1"></i>Lưu Hồ sơ Lịch sử Sửa chữa
+        </button>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+function toggleClaimFields(isChecked) {
+    document.getElementById('claimFields').style.display = isChecked ? 'flex' : 'none';
+}
+
+function fillCarInfo(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return;
+    document.getElementById('plateNoInput').value = opt.getAttribute('data-plate') || '';
+    document.getElementById('frameNoInput').value = opt.getAttribute('data-vin') || '';
+    document.getElementById('modelNameInput').value = opt.getAttribute('data-model') || '';
+    document.getElementById('yearInput').value = opt.getAttribute('data-year') || '2022';
+    document.getElementById('cusNameInput').value = opt.getAttribute('data-cusname') || '';
+    document.getElementById('cusPhoneInput').value = opt.getAttribute('data-phone') || '';
+}
+
+document.getElementById('dealerCodeInput').addEventListener('change', function() {
+    var val = this.value.toUpperCase();
+    var names = {
+        'HTC-CG': 'Hyundai Cầu Giấy',
+        'HTC-PDV': 'Hyundai Phạm Văn Đồng',
+        'HTC-DD': 'Hyundai Đông Đô',
+        'HTC-HD': 'Hyundai Hà Đông',
+        'HTC-SG': 'Hyundai Sài Gòn 1S',
+        'HTC-HP': 'Hyundai Hải Phòng',
+        'HTC-DN': 'Hyundai Đà Nẵng',
+        'HTC-BD': 'Hyundai Bình Dương'
+    };
+    if (names[val]) {
+        document.getElementById('dealerNameInput').value = names[val];
+    }
+});
+</script>
+}

@@ -3077,7 +3077,265 @@ public static class Seeder
             db.SupplierDebitPayments.AddRange(pmtList);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.DealerHistoryRecords.AnyAsync())
+        {
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+            var pFilter = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pAir = await db.Parts.FirstOrDefaultAsync(p => p.Code == "28113-1R100");
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+            var pSpark = await db.Parts.FirstOrDefaultAsync(p => p.Code == "18846-11070");
+            var pCabin = await db.Parts.FirstOrDefaultAsync(p => p.Code == "97133-D3000");
+
+            var records = new List<DealerHistoryRecord>();
+
+            // 1. Xe 30A-123.45 (Hyundai Accent 2022) - VIN: RLHXXAC001 - Khách: Nguyễn Văn An
+            // Lần 1: Bảo dưỡng 1.000km tại Hyundai Cầu Giấy (HTC-CG)
+            var rec1 = new DealerHistoryRecord
+            {
+                RecordNo = $"DHR{DateTime.Today.AddMonths(-18):yyMMdd}-001",
+                DealerCode = "HTC-CG",
+                DealerName = "Hyundai Cầu Giấy",
+                PlateNo = "30A-123.45",
+                FrameNo = "RLHXXAC001",
+                EngineNo = "G4LC-MN89123",
+                TradeMarkName = "Hyundai",
+                ModelName = "Hyundai Accent 1.4 AT",
+                ColorCode = "Trắng Băng (Polar White)",
+                ProductYear = 2022,
+                CusName = "Nguyễn Văn An",
+                CusPhone = "0901111111",
+                CusAddress = "Số 15 Dịch Vọng Hậu, Cầu Giấy, Hà Nội",
+                RONo = "RO-CG-221015",
+                CheckInDate = DateTime.Today.AddMonths(-18),
+                ActualDeliveryDate = DateTime.Today.AddMonths(-18).AddHours(2),
+                Odometer = 1050,
+                ServiceAdvisor = "CVDV Tuấn Hùng",
+                Technician = "KTV Quang Vinh",
+                CustomerRequest = "Bảo dưỡng 1.000km đầu tiên miễn phí tiền công",
+                CarStatus = "Xe mới xuất xưởng 1 tháng, động cơ êm, không báo lỗi",
+                RepairResult = "Đã kiểm tra siết gầm, thay dầu máy và lọc dầu động cơ. Xe đạt tiêu chuẩn xuất xưởng.",
+                TotalLaborAmount = 0,
+                TotalPartAmount = 790000,
+                TotalAmount = 790000,
+                FlagClaim = false,
+                CreatedBy = "dms_sync",
+                CreatedAt = DateTime.Now.AddMonths(-18),
+                Items = [
+                    new DealerHistoryItem { ItemType = LineType.Labor, Code = "BDD-010", Name = "Bảo dưỡng 1.000km (Miễn phí tiền công hãng)", Unit = "Lần", Quantity = 1, UnitPrice = 0, Amount = 0, ExpenseType = ExpenseType.Internal, Technician = "KTV Quang Vinh", Result = "Đạt" },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "05100-00441", Name = "Dầu nhờn động cơ Hyundai Premium 5W-30 (Can 4L)", Unit = "Can", Quantity = 1, UnitPrice = 610000, Amount = 610000, ExpenseType = ExpenseType.Customer },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "26300-35505", Name = "Lọc dầu động cơ chính hãng Hyundai", Unit = "Cái", Quantity = 1, UnitPrice = 180000, Amount = 180000, ExpenseType = ExpenseType.Customer }
+                ]
+            };
+            records.Add(rec1);
+
+            // Lần 2: Bảo dưỡng 10.000km tại Hyundai Phạm Văn Đồng (HTC-PDV)
+            var rec2 = new DealerHistoryRecord
+            {
+                RecordNo = $"DHR{DateTime.Today.AddMonths(-10):yyMMdd}-002",
+                DealerCode = "HTC-PDV",
+                DealerName = "Hyundai Phạm Văn Đồng",
+                PlateNo = "30A-123.45",
+                FrameNo = "RLHXXAC001",
+                EngineNo = "G4LC-MN89123",
+                TradeMarkName = "Hyundai",
+                ModelName = "Hyundai Accent 1.4 AT",
+                ColorCode = "Trắng Băng (Polar White)",
+                ProductYear = 2022,
+                CusName = "Nguyễn Văn An",
+                CusPhone = "0901111111",
+                CusAddress = "Cầu Giấy, Hà Nội",
+                RONo = "RO-PDV-230620",
+                CheckInDate = DateTime.Today.AddMonths(-10),
+                ActualDeliveryDate = DateTime.Today.AddMonths(-10).AddHours(3),
+                Odometer = 10450,
+                ServiceAdvisor = "CVDV Hoàng Lan",
+                Technician = "KTV Văn Đức",
+                CustomerRequest = "Bảo dưỡng định kỳ Cấp 2 (10.000km), kiểm tra phanh và vệ sinh lọc gió",
+                CarStatus = "Xe hoạt động ổn định, má phanh mòn đều",
+                RepairResult = "Đã thay dầu, lọc dầu, lọc gió điều hòa và bảo dưỡng phanh 4 bánh",
+                TotalLaborAmount = 380000,
+                TotalPartAmount = 1070000,
+                TotalAmount = 1450000,
+                FlagClaim = false,
+                CreatedBy = "dms_sync",
+                CreatedAt = DateTime.Now.AddMonths(-10),
+                Items = [
+                    new DealerHistoryItem { ItemType = LineType.Labor, Code = "BDD-020", Name = "Công bảo dưỡng định kỳ Cấp 2 (10.000 km)", Unit = "Giờ", Quantity = 1.2m, UnitPrice = 380000, Amount = 380000, ExpenseType = ExpenseType.Customer, Technician = "KTV Văn Đức", Result = "Đạt" },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "05100-00441", Name = "Dầu nhờn động cơ Hyundai Premium 5W-30 (Can 4L)", Unit = "Can", Quantity = 1, UnitPrice = 610000, Amount = 610000, ExpenseType = ExpenseType.Customer },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "26300-35505", Name = "Lọc dầu động cơ chính hãng Hyundai", Unit = "Cái", Quantity = 1, UnitPrice = 180000, Amount = 180000, ExpenseType = ExpenseType.Customer },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "97133-D3000", Name = "Lọc gió điều hòa than hoạt tính", Unit = "Cái", Quantity = 1, UnitPrice = 280000, Amount = 280000, ExpenseType = ExpenseType.Customer }
+                ]
+            };
+            records.Add(rec2);
+
+            // Lần 3: Bảo dưỡng 20.000km + thay má phanh tại Hyundai Đông Đô (HTC-DD)
+            var rec3 = new DealerHistoryRecord
+            {
+                RecordNo = $"DHR{DateTime.Today.AddMonths(-3):yyMMdd}-003",
+                DealerCode = "HTC-DD",
+                DealerName = "Hyundai Đông Đô",
+                PlateNo = "30A-123.45",
+                FrameNo = "RLHXXAC001",
+                EngineNo = "G4LC-MN89123",
+                TradeMarkName = "Hyundai",
+                ModelName = "Hyundai Accent 1.4 AT",
+                ColorCode = "Trắng Băng (Polar White)",
+                ProductYear = 2022,
+                CusName = "Nguyễn Văn An",
+                CusPhone = "0901111111",
+                CusAddress = "Cầu Giấy, Hà Nội",
+                RONo = "RO-DD-240118",
+                CheckInDate = DateTime.Today.AddMonths(-3),
+                ActualDeliveryDate = DateTime.Today.AddMonths(-3).AddHours(4),
+                Odometer = 20200,
+                ServiceAdvisor = "CVDV Minh Quân",
+                Technician = "KTV Đình Trọng",
+                CustomerRequest = "Bảo dưỡng cấp 3 định kỳ 20.000km, đảo lốp và kiểm tra tiếng kêu nhẹ bánh trước",
+                CarStatus = "Má phanh trước mòn gần tới hạn, bugi đánh lửa còn tốt",
+                RepairResult = "Đã thay dầu động cơ, lọc dầu, lọc gió động cơ, thay bộ má phanh đĩa trước và đảo 4 bánh",
+                TotalLaborAmount = 740000,
+                TotalPartAmount = 2380000,
+                TotalAmount = 3120000,
+                FlagClaim = false,
+                CreatedBy = "dms_sync",
+                CreatedAt = DateTime.Now.AddMonths(-3),
+                Items = [
+                    new DealerHistoryItem { ItemType = LineType.Labor, Code = "BDD-030", Name = "Công bảo dưỡng định kỳ Cấp 3 (20.000 km)", Unit = "Giờ", Quantity = 1.8m, UnitPrice = 520000, Amount = 520000, ExpenseType = ExpenseType.Customer, Technician = "KTV Đình Trọng", Result = "Đạt chuẩn" },
+                    new DealerHistoryItem { ItemType = LineType.Labor, Code = "SCC-BRK-01", Name = "Công thay bộ má phanh đĩa trước & vệ sinh cùm phanh", Unit = "Giờ", Quantity = 0.8m, UnitPrice = 220000, Amount = 220000, ExpenseType = ExpenseType.Customer, Technician = "KTV Đình Trọng", Result = "Lắp ráp đúng kỹ thuật" },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "05100-00441", Name = "Dầu nhờn động cơ Hyundai Premium 5W-30 (Can 4L)", Unit = "Can", Quantity = 1, UnitPrice = 610000, Amount = 610000, ExpenseType = ExpenseType.Customer },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "26300-35505", Name = "Lọc dầu động cơ chính hãng Hyundai", Unit = "Cái", Quantity = 1, UnitPrice = 180000, Amount = 180000, ExpenseType = ExpenseType.Customer },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "28113-1R100", Name = "Lọc gió động cơ Hyundai Accent", Unit = "Cái", Quantity = 1, UnitPrice = 240000, Amount = 240000, ExpenseType = ExpenseType.Customer },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "58101-C1A00", Name = "Bộ má phanh đĩa trước chính hãng", Unit = "Bộ", Quantity = 1, UnitPrice = 1350000, Amount = 1350000, ExpenseType = ExpenseType.Customer }
+                ]
+            };
+            records.Add(rec3);
+
+            // 2. Xe 51G-678.90 (Hyundai Tucson 2023) - VIN: RLHXXTC002 - Khách: Trần Thị Bình
+            // Lần 1: Bảo dưỡng 5.000km tại Hyundai Sài Gòn (HTC-SG)
+            var rec4 = new DealerHistoryRecord
+            {
+                RecordNo = $"DHR{DateTime.Today.AddMonths(-8):yyMMdd}-004",
+                DealerCode = "HTC-SG",
+                DealerName = "Hyundai Sài Gòn 1S",
+                PlateNo = "51G-678.90",
+                FrameNo = "RLHXXTC002",
+                EngineNo = "G4FJ-PL98342",
+                TradeMarkName = "Hyundai",
+                ModelName = "Hyundai Tucson 2.0 AT",
+                ColorCode = "Đỏ Mận (Fiery Red)",
+                ProductYear = 2023,
+                CusName = "Trần Thị Bình",
+                CusPhone = "0902222222",
+                CusAddress = "Quận 1, TP. Hồ Chí Minh",
+                RONo = "RO-SG-230810",
+                CheckInDate = DateTime.Today.AddMonths(-8),
+                ActualDeliveryDate = DateTime.Today.AddMonths(-8).AddHours(2),
+                Odometer = 5120,
+                ServiceAdvisor = "CVDV Thanh Tùng",
+                Technician = "KTV Quốc Hưng",
+                CustomerRequest = "Bảo dưỡng 5.000km định kỳ, thay dầu máy",
+                CarStatus = "Xe hoạt động tốt, không có hiện tượng bất thường",
+                RepairResult = "Đã thay dầu máy và lọc dầu chính hãng",
+                TotalLaborAmount = 250000,
+                TotalPartAmount = 790000,
+                TotalAmount = 1040000,
+                FlagClaim = false,
+                CreatedBy = "dms_sync",
+                CreatedAt = DateTime.Now.AddMonths(-8),
+                Items = [
+                    new DealerHistoryItem { ItemType = LineType.Labor, Code = "BDD-015", Name = "Công bảo dưỡng cấp 5.000km", Unit = "Giờ", Quantity = 0.8m, UnitPrice = 250000, Amount = 250000, ExpenseType = ExpenseType.Customer, Technician = "KTV Quốc Hưng", Result = "Đạt" },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "05100-00441", Name = "Dầu nhờn động cơ Hyundai Premium 5W-30 (Can 4L)", Unit = "Can", Quantity = 1, UnitPrice = 610000, Amount = 610000, ExpenseType = ExpenseType.Customer },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "26300-35505", Name = "Lọc dầu động cơ chính hãng Hyundai", Unit = "Cái", Quantity = 1, UnitPrice = 180000, Amount = 180000, ExpenseType = ExpenseType.Customer }
+                ]
+            };
+            records.Add(rec4);
+
+            // Lần 2: Xử lý bảo hành lỗi bỏ lửa động cơ (Claim) tại Hyundai Service Workshop (HTC-MAIN)
+            var rec5 = new DealerHistoryRecord
+            {
+                RecordNo = $"DHR{DateTime.Today.AddDays(-2):yyMMdd}-005",
+                DealerCode = "HTC-MAIN",
+                DealerName = "Hyundai Service Workshop (Đại lý hiện tại)",
+                PlateNo = "51G-678.90",
+                FrameNo = "RLHXXTC002",
+                EngineNo = "G4FJ-PL98342",
+                TradeMarkName = "Hyundai",
+                ModelName = "Hyundai Tucson 2.0 AT",
+                ColorCode = "Đỏ Mận (Fiery Red)",
+                ProductYear = 2023,
+                CusName = "Trần Thị Bình",
+                CusPhone = "0902222222",
+                CusAddress = "Thanh Xuân, Hà Nội",
+                RONo = "ROSEED-WAR-001",
+                CheckInDate = DateTime.Today.AddDays(-2),
+                ActualDeliveryDate = DateTime.Today.AddDays(-1),
+                Odometer = 18200,
+                ServiceAdvisor = "CVDV Tuấn Hùng",
+                Technician = "KTV Quang Vinh",
+                CustomerRequest = "Bảo hành: Động cơ rung giật khi tăng tốc, đèn Check Engine sáng",
+                CarStatus = "Máy chẩn đoán GDS đọc lỗi P0302 (Bỏ lửa xy-lanh số 2), bugi nứt sứ cách điện",
+                RepairResult = "Đã thay thế bộ 4 bugi đánh lửa Iridium theo diện bảo hành hãng HTC/HMC. Xóa mã lỗi, thử xe êm ái.",
+                TotalLaborAmount = 350000,
+                TotalPartAmount = 880000,
+                TotalAmount = 1230000,
+                FlagClaim = true,
+                ClaimNo = "WAR260427-001",
+                ClaimStatus = "ACCE",
+                CreatedBy = "dms_sync",
+                CreatedAt = DateTime.Now.AddDays(-2),
+                Items = [
+                    new DealerHistoryItem { ItemType = LineType.Labor, Code = "WAR-LAB-01", Name = "Công chẩn đoán GDS & thay thế bugi bảo hành", Unit = "Lần", Quantity = 1, UnitPrice = 350000, Amount = 350000, ExpenseType = ExpenseType.Warranty, Technician = "KTV Quang Vinh", Result = "Đạt tiêu chuẩn bảo hành HTC" },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "18846-11070", Name = "Bugi đánh lửa Iridium cao cấp (Bộ 4 chiếc)", Unit = "Cái", Quantity = 4, UnitPrice = 220000, Amount = 880000, ExpenseType = ExpenseType.Warranty, Remark = "Bảo hành hãng chi trả 100%" }
+                ]
+            };
+            records.Add(rec5);
+
+            // 3. Xe 30E-888.99 (Hyundai Santa Fe 2.2D 2023) - VIN: KMHFH41BPA123456 - Khách: Hoàng Văn Cường
+            var rec6 = new DealerHistoryRecord
+            {
+                RecordNo = $"DHR{DateTime.Today.AddMonths(-6):yyMMdd}-006",
+                DealerCode = "HTC-PDV",
+                DealerName = "Hyundai Phạm Văn Đồng",
+                PlateNo = "30E-888.99",
+                FrameNo = "KMHFH41BPA123456",
+                EngineNo = "D4HB-KN67234",
+                TradeMarkName = "Hyundai",
+                ModelName = "Hyundai Santa Fe 2.2D HTRAC",
+                ColorCode = "Đen (Phantom Black)",
+                ProductYear = 2023,
+                CusName = "Hoàng Văn Cường",
+                CusPhone = "0918888999",
+                CusAddress = "Tây Hồ, Hà Nội",
+                RONo = "RO-PDV-231005",
+                CheckInDate = DateTime.Today.AddMonths(-6),
+                ActualDeliveryDate = DateTime.Today.AddMonths(-6).AddHours(3),
+                Odometer = 12500,
+                ServiceAdvisor = "CVDV Minh Quân",
+                Technician = "KTV Tuấn Anh",
+                CustomerRequest = "Bảo dưỡng cấp 2, kiểm tra hệ dẫn động 4 bánh toàn thời gian HTRAC",
+                CarStatus = "Xe vận hành tốt, dầu phanh và nước làm mát đầy đủ",
+                RepairResult = "Đã thay dầu động cơ máy dầu Castrol 5W-30, lọc dầu, lọc nhiên liệu dầu Diesel",
+                TotalLaborAmount = 450000,
+                TotalPartAmount = 1450000,
+                TotalAmount = 1900000,
+                FlagClaim = false,
+                CreatedBy = "dms_sync",
+                CreatedAt = DateTime.Now.AddMonths(-6),
+                Items = [
+                    new DealerHistoryItem { ItemType = LineType.Labor, Code = "BDD-025", Name = "Công bảo dưỡng cấp 10.000km xe máy dầu", Unit = "Giờ", Quantity = 1.5m, UnitPrice = 450000, Amount = 450000, ExpenseType = ExpenseType.Customer, Technician = "KTV Tuấn Anh", Result = "Đạt" },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "05100-00441", Name = "Dầu động cơ tổng hợp Hyundai Diesel 5W-30 (6L)", Unit = "Can", Quantity = 1.5m, UnitPrice = 650000, Amount = 975000, ExpenseType = ExpenseType.Customer },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "26300-35505", Name = "Lọc dầu động cơ Santa Fe", Unit = "Cái", Quantity = 1, UnitPrice = 215000, Amount = 215000, ExpenseType = ExpenseType.Customer },
+                    new DealerHistoryItem { ItemType = LineType.Part, Code = "97133-D3000", Name = "Lọc gió điều hòa than hoạt tính", Unit = "Cái", Quantity = 1, UnitPrice = 260000, Amount = 260000, ExpenseType = ExpenseType.Customer }
+                ]
+            };
+            records.Add(rec6);
+
+            db.DealerHistoryRecords.AddRange(records);
+            await db.SaveChangesAsync();
+        }
     }
+
 
     private static List<PdiChecklistItem> CreateDefaultChecklist() =>
     [
@@ -3116,7 +3374,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -3153,6 +3411,12 @@ public static class Seeder
             "CREATE TABLE IF NOT EXISTS miniservice.\"PartOOs\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"OONo\" text NOT NULL, \"PartId\" integer NOT NULL, \"PartCode\" text NOT NULL, \"PartName\" text NOT NULL, \"OOPlateNo\" text NOT NULL, \"Model\" text NULL, \"SoLuongNo\" numeric(18,2) NOT NULL, \"SoLuongTra\" numeric(18,2) NOT NULL DEFAULT 0, \"CVDV\" text NULL, \"NgayDatHang\" timestamp NULL, \"NgayVeDuKien\" timestamp NULL, \"NgayHenTra\" timestamp NULL, \"GhiChu\" text NULL, \"Status\" integer NOT NULL DEFAULT 0, \"ROId\" integer NULL, \"CarId\" integer NULL, \"CustomerId\" integer NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"FinishedAt\" timestamp NULL, \"ReturnedBy\" text NULL)",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PartOOs_OrgId_OONo\" ON miniservice.\"PartOOs\" (\"OrgId\", \"OONo\")",
             "CREATE INDEX IF NOT EXISTS \"IX_PartOOs_OrgId_OOPlateNo\" ON miniservice.\"PartOOs\" (\"OrgId\", \"OOPlateNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"DealerHistoryRecords\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"RecordNo\" text NOT NULL, \"DealerCode\" text NOT NULL, \"DealerName\" text NOT NULL, \"PlateNo\" text NOT NULL, \"FrameNo\" text NOT NULL, \"EngineNo\" text NULL, \"TradeMarkName\" text NOT NULL, \"ModelName\" text NOT NULL, \"ColorCode\" text NULL, \"ProductYear\" integer NOT NULL, \"CusName\" text NOT NULL, \"CusPhone\" text NULL, \"CusAddress\" text NULL, \"RONo\" text NOT NULL, \"ROId\" integer NULL, \"CheckInDate\" timestamp NOT NULL, \"ActualDeliveryDate\" timestamp NULL, \"Odometer\" integer NOT NULL, \"ServiceAdvisor\" text NOT NULL, \"Technician\" text NULL, \"CustomerRequest\" text NULL, \"CarStatus\" text NULL, \"RepairResult\" text NULL, \"TotalLaborAmount\" numeric(18,2) NOT NULL, \"TotalPartAmount\" numeric(18,2) NOT NULL, \"TotalAmount\" numeric(18,2) NOT NULL, \"FlagClaim\" boolean NOT NULL DEFAULT false, \"ClaimNo\" text NULL, \"ClaimStatus\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_DealerHistoryRecords_OrgId_RecordNo\" ON miniservice.\"DealerHistoryRecords\" (\"OrgId\", \"RecordNo\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_DealerHistoryRecords_OrgId_PlateNo\" ON miniservice.\"DealerHistoryRecords\" (\"OrgId\", \"PlateNo\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_DealerHistoryRecords_OrgId_FrameNo\" ON miniservice.\"DealerHistoryRecords\" (\"OrgId\", \"FrameNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"DealerHistoryItems\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"DealerHistoryRecordId\" integer NOT NULL, \"ItemType\" integer NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Unit\" text NOT NULL, \"Quantity\" numeric(18,2) NOT NULL, \"UnitPrice\" numeric(18,2) NOT NULL, \"Amount\" numeric(18,2) NOT NULL, \"ExpenseType\" integer NOT NULL, \"Technician\" text NULL, \"Result\" text NULL, \"Remark\" text NULL)",
+            "CREATE INDEX IF NOT EXISTS \"IX_DealerHistoryItems_OrgId_DealerHistoryRecordId\" ON miniservice.\"DealerHistoryItems\" (\"OrgId\", \"DealerHistoryRecordId\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -4124,7 +4388,63 @@ public static class Seeder
                 FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE SET NULL
             );",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PartOOs_OrgId_OONo"" ON ""PartOOs"" (""OrgId"", ""OONo"");",
-            @"CREATE INDEX IF NOT EXISTS ""IX_PartOOs_OrgId_OOPlateNo"" ON ""PartOOs"" (""OrgId"", ""OOPlateNo"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_PartOOs_OrgId_OOPlateNo"" ON ""PartOOs"" (""OrgId"", ""OOPlateNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""DealerHistoryRecords"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""RecordNo"" TEXT NOT NULL,
+                ""DealerCode"" TEXT NOT NULL,
+                ""DealerName"" TEXT NOT NULL,
+                ""PlateNo"" TEXT NOT NULL,
+                ""FrameNo"" TEXT NOT NULL,
+                ""EngineNo"" TEXT NULL,
+                ""TradeMarkName"" TEXT NOT NULL,
+                ""ModelName"" TEXT NOT NULL,
+                ""ColorCode"" TEXT NULL,
+                ""ProductYear"" INTEGER NOT NULL,
+                ""CusName"" TEXT NOT NULL,
+                ""CusPhone"" TEXT NULL,
+                ""CusAddress"" TEXT NULL,
+                ""RONo"" TEXT NOT NULL,
+                ""ROId"" INTEGER NULL,
+                ""CheckInDate"" TEXT NOT NULL,
+                ""ActualDeliveryDate"" TEXT NULL,
+                ""Odometer"" INTEGER NOT NULL,
+                ""ServiceAdvisor"" TEXT NOT NULL,
+                ""Technician"" TEXT NULL,
+                ""CustomerRequest"" TEXT NULL,
+                ""CarStatus"" TEXT NULL,
+                ""RepairResult"" TEXT NULL,
+                ""TotalLaborAmount"" TEXT NOT NULL,
+                ""TotalPartAmount"" TEXT NOT NULL,
+                ""TotalAmount"" TEXT NOT NULL,
+                ""FlagClaim"" INTEGER NOT NULL DEFAULT 0,
+                ""ClaimNo"" TEXT NULL,
+                ""ClaimStatus"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_DealerHistoryRecords_OrgId_RecordNo"" ON ""DealerHistoryRecords"" (""OrgId"", ""RecordNo"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_DealerHistoryRecords_OrgId_PlateNo"" ON ""DealerHistoryRecords"" (""OrgId"", ""PlateNo"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_DealerHistoryRecords_OrgId_FrameNo"" ON ""DealerHistoryRecords"" (""OrgId"", ""FrameNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""DealerHistoryItems"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""DealerHistoryRecordId"" INTEGER NOT NULL,
+                ""ItemType"" INTEGER NOT NULL,
+                ""Code"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""Amount"" TEXT NOT NULL,
+                ""ExpenseType"" INTEGER NOT NULL,
+                ""Technician"" TEXT NULL,
+                ""Result"" TEXT NULL,
+                ""Remark"" TEXT NULL,
+                FOREIGN KEY (""DealerHistoryRecordId"") REFERENCES ""DealerHistoryRecords"" (""Id"") ON DELETE CASCADE
+            );",
+            @"CREATE INDEX IF NOT EXISTS ""IX_DealerHistoryItems_OrgId_DealerHistoryRecordId"" ON ""DealerHistoryItems"" (""OrgId"", ""DealerHistoryRecordId"");"
         };
 
         foreach (var sql in sqls)

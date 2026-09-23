@@ -4091,3 +4091,181 @@ public class OrgController(AppDbContext db) : Controller
         Response.Cookies.Append(TenantContext.CookieName, k, o); Response.Cookies.Append("org_name", n, o);
     }
 }
+
+public class DealerHistoryController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, string? dealer, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Q = q;
+        ViewBag.Dealer = dealer;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+        ViewBag.Dealers = await svc.GetDistinctDealerCodesAsync();
+
+        if (!string.IsNullOrWhiteSpace(q) && q.Trim().Length < 4)
+        {
+            TempData["Error"] = "Theo quy định hệ thống idn.CarService, tra cứu lịch sử sửa chữa yêu cầu nhập tối thiểu 4 ký tự biển số xe hoặc số khung VIN.";
+        }
+
+        var list = await svc.SearchDealerHistoryAsync(q, dealer, fromDate, toDate);
+
+        VehicleHistorySummaryDto? summary = null;
+        if (!string.IsNullOrWhiteSpace(q) && q.Trim().Length >= 4)
+        {
+            summary = await svc.GetVehicleServiceSummaryAsync(q.Trim());
+        }
+
+        ViewBag.Summary = summary;
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var record = await svc.GetDealerHistoryRecordAsync(id);
+        if (record == null)
+        {
+            TempData["Error"] = "Không tìm thấy hồ sơ lịch sử sửa chữa.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var summary = await svc.GetVehicleServiceSummaryAsync(record.PlateNo);
+        ViewBag.Summary = summary;
+        return View(record);
+    }
+
+    public async Task<IActionResult> Print(string plateOrVin)
+    {
+        if (string.IsNullOrWhiteSpace(plateOrVin))
+        {
+            TempData["Error"] = "Vui lòng nhập Biển số xe hoặc Số khung VIN để in sổ bảo dưỡng.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var summary = await svc.GetVehicleServiceSummaryAsync(plateOrVin.Trim());
+        if (summary == null)
+        {
+            TempData["Error"] = $"Không tìm thấy dữ liệu lịch sử bảo dưỡng của xe '{plateOrVin}'.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        return View(summary);
+    }
+
+    public async Task<IActionResult> Create(string? plate, string? vin)
+    {
+        ViewBag.Plate = plate;
+        ViewBag.Vin = vin;
+        ViewBag.Cars = await svc.CarsWithPlateOrVinAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(DealerHistoryRecord record, string laborCodes, string laborNames, string laborHours, string laborPrices, string laborTypes, string partCodes, string partNames, string partUnits, string partQuantities, string partPrices, string partTypes)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(record.PlateNo) || string.IsNullOrWhiteSpace(record.RONo))
+            {
+                TempData["Error"] = "Cần Biển số xe và Số lệnh sửa chữa (RONo).";
+                return RedirectToAction(nameof(Create));
+            }
+
+            var items = new List<DealerHistoryItem>();
+
+            var lCodes = laborCodes?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var lNames = laborNames?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var lHours = laborHours?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var lPrices = laborPrices?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var lTypes = laborTypes?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+
+            for (int i = 0; i < lNames.Length; i++)
+            {
+                var name = lNames[i].Trim();
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                var code = i < lCodes.Length ? lCodes[i].Trim() : $"SRV-{i + 1:D2}";
+                decimal.TryParse(i < lHours.Length ? lHours[i].Trim() : "1", out var qty);
+                decimal.TryParse(i < lPrices.Length ? lPrices[i].Trim() : "0", out var price);
+                var expType = ExpenseType.Customer;
+                if (i < lTypes.Length && int.TryParse(lTypes[i].Trim(), out var tVal)) expType = (ExpenseType)tVal;
+
+                items.Add(new DealerHistoryItem
+                {
+                    ItemType = LineType.Labor,
+                    Code = code,
+                    Name = name,
+                    Unit = "Giờ",
+                    Quantity = qty <= 0 ? 1 : qty,
+                    UnitPrice = price,
+                    ExpenseType = expType,
+                    Technician = record.Technician,
+                    Result = "Đạt yêu cầu xuất xưởng"
+                });
+            }
+
+            var pCodes = partCodes?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var pNames = partNames?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var pUnits = partUnits?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var pQtys = partQuantities?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var pPrices = partPrices?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var pTypes = partTypes?.Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+
+            for (int i = 0; i < pNames.Length; i++)
+            {
+                var name = pNames[i].Trim();
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                var code = i < pCodes.Length ? pCodes[i].Trim() : $"PRT-{i + 1:D2}";
+                var unit = i < pUnits.Length ? pUnits[i].Trim() : "Cái";
+                decimal.TryParse(i < pQtys.Length ? pQtys[i].Trim() : "1", out var qty);
+                decimal.TryParse(i < pPrices.Length ? pPrices[i].Trim() : "0", out var price);
+                var expType = ExpenseType.Customer;
+                if (i < pTypes.Length && int.TryParse(pTypes[i].Trim(), out var tVal)) expType = (ExpenseType)tVal;
+
+                items.Add(new DealerHistoryItem
+                {
+                    ItemType = LineType.Part,
+                    Code = code,
+                    Name = name,
+                    Unit = unit,
+                    Quantity = qty <= 0 ? 1 : qty,
+                    UnitPrice = price,
+                    ExpenseType = expType
+                });
+            }
+
+            var id = await svc.CreateDealerHistoryRecordAsync(record, items);
+            TempData["Success"] = $"Đã ghi nhận hồ sơ lịch sử sửa chữa đại lý {record.RecordNo} ({record.DealerName}) cho xe {record.PlateNo}.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SyncRo(int roId)
+    {
+        var (ok, msg, recId) = await svc.SyncLocalRoToHistoryAsync(roId);
+        if (ok)
+        {
+            TempData["Success"] = msg;
+            if (recId.HasValue) return RedirectToAction(nameof(Detail), new { id = recId.Value });
+        }
+        else
+        {
+            TempData["Error"] = msg;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteDealerHistoryRecordAsync(id);
+        if (ok) TempData["Success"] = msg;
+        else TempData["Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+

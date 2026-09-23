@@ -2052,6 +2052,95 @@ public class SupplierDebitSummaryDto
     public DateTime? LastPaymentDate { get; set; }
 }
 
+/// <summary>Hồ sơ Lịch sử sửa chữa xe chia sẻ toàn hệ thống đại lý — DealerHistoryShareMng trong idn.CarService.</summary>
+public class DealerHistoryRecord : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string RecordNo { get; set; } = "";                        // Mã hồ sơ (VD: DHR260427-001)
+    public string DealerCode { get; set; } = "HTC-CG";                // Mã đại lý thực hiện (DealerCode)
+    public string DealerName { get; set; } = "Hyundai Cầu Giấy";      // Tên đại lý (DealerName)
+    public string PlateNo { get; set; } = "";                         // Biển số xe (PlateNo)
+    public string FrameNo { get; set; } = "";                         // Số khung VIN (FrameNo)
+    public string? EngineNo { get; set; }                             // Số máy (EngineNo)
+    public string TradeMarkName { get; set; } = "Hyundai";            // Hiệu xe (TradeMarkName)
+    public string ModelName { get; set; } = "";                       // Model xe (ModelName)
+    public string? ColorCode { get; set; }                            // Màu xe (ColorCode)
+    public int ProductYear { get; set; }                              // Năm sản xuất (ProductYear)
+    public string CusName { get; set; } = "";                         // Tên khách hàng / chủ xe (CusName)
+    public string? CusPhone { get; set; }                             // SĐT liên hệ (Mobile/Tel)
+    public string? CusAddress { get; set; }                           // Địa chỉ khách hàng
+    public string RONo { get; set; } = "";                            // Số lệnh sửa chữa (NormalizedRONo)
+    public int? ROId { get; set; }                                    // ID lệnh RO tại đại lý hiện tại (nếu có)
+    public DateTime CheckInDate { get; set; } = DateTime.Now;         // Ngày vào xưởng (CheckInDate)
+    public DateTime? ActualDeliveryDate { get; set; }                 // Ngày giao xe thực tế (ActualDeliveryDate)
+    public int Odometer { get; set; }                                 // Số Km tại thời điểm vào xưởng (Km)
+    public string ServiceAdvisor { get; set; } = "CVDV";              // Cố vấn dịch vụ phụ trách (NormalizedCreator)
+    public string? Technician { get; set; }                           // Kỹ thuật viên chính
+    public string? CustomerRequest { get; set; }                      // Yêu cầu của khách hàng (CusRequest)
+    public string? CarStatus { get; set; }                            // Tình trạng xe khi tiếp nhận
+    public string? RepairResult { get; set; }                         // Kết quả sửa chữa
+    public decimal TotalLaborAmount { get; set; }                     // Tiền công lao động
+    public decimal TotalPartAmount { get; set; }                      // Tiền phụ tùng
+    public decimal TotalAmount { get; set; }                          // Tổng chi phí quyết toán
+    public bool FlagClaim { get; set; } = false;                      // Cờ hồ sơ bảo hành / khiếu nại (FlagClaim)
+    public string? ClaimNo { get; set; }                              // Mã số khiếu nại / bảo hành nếu có (ClaimNo)
+    public string? ClaimStatus { get; set; }                          // Trạng thái xử lý bảo hành (ACCE/REJ...)
+    public string CreatedBy { get; set; } = "system";                 // Người lập / đồng bộ
+    public DateTime CreatedAt { get; set; } = DateTime.Now;           // Thời điểm tạo
+
+    public List<DealerHistoryItem> Items { get; set; } = [];
+
+    public int LaborCount => Items.Count(i => i.ItemType == LineType.Labor);
+    public int PartCount => Items.Count(i => i.ItemType == LineType.Part);
+}
+
+/// <summary>Chi tiết hạng mục công việc / phụ tùng trong lịch sử sửa chữa — DealerHistoryItem (Ser_ROServiceItems / Ser_ROPartItems).</summary>
+public class DealerHistoryItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int DealerHistoryRecordId { get; set; }
+    public LineType ItemType { get; set; } = LineType.Labor;          // Loại: Công lao động / Phụ tùng
+    public string Code { get; set; } = "";                            // Mã công việc (SerCode) hoặc Mã phụ tùng (PartCode)
+    public string Name { get; set; } = "";                            // Tên công việc (SerName) hoặc Tên phụ tùng (VieName)
+    public string Unit { get; set; } = "Giờ";                         // ĐVT (Unit)
+    public decimal Quantity { get; set; } = 1;                        // Số lượng / Giờ công
+    public decimal UnitPrice { get; set; }                            // Đơn giá (Price)
+    public decimal Amount { get; set; }                               // Thành tiền
+    public ExpenseType ExpenseType { get; set; } = ExpenseType.Customer; // Đối tượng thanh toán (Khách / Bảo hành / Bảo hiểm)
+    public string? Technician { get; set; }                           // Thợ phụ trách (AssignmentLabor)
+    public string? Result { get; set; }                               // Kết quả thực hiện (KetQua)
+    public string? Remark { get; set; }                               // Ghi chú / Nguyên nhân pan bệnh
+
+    public DealerHistoryRecord DealerHistoryRecord { get; set; } = null!;
+}
+
+/// <summary>DTO Tổng hợp hồ sơ lịch sử dịch vụ xe toàn hệ thống — VehicleHistorySummaryDto.</summary>
+public class VehicleHistorySummaryDto
+{
+    public string PlateNo { get; set; } = "";
+    public string FrameNo { get; set; } = "";
+    public string? EngineNo { get; set; }
+    public string TradeMarkName { get; set; } = "Hyundai";
+    public string ModelName { get; set; } = "";
+    public string? ColorCode { get; set; }
+    public int ProductYear { get; set; }
+    public string CusName { get; set; } = "";
+    public string? CusPhone { get; set; }
+    public string? CusAddress { get; set; }
+    public int CurrentKm { get; set; }
+    public int TotalVisits { get; set; }
+    public decimal TotalSpent { get; set; }
+    public int TotalClaims { get; set; }
+    public DateTime? FirstVisitDate { get; set; }
+    public DateTime? LastVisitDate { get; set; }
+    public string? LastDealerName { get; set; }
+    public string? LastServiceAdvisor { get; set; }
+    public List<DealerHistoryRecord> Records { get; set; } = [];
+}
+
+
 
 
 

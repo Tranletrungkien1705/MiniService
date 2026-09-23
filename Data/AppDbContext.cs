@@ -65,6 +65,8 @@ public class AppDbContext : DbContext
     public DbSet<CusDebitPayment> CusDebitPayments => Set<CusDebitPayment>();
     public DbSet<SupplierDebit> SupplierDebits => Set<SupplierDebit>();
     public DbSet<SupplierDebitPayment> SupplierDebitPayments => Set<SupplierDebitPayment>();
+    public DbSet<DealerHistoryRecord> DealerHistoryRecords => Set<DealerHistoryRecord>();
+    public DbSet<DealerHistoryItem> DealerHistoryItems => Set<DealerHistoryItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -645,6 +647,26 @@ public class AppDbContext : DbContext
             e.Property(x => x.PaymentAmount).HasPrecision(18, 2);
             e.HasOne(x => x.Supplier).WithMany(x => x.SupplierDebitPayments).HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.SupplierDebit).WithMany(x => x.Payments).HasForeignKey(x => x.SupplierDebitId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<DealerHistoryRecord>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.RecordNo }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.PlateNo });
+            e.HasIndex(x => new { x.OrgId, x.FrameNo });
+            e.Property(x => x.TotalLaborAmount).HasPrecision(18, 2);
+            e.Property(x => x.TotalPartAmount).HasPrecision(18, 2);
+            e.Property(x => x.TotalAmount).HasPrecision(18, 2);
+            e.Ignore(x => x.LaborCount);
+            e.Ignore(x => x.PartCount);
+            e.HasMany(x => x.Items).WithOne(x => x.DealerHistoryRecord).HasForeignKey(x => x.DealerHistoryRecordId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<DealerHistoryItem>(e =>
+        {
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.Property(x => x.Amount).HasPrecision(18, 2);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

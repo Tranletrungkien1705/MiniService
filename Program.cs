@@ -4335,6 +4335,185 @@ app.MapDelete("/api/supplierdebits/payments/{paymentId:int}", async (int payment
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// =========================================================================
+// API Tra cứu & Chia sẻ Lịch sử Sửa chữa Toàn Hệ thống Đại lý (DealerHistoryShareMng)
+// =========================================================================
+
+app.MapGet("/api/dealer-history/search", async (string? q, string? dealer, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.SearchDealerHistoryAsync(q, dealer, fromDate, toDate);
+    return Results.Ok(list.Select(r => new
+    {
+        r.Id,
+        r.RecordNo,
+        r.DealerCode,
+        r.DealerName,
+        r.PlateNo,
+        r.FrameNo,
+        r.EngineNo,
+        r.ModelName,
+        r.ProductYear,
+        r.CusName,
+        r.CusPhone,
+        r.RONo,
+        r.ROId,
+        r.CheckInDate,
+        r.ActualDeliveryDate,
+        r.Odometer,
+        r.ServiceAdvisor,
+        r.Technician,
+        r.CustomerRequest,
+        r.CarStatus,
+        r.RepairResult,
+        r.TotalLaborAmount,
+        r.TotalPartAmount,
+        r.TotalAmount,
+        r.FlagClaim,
+        r.ClaimNo,
+        r.ClaimStatus,
+        r.LaborCount,
+        r.PartCount,
+        dealerBadge = Ui.DealerBadge(r.DealerCode).text,
+        dealerBadgeCss = Ui.DealerBadge(r.DealerCode).css,
+        claimBadge = Ui.ClaimBadge(r.FlagClaim, r.ClaimNo).text,
+        claimBadgeCss = Ui.ClaimBadge(r.FlagClaim, r.ClaimNo).css
+    }));
+});
+
+app.MapGet("/api/dealer-history/vehicle/{plateOrVin}", async (string plateOrVin, IRoService svc) =>
+{
+    var summary = await svc.GetVehicleServiceSummaryAsync(plateOrVin);
+    if (summary == null) return Results.NotFound(new { error = $"Không tìm thấy lịch sử xe '{plateOrVin}'." });
+    return Results.Ok(summary);
+});
+
+app.MapGet("/api/dealer-history/{id:int}", async (int id, IRoService svc) =>
+{
+    var r = await svc.GetDealerHistoryRecordAsync(id);
+    if (r == null) return Results.NotFound(new { error = "Không tìm thấy hồ sơ lịch sử sửa chữa." });
+    return Results.Ok(new
+    {
+        r.Id,
+        r.RecordNo,
+        r.DealerCode,
+        r.DealerName,
+        r.PlateNo,
+        r.FrameNo,
+        r.EngineNo,
+        r.TradeMarkName,
+        r.ModelName,
+        r.ColorCode,
+        r.ProductYear,
+        r.CusName,
+        r.CusPhone,
+        r.CusAddress,
+        r.RONo,
+        r.ROId,
+        r.CheckInDate,
+        r.ActualDeliveryDate,
+        r.Odometer,
+        r.ServiceAdvisor,
+        r.Technician,
+        r.CustomerRequest,
+        r.CarStatus,
+        r.RepairResult,
+        r.TotalLaborAmount,
+        r.TotalPartAmount,
+        r.TotalAmount,
+        r.FlagClaim,
+        r.ClaimNo,
+        r.ClaimStatus,
+        r.CreatedBy,
+        r.CreatedAt,
+        items = r.Items.Select(i => new
+        {
+            i.Id,
+            itemType = Ui.Line(i.ItemType),
+            typeValue = (int)i.ItemType,
+            i.Code,
+            i.Name,
+            i.Unit,
+            i.Quantity,
+            i.UnitPrice,
+            i.Amount,
+            expenseType = Ui.Expense(i.ExpenseType).text,
+            expenseCss = Ui.Expense(i.ExpenseType).css,
+            i.Technician,
+            i.Result,
+            i.Remark
+        })
+    });
+});
+
+app.MapPost("/api/dealer-history", async (CreateDealerHistoryRecordDto dto, IRoService svc) =>
+{
+    try
+    {
+        var record = new DealerHistoryRecord
+        {
+            DealerCode = dto.DealerCode?.Trim() ?? "HTC-CG",
+            DealerName = dto.DealerName?.Trim() ?? "Hyundai Cầu Giấy",
+            PlateNo = dto.PlateNo?.Trim() ?? "",
+            FrameNo = dto.FrameNo?.Trim() ?? "",
+            EngineNo = dto.EngineNo?.Trim(),
+            TradeMarkName = dto.TradeMarkName?.Trim() ?? "Hyundai",
+            ModelName = dto.ModelName?.Trim() ?? "",
+            ColorCode = dto.ColorCode?.Trim(),
+            ProductYear = dto.ProductYear > 0 ? dto.ProductYear : DateTime.Today.Year,
+            CusName = dto.CusName?.Trim() ?? "",
+            CusPhone = dto.CusPhone?.Trim(),
+            CusAddress = dto.CusAddress?.Trim(),
+            RONo = dto.RONo?.Trim() ?? "",
+            CheckInDate = dto.CheckInDate ?? DateTime.Now,
+            ActualDeliveryDate = dto.ActualDeliveryDate,
+            Odometer = dto.Odometer,
+            ServiceAdvisor = dto.ServiceAdvisor?.Trim() ?? "CVDV",
+            Technician = dto.Technician?.Trim(),
+            CustomerRequest = dto.CustomerRequest?.Trim(),
+            CarStatus = dto.CarStatus?.Trim(),
+            RepairResult = dto.RepairResult?.Trim() ?? "Đã hoàn tất dịch vụ",
+            FlagClaim = dto.FlagClaim ?? false,
+            ClaimNo = dto.ClaimNo?.Trim(),
+            ClaimStatus = dto.ClaimStatus?.Trim(),
+            CreatedBy = "api"
+        };
+
+        var items = (dto.Items ?? []).Select(i => new DealerHistoryItem
+        {
+            ItemType = i.ItemType,
+            Code = i.Code?.Trim() ?? "",
+            Name = i.Name?.Trim() ?? "",
+            Unit = i.Unit?.Trim() ?? "Cái",
+            Quantity = i.Quantity <= 0 ? 1 : i.Quantity,
+            UnitPrice = i.UnitPrice,
+            ExpenseType = i.ExpenseType ?? ExpenseType.Customer,
+            Technician = i.Technician?.Trim(),
+            Result = i.Result?.Trim(),
+            Remark = i.Remark?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateDealerHistoryRecordAsync(record, items);
+        return Results.Created($"/api/dealer-history/{id}", new { id, record.RecordNo, message = "Đã lưu hồ sơ lịch sử sửa chữa thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/dealer-history/sync-ro/{roId:int}", async (int roId, IRoService svc) =>
+{
+    var (ok, msg, recordId) = await svc.SyncLocalRoToHistoryAsync(roId);
+    return ok ? Results.Ok(new { message = msg, recordId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/dealer-history/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteDealerHistoryRecordAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -4452,3 +4631,6 @@ record CreateSupplierDebitDto(int SupplierId, int? StockInId, int? OrderPartId, 
 record CreateSupplierDebitFromStockInDto(int StockInId, int? SupplierId, DateTime? DueDate, string? Note);
 record CancelSupplierDebitDto(string? Reason);
 record CreateSupplierDebitPaymentDto(int SupplierId, int? SupplierDebitId, decimal PaymentAmount, DateTime? PaymentDate, PaymentMethod? Method, string? PayPersonName, string? PayPersonIdCard, string? PayPersonPhone, string? BankAccount, string? BankName, string? TransactionRef, string? Note, string? Cashier);
+record CreateDealerHistoryRecordDto(string? DealerCode, string? DealerName, string PlateNo, string? FrameNo, string? EngineNo, string? TradeMarkName, string ModelName, string? ColorCode, int ProductYear, string CusName, string? CusPhone, string? CusAddress, string RONo, DateTime? CheckInDate, DateTime? ActualDeliveryDate, int Odometer, string? ServiceAdvisor, string? Technician, string? CustomerRequest, string? CarStatus, string? RepairResult, bool? FlagClaim, string? ClaimNo, string? ClaimStatus, List<CreateDealerHistoryItemDto>? Items);
+record CreateDealerHistoryItemDto(LineType ItemType, string Code, string Name, string? Unit, decimal Quantity, decimal UnitPrice, ExpenseType? ExpenseType, string? Technician, string? Result, string? Remark);
+
