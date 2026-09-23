@@ -1,0 +1,54 @@
+@{
+    ViewData["Title"] = "Thêm Loại hàng / Loại phụ tùng (Part Type)";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/PartType" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Danh mục loại hàng</a>
+        <h5 class="mb-0 fw-bold mt-1"><i class="bi bi-tags-fill me-2 text-primary"></i>Thêm Loại hàng Mới (Ser_MST_PartType)</h5>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-7">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Tên loại hàng (TypeName) <span class="text-danger">*</span></label>
+                            <input name="typeName" class="form-control" placeholder="VD: Phụ tùng chính hãng, Dầu & mỡ bôi trơn..." required />
+                            <div class="form-text">Tên loại hàng không được trùng trong cùng một đại lý.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                            <input name="dealerCode" class="form-control font-monospace" placeholder="VD: VS058 (bỏ trống = tất cả đại lý)" style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mã loại NCC TST (TypeCodeTST)</label>
+                            <input name="typeCodeTst" class="form-control font-monospace" placeholder="VD: GEN, MNT, OIL..." />
+                        </div>
+                    </div>
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu loại hàng</button>
+                        <a href="/PartType" class="btn btn-outline-secondary">Hủy</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card shadow-sm border-0 bg-light">
+            <div class="card-body">
+                <div class="fw-semibold mb-2"><i class="bi bi-info-circle me-1 text-primary"></i>Nghiệp vụ nguồn</div>
+                <ul class="small text-muted mb-0 ps-3">
+                    <li>Bảng <span class="font-monospace">Ser_MST_PartType</span> phân loại phụ tùng theo loại hàng.</li>
+                    <li>Nguồn lưu ở CSDL trung tâm (CmCenter) và đồng bộ sang kho (WH) / đại lý (Dealer).</li>
+                    <li>Khi tạo, cờ <span class="font-monospace">IsActive</span> mặc định bật.</li>
+                    <li><span class="font-monospace">TypeCodeTST</span> là mã loại tương ứng bên hệ thống NCC TST.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>

@@ -6801,6 +6801,89 @@ app.MapDelete("/api/part-groups/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Danh mục Loại hàng / Loại phụ tùng (Ser_MST_PartType)
+app.MapGet("/api/part-types", async (string? dealerCode, string? q, bool? isActive, IRoService svc) =>
+{
+    var list = await svc.PartTypesAsync(dealerCode, q, isActive);
+    return Results.Ok(list.Select(t => new
+    {
+        t.Id,
+        t.TypeName,
+        t.DealerCode,
+        t.IsActive,
+        t.TypeCodeTST,
+        t.CreatedBy,
+        t.CreatedAt,
+        t.LogLUBy,
+        t.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/part-types/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetPartTypeSummaryAsync();
+    return Results.Ok(new { s.TotalTypes, s.ActiveTypes, s.DealerCount, s.TstMappedTypes });
+});
+
+app.MapGet("/api/part-types/{id:int}", async (int id, IRoService svc) =>
+{
+    var t = await svc.GetPartTypeAsync(id);
+    if (t == null) return Results.NotFound(new { error = "Không tìm thấy loại hàng." });
+    return Results.Ok(new
+    {
+        t.Id,
+        t.TypeName,
+        t.DealerCode,
+        t.IsActive,
+        t.TypeCodeTST,
+        t.CreatedBy,
+        t.CreatedAt,
+        t.LogLUBy,
+        t.LogLUDateTime
+    });
+});
+
+app.MapPost("/api/part-types", async (CreatePartTypeDto dto, IRoService svc) =>
+{
+    try
+    {
+        var type = new PartType
+        {
+            TypeName = dto.TypeName?.Trim() ?? "",
+            DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? null : dto.DealerCode.Trim().ToUpperInvariant(),
+            TypeCodeTST = string.IsNullOrWhiteSpace(dto.TypeCodeTST) ? null : dto.TypeCodeTST.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreatePartTypeAsync(type);
+        return Results.Ok(new { partTypeId = id, message = "Đã thêm loại hàng vào danh mục." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/part-types/{id:int}", async (int id, UpdatePartTypeDto dto, IRoService svc) =>
+{
+    var type = new PartType
+    {
+        Id = id,
+        TypeName = dto.TypeName?.Trim() ?? "",
+        DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? null : dto.DealerCode.Trim().ToUpperInvariant(),
+        TypeCodeTST = string.IsNullOrWhiteSpace(dto.TypeCodeTST) ? null : dto.TypeCodeTST.Trim(),
+        IsActive = dto.IsActive ?? true,
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+    var (ok, msg) = await svc.UpdatePartTypeAsync(type);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/part-types/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeletePartTypeAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 // API Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
 app.MapGet("/api/part-prices", async (string? q, bool? isActive, DateTime? dateFrom, DateTime? dateTo, int? partId, IRoService svc) =>
 {
@@ -7358,6 +7441,10 @@ record UpdateServiceTypeDto(string TypeName, string? DealerCode, string? Updated
 // Danh mục Nhóm vật tư / Loại vật tư (Ser_MST_PartGroup)
 record CreatePartGroupDto(string GroupCode, string GroupName, string? DealerCode, int? ParentId, int? OrderId, string? CreatedBy);
 record UpdatePartGroupDto(string GroupCode, string GroupName, string? DealerCode, int? ParentId, int? OrderId, string? UpdatedBy);
+
+// Danh mục Loại hàng / Loại phụ tùng (Ser_MST_PartType)
+record CreatePartTypeDto(string TypeName, string? DealerCode, string? TypeCodeTST, string? CreatedBy);
+record UpdatePartTypeDto(string TypeName, string? DealerCode, string? TypeCodeTST, bool? IsActive, string? UpdatedBy);
 
 // Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
 record CreatePartPriceDto(int PartId, decimal Price, DateTime? DateEffect, string? Remark, string? CreatedBy);

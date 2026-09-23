@@ -98,6 +98,7 @@ public class AppDbContext : DbContext
     public DbSet<SharePart> ShareParts => Set<SharePart>();
     public DbSet<SharePartLine> SharePartLines => Set<SharePartLine>();
     public DbSet<PartGroup> PartGroups => Set<PartGroup>();
+    public DbSet<PartType> PartTypes => Set<PartType>();
     public DbSet<PartPrice> PartPrices => Set<PartPrice>();
     public DbSet<VinModelOrigin> VinModelOrigins => Set<VinModelOrigin>();
     public DbSet<TradeMark> TradeMarks => Set<TradeMark>();
@@ -981,6 +982,12 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.OrgId, x.DealerCode });
             e.Ignore(x => x.ChildCount);
             e.HasOne(x => x.Parent).WithMany(x => x.Children).HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PartType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.DealerCode, x.TypeName }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.DealerCode });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<PartPrice>(e =>

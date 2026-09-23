@@ -1,0 +1,118 @@
+@model PartType
+@{
+    ViewData["Title"] = $"Chi tiết loại hàng [{Model.Id}] {Model.TypeName}";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/PartType" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Danh mục loại hàng</a>
+        <h5 class="mb-0 fw-bold mt-1">
+            <span class="font-monospace text-primary">#@Model.Id</span> - @Model.TypeName
+        </h5>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editTypeModal">
+            <i class="bi bi-pencil me-1"></i>Chỉnh sửa
+        </button>
+        <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Bạn có chắc muốn xóa loại hàng này?');">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin loại hàng</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">ID (PartTypeID)</dt>
+                    <dd class="col-sm-7 font-monospace fw-bold">@Model.Id</dd>
+
+                    <dt class="col-sm-5 text-muted small">Tên loại hàng (TypeName)</dt>
+                    <dd class="col-sm-7">@Model.TypeName</dd>
+
+                    <dt class="col-sm-5 text-muted small">Mã đại lý (DealerCode)</dt>
+                    <dd class="col-sm-7 font-monospace">@(string.IsNullOrEmpty(Model.DealerCode) ? "Tất cả đại lý" : Model.DealerCode)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Mã loại NCC TST (TypeCodeTST)</dt>
+                    <dd class="col-sm-7 font-monospace">@(string.IsNullOrEmpty(Model.TypeCodeTST) ? "-" : Model.TypeCodeTST)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Trạng thái (IsActive)</dt>
+                    <dd class="col-sm-7">
+                        @if (Model.IsActive)
+                        {
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">Hoạt động</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary-subtle text-secondary border">Tạm dừng</span>
+                        }
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-clock-history me-1 text-secondary"></i>Lịch sử cập nhật</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Người tạo (CreatedBy)</dt>
+                    <dd class="col-sm-7">@Model.CreatedBy</dd>
+
+                    <dt class="col-sm-5 text-muted small">Ngày tạo (CreatedDate)</dt>
+                    <dd class="col-sm-7">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</dd>
+
+                    <dt class="col-sm-5 text-muted small">Người cập nhật cuối (LogLUBy)</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(Model.LogLUBy) ? "-" : Model.LogLUBy)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Cập nhật cuối (LogLUDateTime)</dt>
+                    <dd class="col-sm-7">@(Model.LogLUDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "-")</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Chỉnh sửa loại hàng -->
+<div class="modal fade" id="editTypeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Update" asp-route-id="@Model.Id" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2 text-primary"></i>Chỉnh sửa loại hàng #@Model.Id</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Tên loại hàng (TypeName) <span class="text-danger">*</span></label>
+                            <input name="typeName" class="form-control" value="@Model.TypeName" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                            <input name="dealerCode" class="form-control font-monospace" value="@Model.DealerCode" placeholder="Bỏ trống = tất cả đại lý" style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Mã loại NCC TST (TypeCodeTST)</label>
+                            <input name="typeCodeTst" class="form-control font-monospace" value="@Model.TypeCodeTST" />
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="isActive" value="true" id="isActiveSwitch" checked="@Model.IsActive" />
+                                <label class="form-check-label small fw-semibold" for="isActiveSwitch">Đang hoạt động (IsActive)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu thay đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

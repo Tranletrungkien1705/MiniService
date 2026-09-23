@@ -303,6 +303,14 @@ public interface IRoService
     Task<PartGroupSummaryDto> GetPartGroupSummaryAsync();
     Task<List<string>> GetDistinctPartGroupDealersAsync();
     Task<List<PartGroup>> GetPartGroupParentsAsync(string? dealerCode, int? excludeId);
+    // Part Type Master — Danh mục Loại hàng / Loại phụ tùng (Ser_MST_PartType)
+    Task<List<PartType>> PartTypesAsync(string? dealerCode, string? q, bool? isActive);
+    Task<PartType?> GetPartTypeAsync(int id);
+    Task<int> CreatePartTypeAsync(PartType type);
+    Task<(bool ok, string msg)> UpdatePartTypeAsync(PartType type);
+    Task<(bool ok, string msg)> DeletePartTypeAsync(int id);
+    Task<PartTypeSummaryDto> GetPartTypeSummaryAsync();
+    Task<List<string>> GetDistinctPartTypeDealersAsync();
     // Part Price — Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
     Task<List<PartPrice>> PartPricesAsync(string? q, bool? isActive, DateTime? dateFrom, DateTime? dateTo, int? partId);
     Task<PartPrice?> GetPartPriceAsync(int id);
@@ -6114,6 +6122,104 @@ public class RoService(AppDbContext db) : IRoService
             if (g != null) g.FamilyId = await ResolvePartGroupFamilyIdAsync(id);
         }
     }
+
+    // --- Part Type Master — Danh mục Loại hàng / Loại phụ tùng (Ser_MST_PartType) ---
+    public async Task<List<PartType>> PartTypesAsync(string? dealerCode, string? q, bool? isActive)
+    {
+        var query = db.PartTypes.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim().ToUpperInvariant();
+            query = query.Where(t => t.DealerCode == dc);
+        }
+        if (isActive.HasValue) query = query.Where(t => t.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(t => t.TypeName.ToLower().Contains(s)
+                || (t.TypeCodeTST != null && t.TypeCodeTST.ToLower().Contains(s)));
+        }
+        return await query.OrderBy(t => t.TypeName).ToListAsync();
+    }
+
+    public Task<PartType?> GetPartTypeAsync(int id) =>
+        db.PartTypes.FirstOrDefaultAsync(t => t.Id == id);
+
+    public async Task<int> CreatePartTypeAsync(PartType type)
+    {
+        // Ser_Mst_PartType_Create: TypeName bắt buộc; CheckExistTypePartName chặn trùng tên trong cùng đại lý.
+        if (string.IsNullOrWhiteSpace(type.TypeName))
+            throw new InvalidOperationException("Vui lòng nhập Tên loại hàng (TypeName).");
+
+        var name = type.TypeName.Trim();
+        var dealer = string.IsNullOrWhiteSpace(type.DealerCode) ? null : type.DealerCode.Trim().ToUpperInvariant();
+
+        var dup = await db.PartTypes.AnyAsync(t => t.TypeName == name && t.DealerCode == dealer);
+        if (dup)
+            throw new InvalidOperationException($"Tên loại hàng '{name}' đã tồn tại trong đại lý {dealer ?? "(tất cả)"}.");
+
+        type.TypeName = name;
+        type.DealerCode = dealer;
+        type.IsActive = true;
+        type.CreatedBy = type.CreatedBy ?? "web";
+        type.CreatedAt = DateTime.Now;
+        db.PartTypes.Add(type);
+        await db.SaveChangesAsync();
+        return type.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdatePartTypeAsync(PartType type)
+    {
+        var existing = await db.PartTypes.FirstOrDefaultAsync(t => t.Id == type.Id);
+        if (existing == null) return (false, "Không tìm thấy loại hàng.");
+        if (string.IsNullOrWhiteSpace(type.TypeName))
+            return (false, "Tên loại hàng không được để trống.");
+
+        var name = type.TypeName.Trim();
+        var dealer = string.IsNullOrWhiteSpace(type.DealerCode) ? null : type.DealerCode.Trim().ToUpperInvariant();
+
+        // CheckExistTypePartNameWhenUpdate: loại trừ chính nó khi kiểm tra trùng tên.
+        var dup = await db.PartTypes.AnyAsync(t => t.Id != type.Id && t.TypeName == name && t.DealerCode == dealer);
+        if (dup)
+            return (false, $"Tên loại hàng '{name}' đã tồn tại trong đại lý {dealer ?? "(tất cả)"}.");
+
+        existing.TypeName = name;
+        existing.DealerCode = dealer;
+        existing.TypeCodeTST = string.IsNullOrWhiteSpace(type.TypeCodeTST) ? null : type.TypeCodeTST.Trim();
+        existing.IsActive = type.IsActive;
+        existing.LogLUBy = type.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật loại hàng [{existing.Id}] {existing.TypeName}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeletePartTypeAsync(int id)
+    {
+        var existing = await db.PartTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (existing == null) return (false, "Không tìm thấy loại hàng.");
+        db.PartTypes.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại hàng [{id}] {existing.TypeName}.");
+    }
+
+    public async Task<PartTypeSummaryDto> GetPartTypeSummaryAsync()
+    {
+        var all = await db.PartTypes.ToListAsync();
+        return new PartTypeSummaryDto
+        {
+            TotalTypes = all.Count,
+            ActiveTypes = all.Count(t => t.IsActive),
+            DealerCount = all.Where(t => !string.IsNullOrWhiteSpace(t.DealerCode)).Select(t => t.DealerCode).Distinct().Count(),
+            TstMappedTypes = all.Count(t => !string.IsNullOrWhiteSpace(t.TypeCodeTST))
+        };
+    }
+
+    public Task<List<string>> GetDistinctPartTypeDealersAsync() =>
+        db.PartTypes.Where(t => t.DealerCode != null)
+            .Select(t => t.DealerCode!)
+            .Distinct()
+            .OrderBy(t => t)
+            .ToListAsync();
 
     // --- Part Price — Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice) ---
     public async Task<List<PartPrice>> PartPricesAsync(string? q, bool? isActive, DateTime? dateFrom, DateTime? dateTo, int? partId)

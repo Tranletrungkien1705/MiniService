@@ -2585,6 +2585,20 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Danh mục Loại hàng / Loại phụ tùng (Ser_MST_PartType) — loại hàng mẫu cho đại lý VS058
+        if (!await db.PartTypes.AnyAsync())
+        {
+            db.PartTypes.AddRange(
+                new PartType { TypeName = "Phụ tùng chính hãng", DealerCode = "VS058", TypeCodeTST = "GEN", CreatedBy = "Hệ thống HTC" },
+                new PartType { TypeName = "Phụ tùng bảo dưỡng", DealerCode = "VS058", TypeCodeTST = "MNT", CreatedBy = "Hệ thống HTC" },
+                new PartType { TypeName = "Dầu & mỡ bôi trơn", DealerCode = "VS058", TypeCodeTST = "OIL", CreatedBy = "Hệ thống HTC" },
+                new PartType { TypeName = "Phụ tùng đồng sơn", DealerCode = "VS058", TypeCodeTST = "BP", CreatedBy = "Hệ thống HTC" },
+                new PartType { TypeName = "Phụ tùng bảo hành", DealerCode = "VS058", TypeCodeTST = "WAR", CreatedBy = "Hệ thống HTC" },
+                new PartType { TypeName = "Vật tư tiêu hao", DealerCode = "VS058", TypeCodeTST = "CON", CreatedBy = "Hệ thống HTC" }
+            );
+            await db.SaveChangesAsync();
+        }
+
         // Seed Lịch sử giá bán phụ tùng (Ser_Inv_PartPrice) — lịch sử điều chỉnh giá theo ngày hiệu lực
         if (!await db.PartPrices.AnyAsync())
         {

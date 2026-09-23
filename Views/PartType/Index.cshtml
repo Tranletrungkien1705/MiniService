@@ -1,0 +1,154 @@
+@model List<PartType>
+@{
+    ViewData["Title"] = "Danh mục Loại hàng / Loại phụ tùng (Part Type)";
+    var summary = ViewBag.Summary as PartTypeSummaryDto ?? new PartTypeSummaryDto();
+    var dealers = ViewBag.Dealers as List<string> ?? [];
+    var isActive = ViewBag.IsActive as bool?;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số loại hàng</div>
+                <div class="stat-num text-primary">@summary.TotalTypes</div>
+                <div class="text-muted" style="font-size:11.5px">Danh mục loại hàng (Ser_MST_PartType)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đang hoạt động</div>
+                <div class="stat-num text-success">@summary.ActiveTypes</div>
+                <div class="text-muted" style="font-size:11.5px">Loại có IsActive = true</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đại lý áp dụng</div>
+                <div class="stat-num text-warning">@summary.DealerCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số đại lý (DealerCode)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đã ánh xạ NCC TST</div>
+                <div class="stat-num text-info">@summary.TstMappedTypes</div>
+                <div class="text-muted" style="font-size:11.5px">Loại có mã TypeCodeTST</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:280px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Tên loại / mã TST..." />
+                </div>
+                <select name="dealerCode" class="form-select form-select-sm" style="width:180px" onchange="this.form.submit()">
+                    <option value="">-- Đại lý --</option>
+                    @foreach (var dc in dealers)
+                    {
+                        <option value="@dc" selected="@(ViewBag.DealerCode == dc)">@dc</option>
+                    }
+                </select>
+                <select name="isActive" class="form-select form-select-sm" style="width:150px" onchange="this.form.submit()">
+                    <option value="">-- Trạng thái --</option>
+                    <option value="true" selected="@(isActive == true)">Đang hoạt động</option>
+                    <option value="false" selected="@(isActive == false)">Tạm dừng</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || !string.IsNullOrEmpty(ViewBag.DealerCode as string) || isActive.HasValue)
+                {
+                    <a href="/PartType" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/PartGroup" class="btn btn-sm btn-outline-secondary"><i class="bi bi-diagram-3 me-1"></i>Nhóm vật tư</a>
+                <a href="/PartType/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Thêm loại hàng</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:70px">ID</th>
+                        <th>Tên loại hàng</th>
+                        <th style="width:150px">Mã NCC TST</th>
+                        <th style="width:130px">Đại lý</th>
+                        <th class="text-center" style="width:110px">Trạng thái</th>
+                        <th class="text-end" style="width:90px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy loại hàng nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var t in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace text-secondary">@t.Id</td>
+                            <td>
+                                <a asp-action="Detail" asp-route-id="@t.Id" class="fw-semibold text-dark text-decoration-none">
+                                    @t.TypeName
+                                </a>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(t.TypeCodeTST))
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@t.TypeCodeTST</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(t.DealerCode))
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@t.DealerCode</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Tất cả đại lý</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (t.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Hoạt động</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border">Tạm dừng</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@t.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

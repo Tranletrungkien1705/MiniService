@@ -3384,6 +3384,90 @@ public class PartGroupController(IRoService svc) : Controller
     }
 }
 
+public class PartTypeController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? dealerCode, string? q, bool? isActive)
+    {
+        ViewBag.DealerCode = dealerCode;
+        ViewBag.Q = q;
+        ViewBag.IsActive = isActive;
+        ViewBag.Dealers = await svc.GetDistinctPartTypeDealersAsync();
+        ViewBag.Summary = await svc.GetPartTypeSummaryAsync();
+        var list = await svc.PartTypesAsync(dealerCode, q, isActive);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var type = await svc.GetPartTypeAsync(id);
+        if (type == null) return NotFound();
+        return View(type);
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string typeName, string? dealerCode, string? typeCodeTst)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            TempData["Error"] = "Vui lòng nhập Tên loại hàng (TypeName).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            var type = new PartType
+            {
+                TypeName = typeName.Trim(),
+                DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim().ToUpperInvariant(),
+                TypeCodeTST = string.IsNullOrWhiteSpace(typeCodeTst) ? null : typeCodeTst.Trim(),
+                CreatedBy = "web"
+            };
+            var id = await svc.CreatePartTypeAsync(type);
+            TempData["Success"] = $"Đã thêm loại hàng [{id}] {type.TypeName} vào danh mục.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string typeName, string? dealerCode, string? typeCodeTst, bool isActive)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            TempData["Error"] = "Tên loại hàng không được để trống.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var type = new PartType
+        {
+            Id = id,
+            TypeName = typeName.Trim(),
+            DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim().ToUpperInvariant(),
+            TypeCodeTST = string.IsNullOrWhiteSpace(typeCodeTst) ? null : typeCodeTst.Trim(),
+            IsActive = isActive,
+            LogLUBy = "web"
+        };
+
+        var (ok, msg) = await svc.UpdatePartTypeAsync(type);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeletePartTypeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class BomController(IRoService svc) : Controller
 {
     public async Task<IActionResult> Index(bool? isActive, string? q)

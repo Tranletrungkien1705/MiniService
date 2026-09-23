@@ -3503,6 +3503,36 @@ public class PartGroupSummaryDto
     public int DealerCount { get; set; }                      // Số đại lý khác nhau
     public int ActiveGroups { get; set; }                     // Số nhóm đang hoạt động
 }
+
+/// <summary>Danh mục Loại hàng / Loại phụ tùng (Part Type) — Ser_MST_PartType trong idn.CarService.
+/// Phân loại phụ tùng theo loại hàng (TypeName) phục vụ tra cứu, báo cáo kho & đồng bộ giá NCC TST.
+/// Mỗi loại có tên (TypeName) duy nhất trong một đại lý (DealerCode), cờ hoạt động (IsActive)
+/// và mã loại tương ứng bên hệ thống NCC TST (TypeCodeTST).
+/// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH) / đại lý (Dealer).
+/// Nghiệp vụ: Ser_Mst_PartType_Create / _Update / _Delete / _Get_HQ / _Get_DL.</summary>
+public class PartType : IOrgOwned
+{
+    public int Id { get; set; }                               // PartTypeID
+    public Guid OrgId { get; set; }
+    public string TypeName { get; set; } = "";               // Tên loại hàng (TypeName)
+    public string? DealerCode { get; set; }                   // Mã đại lý áp dụng (DealerCode)
+    public bool IsActive { get; set; } = true;                // Cờ hoạt động (IsActive)
+    public string? TypeCodeTST { get; set; }                  // Mã loại hàng bên NCC TST (TypeCodeTST)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo (CreatedDate)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục Loại hàng — phục vụ màn hình quản lý PartType.</summary>
+public class PartTypeSummaryDto
+{
+    public int TotalTypes { get; set; }                       // Tổng số loại hàng
+    public int ActiveTypes { get; set; }                      // Số loại đang hoạt động
+    public int DealerCount { get; set; }                      // Số đại lý khác nhau
+    public int TstMappedTypes { get; set; }                   // Số loại đã ánh xạ mã NCC TST (TypeCodeTST)
+}
+
 /// <summary>Lịch sử giá bán phụ tùng theo ngày hiệu lực — Ser_Inv_PartPrice trong idn.CarService.
 /// Mỗi dòng là một mức giá bán (Price) của một phụ tùng (PartID) có hiệu lực từ ngày DateEffect.
 /// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH) / đại lý (Dealer).
