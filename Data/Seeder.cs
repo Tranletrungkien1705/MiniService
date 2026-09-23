@@ -4821,54 +4821,59 @@ public static class Seeder
                     ROWTID = "ROWT-XMA", TypeCode = WarrantyTypeCode.XM, TypeName = "Bảo hành xe mới",
                     DetailCode = WarrantyTypeDetailCode.A, DetailName = "Hư hỏng do lỗi sản xuất",
                     Photos =
-                    [
+                    new[]
+                    {
                         new WarrantyPhotoType_Seed("VIN", "Ảnh số khung VIN"),
                         new WarrantyPhotoType_Seed("ODO", "Ảnh đồng hồ ODO"),
                         new WarrantyPhotoType_Seed("LOI", "Ảnh chi tiết lỗi / hư hỏng"),
                         new WarrantyPhotoType_Seed("NGHIEMTHU", "Ảnh nghiệm thu sau sửa chữa")
-                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                    }.Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
                 },
                 new()
                 {
                     ROWTID = "ROWT-SBB", TypeCode = WarrantyTypeCode.SB, TypeName = "Sửa chữa bảo hành",
                     DetailCode = WarrantyTypeDetailCode.B, DetailName = "Hư hỏng do linh kiện",
                     Photos =
-                    [
+                    new[]
+                    {
                         new WarrantyPhotoType_Seed("VIN", "Ảnh số khung VIN"),
                         new WarrantyPhotoType_Seed("LOI", "Ảnh chi tiết lỗi / hư hỏng"),
                         new WarrantyPhotoType_Seed("PHUTUNG", "Ảnh phụ tùng thay thế")
-                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                    }.Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
                 },
                 new()
                 {
                     ROWTID = "ROWT-PTP", TypeCode = WarrantyTypeCode.PT, TypeName = "Phụ tùng bảo hành",
                     DetailCode = WarrantyTypeDetailCode.P, DetailName = "Phụ tùng",
                     Photos =
-                    [
+                    new[]
+                    {
                         new WarrantyPhotoType_Seed("PHUTUNG", "Ảnh phụ tùng thay thế"),
                         new WarrantyPhotoType_Seed("MPTC", "Ảnh mã phụ tùng chính (không hiển thị tóm tắt)")
-                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                    }.Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
                 },
                 new()
                 {
                     ROWTID = "ROWT-TCW", TypeCode = WarrantyTypeCode.TC, TypeName = "Bảo hành thiện chí",
                     DetailCode = WarrantyTypeDetailCode.W, DetailName = "Công việc bảo hành",
                     Photos =
-                    [
+                    new[]
+                    {
                         new WarrantyPhotoType_Seed("VIN", "Ảnh số khung VIN"),
                         new WarrantyPhotoType_Seed("TONGTHE", "Ảnh tổng thể xe")
-                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                    }.Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
                 },
                 new()
                 {
                     ROWTID = "ROWT-BTS", TypeCode = WarrantyTypeCode.BT, TypeName = "Bảo hành bổ sung",
                     DetailCode = WarrantyTypeDetailCode.S, DetailName = "Sửa chữa",
                     Photos =
-                    [
+                    new[]
+                    {
                         new WarrantyPhotoType_Seed("VIN", "Ảnh số khung VIN"),
                         new WarrantyPhotoType_Seed("LOI", "Ảnh chi tiết lỗi / hư hỏng"),
                         new WarrantyPhotoType_Seed("NGHIEMTHU", "Ảnh nghiệm thu sau sửa chữa")
-                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                    }.Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
                 }
             };
 
@@ -5041,6 +5046,12 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_MaintenanceSettings_OrgId_ROMSID\" ON miniservice.\"MaintenanceSettings\" (\"OrgId\", \"ROMSID\")",
             "CREATE INDEX IF NOT EXISTS \"IX_MaintenanceSettings_OrgId_Km\" ON miniservice.\"MaintenanceSettings\" (\"OrgId\", \"Km\")",
             "CREATE INDEX IF NOT EXISTS \"IX_MaintenanceSettings_OrgId_Level\" ON miniservice.\"MaintenanceSettings\" (\"OrgId\", \"Level\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"WarrantyPhotoTypes\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ROWPTCode\" text NOT NULL, \"ROWPTName\" text NOT NULL, \"FlagActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WarrantyPhotoTypes_OrgId_ROWPTCode\" ON miniservice.\"WarrantyPhotoTypes\" (\"OrgId\", \"ROWPTCode\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"WarrantyTypes\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ROWTID\" text NOT NULL, \"TypeCode\" integer NOT NULL, \"TypeName\" text NOT NULL, \"DetailCode\" integer NOT NULL, \"DetailName\" text NOT NULL, \"PhotoTypeDisplay\" text NULL, \"FlagActive\" boolean NOT NULL DEFAULT true, \"LogLuDateTime\" timestamp NULL, \"LogLUBy\" text NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"UpdatedAt\" timestamp NULL, \"UpdatedBy\" text NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WarrantyTypes_OrgId_TypeCode_DetailCode\" ON miniservice.\"WarrantyTypes\" (\"OrgId\", \"TypeCode\", \"DetailCode\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"WarrantyTypePhotos\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"WarrantyTypeId\" integer NOT NULL, \"ROWPTCode\" text NOT NULL, \"ROWPTName\" text NULL)",
+            "CREATE INDEX IF NOT EXISTS \"IX_WarrantyTypePhotos_OrgId_WarrantyTypeId\" ON miniservice.\"WarrantyTypePhotos\" (\"OrgId\", \"WarrantyTypeId\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -6462,7 +6473,42 @@ public static class Seeder
             );",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_MaintenanceSettings_OrgId_ROMSID"" ON ""MaintenanceSettings"" (""OrgId"", ""ROMSID"");",
             @"CREATE INDEX IF NOT EXISTS ""IX_MaintenanceSettings_OrgId_Km"" ON ""MaintenanceSettings"" (""OrgId"", ""Km"");",
-            @"CREATE INDEX IF NOT EXISTS ""IX_MaintenanceSettings_OrgId_Level"" ON ""MaintenanceSettings"" (""OrgId"", ""Level"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_MaintenanceSettings_OrgId_Level"" ON ""MaintenanceSettings"" (""OrgId"", ""Level"");",
+            @"CREATE TABLE IF NOT EXISTS ""WarrantyPhotoTypes"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ROWPTCode"" TEXT NOT NULL,
+                ""ROWPTName"" TEXT NOT NULL,
+                ""FlagActive"" INTEGER NOT NULL DEFAULT 1,
+                ""CreatedAt"" TEXT NOT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_WarrantyPhotoTypes_OrgId_ROWPTCode"" ON ""WarrantyPhotoTypes"" (""OrgId"", ""ROWPTCode"");",
+            @"CREATE TABLE IF NOT EXISTS ""WarrantyTypes"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ROWTID"" TEXT NOT NULL,
+                ""TypeCode"" INTEGER NOT NULL,
+                ""TypeName"" TEXT NOT NULL,
+                ""DetailCode"" INTEGER NOT NULL,
+                ""DetailName"" TEXT NOT NULL,
+                ""PhotoTypeDisplay"" TEXT NULL,
+                ""FlagActive"" INTEGER NOT NULL DEFAULT 1,
+                ""LogLuDateTime"" TEXT NULL,
+                ""LogLUBy"" TEXT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""UpdatedAt"" TEXT NULL,
+                ""UpdatedBy"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_WarrantyTypes_OrgId_TypeCode_DetailCode"" ON ""WarrantyTypes"" (""OrgId"", ""TypeCode"", ""DetailCode"");",
+            @"CREATE TABLE IF NOT EXISTS ""WarrantyTypePhotos"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""WarrantyTypeId"" INTEGER NOT NULL,
+                ""ROWPTCode"" TEXT NOT NULL,
+                ""ROWPTName"" TEXT NULL,
+                FOREIGN KEY (""WarrantyTypeId"") REFERENCES ""WarrantyTypes"" (""Id"") ON DELETE CASCADE
+            );",
+            @"CREATE INDEX IF NOT EXISTS ""IX_WarrantyTypePhotos_OrgId_WarrantyTypeId"" ON ""WarrantyTypePhotos"" (""OrgId"", ""WarrantyTypeId"");"
         };
 
         foreach (var sql in sqls)
