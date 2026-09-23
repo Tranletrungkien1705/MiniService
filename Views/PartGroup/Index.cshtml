@@ -1,0 +1,220 @@
+@model List<PartGroup>
+@{
+    ViewData["Title"] = "Danh mục Nhóm vật tư (Part Group)";
+    var summary = ViewBag.Summary as PartGroupSummaryDto ?? new PartGroupSummaryDto();
+    var dealers = ViewBag.Dealers as List<string> ?? [];
+    var isActive = ViewBag.IsActive as bool?;
+    var byId = Model.ToDictionary(g => g.Id);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số nhóm vật tư</div>
+                <div class="stat-num text-primary">@summary.TotalGroups</div>
+                <div class="text-muted" style="font-size:11.5px">Danh mục nhóm vật tư (Ser_MST_PartGroup)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Nhóm gốc / Nhóm con</div>
+                <div class="stat-num text-info">@summary.RootGroups <span class="fs-6 text-muted">/ @summary.ChildGroups</span></div>
+                <div class="text-muted" style="font-size:11.5px">Cây phân cấp theo ParentID</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đang hoạt động</div>
+                <div class="stat-num text-success">@summary.ActiveGroups</div>
+                <div class="text-muted" style="font-size:11.5px">Nhóm có IsActive = true</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đại lý áp dụng</div>
+                <div class="stat-num text-warning">@summary.DealerCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số đại lý (DealerCode)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:280px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Mã / tên nhóm, đại lý..." />
+                </div>
+                <select name="dealerCode" class="form-select form-select-sm" style="width:180px" onchange="this.form.submit()">
+                    <option value="">-- Đại lý --</option>
+                    @foreach (var dc in dealers)
+                    {
+                        <option value="@dc" selected="@(ViewBag.DealerCode == dc)">@dc</option>
+                    }
+                </select>
+                <select name="isActive" class="form-select form-select-sm" style="width:150px" onchange="this.form.submit()">
+                    <option value="">-- Trạng thái --</option>
+                    <option value="true" selected="@(isActive == true)">Đang hoạt động</option>
+                    <option value="false" selected="@(isActive == false)">Tạm dừng</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || !string.IsNullOrEmpty(ViewBag.DealerCode as string) || isActive.HasValue)
+                {
+                    <a href="/PartGroup" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/Part" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Danh mục phụ tùng</a>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createGroupModal">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm nhóm vật tư
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:70px">ID</th>
+                        <th style="width:150px">Mã nhóm</th>
+                        <th>Tên nhóm vật tư</th>
+                        <th style="width:180px">Nhóm cha</th>
+                        <th style="width:130px">Đại lý</th>
+                        <th class="text-center" style="width:110px">Nhóm con</th>
+                        <th class="text-center" style="width:110px">Trạng thái</th>
+                        <th class="text-end" style="width:90px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy nhóm vật tư nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var g in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace text-secondary">@g.Id</td>
+                            <td class="font-monospace fw-semibold">@g.GroupCode</td>
+                            <td>
+                                <a asp-action="Detail" asp-route-id="@g.Id" class="fw-semibold text-dark text-decoration-none">
+                                    @g.GroupName
+                                </a>
+                            </td>
+                            <td>
+                                @if (g.ParentId.HasValue && byId.TryGetValue(g.ParentId.Value, out var parent))
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@parent.GroupCode</span>
+                                    <span class="small text-muted">@parent.GroupName</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">— Nhóm gốc —</span>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(g.DealerCode))
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@g.DealerCode</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Tất cả đại lý</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (g.ChildCount > 0)
+                                {
+                                    <span class="badge bg-info-subtle text-info border border-info-subtle">@g.ChildCount nhóm</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (g.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Hoạt động</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border">Tạm dừng</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@g.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm nhóm vật tư mới -->
+<div class="modal fade" id="createGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-diagram-3-fill me-2 text-primary"></i>Thêm Nhóm vật tư Mới (Ser_MST_PartGroup)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Mã nhóm (GroupCode) <span class="text-danger">*</span></label>
+                            <input name="groupCode" class="form-control font-monospace" placeholder="VD: PG-DAU" required style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Thứ tự (OrderID)</label>
+                            <input name="orderId" type="number" class="form-control" placeholder="VD: 1" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Tên nhóm vật tư (GroupName) <span class="text-danger">*</span></label>
+                            <input name="groupName" class="form-control" placeholder="VD: Dầu & mỡ bôi trơn, Phanh - Hệ thống phanh..." required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                            <input name="dealerCode" class="form-control font-monospace" placeholder="VD: VS058 (bỏ trống = tất cả đại lý)" style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Nhóm cha (ParentID)</label>
+                            <select name="parentId" class="form-select">
+                                <option value="">— Không có (nhóm gốc) —</option>
+                                @foreach (var p in (ViewBag.Parents as List<PartGroup> ?? []))
+                                {
+                                    <option value="@p.Id">@p.GroupCode - @p.GroupName</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu nhóm vật tư</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

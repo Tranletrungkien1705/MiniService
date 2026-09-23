@@ -3292,6 +3292,98 @@ public class ServiceTypeController(IRoService svc) : Controller
     }
 }
 
+public class PartGroupController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? dealerCode, string? q, bool? isActive)
+    {
+        ViewBag.DealerCode = dealerCode;
+        ViewBag.Q = q;
+        ViewBag.IsActive = isActive;
+        ViewBag.Dealers = await svc.GetDistinctPartGroupDealersAsync();
+        ViewBag.Summary = await svc.GetPartGroupSummaryAsync();
+        var list = await svc.PartGroupsAsync(dealerCode, q, isActive);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var group = await svc.GetPartGroupAsync(id);
+        if (group == null) return NotFound();
+        ViewBag.Parents = await svc.GetPartGroupParentsAsync(group.DealerCode, id);
+        return View(group);
+    }
+
+    public async Task<IActionResult> Create(string? dealerCode)
+    {
+        ViewBag.Parents = await svc.GetPartGroupParentsAsync(dealerCode, null);
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string groupCode, string groupName, string? dealerCode, int? parentId, int? orderId)
+    {
+        if (string.IsNullOrWhiteSpace(groupCode) || string.IsNullOrWhiteSpace(groupName))
+        {
+            TempData["Error"] = "Vui lòng nhập Mã nhóm (GroupCode) và Tên nhóm (GroupName).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            var group = new PartGroup
+            {
+                GroupCode = groupCode.Trim(),
+                GroupName = groupName.Trim(),
+                DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim().ToUpperInvariant(),
+                ParentId = (parentId.HasValue && parentId.Value > 0) ? parentId : null,
+                OrderId = orderId,
+                CreatedBy = "web"
+            };
+            var id = await svc.CreatePartGroupAsync(group);
+            TempData["Success"] = $"Đã thêm nhóm vật tư [{id}] {group.GroupCode} - {group.GroupName} vào danh mục.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string groupCode, string groupName, string? dealerCode, int? parentId, int? orderId)
+    {
+        if (string.IsNullOrWhiteSpace(groupName))
+        {
+            TempData["Error"] = "Tên nhóm vật tư không được để trống.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var group = new PartGroup
+        {
+            Id = id,
+            GroupCode = groupCode?.Trim() ?? "",
+            GroupName = groupName.Trim(),
+            DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim().ToUpperInvariant(),
+            ParentId = (parentId.HasValue && parentId.Value > 0) ? parentId : null,
+            OrderId = orderId,
+            LogLUBy = "web"
+        };
+
+        var (ok, msg) = await svc.UpdatePartGroupAsync(group);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeletePartGroupAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class BomController(IRoService svc) : Controller
 {
     public async Task<IActionResult> Index(bool? isActive, string? q)

@@ -2550,6 +2550,41 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Danh mục Nhóm vật tư / Loại vật tư (Ser_MST_PartGroup) — cây phân cấp mẫu cho đại lý VS058
+        if (!await db.PartGroups.AnyAsync())
+        {
+            var pgDau = new PartGroup { GroupCode = "PG-DAU", GroupName = "Dầu & mỡ bôi trơn", DealerCode = "VS058", OrderId = 1, CreatedBy = "Hệ thống HTC" };
+            var pgLoc = new PartGroup { GroupCode = "PG-LOC", GroupName = "Lọc & vật tư bảo dưỡng", DealerCode = "VS058", OrderId = 2, CreatedBy = "Hệ thống HTC" };
+            var pgPhanh = new PartGroup { GroupCode = "PG-PHANH", GroupName = "Phanh - Hệ thống phanh", DealerCode = "VS058", OrderId = 3, CreatedBy = "Hệ thống HTC" };
+            var pgDongCo = new PartGroup { GroupCode = "PG-DONGCO", GroupName = "Động cơ - Máy", DealerCode = "VS058", OrderId = 4, CreatedBy = "Hệ thống HTC" };
+            db.PartGroups.AddRange(pgDau, pgLoc, pgPhanh, pgDongCo);
+            await db.SaveChangesAsync();
+
+            // Nhóm con (ParentID) — minh họa cây phân cấp 2 cấp
+            var pgDauDongCo = new PartGroup { GroupCode = "PG-DAU-DC", GroupName = "Dầu động cơ", DealerCode = "VS058", ParentId = pgDau.Id, OrderId = 1, CreatedBy = "Hệ thống HTC" };
+            var pgDauHopSo = new PartGroup { GroupCode = "PG-DAU-HS", GroupName = "Dầu hộp số & cầu", DealerCode = "VS058", ParentId = pgDau.Id, OrderId = 2, CreatedBy = "Hệ thống HTC" };
+            var pgLocDau = new PartGroup { GroupCode = "PG-LOC-DAU", GroupName = "Lọc dầu động cơ", DealerCode = "VS058", ParentId = pgLoc.Id, OrderId = 1, CreatedBy = "Hệ thống HTC" };
+            var pgLocGio = new PartGroup { GroupCode = "PG-LOC-GIO", GroupName = "Lọc gió động cơ & điều hòa", DealerCode = "VS058", ParentId = pgLoc.Id, OrderId = 2, CreatedBy = "Hệ thống HTC" };
+            var pgPhanhTruoc = new PartGroup { GroupCode = "PG-PHANH-T", GroupName = "Phanh trước", DealerCode = "VS058", ParentId = pgPhanh.Id, OrderId = 1, CreatedBy = "Hệ thống HTC" };
+            db.PartGroups.AddRange(pgDauDongCo, pgDauHopSo, pgLocDau, pgLocGio, pgPhanhTruoc);
+            await db.SaveChangesAsync();
+
+            // FamilyID = nhóm gốc cao nhất của cây (Part_GetFamilyID)
+            foreach (var g in await db.PartGroups.ToListAsync())
+            {
+                var cur = g;
+                var guard = 0;
+                while (cur.ParentId != null && guard++ < 100)
+                {
+                    var parent = await db.PartGroups.FirstOrDefaultAsync(x => x.Id == cur.ParentId.Value);
+                    if (parent == null) break;
+                    cur = parent;
+                }
+                g.FamilyId = cur.Id;
+            }
+            await db.SaveChangesAsync();
+        }
+
         // Seed Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
         if (!await db.Boms.AnyAsync())
         {
@@ -5239,6 +5274,9 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ServiceItems_OrgId_Code\" ON miniservice.\"ServiceItems\" (\"OrgId\", \"Code\")",
             "ALTER TABLE miniservice.\"ServiceItems\" ADD COLUMN IF NOT EXISTS \"ServiceTypeId\" integer NULL",
             "CREATE TABLE IF NOT EXISTS miniservice.\"ServiceTypes\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"TypeName\" text NOT NULL, \"DealerCode\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"PartGroups\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"DealerCode\" text NULL, \"ParentId\" integer NULL, \"FamilyId\" integer NULL, \"OrderId\" integer NULL, \"GroupCode\" text NOT NULL, \"GroupName\" text NOT NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PartGroups_OrgId_DealerCode_GroupCode\" ON miniservice.\"PartGroups\" (\"OrgId\", \"DealerCode\", \"GroupCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_PartGroups_OrgId_DealerCode\" ON miniservice.\"PartGroups\" (\"OrgId\", \"DealerCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"Suppliers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Address\" text NULL, \"Phone\" text NULL, \"Email\" text NULL, \"ContactName\" text NULL, \"ContactPhone\" text NULL, \"TaxCode\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankAccount\" text NULL",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankName\" text NULL",
@@ -6915,6 +6953,17 @@ public static class Seeder
                     "CREATE INDEX IF NOT EXISTS \"IX_SharePartLines_OrgId_SharePartId\" ON \"SharePartLines\" (\"OrgId\", \"SharePartId\");"
                 };
                 foreach (var sql in shareSqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+                // Danh mục Nhóm vật tư / Loại vật tư (Ser_MST_PartGroup) — SQLite
+                var partGroupSqls = new[]
+                {
+                    "CREATE TABLE IF NOT EXISTS \"PartGroups\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"DealerCode\" TEXT NULL, \"ParentId\" INTEGER NULL, \"FamilyId\" INTEGER NULL, \"OrderId\" INTEGER NULL, \"GroupCode\" TEXT NOT NULL, \"GroupName\" TEXT NOT NULL, \"IsActive\" INTEGER NOT NULL DEFAULT 1, \"CreatedBy\" TEXT NOT NULL DEFAULT 'web', \"CreatedAt\" TEXT NOT NULL, \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PartGroups_OrgId_DealerCode_GroupCode\" ON \"PartGroups\" (\"OrgId\", \"DealerCode\", \"GroupCode\");",
+                    "CREATE INDEX IF NOT EXISTS \"IX_PartGroups_OrgId_DealerCode\" ON \"PartGroups\" (\"OrgId\", \"DealerCode\");"
+                };
+                foreach (var sql in partGroupSqls)
                 {
                     try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
                 }

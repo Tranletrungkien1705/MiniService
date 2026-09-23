@@ -294,6 +294,15 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteServiceTypeAsync(int id);
     Task<ServiceTypeSummaryDto> GetServiceTypeSummaryAsync();
     Task<List<string>> GetDistinctServiceTypeDealersAsync();
+    // Part Group Master — Danh mục Nhóm vật tư / Loại vật tư (Ser_MST_PartGroup)
+    Task<List<PartGroup>> PartGroupsAsync(string? dealerCode, string? q, bool? isActive);
+    Task<PartGroup?> GetPartGroupAsync(int id);
+    Task<int> CreatePartGroupAsync(PartGroup group);
+    Task<(bool ok, string msg)> UpdatePartGroupAsync(PartGroup group);
+    Task<(bool ok, string msg)> DeletePartGroupAsync(int id);
+    Task<PartGroupSummaryDto> GetPartGroupSummaryAsync();
+    Task<List<string>> GetDistinctPartGroupDealersAsync();
+    Task<List<PartGroup>> GetPartGroupParentsAsync(string? dealerCode, int? excludeId);
     // Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
     Task<List<Bom>> BomsAsync(bool? isActive, string? q);
     Task<Bom?> GetBomAsync(int id);
@@ -5868,6 +5877,209 @@ public class RoService(AppDbContext db) : IRoService
             .Distinct()
             .OrderBy(t => t)
             .ToListAsync();
+
+    // --- Part Group Master — Danh mục Nhóm vật tư / Loại vật tư (Ser_MST_PartGroup) ---
+    public async Task<List<PartGroup>> PartGroupsAsync(string? dealerCode, string? q, bool? isActive)
+    {
+        var query = db.PartGroups.Include(g => g.Children).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim().ToUpperInvariant();
+            query = query.Where(g => g.DealerCode == dc);
+        }
+        if (isActive.HasValue)
+            query = query.Where(g => g.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(g => g.GroupCode.ToLower().Contains(s)
+                || g.GroupName.ToLower().Contains(s)
+                || (g.DealerCode != null && g.DealerCode.ToLower().Contains(s)));
+        }
+        return await query
+            .OrderBy(g => g.DealerCode).ThenBy(g => g.OrderId ?? int.MaxValue).ThenBy(g => g.GroupCode)
+            .ToListAsync();
+    }
+
+    public Task<PartGroup?> GetPartGroupAsync(int id) =>
+        db.PartGroups.Include(g => g.Children).Include(g => g.Parent).FirstOrDefaultAsync(g => g.Id == id);
+
+    public async Task<int> CreatePartGroupAsync(PartGroup group)
+    {
+        if (string.IsNullOrWhiteSpace(group.GroupCode))
+            throw new InvalidOperationException("Vui lòng nhập mã nhóm vật tư (GroupCode).");
+        if (string.IsNullOrWhiteSpace(group.GroupName))
+            throw new InvalidOperationException("Vui lòng nhập tên nhóm vật tư (GroupName).");
+
+        group.GroupCode = group.GroupCode.Trim().ToUpperInvariant();
+        group.GroupName = group.GroupName.Trim();
+        group.DealerCode = string.IsNullOrWhiteSpace(group.DealerCode) ? null : group.DealerCode.Trim().ToUpperInvariant();
+
+        // checkExistPartGroupCode: mã nhóm không được trùng trong cùng đại lý (chỉ xét nhóm đang hoạt động).
+        var exists = await db.PartGroups.AnyAsync(g => g.GroupCode == group.GroupCode
+            && g.DealerCode == group.DealerCode && g.IsActive);
+        if (exists)
+            throw new InvalidOperationException($"Mã nhóm vật tư '{group.GroupCode}' đã tồn tại trong đại lý {group.DealerCode ?? "(tất cả)"}.");
+
+        if (group.ParentId.HasValue && group.ParentId.Value > 0)
+        {
+            var parent = await db.PartGroups.FirstOrDefaultAsync(g => g.Id == group.ParentId.Value);
+            if (parent == null) throw new InvalidOperationException("Không tìm thấy nhóm vật tư cha (ParentID).");
+        }
+        else
+        {
+            group.ParentId = null;
+        }
+
+        group.IsActive = true;
+        group.CreatedAt = DateTime.Now;
+        group.LogLUDateTime = DateTime.Now;
+        group.LogLUBy = group.CreatedBy;
+        db.PartGroups.Add(group);
+        await db.SaveChangesAsync();
+
+        // Part_GetFamilyID: FamilyID = nhóm gốc cao nhất của cây phân cấp.
+        group.FamilyId = await ResolvePartGroupFamilyIdAsync(group.Id);
+        await db.SaveChangesAsync();
+        return group.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdatePartGroupAsync(PartGroup group)
+    {
+        var existing = await db.PartGroups.FirstOrDefaultAsync(g => g.Id == group.Id);
+        if (existing == null) return (false, "Không tìm thấy nhóm vật tư.");
+
+        if (string.IsNullOrWhiteSpace(group.GroupName))
+            return (false, "Tên nhóm vật tư không được để trống.");
+
+        var newName = group.GroupName.Trim();
+        var newDealer = string.IsNullOrWhiteSpace(group.DealerCode) ? null : group.DealerCode.Trim().ToUpperInvariant();
+        var newCode = string.IsNullOrWhiteSpace(group.GroupCode) ? existing.GroupCode : group.GroupCode.Trim().ToUpperInvariant();
+
+        // checkExistPartGroupCodeModify: mã nhóm không trùng với nhóm khác trong cùng đại lý.
+        var dup = await db.PartGroups.AnyAsync(g => g.Id != group.Id && g.GroupCode == newCode
+            && g.DealerCode == newDealer && g.IsActive);
+        if (dup) return (false, $"Mã nhóm vật tư '{newCode}' đã tồn tại trong đại lý {newDealer ?? "(tất cả)"}.");
+
+        // Chặn đặt nhóm cha là chính nó hoặc nhóm con của nó (tránh vòng lặp cây).
+        if (group.ParentId.HasValue && group.ParentId.Value > 0)
+        {
+            if (group.ParentId.Value == group.Id)
+                return (false, "Nhóm cha không thể là chính nó.");
+            var descendants = await CollectPartGroupDescendantIdsAsync(group.Id);
+            if (descendants.Contains(group.ParentId.Value))
+                return (false, "Nhóm cha không thể là nhóm con của chính nó (gây vòng lặp cây phân cấp).");
+        }
+
+        existing.DealerCode = newDealer;
+        existing.ParentId = (group.ParentId.HasValue && group.ParentId.Value > 0) ? group.ParentId : null;
+        existing.OrderId = group.OrderId;
+        existing.GroupCode = newCode;
+        existing.GroupName = newName;
+        existing.LogLUBy = group.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+
+        // Cập nhật lại FamilyID cho nhóm này và toàn bộ nhánh con.
+        await RefreshPartGroupFamilyAsync(existing.Id);
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật nhóm vật tư [{existing.Id}] {existing.GroupName}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeletePartGroupAsync(int id)
+    {
+        var existing = await db.PartGroups.FirstOrDefaultAsync(g => g.Id == id);
+        if (existing == null) return (false, "Không tìm thấy nhóm vật tư.");
+
+        // checkExistPartGroupCodeHasChild: chặn xóa khi còn nhóm con tham chiếu ParentID.
+        var hasChild = await db.PartGroups.AnyAsync(g => g.ParentId == id);
+        if (hasChild)
+            return (false, $"Nhóm vật tư '{existing.GroupName}' còn nhóm con nên không thể xóa.");
+
+        db.PartGroups.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa nhóm vật tư [{id}] {existing.GroupName}.");
+    }
+
+    public async Task<PartGroupSummaryDto> GetPartGroupSummaryAsync()
+    {
+        var all = await db.PartGroups.ToListAsync();
+        return new PartGroupSummaryDto
+        {
+            TotalGroups = all.Count,
+            RootGroups = all.Count(g => g.ParentId == null),
+            ChildGroups = all.Count(g => g.ParentId != null),
+            DealerCount = all.Where(g => !string.IsNullOrWhiteSpace(g.DealerCode)).Select(g => g.DealerCode).Distinct().Count(),
+            ActiveGroups = all.Count(g => g.IsActive)
+        };
+    }
+
+    public Task<List<string>> GetDistinctPartGroupDealersAsync() =>
+        db.PartGroups.Where(g => g.DealerCode != null)
+            .Select(g => g.DealerCode!)
+            .Distinct()
+            .OrderBy(g => g)
+            .ToListAsync();
+
+    public async Task<List<PartGroup>> GetPartGroupParentsAsync(string? dealerCode, int? excludeId)
+    {
+        var query = db.PartGroups.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim().ToUpperInvariant();
+            query = query.Where(g => g.DealerCode == dc);
+        }
+        if (excludeId.HasValue && excludeId.Value > 0)
+        {
+            var descendants = await CollectPartGroupDescendantIdsAsync(excludeId.Value);
+            descendants.Add(excludeId.Value);
+            query = query.Where(g => !descendants.Contains(g.Id));
+        }
+        return await query.OrderBy(g => g.GroupCode).ToListAsync();
+    }
+
+    // Part_GetFamilyID: đi ngược cây ParentID để tìm nhóm gốc cao nhất.
+    private async Task<int> ResolvePartGroupFamilyIdAsync(int id)
+    {
+        var current = await db.PartGroups.FirstOrDefaultAsync(g => g.Id == id);
+        var guard = 0;
+        while (current?.ParentId != null && guard++ < 100)
+        {
+            var parent = await db.PartGroups.FirstOrDefaultAsync(g => g.Id == current.ParentId.Value);
+            if (parent == null) break;
+            current = parent;
+        }
+        return current?.Id ?? id;
+    }
+
+    // Thu thập toàn bộ ID nhóm con (đệ quy) của một nhóm — phục vụ chống vòng lặp cây.
+    private async Task<List<int>> CollectPartGroupDescendantIdsAsync(int rootId)
+    {
+        var all = await db.PartGroups.Select(g => new { g.Id, g.ParentId }).ToListAsync();
+        var result = new List<int>();
+        var frontier = new List<int> { rootId };
+        var guard = 0;
+        while (frontier.Count > 0 && guard++ < 100)
+        {
+            var children = all.Where(g => g.ParentId != null && frontier.Contains(g.ParentId.Value))
+                .Select(g => g.Id).ToList();
+            result.AddRange(children);
+            frontier = children;
+        }
+        return result;
+    }
+
+    // Cập nhật lại FamilyID cho một nhóm và toàn bộ nhánh con sau khi đổi cấu trúc cây.
+    private async Task RefreshPartGroupFamilyAsync(int rootId)
+    {
+        var ids = new List<int> { rootId };
+        ids.AddRange(await CollectPartGroupDescendantIdsAsync(rootId));
+        foreach (var id in ids)
+        {
+            var g = await db.PartGroups.FirstOrDefaultAsync(x => x.Id == id);
+            if (g != null) g.FamilyId = await ResolvePartGroupFamilyIdAsync(id);
+        }
+    }
 
     // --- Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl) ---
     public async Task<List<Bom>> BomsAsync(bool? isActive, string? q)

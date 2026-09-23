@@ -6705,6 +6705,102 @@ app.MapDelete("/api/service-types/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Danh mục Nhóm vật tư / Loại vật tư (Ser_MST_PartGroup)
+app.MapGet("/api/part-groups", async (string? dealerCode, string? q, bool? isActive, IRoService svc) =>
+{
+    var list = await svc.PartGroupsAsync(dealerCode, q, isActive);
+    return Results.Ok(list.Select(g => new
+    {
+        g.Id,
+        g.GroupCode,
+        g.GroupName,
+        g.DealerCode,
+        g.ParentId,
+        g.FamilyId,
+        g.OrderId,
+        g.IsActive,
+        childCount = g.ChildCount,
+        g.CreatedBy,
+        g.CreatedAt,
+        g.LogLUBy,
+        g.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/part-groups/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetPartGroupSummaryAsync();
+    return Results.Ok(new { s.TotalGroups, s.RootGroups, s.ChildGroups, s.DealerCount, s.ActiveGroups });
+});
+
+app.MapGet("/api/part-groups/{id:int}", async (int id, IRoService svc) =>
+{
+    var g = await svc.GetPartGroupAsync(id);
+    if (g == null) return Results.NotFound(new { error = "Không tìm thấy nhóm vật tư." });
+    return Results.Ok(new
+    {
+        g.Id,
+        g.GroupCode,
+        g.GroupName,
+        g.DealerCode,
+        g.ParentId,
+        parentName = g.Parent?.GroupName,
+        g.FamilyId,
+        g.OrderId,
+        g.IsActive,
+        childCount = g.ChildCount,
+        children = g.Children.Select(c => new { c.Id, c.GroupCode, c.GroupName }),
+        g.CreatedBy,
+        g.CreatedAt,
+        g.LogLUBy,
+        g.LogLUDateTime
+    });
+});
+
+app.MapPost("/api/part-groups", async (CreatePartGroupDto dto, IRoService svc) =>
+{
+    try
+    {
+        var group = new PartGroup
+        {
+            GroupCode = dto.GroupCode?.Trim() ?? "",
+            GroupName = dto.GroupName?.Trim() ?? "",
+            DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? null : dto.DealerCode.Trim().ToUpperInvariant(),
+            ParentId = (dto.ParentId.HasValue && dto.ParentId.Value > 0) ? dto.ParentId : null,
+            OrderId = dto.OrderId,
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreatePartGroupAsync(group);
+        return Results.Ok(new { partGroupId = id, group.FamilyId, message = "Đã thêm nhóm vật tư vào danh mục." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/part-groups/{id:int}", async (int id, UpdatePartGroupDto dto, IRoService svc) =>
+{
+    var group = new PartGroup
+    {
+        Id = id,
+        GroupCode = dto.GroupCode?.Trim() ?? "",
+        GroupName = dto.GroupName?.Trim() ?? "",
+        DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? null : dto.DealerCode.Trim().ToUpperInvariant(),
+        ParentId = (dto.ParentId.HasValue && dto.ParentId.Value > 0) ? dto.ParentId : null,
+        OrderId = dto.OrderId,
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+    var (ok, msg) = await svc.UpdatePartGroupAsync(group);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/part-groups/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeletePartGroupAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -6884,6 +6980,10 @@ record CreateSharePartLineDto(int PartId, decimal QuantityShare, string? DealerC
 // Danh mục Loại công việc dịch vụ (Ser_MST_ServiceType)
 record CreateServiceTypeDto(string TypeName, string? DealerCode, string? CreatedBy);
 record UpdateServiceTypeDto(string TypeName, string? DealerCode, string? UpdatedBy);
+
+// Danh mục Nhóm vật tư / Loại vật tư (Ser_MST_PartGroup)
+record CreatePartGroupDto(string GroupCode, string GroupName, string? DealerCode, int? ParentId, int? OrderId, string? CreatedBy);
+record UpdatePartGroupDto(string GroupCode, string GroupName, string? DealerCode, int? ParentId, int? OrderId, string? UpdatedBy);
 
 
 

@@ -1,0 +1,188 @@
+@model PartGroup
+@{
+    ViewData["Title"] = $"Chi tiết nhóm vật tư [{Model.Id}] {Model.GroupName}";
+    var parents = ViewBag.Parents as List<PartGroup> ?? [];
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/PartGroup" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Danh mục nhóm vật tư</a>
+        <h5 class="mb-0 fw-bold mt-1">
+            <span class="font-monospace text-primary">#@Model.Id</span> - @Model.GroupName
+        </h5>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editGroupModal">
+            <i class="bi bi-pencil me-1"></i>Chỉnh sửa
+        </button>
+        <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Bạn có chắc muốn xóa nhóm vật tư này?');">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin nhóm vật tư</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">ID (PartGroupID)</dt>
+                    <dd class="col-sm-7 font-monospace fw-bold">@Model.Id</dd>
+
+                    <dt class="col-sm-5 text-muted small">Mã nhóm (GroupCode)</dt>
+                    <dd class="col-sm-7 font-monospace fw-semibold">@Model.GroupCode</dd>
+
+                    <dt class="col-sm-5 text-muted small">Tên nhóm (GroupName)</dt>
+                    <dd class="col-sm-7">@Model.GroupName</dd>
+
+                    <dt class="col-sm-5 text-muted small">Mã đại lý (DealerCode)</dt>
+                    <dd class="col-sm-7 font-monospace">@(string.IsNullOrEmpty(Model.DealerCode) ? "Tất cả đại lý" : Model.DealerCode)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Nhóm cha (ParentID)</dt>
+                    <dd class="col-sm-7">
+                        @if (Model.Parent != null)
+                        {
+                            <a asp-action="Detail" asp-route-id="@Model.Parent.Id" class="text-decoration-none">
+                                <span class="badge bg-light text-dark border font-monospace">@Model.Parent.GroupCode</span> @Model.Parent.GroupName
+                            </a>
+                        }
+                        else
+                        {
+                            <span class="text-muted">— Nhóm gốc —</span>
+                        }
+                    </dd>
+
+                    <dt class="col-sm-5 text-muted small">Nhóm gốc cây (FamilyID)</dt>
+                    <dd class="col-sm-7 font-monospace">@(Model.FamilyId?.ToString() ?? "-")</dd>
+
+                    <dt class="col-sm-5 text-muted small">Thứ tự (OrderID)</dt>
+                    <dd class="col-sm-7">@(Model.OrderId?.ToString() ?? "-")</dd>
+
+                    <dt class="col-sm-5 text-muted small">Trạng thái (IsActive)</dt>
+                    <dd class="col-sm-7">
+                        @if (Model.IsActive)
+                        {
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">Hoạt động</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary-subtle text-secondary border">Tạm dừng</span>
+                        }
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-clock-history me-1 text-secondary"></i>Lịch sử cập nhật</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Người tạo (CreatedBy)</dt>
+                    <dd class="col-sm-7">@Model.CreatedBy</dd>
+
+                    <dt class="col-sm-5 text-muted small">Ngày tạo (CreatedDate)</dt>
+                    <dd class="col-sm-7">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</dd>
+
+                    <dt class="col-sm-5 text-muted small">Người cập nhật cuối (LogLUBy)</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(Model.LogLUBy) ? "-" : Model.LogLUBy)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Cập nhật cuối (LogLUDateTime)</dt>
+                    <dd class="col-sm-7">@(Model.LogLUDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "-")</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.Children.Any())
+{
+    <div class="card shadow-sm border-0 mt-3">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-diagram-3 me-1 text-primary"></i>Nhóm con trực tiếp (@Model.Children.Count)</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:150px">Mã nhóm</th>
+                            <th>Tên nhóm</th>
+                            <th class="text-center" style="width:120px">Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in Model.Children.OrderBy(x => x.OrderId ?? int.MaxValue).ThenBy(x => x.GroupCode))
+                        {
+                            <tr>
+                                <td class="font-monospace">
+                                    <a asp-action="Detail" asp-route-id="@c.Id" class="text-decoration-none">@c.GroupCode</a>
+                                </td>
+                                <td>@c.GroupName</td>
+                                <td class="text-center">
+                                    @if (c.IsActive)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Hoạt động</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary border">Tạm dừng</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal Chỉnh sửa nhóm vật tư -->
+<div class="modal fade" id="editGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Update" asp-route-id="@Model.Id" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2 text-primary"></i>Chỉnh sửa nhóm vật tư #@Model.Id</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Mã nhóm (GroupCode)</label>
+                            <input name="groupCode" class="form-control font-monospace" value="@Model.GroupCode" style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Thứ tự (OrderID)</label>
+                            <input name="orderId" type="number" class="form-control" value="@Model.OrderId" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Tên nhóm vật tư (GroupName) <span class="text-danger">*</span></label>
+                            <input name="groupName" class="form-control" value="@Model.GroupName" required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                            <input name="dealerCode" class="form-control font-monospace" value="@Model.DealerCode" placeholder="Bỏ trống = tất cả đại lý" style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Nhóm cha (ParentID)</label>
+                            <select name="parentId" class="form-select">
+                                <option value="">— Không có (nhóm gốc) —</option>
+                                @foreach (var p in parents)
+                                {
+                                    <option value="@p.Id" selected="@(Model.ParentId == p.Id)">@p.GroupCode - @p.GroupName</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu thay đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

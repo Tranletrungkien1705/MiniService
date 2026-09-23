@@ -3466,3 +3466,40 @@ public class SharePartSummaryDto
     public int DealerCount { get; set; }                      // Số đại lý đang chia sẻ
     public int PartCount { get; set; }                        // Số phụ tùng khác nhau được chia sẻ
 }
+
+/// <summary>Danh mục Nhóm vật tư / Loại vật tư (Part Group) — Ser_MST_PartGroup trong idn.CarService.
+/// Phân nhóm phụ tùng theo cây phân cấp (ParentID) phục vụ tra cứu & báo cáo kho.
+/// Mỗi nhóm có mã (GroupCode) duy nhất trong một đại lý (DealerCode), thứ tự hiển thị (OrderID)
+/// và FamilyID = nhóm gốc cao nhất của cây phân cấp (hàm Part_GetFamilyID).
+/// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH) / đại lý (Dealer).</summary>
+public class PartGroup : IOrgOwned
+{
+    public int Id { get; set; }                               // PartGroupID
+    public Guid OrgId { get; set; }
+    public string? DealerCode { get; set; }                   // Mã đại lý áp dụng (DealerCode)
+    public int? ParentId { get; set; }                        // Nhóm cha (ParentID) — null = nhóm gốc
+    public int? FamilyId { get; set; }                        // Nhóm gốc cao nhất của cây (FamilyID)
+    public int? OrderId { get; set; }                         // Thứ tự hiển thị (OrderID)
+    public string GroupCode { get; set; } = "";               // Mã nhóm vật tư (GroupCode)
+    public string GroupName { get; set; } = "";               // Tên nhóm vật tư (GroupName)
+    public bool IsActive { get; set; } = true;                // Cờ hoạt động (IsActive)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo (CreatedDate)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+
+    public PartGroup? Parent { get; set; }                    // Nhóm cha (navigation)
+    public List<PartGroup> Children { get; set; } = [];       // Các nhóm con trực tiếp
+
+    public int ChildCount => Children.Count;                  // Số nhóm con trực tiếp
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục Nhóm vật tư — phục vụ màn hình quản lý PartGroup.</summary>
+public class PartGroupSummaryDto
+{
+    public int TotalGroups { get; set; }                      // Tổng số nhóm vật tư
+    public int RootGroups { get; set; }                       // Số nhóm gốc (không có cha)
+    public int ChildGroups { get; set; }                      // Số nhóm con (có cha)
+    public int DealerCount { get; set; }                      // Số đại lý khác nhau
+    public int ActiveGroups { get; set; }                     // Số nhóm đang hoạt động
+}
