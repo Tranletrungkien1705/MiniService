@@ -30,7 +30,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int TotalCustomerGroups = 0, int ActiveCustomerGroups = 0, int TotalFleetCars = 0,
     int PendingPartPriceRequests = 0, int RespondedPartPriceRequests = 0,
     int TotalComplaintDiagnosticErrors = 0, int TotalComplaintCodes = 0, int TotalDiagnosticCodes = 0,
-    int TotalBirthdays = 0, int ThisMonthBirthdays = 0, int TodayBirthdays = 0, int PendingBirthdays = 0);
+    int TotalBirthdays = 0, int ThisMonthBirthdays = 0, int TodayBirthdays = 0, int PendingBirthdays = 0,
+    int TotalWarrantyWorks = 0, int ActiveWarrantyWorks = 0);
 
 public interface IRoService
 {
@@ -49,7 +50,7 @@ public interface IRoService
     Task<List<RepairOrder>> ROsAsync(ROStatus? status, string? q);
     Task<RepairOrder?> GetROAsync(int id);
     Task<int> CreateROAsync(RepairOrder ro);
-    Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null, ExpenseType expenseType = ExpenseType.Customer, int? serviceItemId = null, decimal? stdManHour = null);
+    Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null, ExpenseType expenseType = ExpenseType.Customer, int? serviceItemId = null, decimal? stdManHour = null, int? warrantyWorkId = null);
     Task RemoveLineAsync(int lineId);
     Task<(bool ok, string msg)> TransitionAsync(int roId, ROStatus to);
     Task<(bool ok, string msg)> DeleteROAsync(int roId);
@@ -400,6 +401,18 @@ public interface IRoService
     Task<List<ComplaintDiagnosticError>> GetActiveDiagnosticsAsync(VehicleSystemGroup? group = null);
     Task<(bool ok, string msg)> ApplyErrorToROAsync(int roId, int errorId, string target);
     Task<List<RepairOrder>> ROsForErrorAssignmentAsync();
+    // Warranty Standard Labor Works (Ser_MST_ROWarrantyWork & Ser_MST_ROWarrantyType)
+    Task<List<WarrantyWork>> WarrantyWorksAsync(string? model, WarrantyLaborGroup? group, WarrantyCoverageType? coverage, string? q, bool? isActive);
+    Task<WarrantyWork?> GetWarrantyWorkAsync(int id);
+    Task<WarrantyWork?> GetWarrantyWorkByCodeAsync(string code);
+    Task<WarrantyWorkSummaryDto> GetWarrantyWorkSummaryAsync();
+    Task<int> CreateWarrantyWorkAsync(WarrantyWork work);
+    Task<(bool ok, string msg)> UpdateWarrantyWorkAsync(int id, WarrantyWork input);
+    Task<(bool ok, string msg)> ToggleWarrantyWorkActiveAsync(int id);
+    Task<(bool ok, string msg)> DeleteWarrantyWorkAsync(int id);
+    Task<(bool ok, string msg, int? lineId)> ApplyWarrantyWorkToRoAsync(int warrantyWorkId, int roId, decimal? customHours, string? note);
+    Task<List<RepairOrder>> ROsForWarrantyWorkSelectAsync();
+    Task<List<string>> DistinctWarrantyModelsAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -661,7 +674,7 @@ public class RoService(AppDbContext db) : IRoService
         return ro.Id;
     }
 
-    public async Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null, ExpenseType expenseType = ExpenseType.Customer, int? serviceItemId = null, decimal? stdManHour = null)
+    public async Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null, ExpenseType expenseType = ExpenseType.Customer, int? serviceItemId = null, decimal? stdManHour = null, int? warrantyWorkId = null)
     {
         var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == roId) ?? throw new KeyNotFoundException();
         if (ro.Status is ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding)
@@ -688,6 +701,18 @@ public class RoService(AppDbContext db) : IRoService
                 if (qty <= 0) qty = svcItem.StdManHour > 0 ? svcItem.StdManHour : 1;
             }
         }
+        else if (type == LineType.Labor && warrantyWorkId.HasValue && warrantyWorkId.Value > 0)
+        {
+            var wrtWork = await db.WarrantyWorks.FirstOrDefaultAsync(w => w.Id == warrantyWorkId.Value);
+            if (wrtWork != null)
+            {
+                if (string.IsNullOrWhiteSpace(name)) name = $"[BH {wrtWork.Code}] {wrtWork.Name}";
+                if (price <= 0) price = wrtWork.RatePrice;
+                stdManHour ??= wrtWork.RateHour;
+                if (qty <= 0) qty = wrtWork.RateHour > 0 ? wrtWork.RateHour : 1;
+                expenseType = ExpenseType.Warranty;
+            }
+        }
 
         db.Lines.Add(new RepairLine
         {
@@ -696,6 +721,7 @@ public class RoService(AppDbContext db) : IRoService
             ExpenseType = expenseType,
             PartId = (type == LineType.Part && partId > 0) ? partId : null,
             ServiceItemId = (type == LineType.Labor && serviceItemId > 0) ? serviceItemId : null,
+            WarrantyWorkId = (type == LineType.Labor && warrantyWorkId > 0) ? warrantyWorkId : null,
             StdManHour = stdManHour,
             Name = name.Trim(),
             Quantity = qty <= 0 ? 1 : qty,
@@ -940,6 +966,9 @@ public class RoService(AppDbContext db) : IRoService
         var todayBirthdays = allBirthdays.Count(b => b.DateBth.Month == curBthMonth && b.DateBth.Day == curBthDay);
         var pendingBirthdays = allBirthdays.Count(b => b.Status == CustomerCareBirthdayStatus.Pending);
 
+        var totalWarrantyWorks = await db.WarrantyWorks.CountAsync();
+        var activeWarrantyWorks = await db.WarrantyWorks.CountAsync(w => w.FlagActive);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -1005,7 +1034,9 @@ public class RoService(AppDbContext db) : IRoService
             totalBirthdays,
             thisMonthBirthdays,
             todayBirthdays,
-            pendingBirthdays);
+            pendingBirthdays,
+            totalWarrantyWorks,
+            activeWarrantyWorks);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -8893,6 +8924,244 @@ public class RoService(AppDbContext db) : IRoService
             .Include(c => c.Cars)
             .Where(c => !existingCustomerIds.Contains(c.Id))
             .OrderBy(c => c.Name)
+            .ToListAsync();
+    }
+
+    // =========================================================================
+    // ĐỊNH MỨC GIỜ CÔNG BẢO HÀNH HÃNG FLAT RATE (Ser_MST_ROWarrantyWork & Ser_MST_ROWarrantyType)
+    // =========================================================================
+
+    public async Task<List<WarrantyWork>> WarrantyWorksAsync(string? model, WarrantyLaborGroup? group, WarrantyCoverageType? coverage, string? q, bool? isActive)
+    {
+        var query = db.WarrantyWorks
+            .Include(w => w.RepairLines)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            var m = model.Trim().ToLower();
+            query = query.Where(w => w.Model.ToLower().Contains(m));
+        }
+
+        if (group.HasValue)
+            query = query.Where(w => w.LaborGroup == group.Value);
+
+        if (coverage.HasValue)
+            query = query.Where(w => w.CoverageType == coverage.Value);
+
+        if (isActive.HasValue)
+            query = query.Where(w => w.FlagActive == isActive.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(w =>
+                w.Code.ToLower().Contains(term) ||
+                w.Name.ToLower().Contains(term) ||
+                w.Model.ToLower().Contains(term) ||
+                (w.AppTypeCode != null && w.AppTypeCode.ToLower().Contains(term)) ||
+                (w.EngineType != null && w.EngineType.ToLower().Contains(term)) ||
+                (w.Remark != null && w.Remark.ToLower().Contains(term)));
+        }
+
+        return await query
+            .OrderBy(w => w.Model)
+            .ThenBy(w => w.LaborGroup)
+            .ThenBy(w => w.Code)
+            .ToListAsync();
+    }
+
+    public async Task<WarrantyWork?> GetWarrantyWorkAsync(int id)
+    {
+        return await db.WarrantyWorks
+            .Include(w => w.RepairLines)
+                .ThenInclude(l => l.RO)
+                    .ThenInclude(r => r.Car)
+            .Include(w => w.RepairLines)
+                .ThenInclude(l => l.RO)
+                    .ThenInclude(r => r.Customer)
+            .FirstOrDefaultAsync(w => w.Id == id);
+    }
+
+    public async Task<WarrantyWork?> GetWarrantyWorkByCodeAsync(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return null;
+        var c = code.Trim().ToUpper();
+        return await db.WarrantyWorks.FirstOrDefaultAsync(w => w.Code.ToUpper() == c);
+    }
+
+    public async Task<WarrantyWorkSummaryDto> GetWarrantyWorkSummaryAsync()
+    {
+        var works = await db.WarrantyWorks
+            .Include(w => w.RepairLines)
+            .ToListAsync();
+
+        var total = works.Count;
+        var active = works.Count(w => w.FlagActive);
+        var inactive = total - active;
+        var totalModels = works.Select(w => w.Model.Trim().ToLower()).Where(m => !string.IsNullOrEmpty(m)).Distinct().Count();
+        var avgHours = total > 0 ? Math.Round(works.Average(w => w.RateHour), 2) : 0m;
+        var avgPrice = total > 0 ? Math.Round(works.Average(w => w.Price), 0) : 0m;
+        var claims = works.Sum(w => w.RepairLines.Count);
+
+        return new WarrantyWorkSummaryDto
+        {
+            TotalWorks = total,
+            ActiveWorks = active,
+            InactiveWorks = inactive,
+            TotalModels = totalModels,
+            AvgRateHour = avgHours,
+            AvgPrice = avgPrice,
+            TotalClaimsApplied = claims
+        };
+    }
+
+    public async Task<int> CreateWarrantyWorkAsync(WarrantyWork work)
+    {
+        work.Code = work.Code.Trim().ToUpper();
+        if (string.IsNullOrWhiteSpace(work.Code))
+            throw new ArgumentException("Mã công việc bảo hành không được để trống.");
+
+        var exists = await db.WarrantyWorks.AnyAsync(w => w.Code == work.Code);
+        if (exists)
+            throw new InvalidOperationException($"Mã công việc bảo hành '{work.Code}' đã tồn tại.");
+
+        if (string.IsNullOrWhiteSpace(work.Name))
+            throw new ArgumentException("Tên công việc bảo hành không được để trống.");
+
+        if (string.IsNullOrWhiteSpace(work.Model))
+            work.Model = "Tất cả dòng xe";
+
+        if (work.RateHour <= 0) work.RateHour = 1.0m;
+        if (work.RatePrice <= 0) work.RatePrice = 300_000m;
+        work.Price = Math.Round(work.RateHour * work.RatePrice, 0);
+
+        if (work.VatPercent < 0) work.VatPercent = 8;
+        if (work.CreatedAt == default) work.CreatedAt = DateTime.Now;
+
+        db.WarrantyWorks.Add(work);
+        await db.SaveChangesAsync();
+        return work.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateWarrantyWorkAsync(int id, WarrantyWork input)
+    {
+        var work = await db.WarrantyWorks.FirstOrDefaultAsync(w => w.Id == id);
+        if (work == null) return (false, "Không tìm thấy công việc bảo hành.");
+
+        var code = input.Code.Trim().ToUpper();
+        if (string.IsNullOrWhiteSpace(code)) return (false, "Mã công việc bảo hành không được để trống.");
+
+        var duplicate = await db.WarrantyWorks.AnyAsync(w => w.Id != id && w.Code == code);
+        if (duplicate) return (false, $"Mã công việc '{code}' đã được dùng cho bản ghi khác.");
+
+        work.Code = code;
+        work.Name = input.Name.Trim();
+        work.Model = string.IsNullOrWhiteSpace(input.Model) ? "Tất cả dòng xe" : input.Model.Trim();
+        work.LaborGroup = input.LaborGroup;
+        work.CoverageType = input.CoverageType;
+        work.AppTypeCode = input.AppTypeCode?.Trim();
+        work.EngineType = input.EngineType?.Trim();
+        work.RateHour = input.RateHour > 0 ? input.RateHour : 1.0m;
+        work.RatePrice = input.RatePrice > 0 ? input.RatePrice : 300_000m;
+        work.Price = Math.Round(work.RateHour * work.RatePrice, 0);
+        work.VatPercent = input.VatPercent >= 0 ? input.VatPercent : 8;
+        work.RequiredPhotos = input.RequiredPhotos?.Trim();
+        work.Remark = input.Remark?.Trim();
+        work.FlagActive = input.FlagActive;
+        work.UpdatedAt = DateTime.Now;
+        work.UpdatedBy = input.UpdatedBy ?? "user";
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật công việc bảo hành {work.Code}.");
+    }
+
+    public async Task<(bool ok, string msg)> ToggleWarrantyWorkActiveAsync(int id)
+    {
+        var work = await db.WarrantyWorks.FirstOrDefaultAsync(w => w.Id == id);
+        if (work == null) return (false, "Không tìm thấy công việc bảo hành.");
+
+        work.FlagActive = !work.FlagActive;
+        work.UpdatedAt = DateTime.Now;
+        await db.SaveChangesAsync();
+        return (true, $"Đã {(work.FlagActive ? "kích hoạt" : "ngừng áp dụng")} công việc {work.Code}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteWarrantyWorkAsync(int id)
+    {
+        var work = await db.WarrantyWorks
+            .Include(w => w.RepairLines)
+            .FirstOrDefaultAsync(w => w.Id == id);
+        if (work == null) return (false, "Không tìm thấy công việc bảo hành.");
+
+        if (work.RepairLines.Count > 0)
+        {
+            work.FlagActive = false;
+            work.UpdatedAt = DateTime.Now;
+            await db.SaveChangesAsync();
+            return (true, $"Công việc {work.Code} đã phát sinh {work.RepairLines.Count} dòng sửa chữa trên Lệnh RO — đã chuyển trạng thái ngừng áp dụng (ngưng hiệu lực).");
+        }
+
+        db.WarrantyWorks.Remove(work);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa công việc bảo hành {work.Code}.");
+    }
+
+    public async Task<(bool ok, string msg, int? lineId)> ApplyWarrantyWorkToRoAsync(int warrantyWorkId, int roId, decimal? customHours, string? note)
+    {
+        var work = await db.WarrantyWorks.FirstOrDefaultAsync(w => w.Id == warrantyWorkId);
+        if (work == null) return (false, "Không tìm thấy công việc bảo hành định mức.", null);
+
+        var ro = await db.ROs
+            .Include(r => r.Lines)
+            .Include(r => r.Car)
+            .FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa RO.", null);
+
+        if (ro.Status is ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding)
+            return (false, $"RO {ro.Code} ở trạng thái {ro.Status} — không thể thêm công việc mới.", null);
+
+        var hours = customHours.HasValue && customHours.Value > 0 ? customHours.Value : work.RateHour;
+        var unitPrice = work.RatePrice;
+
+        var line = new RepairLine
+        {
+            ROId = roId,
+            Type = LineType.Labor,
+            ExpenseType = ExpenseType.Warranty,
+            WarrantyWorkId = work.Id,
+            StdManHour = hours,
+            Quantity = hours,
+            UnitPrice = unitPrice,
+            Name = string.IsNullOrWhiteSpace(note)
+                ? $"[BH {work.Code}] {work.Name} ({work.Model})"
+                : $"[BH {work.Code}] {work.Name} - {note.Trim()}"
+        };
+
+        db.Lines.Add(line);
+        await db.SaveChangesAsync();
+
+        return (true, $"Đã áp dụng công việc bảo hành {work.Code} ({hours:N1}h) vào RO {ro.Code} thành công.", line.Id);
+    }
+
+    public async Task<List<RepairOrder>> ROsForWarrantyWorkSelectAsync()
+    {
+        var openStatuses = new[] { ROStatus.Created, ROStatus.Printed, ROStatus.Wait4Part, ROStatus.HasPart, ROStatus.HasRO, ROStatus.InGarage, ROStatus.Repaired, ROStatus.CheckEnd };
+        return await db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Where(r => openStatuses.Contains(r.Status))
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+    }
+
+    public async Task<List<string>> DistinctWarrantyModelsAsync()
+    {
+        return await db.WarrantyWorks
+            .Select(w => w.Model.Trim())
+            .Where(m => !string.IsNullOrEmpty(m))
+            .Distinct()
+            .OrderBy(m => m)
             .ToListAsync();
     }
 }

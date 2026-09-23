@@ -5271,5 +5271,125 @@ public class CustomerCareBirthdayController(IRoService svc) : Controller
     }
 }
 
+public class WarrantyWorkController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? model, WarrantyLaborGroup? group, WarrantyCoverageType? coverage, string? q, bool? isActive)
+    {
+        ViewBag.Model = model;
+        ViewBag.Group = group;
+        ViewBag.Coverage = coverage;
+        ViewBag.Q = q;
+        ViewBag.IsActive = isActive;
+
+        var summary = await svc.GetWarrantyWorkSummaryAsync();
+        ViewBag.Summary = summary;
+        ViewBag.Models = await svc.DistinctWarrantyModelsAsync();
+        ViewBag.OpenROs = await svc.ROsForWarrantyWorkSelectAsync();
+
+        var list = await svc.WarrantyWorksAsync(model, group, coverage, q, isActive);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Models = await svc.DistinctWarrantyModelsAsync();
+        return View(new WarrantyWork
+        {
+            Code = "WRT-",
+            RateHour = 1.0m,
+            RatePrice = 300_000m,
+            Price = 300_000m,
+            VatPercent = 8
+        });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(WarrantyWork work)
+    {
+        if (string.IsNullOrWhiteSpace(work.Code) || string.IsNullOrWhiteSpace(work.Name))
+        {
+            TempData["Error"] = "Vui lòng nhập đầy đủ Mã và Tên công việc bảo hành.";
+            ViewBag.Models = await svc.DistinctWarrantyModelsAsync();
+            return View(work);
+        }
+
+        try
+        {
+            var id = await svc.CreateWarrantyWorkAsync(work);
+            TempData["Success"] = $"Đã tạo công việc bảo hành {work.Code} thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Models = await svc.DistinctWarrantyModelsAsync();
+            return View(work);
+        }
+    }
+
+    public async Task<IActionResult> Edit(int id)
+    {
+        var work = await svc.GetWarrantyWorkAsync(id);
+        if (work == null) return NotFound();
+
+        ViewBag.Models = await svc.DistinctWarrantyModelsAsync();
+        return View(work);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, WarrantyWork work)
+    {
+        var (ok, msg) = await svc.UpdateWarrantyWorkAsync(id, work);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (!ok)
+        {
+            ViewBag.Models = await svc.DistinctWarrantyModelsAsync();
+            return View(work);
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var work = await svc.GetWarrantyWorkAsync(id);
+        if (work == null) return NotFound();
+
+        ViewBag.OpenROs = await svc.ROsForWarrantyWorkSelectAsync();
+        return View(work);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleActive(int id)
+    {
+        var (ok, msg) = await svc.ToggleWarrantyWorkActiveAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyToRO(int warrantyWorkId, int roId, decimal? customHours, string? note)
+    {
+        var (ok, msg, lineId) = await svc.ApplyWarrantyWorkToRoAsync(warrantyWorkId, roId, customHours, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id = warrantyWorkId });
+    }
+
+    public async Task<IActionResult> Print(string? model, WarrantyLaborGroup? group)
+    {
+        ViewBag.SelectedModel = model;
+        ViewBag.SelectedGroup = group;
+        var list = await svc.WarrantyWorksAsync(model, group, null, null, true);
+        return View(list);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteWarrantyWorkAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 
 

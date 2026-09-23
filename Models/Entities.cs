@@ -631,6 +631,8 @@ public class RepairLine : IOrgOwned
     public RepairOrder RO { get; set; } = null!;
     public Part? Part { get; set; }
     public ServiceItem? ServiceItem { get; set; }
+    public int? WarrantyWorkId { get; set; }        // Liên kết định mức công việc bảo hành hãng (Ser_MST_ROWarrantyWork)
+    public WarrantyWork? WarrantyWork { get; set; }
 }
 
 /// <summary>Báo cáo bảo hành (Warranty Report) — Ser_ROWarrantyReport trong idn.CarService.</summary>
@@ -2709,4 +2711,68 @@ public class CustomerCareBirthdaySummaryDto
     public int VouchersUsedCount { get; set; }
     public decimal TotalVoucherValue { get; set; }
     public decimal ContactCompletionRate => TotalCount > 0 ? Math.Round((decimal)ContactedCount * 100m / TotalCount, 1) : 0m;
+}
+
+/// <summary>Nhóm kỹ thuật công việc bảo hành xe — theo Ser_MST_ROWarrantyWork trong idn.CarService.</summary>
+public enum WarrantyLaborGroup
+{
+    Engine = 1,            // Động cơ & Hệ thống nhiên liệu
+    Transmission = 2,      // Hộp số & Hệ thống truyền động
+    Electrical = 3,        // Hệ thống điện & Điện tử
+    BrakeSteering = 4,     // Hệ thống phanh & Lái
+    ChassisSuspension = 5, // Khung gầm & Treo
+    BodyInterior = 6,      // Thân vỏ & Nội thất
+    SoftwareECU = 7        // Lập trình & Cập nhật phần mềm ECU
+}
+
+/// <summary>Phân loại chính sách bảo hành hãng — theo Ser_MST_ROWarrantyType trong idn.CarService.</summary>
+public enum WarrantyCoverageType
+{
+    NewCar = 1,            // W1: Bảo hành xe mới tiêu chuẩn (3-5 năm / 100.000 km)
+    GenuinePart = 2,       // W2: Bảo hành phụ tùng thay thế chính hãng (12 tháng / 20.000 km)
+    Goodwill = 3,          // W3: Bảo hành thiện chí (Đại lý & Hãng hỗ trợ KH thân thiết)
+    CampaignRecall = 4,    // W4: Chiến dịch kỹ thuật & Triệu hồi (Recall Campaign)
+    ExtendedWarranty = 5   // W5: Bảo hành gia hạn mở rộng
+}
+
+/// <summary>Công việc bảo hành định mức & Đơn giá hãng chi trả — Ser_MST_ROWarrantyWork trong idn.CarService.</summary>
+public class WarrantyWork : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";          // Mã công việc bảo hành (ROWWorkCode, VD: WRT-ENG-001)
+    public string Name { get; set; } = "";          // Tên công việc bảo hành (ROWWorkName)
+    public string Model { get; set; } = "";         // Dòng xe áp dụng (VD: SantaFe, Tucson, Creta, Accent...)
+    public WarrantyLaborGroup LaborGroup { get; set; } = WarrantyLaborGroup.Engine; // Nhóm kỹ thuật
+    public WarrantyCoverageType CoverageType { get; set; } = WarrantyCoverageType.NewCar; // Loại bảo hành áp dụng
+    public string? AppTypeCode { get; set; }        // Mã phê duyệt HTC/HTV
+    public string? EngineType { get; set; }         // Loại động cơ / Remark (VD: SmartStream D2.2, Kappa 1.4 MPI...)
+    public decimal RateHour { get; set; } = 1.0m;   // Giờ công định mức bảo hành Flat Rate (RateHour)
+    public decimal RatePrice { get; set; } = 300_000m; // Đơn giá giờ công bảo hành do hãng duyệt chi trả (RatePrice)
+    public decimal Price { get; set; }              // Thành tiền công bảo hành chuẩn (Price = RateHour * RatePrice)
+    public int VatPercent { get; set; } = 8;        // Thuế suất VAT (%)
+    public decimal TotalWithVat => Math.Round(Price * (1 + VatPercent / 100m), 0);
+    public string? RequiredPhotos { get; set; }     // Danh sách hồ sơ ảnh bắt buộc (VIN, ODO, Lỗi, Nghiệm thu)
+    public string? Remark { get; set; }             // Ghi chú kỹ thuật / điều kiện bảo hành
+    public bool FlagActive { get; set; } = true;    // Trạng thái hiệu lực (FlagActive)
+    public string CreatedBy { get; set; } = "Hãng HTC";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<RepairLine> RepairLines { get; set; } = [];
+
+    public int UsageCount => RepairLines.Count;
+}
+
+/// <summary>DTO Tổng hợp chỉ số Định mức giờ công bảo hành — Ser_MST_ROWarrantyWork trong idn.CarService.</summary>
+public class WarrantyWorkSummaryDto
+{
+    public int TotalWorks { get; set; }
+    public int ActiveWorks { get; set; }
+    public int InactiveWorks { get; set; }
+    public int TotalModels { get; set; }
+    public decimal AvgRateHour { get; set; }
+    public decimal AvgPrice { get; set; }
+    public int TotalClaimsApplied { get; set; }
 }

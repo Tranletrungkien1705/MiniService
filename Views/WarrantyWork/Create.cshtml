@@ -1,0 +1,156 @@
+@model WarrantyWork
+@{
+    ViewData["Title"] = "Thêm mới Định mức Giờ công Bảo hành Tiêu chuẩn";
+    var modelsList = ViewBag.Models as List<string> ?? [];
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white border-bottom py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="mb-1 fw-bold text-primary"><i class="bi bi-plus-circle me-1"></i> Thêm mới Công việc Bảo hành Tiêu chuẩn Flat Rate</h6>
+                        <span class="text-muted small">Quy chuẩn định mức giờ công và đơn giá chi trả bồi hoàn bảo hành hãng (HTC / Hyundai)</span>
+                    </div>
+                    <a href="/WarrantyWork" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Quay lại danh sách</a>
+                </div>
+            </div>
+            <form method="post" action="/WarrantyWork/Create" class="card-body p-4">
+                @Html.AntiForgeryToken()
+
+                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">1. Thông tin Định danh &amp; Phân nhóm Kỹ thuật</h6>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Mã công việc bảo hành (Code) <span class="text-danger">*</span></label>
+                        <input type="text" name="Code" class="form-control font-monospace" placeholder="VD: WRT-ENG-001" value="@Model.Code" required />
+                        <div class="form-text" style="font-size:11.5px">Theo mã chuẩn Flat Rate hãng HTC</div>
+                    </div>
+                    <div class="col-md-8">
+                        <label class="form-label small fw-semibold">Tên công việc kỹ thuật <span class="text-danger">*</span></label>
+                        <input type="text" name="Name" class="form-control" placeholder="VD: Thay thế phớt đuôi trục khuỷu &amp; đại tu mặt máy" value="@Model.Name" required />
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Dòng xe áp dụng (Model) <span class="text-danger">*</span></label>
+                        <input list="modelSuggestions" name="Model" class="form-control" placeholder="Chọn hoặc nhập dòng xe..." value="@Model.Model" required />
+                        <datalist id="modelSuggestions">
+                            <option value="SantaFe">SantaFe</option>
+                            <option value="Tucson">Tucson</option>
+                            <option value="Creta">Creta</option>
+                            <option value="Accent">Accent</option>
+                            <option value="Elantra">Elantra</option>
+                            <option value="Custin">Custin</option>
+                            <option value="Grand i10">Grand i10</option>
+                            <option value="Stargazer">Stargazer</option>
+                            <option value="Ioniq 5">Ioniq 5</option>
+                            <option value="Palisade">Palisade</option>
+                            <option value="Tất cả dòng xe">Tất cả dòng xe</option>
+                        </datalist>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Nhóm kỹ thuật xe</label>
+                        <select name="LaborGroup" class="form-select">
+                            @foreach (WarrantyLaborGroup g in Enum.GetValues<WarrantyLaborGroup>())
+                            {
+                                var info = Ui.WarrantyLaborGroup(g);
+                                <option value="@((int)g)" selected="@(Model.LaborGroup == g)">@info.text</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Chính sách bảo hành áp dụng</label>
+                        <select name="CoverageType" class="form-select">
+                            @foreach (WarrantyCoverageType c in Enum.GetValues<WarrantyCoverageType>())
+                            {
+                                var info = Ui.WarrantyCoverageType(c);
+                                <option value="@((int)c)" selected="@(Model.CoverageType == c)">[@info.code] @info.text</option>
+                            }
+                        </select>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Kiểu động cơ / Phiên bản trang bị (Engine)</label>
+                        <input type="text" name="EngineType" class="form-control" placeholder="VD: SmartStream D2.2 CRDi, Kappa 1.4 MPI, 1.6 T-GDI..." value="@Model.EngineType" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Mã phê duyệt hệ thống HTC / HTV (AppTypeCode)</label>
+                        <input type="text" name="AppTypeCode" class="form-control" placeholder="VD: HTC-W-ENG-01, HTV-WRT-2023" value="@Model.AppTypeCode" />
+                    </div>
+                </div>
+
+                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">2. Định mức Giờ công &amp; Đơn giá Chi trả Bảo hành Hãng</h6>
+                <div class="row g-3 mb-4 bg-light p-3 rounded border">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Giờ định mức Flat Rate (h) <span class="text-danger">*</span></label>
+                        <input type="number" step="0.1" min="0.1" name="RateHour" id="rateHour" class="form-control fw-bold text-primary" value="@Model.RateHour" oninput="calcPrice()" required />
+                        <div class="form-text" style="font-size:11px">Định mức chuẩn theo sổ tay hãng</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Đơn giá / giờ chi trả (đ) <span class="text-danger">*</span></label>
+                        <input type="number" step="1000" min="0" name="RatePrice" id="ratePrice" class="form-control font-monospace" value="@Model.RatePrice" oninput="calcPrice()" required />
+                        <div class="form-text" style="font-size:11px">Hãng bồi hoàn cho đại lý</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Thành tiền công bảo hành (đ)</label>
+                        <input type="text" id="dispPrice" class="form-control fw-bold text-success font-monospace" value="@Model.Price.ToString("N0") đ" readonly />
+                        <input type="hidden" name="Price" id="valPrice" value="@Model.Price" />
+                        <div class="form-text" style="font-size:11px">Tự động = Giờ × Đơn giá</div>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">Thuế GTGT VAT (%)</label>
+                        <div class="input-group">
+                            <input type="number" name="VatPercent" id="vatPercent" class="form-control" value="@Model.VatPercent" oninput="calcPrice()" />
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <div class="form-text text-muted" id="dispTotalVat" style="font-size:11px">Có thuế: @Model.TotalWithVat.ToString("N0") đ</div>
+                    </div>
+                </div>
+
+                <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">3. Quy chuẩn Hồ sơ Ảnh &amp; Hướng dẫn Kỹ thuật</h6>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Danh sách ảnh hồ sơ nghiệm thu bắt buộc (Required Photos)</label>
+                    <textarea name="RequiredPhotos" class="form-control" rows="2" placeholder="VD: 1. Ảnh số khung VIN kính lái; 2. Ảnh đồng hồ ODO; 3. Ảnh chi tiết rò rỉ hư hỏng; 4. Ảnh phụ tùng mới chính hãng đã lắp ráp hoàn thiện.">@Model.RequiredPhotos</textarea>
+                    <div class="form-text" style="font-size:11.5px">Quy chuẩn hồ sơ nghiệm thu bảo hành theo tiêu chuẩn Hyundai Motor Company</div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Ghi chú kỹ thuật &amp; điều kiện bảo hành (Remark)</label>
+                    <textarea name="Remark" class="form-control" rows="2" placeholder="VD: Yêu cầu dụng cụ chuyên dụng SST khi lắp ráp, thực hiện quy trình cân chỉnh góc lái sau khi thay thế...">@Model.Remark</textarea>
+                </div>
+
+                <div class="form-check form-switch mb-4">
+                    <input class="form-check-input" type="checkbox" name="FlagActive" value="true" id="flagActive" checked="@Model.FlagActive" />
+                    <input type="hidden" name="FlagActive" value="false" />
+                    <label class="form-check-label fw-semibold small" for="flagActive">Kích hoạt áp dụng ngay định mức công việc bảo hành này</label>
+                </div>
+
+                <div class="d-flex justify-content-end gap-2 border-top pt-3">
+                    <a href="/WarrantyWork" class="btn btn-secondary">Hủy bỏ</a>
+                    <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-circle me-1"></i> Lưu định mức bảo hành</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+function calcPrice() {
+    var h = parseFloat(document.getElementById('rateHour').value) || 0;
+    var p = parseFloat(document.getElementById('ratePrice').value) || 0;
+    var vat = parseFloat(document.getElementById('vatPercent').value) || 0;
+
+    var price = Math.round(h * p);
+    var totalVat = Math.round(price * (1 + vat / 100));
+
+    document.getElementById('dispPrice').value = price.toLocaleString('vi-VN') + ' đ';
+    document.getElementById('valPrice').value = price;
+    document.getElementById('dispTotalVat').innerText = 'Có thuế: ' + totalVat.toLocaleString('vi-VN') + ' đ';
+}
+</script>
+}

@@ -667,5 +667,27 @@ public static class Ui
         Models.BirthdayContactChannel.InPerson => ("Tại xưởng dịch vụ", "bi-person-check-fill", "secondary"),
         _ => (c.ToString(), "bi-chat", "light")
     };
+
+    public static (string text, string icon, string css) WarrantyLaborGroup(WarrantyLaborGroup g) => g switch
+    {
+        Models.WarrantyLaborGroup.Engine => ("Động cơ & Nhiên liệu", "bi-fuel-pump", "danger"),
+        Models.WarrantyLaborGroup.Transmission => ("Hộp số & Truyền động", "bi-gear-wide-connected", "primary"),
+        Models.WarrantyLaborGroup.Electrical => ("Điện & Điện tử", "bi-lightning-charge", "warning"),
+        Models.WarrantyLaborGroup.BrakeSteering => ("Phanh & Lái", "bi-slash-circle", "info"),
+        Models.WarrantyLaborGroup.ChassisSuspension => ("Khung gầm & Treo", "bi-shield-shaded", "secondary"),
+        Models.WarrantyLaborGroup.BodyInterior => ("Thân vỏ & Nội thất", "bi-car-front", "dark"),
+        Models.WarrantyLaborGroup.SoftwareECU => ("Lập trình ECU & Phần mềm", "bi-cpu", "success"),
+        _ => (g.ToString(), "bi-tools", "secondary")
+    };
+
+    public static (string text, string code, string css) WarrantyCoverageType(WarrantyCoverageType t) => t switch
+    {
+        Models.WarrantyCoverageType.NewCar => ("Bảo hành xe mới", "W1", "primary"),
+        Models.WarrantyCoverageType.GenuinePart => ("Bảo hành phụ tùng", "W2", "info"),
+        Models.WarrantyCoverageType.Goodwill => ("Bảo hành thiện chí", "W3", "warning"),
+        Models.WarrantyCoverageType.CampaignRecall => ("Chiến dịch / Triệu hồi", "W4", "danger"),
+        Models.WarrantyCoverageType.ExtendedWarranty => ("Bảo hành gia hạn", "W5", "success"),
+        _ => (t.ToString(), "", "secondary")
+    };
 }
 

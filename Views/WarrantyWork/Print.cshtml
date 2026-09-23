@@ -1,0 +1,146 @@
+@model List<WarrantyWork>
+@{
+    Layout = null;
+    string? selectedModel = ViewBag.SelectedModel;
+    WarrantyLaborGroup? selectedGroup = ViewBag.SelectedGroup;
+    var totalHours = Model.Sum(m => m.RateHour);
+    var totalPrice = Model.Sum(m => m.Price);
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>Bảng Định mức Giờ công Bảo hành Tiêu chuẩn Flat Rate - Hyundai</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12.5px; color: #111; background: #fff; }
+        .print-header { border-bottom: 2px solid #002c5f; padding-bottom: 12px; margin-bottom: 20px; }
+        .hyundai-blue { color: #002c5f; }
+        .table-sm th, .table-sm td { padding: 5px 8px; vertical-align: middle; }
+        @@media print {
+            .no-print { display: none !important; }
+            body { padding: 0; margin: 0; }
+            .page-break { page-break-after: always; }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="no-print d-flex justify-content-between align-items-center mb-4 p-2 bg-light border rounded">
+        <div>
+            <i class="bi bi-printer me-1 text-primary"></i>
+            <span>Chế độ in: Bảng định mức giờ công bảo hành tiêu chuẩn (Flat Rate Labor Manual)</span>
+        </div>
+        <div class="btn-group">
+            <button onclick="window.print()" class="btn btn-sm btn-primary"><i class="bi bi-printer me-1"></i> In tài liệu</button>
+            <button onclick="window.close()" class="btn btn-sm btn-outline-secondary">Đóng cửa sổ</button>
+        </div>
+    </div>
+
+    <!-- Header thông tin đại lý & hãng -->
+    <div class="print-header">
+        <div class="row align-items-center">
+            <div class="col-7">
+                <div class="fw-bold fs-5 hyundai-blue text-uppercase">HỆ THỐNG ĐẠI LÝ ỦY QUYỀN HYUNDAI THÀNH CÔNG VIỆT NAM</div>
+                <div class="fw-semibold">TRUNG TÂM DỊCH VỤ BẢO HÀNH &amp; BẢO DƯỠNG CHÍNH HÃNG</div>
+                <div class="text-muted small">Tiêu chuẩn quy chuẩn giờ công Flat Rate ban hành bởi Hyundai Motor Company (HMC)</div>
+            </div>
+            <div class="col-5 text-end">
+                <div class="small fw-semibold text-uppercase">Mẫu biểu: WRT-FRM-01/HTC</div>
+                <div class="small text-muted">Ngày trích xuất: @DateTime.Now.ToString("dd/MM/yyyy HH:mm")</div>
+                <div class="small text-muted">Trạng thái dữ liệu: Có hiệu lực toàn hệ thống</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-center my-4">
+        <h4 class="fw-bold hyundai-blue text-uppercase mb-1">BẢNG ĐỊNH MỨC GIỜ CÔNG BẢO HÀNH TIÊU CHUẨN (FLAT RATE MANUAL)</h4>
+        <div class="text-muted">
+            @(string.IsNullOrWhiteSpace(selectedModel) ? "TẤT CẢ DÒNG XE HYUNDAI" : $"DÒNG XE: {selectedModel.ToUpper()}")
+            @(selectedGroup.HasValue ? $" · HỆ THỐNG: {Ui.WarrantyLaborGroup(selectedGroup.Value).text.ToUpper()}" : "")
+        </div>
+    </div>
+
+    <div class="table-responsive mb-4">
+        <table class="table table-bordered table-sm align-middle" style="font-size:11.5px">
+            <thead style="background-color:#f0f4f8">
+                <tr class="text-center fw-bold">
+                    <th style="width:35px">STT</th>
+                    <th style="width:110px">Mã việc (Code)</th>
+                    <th>Nội dung công việc bảo hành kỹ thuật</th>
+                    <th style="width:95px">Dòng xe</th>
+                    <th style="width:130px">Hệ thống kỹ thuật</th>
+                    <th style="width:105px">Chính sách BH</th>
+                    <th style="width:140px">Kiểu động cơ / Phiên bản</th>
+                    <th class="text-end" style="width:75px">Định mức</th>
+                    <th class="text-end" style="width:95px">Đơn giá / h</th>
+                    <th class="text-end" style="width:100px">Thành tiền</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ int idx = 1; }
+                @foreach (var item in Model)
+                {
+                    var group = Ui.WarrantyLaborGroup(item.LaborGroup);
+                    var cov = Ui.WarrantyCoverageType(item.CoverageType);
+                    <tr>
+                        <td class="text-center">@(idx++)</td>
+                        <td class="fw-bold font-monospace text-primary">@item.Code</td>
+                        <td>
+                            <div class="fw-semibold">@item.Name</div>
+                            @if (!string.IsNullOrWhiteSpace(item.AppTypeCode))
+                            {
+                                <span class="text-muted" style="font-size:10px">[HTC App: @item.AppTypeCode]</span>
+                            }
+                        </td>
+                        <td class="text-center">@item.Model</td>
+                        <td>@group.text</td>
+                        <td class="text-center">[@cov.code] @cov.text</td>
+                        <td>@(string.IsNullOrWhiteSpace(item.EngineType) ? "Tất cả" : item.EngineType)</td>
+                        <td class="text-end fw-bold">@item.RateHour.ToString("N1") h</td>
+                        <td class="text-end font-monospace">@item.RatePrice.ToString("N0")</td>
+                        <td class="text-end font-monospace fw-bold text-dark">@item.Price.ToString("N0")</td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot style="background-color:#f8f9fa">
+                <tr class="fw-bold">
+                    <td colspan="7" class="text-end text-uppercase">Tổng cộng (@Model.Count công việc):</td>
+                    <td class="text-end text-primary">@totalHours.ToString("N1") h</td>
+                    <td></td>
+                    <td class="text-end text-success font-monospace">@totalPrice.ToString("N0") đ</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <!-- Quy định nghiệm thu bảo hành -->
+    <div class="border rounded p-3 mb-4 bg-light small" style="font-size:11px">
+        <div class="fw-bold text-uppercase hyundai-blue mb-1"><i class="bi bi-shield-check me-1"></i> Quy định Nghiệm thu &amp; Thanh quyết toán Bảo hành:</div>
+        <ul class="mb-0 ps-3">
+            <li>Định mức giờ công trên áp dụng thống nhất cho tất cả các đại lý ủy quyền Hyundai Thành Công trên toàn quốc.</li>
+            <li>Khi lập hồ sơ bồi hoàn bảo hành, đại lý bắt buộc chụp đủ các ảnh hồ sơ: Ảnh ODO, ảnh số khung VIN kính lái, ảnh chi tiết lỗi hư hỏng và ảnh phụ tùng mới đã thay thế.</li>
+            <li>Trường hợp sửa chữa phát sinh thời gian vượt định mức (Overtime) do bu-lông gỉ sét, đứt gãy hoặc lỗi phức tạp, đại lý phải gửi yêu cầu Technical Case Report (TCR) lên HTC để được phê duyệt bổ sung.</li>
+        </ul>
+    </div>
+
+    <!-- Chữ ký xác nhận đại lý -->
+    <div class="row text-center mt-5" style="page-break-inside:avoid">
+        <div class="col-4">
+            <div class="fw-bold text-uppercase">Cán bộ Bảo hành (Warranty Officer)</div>
+            <div class="text-muted small fst-italic mb-5">(Ký và ghi rõ họ tên)</div>
+            <div class="fw-semibold">Nguyễn Văn An</div>
+        </div>
+        <div class="col-4">
+            <div class="fw-bold text-uppercase">Quản đốc Xưởng Dịch vụ</div>
+            <div class="text-muted small fst-italic mb-5">(Ký và ghi rõ họ tên)</div>
+            <div class="fw-semibold">Trần Quốc Toản</div>
+        </div>
+        <div class="col-4">
+            <div class="fw-bold text-uppercase">Giám đốc Dịch vụ (Service Director)</div>
+            <div class="text-muted small fst-italic mb-5">(Ký tên và đóng dấu)</div>
+            <div class="fw-semibold">Lê Hoàng Nam</div>
+        </div>
+    </div>
+</body>
+</html>

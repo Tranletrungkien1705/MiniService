@@ -76,6 +76,7 @@ public class AppDbContext : DbContext
     public DbSet<ComplaintDiagnosticError> ComplaintDiagnosticErrors => Set<ComplaintDiagnosticError>();
     public DbSet<CustomerCare72h> CustomerCare72hs => Set<CustomerCare72h>();
     public DbSet<CustomerCareBirthday> CustomerCareBirthdays => Set<CustomerCareBirthday>();
+    public DbSet<WarrantyWork> WarrantyWorks => Set<WarrantyWork>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -791,6 +792,17 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.UsedInRO).WithMany(r => r.CustomerCareBirthdays).HasForeignKey(x => x.UsedInROId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<WarrantyWork>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
+            e.Ignore(x => x.TotalWithVat);
+            e.Ignore(x => x.UsageCount);
+            e.Property(x => x.RateHour).HasPrecision(5, 2);
+            e.Property(x => x.RatePrice).HasPrecision(18, 2);
+            e.Property(x => x.Price).HasPrecision(18, 2);
+            e.HasMany(x => x.RepairLines).WithOne(x => x.WarrantyWork).HasForeignKey(x => x.WarrantyWorkId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

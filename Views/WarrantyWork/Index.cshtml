@@ -1,0 +1,291 @@
+@model List<WarrantyWork>
+@{
+    ViewData["Title"] = "Định mức Giờ công Bảo hành Tiêu chuẩn Flat Rate (Ser_MST_ROWarrantyWork)";
+    var summary = ViewBag.Summary as WarrantyWorkSummaryDto ?? new WarrantyWorkSummaryDto();
+    var openROs = ViewBag.OpenROs as List<RepairOrder> ?? [];
+    var modelsList = ViewBag.Models as List<string> ?? [];
+    string? curModel = ViewBag.Model;
+    WarrantyLaborGroup? curGroup = ViewBag.Group;
+    WarrantyCoverageType? curCoverage = ViewBag.Coverage;
+    bool? curActive = ViewBag.IsActive;
+    string? curQ = ViewBag.Q;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng định mức công việc BH</div>
+                <div class="stat-num text-primary">@summary.TotalWorks</div>
+                <div class="text-muted" style="font-size:11.5px">Đang áp dụng: <strong class="text-success">@summary.ActiveWorks</strong> · Tạm ngưng: <strong class="text-secondary">@summary.InactiveWorks</strong></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Dòng xe Hyundai chuẩn hóa</div>
+                <div class="stat-num text-info">@summary.TotalModels <span class="fs-6 fw-normal text-muted">dòng xe</span></div>
+                <div class="text-muted" style="font-size:11.5px">SantaFe, Tucson, Creta, Accent, Custin...</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Giờ công Flat Rate trung bình</div>
+                <div class="stat-num text-warning">@summary.AvgRateHour.ToString("N1") <span class="fs-6 fw-normal text-muted">giờ/việc</span></div>
+                <div class="text-muted" style="font-size:11.5px">Đơn giá hãng duyệt TB: <strong>@summary.AvgPrice.ToString("N0") đ</strong></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Lượt áp dụng trên Lệnh RO</div>
+                <div class="stat-num text-success">@summary.TotalClaimsApplied <span class="fs-6 fw-normal text-muted">lượt</span></div>
+                <div class="text-muted" style="font-size:11.5px">Hồ sơ bảo hành nghiệm thu kỹ thuật</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body p-3">
+        <form method="get" class="row g-2 align-items-center">
+            <div class="col-md-3">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="text" name="q" value="@curQ" class="form-control" placeholder="Mã việc, tên việc, động cơ..." />
+                </div>
+            </div>
+            <div class="col-md-2">
+                <select name="model" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Tất cả dòng xe --</option>
+                    @foreach (var m in modelsList)
+                    {
+                        <option value="@m" selected="@(curModel == m)">@m</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="group" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Nhóm kỹ thuật --</option>
+                    @foreach (WarrantyLaborGroup g in Enum.GetValues<WarrantyLaborGroup>())
+                    {
+                        var info = Ui.WarrantyLaborGroup(g);
+                        <option value="@((int)g)" selected="@(curGroup == g)">@info.text</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="coverage" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Chính sách BH --</option>
+                    @foreach (WarrantyCoverageType c in Enum.GetValues<WarrantyCoverageType>())
+                    {
+                        var info = Ui.WarrantyCoverageType(c);
+                        <option value="@((int)c)" selected="@(curCoverage == c)">[@info.code] @info.text</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-1">
+                <select name="isActive" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="">-- Hiệu lực --</option>
+                    <option value="true" selected="@(curActive == true)">Áp dụng</option>
+                    <option value="false" selected="@(curActive == false)">Ngừng</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-1 justify-content-end">
+                <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-filter"></i> Lọc</button>
+                <a href="/WarrantyWork" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                <a href="/WarrantyWork/Print?model=@curModel&group=@curGroup" target="_blank" class="btn btn-sm btn-outline-dark" title="In sổ định mức Flat Rate chuẩn HTC"><i class="bi bi-printer"></i></a>
+                <a href="/WarrantyWork/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg"></i> Thêm mới</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" style="font-size:13px">
+                <thead class="table-light text-secondary">
+                    <tr>
+                        <th style="width:130px">Mã việc (Code)</th>
+                        <th>Tên công việc kỹ thuật</th>
+                        <th style="width:110px">Dòng xe</th>
+                        <th style="width:160px">Hệ thống / Nhóm</th>
+                        <th style="width:140px">Chính sách BH</th>
+                        <th class="text-end" style="width:85px">Định mức</th>
+                        <th class="text-end" style="width:110px">Đơn giá / h</th>
+                        <th class="text-end" style="width:115px">Thành tiền</th>
+                        <th class="text-center" style="width:75px">Lượt dùng</th>
+                        <th class="text-center" style="width:85px">Hiệu lực</th>
+                        <th class="text-end" style="width:140px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="11" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                                Không tìm thấy công việc bảo hành định mức phù hợp.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var item in Model)
+                    {
+                        var groupInfo = Ui.WarrantyLaborGroup(item.LaborGroup);
+                        var covInfo = Ui.WarrantyCoverageType(item.CoverageType);
+                        <tr class="@(!item.FlagActive ? "text-muted bg-light" : "")">
+                            <td>
+                                <a href="/WarrantyWork/Detail/@item.Id" class="fw-bold font-monospace text-decoration-none text-primary">
+                                    @item.Code
+                                </a>
+                                @if (!string.IsNullOrWhiteSpace(item.AppTypeCode))
+                                {
+                                    <div class="text-muted" style="font-size:10.5px">@item.AppTypeCode</div>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@item.Name</div>
+                                @if (!string.IsNullOrWhiteSpace(item.EngineType))
+                                {
+                                    <span class="badge bg-light text-dark border me-1" style="font-size:11px">@item.EngineType</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(item.Remark))
+                                {
+                                    <span class="text-muted" style="font-size:11.5px">@item.Remark</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary-subtle text-secondary-emphasis border">@item.Model</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-@groupInfo.css-subtle text-@groupInfo.css-emphasis border">
+                                    <i class="bi @groupInfo.icon me-1"></i>@groupInfo.text
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-@covInfo.css-subtle text-@covInfo.css-emphasis border">
+                                    [@covInfo.code] @covInfo.text
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <span class="fw-bold text-dark">@item.RateHour.ToString("N1")</span> <span class="text-muted small">h</span>
+                            </td>
+                            <td class="text-end text-muted font-monospace">
+                                @item.RatePrice.ToString("N0") đ
+                            </td>
+                            <td class="text-end font-monospace">
+                                <span class="fw-bold text-primary">@item.Price.ToString("N0") đ</span>
+                                <div class="text-muted" style="font-size:10.5px">+VAT: @item.TotalWithVat.ToString("N0") đ</div>
+                            </td>
+                            <td class="text-center">
+                                @if (item.UsageCount > 0)
+                                {
+                                    <span class="badge bg-success-subtle text-success border">@item.UsageCount</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">0</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (item.FlagActive)
+                                {
+                                    <span class="badge bg-success">Áp dụng</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Tạm ngưng</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="/WarrantyWork/Detail/@item.Id" class="btn btn-outline-info" title="Xem chi tiết & lịch sử"><i class="bi bi-eye"></i></a>
+                                    @if (item.FlagActive)
+                                    {
+                                        <button type="button" class="btn btn-outline-success" title="Gán vào RO" onclick="openApplyModal(@item.Id, '@item.Code', '@item.Name', @item.RateHour, '@item.Model')">
+                                            <i class="bi bi-wrench"></i>
+                                        </button>
+                                    }
+                                    <a href="/WarrantyWork/Edit/@item.Id" class="btn btn-outline-secondary" title="Sửa"><i class="bi bi-pencil"></i></a>
+                                    <form method="post" action="/WarrantyWork/ToggleActive/@item.Id" class="d-inline" onsubmit="return confirm('Bạn có chắc muốn đổi trạng thái hiệu lực mã @item.Code?')">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-outline-warning" title="@(item.FlagActive ? "Ngừng áp dụng" : "Kích hoạt lại")">
+                                            <i class="bi @(item.FlagActive ? "bi-pause" : "bi-play")"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Áp dụng công việc bảo hành vào Lệnh sửa chữa RO -->
+<div class="modal fade" id="applyModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form method="post" action="/WarrantyWork/ApplyToRO" class="modal-content">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="warrantyWorkId" id="modalWorkId" />
+            <div class="modal-header">
+                <h6 class="modal-title fw-bold"><i class="bi bi-wrench-adjustable me-1 text-primary"></i> Áp dụng công việc bảo hành vào RO</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info py-2 small mb-3">
+                    <strong id="modalWorkCode"></strong>: <span id="modalWorkName"></span> (<span id="modalWorkModel"></span>)
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-semibold">Chọn Lệnh sửa chữa đang mở (RO) <span class="text-danger">*</span></label>
+                    <select name="roId" class="form-select form-select-sm" required>
+                        <option value="">-- Chọn RO đang tiếp nhận / sửa chữa --</option>
+                        @foreach (var ro in openROs)
+                        {
+                            <option value="@ro.Id">@ro.Code — Xe: @(ro.Car?.Plate ?? "N/A") (@(ro.Car?.Model ?? "N/A")) — KH: @(ro.Customer?.Name ?? "N/A") [@Ui.Status(ro.Status).text]</option>
+                        }
+                    </select>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Giờ công thực hiện (h)</label>
+                        <input type="number" step="0.1" name="customHours" id="modalWorkHours" class="form-control form-control-sm" />
+                        <div class="form-text" style="font-size:11px">Mặc định theo định mức Flat Rate</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Phân loại chi phí</label>
+                        <input type="text" class="form-control form-control-sm" value="Bảo hành hãng (Warranty)" readonly />
+                        <div class="form-text" style="font-size:11px">Tự động gắn ExpenseType = Warranty</div>
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-semibold">Ghi chú bổ sung dòng sửa chữa</label>
+                    <input type="text" name="note" class="form-control form-control-sm" placeholder="VD: Thay thế theo kết luận kỹ thuật viên..." />
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg me-1"></i> Xác nhận gắn vào RO</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+function openApplyModal(id, code, name, hours, model) {
+    document.getElementById('modalWorkId').value = id;
+    document.getElementById('modalWorkCode').innerText = code;
+    document.getElementById('modalWorkName').innerText = name;
+    document.getElementById('modalWorkModel').innerText = model;
+    document.getElementById('modalWorkHours').value = hours;
+    new bootstrap.Modal(document.getElementById('applyModal')).show();
+}
+</script>
+}

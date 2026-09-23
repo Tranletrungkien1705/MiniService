@@ -4327,6 +4327,251 @@ public static class Seeder
 
             await db.SaveChangesAsync();
         }
+
+        // Seed Định mức giờ công bảo hành tiêu chuẩn Flat Rate (Ser_MST_ROWarrantyWork & Ser_MST_ROWarrantyType)
+        if (!await db.WarrantyWorks.AnyAsync())
+        {
+            var warrantyWorks = new List<WarrantyWork>
+            {
+                new()
+                {
+                    Code = "WRT-ENG-SF01",
+                    Name = "Thay thế phớt đuôi trục khuỷu & hạ ráp hộp số tự động",
+                    Model = "SantaFe",
+                    LaborGroup = WarrantyLaborGroup.Engine,
+                    CoverageType = WarrantyCoverageType.NewCar,
+                    AppTypeCode = "HTC-W-ENG-01",
+                    EngineType = "SmartStream D2.2 CRDi",
+                    RateHour = 4.5m,
+                    RatePrice = 320_000m,
+                    Price = 1_440_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh chụp đồng hồ ODO; 2. Ảnh số khung VIN kính lái; 3. Ảnh rò rỉ dầu phớt đuôi trục khuỷu khi hạ hộp số; 4. Ảnh phớt mới chính hãng đã lắp ráp hoàn thiện.",
+                    Remark = "Áp dụng cho dòng SantaFe máy dầu thế hệ mới TM/MX5. Cần dùng dụng cụ chuyên dụng SST ép phớt trục khuỷu.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-TRN-SF02",
+                    Name = "Thay cụm van điều khiển thủy lực hộp số tự động 8 cấp (Valve Body)",
+                    Model = "SantaFe",
+                    LaborGroup = WarrantyLaborGroup.Transmission,
+                    CoverageType = WarrantyCoverageType.NewCar,
+                    AppTypeCode = "HTC-W-TRN-08",
+                    EngineType = "SmartStream D2.2 / G2.5",
+                    RateHour = 3.2m,
+                    RatePrice = 320_000m,
+                    Price = 1_024_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh chụp mã lỗi quét máy chẩn đoán GDS Mobile; 3. Ảnh cụm Valve Body tháo rời; 4. Ảnh tem phụ tùng mới Mobis.",
+                    Remark = "Cần xả dầu hộp số ATF SP-IV-RR và châm mới, thực hiện quy trình cài đặt lại điểm thích ứng hộp số (Adaptation Reset).",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-ELC-SF03",
+                    Name = "Cân chỉnh cụm Radar trước & Camera kính lái hệ thống an toàn Hyundai SmartSense",
+                    Model = "SantaFe",
+                    LaborGroup = WarrantyLaborGroup.Electrical,
+                    CoverageType = WarrantyCoverageType.CampaignRecall,
+                    AppTypeCode = "HTC-W-ELC-ADAS",
+                    EngineType = "Tất cả phiên bản",
+                    RateHour = 1.8m,
+                    RatePrice = 350_000m,
+                    Price = 630_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh bố trí bia ngắm cân chỉnh ADAS Target Board; 3. Ảnh màn hình GDS báo kết quả Calibrate Passed.",
+                    Remark = "Yêu cầu thực hiện tại khoang căn chỉnh có mặt phẳng tiêu chuẩn, khoảng cách bia ngắm theo Shop Manual.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-ENG-TU01",
+                    Name = "Thay bơm nước làm mát điện tử & van hằng nhiệt điện tử tích hợp",
+                    Model = "Tucson",
+                    LaborGroup = WarrantyLaborGroup.Engine,
+                    CoverageType = WarrantyCoverageType.NewCar,
+                    AppTypeCode = "HTC-W-ENG-16T",
+                    EngineType = "SmartStream 1.6 T-GDI",
+                    RateHour = 2.4m,
+                    RatePrice = 320_000m,
+                    Price = 768_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh rò rỉ dung dịch làm mát hoặc mã lỗi P2681; 3. Ảnh bơm nước mới và số part number.",
+                    Remark = "Xả gió hệ thống làm mát bằng máy hút chân không chuyên dụng, châm nước làm mát Hyundai Long Life Coolant.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-CHAS-TU02",
+                    Name = "Thay thước lái trợ lực điện C-MDPS & căn chỉnh góc đặt bánh xe 3D",
+                    Model = "Tucson",
+                    LaborGroup = WarrantyLaborGroup.ChassisSuspension,
+                    CoverageType = WarrantyCoverageType.NewCar,
+                    AppTypeCode = "HTC-W-CHAS-MDPS",
+                    EngineType = "Tất cả phiên bản",
+                    RateHour = 2.8m,
+                    RatePrice = 300_000m,
+                    Price = 840_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh thước lái rơ lắc / chảy dầu chụp bụi; 3. Ảnh kết quả đo góc đặt bánh xe trước và sau căn chỉnh.",
+                    Remark = "Cài đặt cảm biến góc lái SAS (Steering Angle Sensor) về 0 độ sau khi hoàn thành.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-ENG-CR01",
+                    Name = "Thay cụm bu-gi, mô-bin đánh lửa và gioăng nắp giàn cò động cơ",
+                    Model = "Creta",
+                    LaborGroup = WarrantyLaborGroup.Engine,
+                    CoverageType = WarrantyCoverageType.GenuinePart,
+                    AppTypeCode = "HTC-W-ENG-IGN",
+                    EngineType = "SmartStream 1.5 MPI",
+                    RateHour = 1.2m,
+                    RatePrice = 300_000m,
+                    Price = 360_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh bugi bám muội đen / mô-bin nứt vỏ; 3. Ảnh gioăng mới lắp chuẩn lực siết.",
+                    Remark = "Siết bu-lông nắp giàn cò theo đúng sơ đồ chữ thập lực 9.8 - 11.8 Nm.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-BRK-CR02",
+                    Name = "Thay mô-tơ chấp hành phanh tay điện tử EPB bánh sau trái/phải",
+                    Model = "Creta",
+                    LaborGroup = WarrantyLaborGroup.BrakeSteering,
+                    CoverageType = WarrantyCoverageType.NewCar,
+                    AppTypeCode = "HTC-W-BRK-EPB",
+                    EngineType = "SmartStream 1.5 MPI",
+                    RateHour = 1.6m,
+                    RatePrice = 300_000m,
+                    Price = 480_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh đèn báo lỗi EPB sáng taplo; 3. Ảnh mô tơ nứt vỏ / bó kẹt cơ cấu; 4. Ảnh cụm mới.",
+                    Remark = "Thực hiện lệnh nhả phanh bảo dưỡng Brake Pad Replacement Mode bằng máy chẩn đoán trước khi tháo.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-ENG-AC01",
+                    Name = "Lập trình cập nhật ECU động cơ khắc phục rung giật ga đầu & vệ sinh họng hút",
+                    Model = "Accent",
+                    LaborGroup = WarrantyLaborGroup.SoftwareECU,
+                    CoverageType = WarrantyCoverageType.CampaignRecall,
+                    AppTypeCode = "HTC-W-ECU-ACC01",
+                    EngineType = "Kappa 1.4 MPI",
+                    RateHour = 0.8m,
+                    RatePrice = 350_000m,
+                    Price = 280_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh màn hình GDS hiển thị phiên bản ECU ROM ID trước và sau khi nâng cấp Update thành công.",
+                    Remark = "Bản tin kỹ thuật HTC-TSB-2023-08. Yêu cầu bình ắc quy nối máy sạc duy trì điện áp trên 12.4V trong suốt quá trình flash ROM.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-ELC-AC02",
+                    Name = "Thay cụm mô-đun điều khiển thân xe BCM & đồng bộ chìa khóa Smartkey",
+                    Model = "Accent",
+                    LaborGroup = WarrantyLaborGroup.Electrical,
+                    CoverageType = WarrantyCoverageType.NewCar,
+                    AppTypeCode = "HTC-W-ELC-BCM",
+                    EngineType = "Tất cả phiên bản",
+                    RateHour = 1.5m,
+                    RatePrice = 320_000m,
+                    Price = 480_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh mã lỗi BCM; 3. Ảnh hộp BCM mới và chìa khóa học lệnh thành công.",
+                    Remark = "Cần mã PIN code bảo mật đại lý từ cổng DMS HTC để nhập chìa mới.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-BDY-CU01",
+                    Name = "Căn chỉnh cụm mô-tơ, dây cáp & cảm biến chống kẹt cửa trượt điện thông minh",
+                    Model = "Custin",
+                    LaborGroup = WarrantyLaborGroup.BodyInterior,
+                    CoverageType = WarrantyCoverageType.Goodwill,
+                    AppTypeCode = "HTC-W-BDY-SLD",
+                    EngineType = "SmartStream 1.5 / 2.0 T-GDI",
+                    RateHour = 2.0m,
+                    RatePrice = 300_000m,
+                    Price = 600_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh cơ cấu ngàm khóa và dây cáp cửa trượt; 3. Video/ảnh nghiệm thu cửa đóng mở mượt mà.",
+                    Remark = "Kiểm tra khe hở mép cửa trượt với thân xe (3.5mm +- 0.5mm), bôi trơn rãnh trượt chuyên dụng mỡ silicon.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-CHAS-I10",
+                    Name = "Thay thế rô-tuyn cân bằng trước và đệm cao su chân treo hộp số chống rung giật",
+                    Model = "Grand i10",
+                    LaborGroup = WarrantyLaborGroup.ChassisSuspension,
+                    CoverageType = WarrantyCoverageType.NewCar,
+                    AppTypeCode = "HTC-W-CHAS-I10",
+                    EngineType = "Kappa 1.2 MPI",
+                    RateHour = 1.4m,
+                    RatePrice = 280_000m,
+                    Price = 392_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh chụp khớp cầu rô-tuyn rơ rách cao su; 3. Ảnh cao su chân số nứt gãy; 4. Ảnh phụ tùng mới đã lắp.",
+                    Remark = "Khắc phục triệt để tiếng kêu lục cục dưới gầm khi xe qua gờ giảm tốc.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                },
+                new()
+                {
+                    Code = "WRT-TRN-EL01",
+                    Name = "Thay cụm ly hợp kép khô và cài đặt điểm bắt ly hợp Touch Point hộp số 7DCT",
+                    Model = "Elantra",
+                    LaborGroup = WarrantyLaborGroup.Transmission,
+                    CoverageType = WarrantyCoverageType.ExtendedWarranty,
+                    AppTypeCode = "HTC-W-TRN-7DCT",
+                    EngineType = "1.6 T-GDI Sport",
+                    RateHour = 4.0m,
+                    RatePrice = 350_000m,
+                    Price = 1_400_000m,
+                    VatPercent = 8,
+                    RequiredPhotos = "1. Ảnh ODO & VIN; 2. Ảnh lá côn cháy mòn / đo độ hở khe hở ly hợp Clearance; 3. Ảnh cụm côn mới và máy căn chỉnh SST.",
+                    Remark = "Thực hiện quy trình học lại điểm ly hợp Touch Point Learning khi nhiệt độ hộp số đạt 60-80 độ C.",
+                    FlagActive = true,
+                    CreatedBy = "Hãng HTC"
+                }
+            };
+
+            db.WarrantyWorks.AddRange(warrantyWorks);
+            await db.SaveChangesAsync();
+
+            // Link warranty works to existing RO repair lines where ExpenseType == Warranty
+            var warrantyLines = await db.Lines.Where(l => l.ExpenseType == ExpenseType.Warranty && l.WarrantyWorkId == null).ToListAsync();
+            if (warrantyLines.Count > 0)
+            {
+                var sfWork = warrantyWorks.FirstOrDefault(w => w.Code == "WRT-ENG-SF01");
+                var acWork = warrantyWorks.FirstOrDefault(w => w.Code == "WRT-ENG-AC01");
+                for (int i = 0; i < warrantyLines.Count; i++)
+                {
+                    var targetWork = (i % 2 == 0) ? sfWork : acWork;
+                    if (targetWork != null)
+                    {
+                        warrantyLines[i].WarrantyWorkId = targetWork.Id;
+                        warrantyLines[i].StdManHour = targetWork.RateHour;
+                    }
+                }
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
 
@@ -4367,7 +4612,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -4454,6 +4699,11 @@ public static class Seeder
             "CREATE INDEX IF NOT EXISTS \"IX_CustomerCareBirthdays_OrgId_CustomerId\" ON miniservice.\"CustomerCareBirthdays\" (\"OrgId\", \"CustomerId\")",
             "CREATE INDEX IF NOT EXISTS \"IX_CustomerCareBirthdays_OrgId_DateBth\" ON miniservice.\"CustomerCareBirthdays\" (\"OrgId\", \"DateBth\")",
             "CREATE INDEX IF NOT EXISTS \"IX_CustomerCareBirthdays_OrgId_Status\" ON miniservice.\"CustomerCareBirthdays\" (\"OrgId\", \"Status\")",
+            "ALTER TABLE miniservice.\"Lines\" ADD COLUMN IF NOT EXISTS \"WarrantyWorkId\" integer NULL",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"WarrantyWorks\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Model\" text NOT NULL, \"LaborGroup\" integer NOT NULL DEFAULT 1, \"CoverageType\" integer NOT NULL DEFAULT 1, \"AppTypeCode\" text NULL, \"EngineType\" text NULL, \"RateHour\" numeric(5,2) NOT NULL DEFAULT 1.0, \"RatePrice\" numeric(18,2) NOT NULL DEFAULT 300000, \"Price\" numeric(18,2) NOT NULL DEFAULT 300000, \"VatPercent\" integer NOT NULL DEFAULT 8, \"RequiredPhotos\" text NULL, \"Remark\" text NULL, \"FlagActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'Hãng HTC', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"UpdatedAt\" timestamp NULL, \"UpdatedBy\" text NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WarrantyWorks_OrgId_Code\" ON miniservice.\"WarrantyWorks\" (\"OrgId\", \"Code\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_WarrantyWorks_OrgId_Model\" ON miniservice.\"WarrantyWorks\" (\"OrgId\", \"Model\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_WarrantyWorks_OrgId_LaborGroup\" ON miniservice.\"WarrantyWorks\" (\"OrgId\", \"LaborGroup\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -5732,7 +5982,32 @@ public static class Seeder
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerCareBirthdays_OrgId_CareBthNo"" ON ""CustomerCareBirthdays"" (""OrgId"", ""CareBthNo"");",
             @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCareBirthdays_OrgId_CustomerId"" ON ""CustomerCareBirthdays"" (""OrgId"", ""CustomerId"");",
             @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCareBirthdays_OrgId_DateBth"" ON ""CustomerCareBirthdays"" (""OrgId"", ""DateBth"");",
-            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCareBirthdays_OrgId_Status"" ON ""CustomerCareBirthdays"" (""OrgId"", ""Status"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCareBirthdays_OrgId_Status"" ON ""CustomerCareBirthdays"" (""OrgId"", ""Status"");",
+            @"CREATE TABLE IF NOT EXISTS ""WarrantyWorks"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""Code"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""Model"" TEXT NOT NULL,
+                ""LaborGroup"" INTEGER NOT NULL,
+                ""CoverageType"" INTEGER NOT NULL,
+                ""AppTypeCode"" TEXT NULL,
+                ""EngineType"" TEXT NULL,
+                ""RateHour"" TEXT NOT NULL,
+                ""RatePrice"" TEXT NOT NULL,
+                ""Price"" TEXT NOT NULL,
+                ""VatPercent"" INTEGER NOT NULL,
+                ""RequiredPhotos"" TEXT NULL,
+                ""Remark"" TEXT NULL,
+                ""FlagActive"" INTEGER NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""UpdatedAt"" TEXT NULL,
+                ""UpdatedBy"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_WarrantyWorks_OrgId_Code"" ON ""WarrantyWorks"" (""OrgId"", ""Code"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_WarrantyWorks_OrgId_Model"" ON ""WarrantyWorks"" (""OrgId"", ""Model"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_WarrantyWorks_OrgId_LaborGroup"" ON ""WarrantyWorks"" (""OrgId"", ""LaborGroup"");"
         };
 
         foreach (var sql in sqls)

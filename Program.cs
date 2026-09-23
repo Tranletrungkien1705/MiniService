@@ -5575,6 +5575,201 @@ app.MapDelete("/api/customer-care-birthdays/{id:int}", async (int id, IRoService
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Định mức giờ công bảo hành tiêu chuẩn Flat Rate (Ser_MST_ROWarrantyWork & Ser_MST_ROWarrantyType)
+app.MapGet("/api/warranty-works", async (string? model, WarrantyLaborGroup? group, WarrantyCoverageType? coverage, string? q, bool? isActive, IRoService svc) =>
+{
+    var list = await svc.WarrantyWorksAsync(model, group, coverage, q, isActive);
+    return Results.Ok(list.Select(w => new
+    {
+        w.Id,
+        w.Code,
+        w.Name,
+        w.Model,
+        laborGroup = Ui.WarrantyLaborGroup(w.LaborGroup).text,
+        laborGroupIcon = Ui.WarrantyLaborGroup(w.LaborGroup).icon,
+        laborGroupValue = (int)w.LaborGroup,
+        coverageType = Ui.WarrantyCoverageType(w.CoverageType).text,
+        coverageTypeCode = Ui.WarrantyCoverageType(w.CoverageType).code,
+        coverageTypeValue = (int)w.CoverageType,
+        w.AppTypeCode,
+        w.EngineType,
+        w.RateHour,
+        w.RatePrice,
+        w.Price,
+        w.VatPercent,
+        w.TotalWithVat,
+        w.RequiredPhotos,
+        w.Remark,
+        w.FlagActive,
+        w.UsageCount,
+        w.CreatedBy,
+        w.CreatedAt,
+        w.UpdatedAt
+    }));
+});
+
+app.MapGet("/api/warranty-works/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetWarrantyWorkSummaryAsync();
+    return Results.Ok(s);
+});
+
+app.MapGet("/api/warranty-works/by-model", async (string model, IRoService svc) =>
+{
+    var list = await svc.WarrantyWorksAsync(model, null, null, null, true);
+    return Results.Ok(list.Select(w => new
+    {
+        w.Id,
+        w.Code,
+        w.Name,
+        w.Model,
+        w.LaborGroup,
+        laborGroupName = Ui.WarrantyLaborGroup(w.LaborGroup).text,
+        w.RateHour,
+        w.RatePrice,
+        w.Price,
+        w.TotalWithVat
+    }));
+});
+
+app.MapGet("/api/warranty-works/{id:int}", async (int id, IRoService svc) =>
+{
+    var w = await svc.GetWarrantyWorkAsync(id);
+    if (w == null) return Results.NotFound(new { error = "Không tìm thấy công việc bảo hành định mức." });
+    return Results.Ok(new
+    {
+        w.Id,
+        w.Code,
+        w.Name,
+        w.Model,
+        laborGroup = Ui.WarrantyLaborGroup(w.LaborGroup).text,
+        laborGroupIcon = Ui.WarrantyLaborGroup(w.LaborGroup).icon,
+        laborGroupValue = (int)w.LaborGroup,
+        coverageType = Ui.WarrantyCoverageType(w.CoverageType).text,
+        coverageTypeCode = Ui.WarrantyCoverageType(w.CoverageType).code,
+        coverageTypeValue = (int)w.CoverageType,
+        w.AppTypeCode,
+        w.EngineType,
+        w.RateHour,
+        w.RatePrice,
+        w.Price,
+        w.VatPercent,
+        w.TotalWithVat,
+        w.RequiredPhotos,
+        w.Remark,
+        w.FlagActive,
+        w.UsageCount,
+        w.CreatedBy,
+        w.CreatedAt,
+        w.UpdatedAt,
+        appliedLines = w.RepairLines.Select(l => new
+        {
+            l.Id,
+            roId = l.ROId,
+            roCode = l.RO?.Code,
+            plate = l.RO?.Car?.Plate,
+            model = l.RO?.Car?.Model,
+            customer = l.RO?.Customer?.Name,
+            hours = l.Quantity,
+            rate = l.UnitPrice,
+            amount = l.Amount,
+            roStatus = l.RO != null ? Ui.Status(l.RO.Status).text : ""
+        })
+    });
+});
+
+app.MapGet("/api/warranty-works/by-code/{code}", async (string code, IRoService svc) =>
+{
+    var w = await svc.GetWarrantyWorkByCodeAsync(code);
+    if (w == null) return Results.NotFound(new { error = $"Không tìm thấy mã công việc bảo hành '{code}'." });
+    return Results.Ok(new
+    {
+        w.Id,
+        w.Code,
+        w.Name,
+        w.Model,
+        laborGroup = Ui.WarrantyLaborGroup(w.LaborGroup).text,
+        laborGroupValue = (int)w.LaborGroup,
+        coverageType = Ui.WarrantyCoverageType(w.CoverageType).text,
+        w.RateHour,
+        w.RatePrice,
+        w.Price,
+        w.TotalWithVat,
+        w.FlagActive
+    });
+});
+
+app.MapPost("/api/warranty-works", async (CreateWarrantyWorkDto dto, IRoService svc) =>
+{
+    try
+    {
+        var work = new WarrantyWork
+        {
+            Code = dto.Code,
+            Name = dto.Name,
+            Model = string.IsNullOrWhiteSpace(dto.Model) ? "Tất cả dòng xe" : dto.Model.Trim(),
+            LaborGroup = dto.LaborGroup,
+            CoverageType = dto.CoverageType ?? WarrantyCoverageType.NewCar,
+            AppTypeCode = dto.AppTypeCode?.Trim(),
+            EngineType = dto.EngineType?.Trim(),
+            RateHour = dto.RateHour <= 0 ? 1.0m : dto.RateHour,
+            RatePrice = dto.RatePrice <= 0 ? 300_000m : dto.RatePrice,
+            VatPercent = dto.VatPercent ?? 8,
+            RequiredPhotos = dto.RequiredPhotos?.Trim(),
+            Remark = dto.Remark?.Trim(),
+            FlagActive = dto.FlagActive ?? true,
+            CreatedBy = string.IsNullOrWhiteSpace(dto.CreatedBy) ? "API" : dto.CreatedBy.Trim()
+        };
+        var id = await svc.CreateWarrantyWorkAsync(work);
+        return Results.Created($"/api/warranty-works/{id}", new { id, work.Code, message = "Đã tạo công việc bảo hành định mức thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/warranty-works/{id:int}", async (int id, UpdateWarrantyWorkDto dto, IRoService svc) =>
+{
+    var update = new WarrantyWork
+    {
+        Code = dto.Code,
+        Name = dto.Name,
+        Model = dto.Model,
+        LaborGroup = dto.LaborGroup,
+        CoverageType = dto.CoverageType,
+        AppTypeCode = dto.AppTypeCode,
+        EngineType = dto.EngineType,
+        RateHour = dto.RateHour,
+        RatePrice = dto.RatePrice,
+        VatPercent = dto.VatPercent,
+        RequiredPhotos = dto.RequiredPhotos,
+        Remark = dto.Remark,
+        FlagActive = dto.FlagActive,
+        UpdatedBy = dto.UpdatedBy ?? "API"
+    };
+    var (ok, msg) = await svc.UpdateWarrantyWorkAsync(id, update);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/warranty-works/{id:int}/toggle-active", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ToggleWarrantyWorkActiveAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/warranty-works/{id:int}/apply-to-ro", async (int id, ApplyWarrantyWorkToRoDto dto, IRoService svc) =>
+{
+    var (ok, msg, lineId) = await svc.ApplyWarrantyWorkToRoAsync(id, dto.RoId, dto.CustomHours, dto.Note);
+    return ok ? Results.Ok(new { message = msg, lineId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/warranty-works/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteWarrantyWorkAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -5724,6 +5919,10 @@ record CreateReRepairFromCare72hDto(string? Technician, string? Note);
 record CreateCustomerCareBirthdayDto(int CustomerId, DateTime? DateOfBirth, string? GiftVoucherCode, decimal? GiftVoucherValue, decimal? DiscountPercent, string? Remark, string? CreatedBy);
 record UpdateBirthdayContactDto(CustomerCareBirthdayStatus Status, BirthdayContactChannel Channel, string? Remark, string? GiftVoucherCode, decimal GiftVoucherValue, decimal DiscountPercent, DateTime? ValidUntil, string? ContactedBy);
 record BookBirthdayAppointmentDto(DateTime AppointmentDate, AppointmentServiceType ServiceType, string? Note);
+
+record CreateWarrantyWorkDto(string Code, string Name, string? Model, WarrantyLaborGroup LaborGroup, WarrantyCoverageType? CoverageType, string? AppTypeCode, string? EngineType, decimal RateHour, decimal RatePrice, int? VatPercent, string? RequiredPhotos, string? Remark, bool? FlagActive, string? CreatedBy);
+record UpdateWarrantyWorkDto(string Code, string Name, string Model, WarrantyLaborGroup LaborGroup, WarrantyCoverageType CoverageType, string? AppTypeCode, string? EngineType, decimal RateHour, decimal RatePrice, int VatPercent, string? RequiredPhotos, string? Remark, bool FlagActive, string? UpdatedBy);
+record ApplyWarrantyWorkToRoDto(int RoId, decimal? CustomHours, string? Note);
 
 
 
