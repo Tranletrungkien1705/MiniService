@@ -91,6 +91,7 @@ public class AppDbContext : DbContext
     public DbSet<Bom> Boms => Set<Bom>();
     public DbSet<BomLine> BomLines => Set<BomLine>();
     public DbSet<DealerBankAccount> DealerBankAccounts => Set<DealerBankAccount>();
+    public DbSet<WarehouseLocation> WarehouseLocations => Set<WarehouseLocation>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -917,6 +918,13 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.DealerCode, x.AccountNo }).IsUnique();
             e.HasIndex(x => new { x.OrgId, x.DealerCode });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<WarehouseLocation>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.DealerCode, x.LocationCode }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.DealerCode });
+            e.HasIndex(x => new { x.OrgId, x.StockNo });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

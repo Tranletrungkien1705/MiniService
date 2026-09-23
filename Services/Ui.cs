@@ -478,6 +478,17 @@ public static class Ui
 
     public static (string text, string css) BomActive(bool isActive) =>
         isActive ? ("Đang áp dụng", "success") : ("Tạm dừng", "secondary");
+    public static (string text, string css) LocationActive(bool isActive) =>
+        isActive ? ("Đang sử dụng", "success") : ("Ngừng sử dụng", "secondary");
+    public static (string text, string css) LocationTypeLabel(LocationType t) => t switch
+    {
+        LocationType.Rack => ("Kệ hàng", "primary"),
+        LocationType.Floor => ("Mặt sàn", "info"),
+        LocationType.Shelf => ("Ô kệ", "warning"),
+        LocationType.Bin => ("Thùng/Ô nhỏ", "secondary"),
+        LocationType.Yard => ("Bãi ngoài trời", "dark"),
+        _ => ("Khác", "secondary")
+    };
 
     public static (string text, string code, string css) SupplierPaymentStatus(SupplierPaymentStatus s) => s switch
     {

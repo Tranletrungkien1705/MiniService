@@ -1,0 +1,56 @@
+@{
+    ViewData["Title"] = "Thêm vị trí kệ/kho phụ tùng";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/WarehouseLocation" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Danh mục vị trí kho</a>
+        <h5 class="mb-0 fw-bold mt-1"><i class="bi bi-geo-alt me-2 text-primary"></i>Thêm vị trí kệ/kho phụ tùng</h5>
+    </div>
+</div>
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin vị trí</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Mã vị trí (LocationCode) <span class="text-danger">*</span></label>
+                    <input name="locationCode" class="form-control font-monospace" placeholder="VD: A-01-02" required style="text-transform:uppercase" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small fw-semibold">Tên vị trí (LocationName) <span class="text-danger">*</span></label>
+                    <input name="locationName" class="form-control" placeholder="VD: Kệ A - Ô 01 - Tầng 2" required />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Đại lý (DealerCode) <span class="text-danger">*</span></label>
+                    <input name="dealerCode" class="form-control font-monospace" placeholder="VD: VS058" required />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Kho (StockNo)</label>
+                    <input name="stockNo" class="form-control font-monospace" placeholder="VD: KHO1" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Loại vị trí (LocationType)</label>
+                    <select name="type" class="form-select">
+                        @foreach (var t in Enum.GetValues<LocationType>())
+                        {
+                            <option value="@t">@Ui.LocationTypeLabel(t).text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Bề mặt kệ (LocationSurface)</label>
+                    <input name="surface" class="form-control" placeholder="VD: Thép sơn tĩnh điện" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Độ cao kệ (LocationHight)</label>
+                    <input name="height" class="form-control" placeholder="VD: 2.5m" />
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu vị trí kho</button>
+        <a href="/WarehouseLocation" class="btn btn-secondary">Hủy</a>
+    </div>
+</form>

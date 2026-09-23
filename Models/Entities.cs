@@ -3255,3 +3255,45 @@ public class DealerBankAccountSummaryDto
     public int DealerCount { get; set; }                      // Số đại lý khác nhau có tài khoản
     public int BankCount { get; set; }                        // Số ngân hàng khác nhau
 }
+
+/// <summary>Vị trí kệ/kho phụ tùng (Warehouse Location) — Ser_Mst_Location trong idn.CarService.
+/// Danh mục vị trí lưu kho (kệ, ô, tầng) theo từng kho (StockNo) và đại lý (DealerCode), dùng để
+/// chỉ định vị trí thực tế khi nhập/xuất/kiểm kê phụ tùng. Nguồn lưu ở CSDL TRUNG TÂM (CmCenter)
+/// và đồng bộ sang kho (WH) + đại lý (Dealer).</summary>
+public class WarehouseLocation : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string LocationCode { get; set; } = "";            // Mã vị trí (LocationCode)
+    public string LocationName { get; set; } = "";            // Tên vị trí (LocationName)
+    public string DealerCode { get; set; } = "";              // Mã đại lý sở hữu (DealerCode)
+    public string? StockNo { get; set; }                      // Kho chứa vị trí (StockNo)
+    public LocationType Type { get; set; } = LocationType.Rack; // Loại vị trí (LocationType)
+    public string? Surface { get; set; }                      // Bề mặt kệ (LocationSurface)
+    public string? Height { get; set; }                       // Độ cao kệ (LocationHight)
+    public bool IsActive { get; set; } = true;                // Cờ hiệu lực hoạt động (IsActive)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (LogLUBy lần đầu)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>Loại vị trí lưu kho — theo Ser_Mst_Location.LocationType idn.CarService.</summary>
+public enum LocationType
+{
+    Rack = 0,        // 1: Kệ hàng (Rack)
+    Floor = 1,       // 2: Mặt sàn (Floor)
+    Shelf = 2,       // 3: Ô kệ (Shelf)
+    Bin = 3,         // 4: Thùng/Ô nhỏ (Bin)
+    Yard = 4         // 5: Bãi ngoài trời (Yard)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục vị trí kho — phục vụ màn hình quản lý vị trí.</summary>
+public class WarehouseLocationSummaryDto
+{
+    public int TotalLocations { get; set; }
+    public int ActiveLocations { get; set; }
+    public int InactiveLocations { get; set; }
+    public int DealerCount { get; set; }                      // Số đại lý khác nhau có vị trí
+    public int StockCount { get; set; }                       // Số kho (StockNo) khác nhau
+}

@@ -2585,6 +2585,22 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Vị trí kệ/kho phụ tùng (Ser_Mst_Location)
+        if (!await db.WarehouseLocations.AnyAsync())
+        {
+            var locations = new List<WarehouseLocation>
+            {
+                new() { LocationCode = "A-01-01", LocationName = "Kệ A - Ô 01 - Tầng 1", DealerCode = "VS058", StockNo = "KHO1", Type = LocationType.Rack, Surface = "Thép sơn tĩnh điện", Height = "2.5m", IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { LocationCode = "A-01-02", LocationName = "Kệ A - Ô 01 - Tầng 2", DealerCode = "VS058", StockNo = "KHO1", Type = LocationType.Rack, Surface = "Thép sơn tĩnh điện", Height = "2.5m", IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { LocationCode = "B-02-01", LocationName = "Kệ B - Ô 02 - Tầng 1", DealerCode = "VS058", StockNo = "KHO1", Type = LocationType.Shelf, Surface = "Kệ gỗ công nghiệp", Height = "2.0m", IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { LocationCode = "FLOOR-01", LocationName = "Mặt sàn khu vực phụ tùng nặng", DealerCode = "VS058", StockNo = "KHO1", Type = LocationType.Floor, Surface = "Bê tông", Height = "0m", IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { LocationCode = "YARD-01", LocationName = "Bãi ngoài trời - Lốp & Ắc quy", DealerCode = "VS058", StockNo = "KHO2", Type = LocationType.Yard, Surface = "Bê tông ngoài trời", Height = "0m", IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { LocationCode = "BIN-01", LocationName = "Thùng nhỏ - Ốc vít & Gioăng", DealerCode = "VS058", StockNo = "KHO1", Type = LocationType.Bin, Surface = "Nhựa", Height = "0.5m", IsActive = true, CreatedBy = "Hệ thống HTC" }
+            };
+            db.WarehouseLocations.AddRange(locations);
+            await db.SaveChangesAsync();
+        }
+
         if (!await db.Suppliers.AnyAsync())
         {
             var s1 = new Supplier { Code = "HTC", Name = "Công ty Cổ phần Liên doanh Ô tô Hyundai Thành Công Việt Nam", Address = "Tòa nhà Epic Tower, Nam Từ Liêm, Hà Nội", Phone = "024.3826.2614", Email = "parts@hyundai-thanhcong.vn", ContactName = "Nguyễn Hoàng Minh", ContactPhone = "0912.345.678", TaxCode = "0102872391", BankAccount = "0011004568899", BankName = "Vietcombank - CN Sở Giao Dịch Hà Nội", IsActive = true };
@@ -5088,7 +5104,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "Boms", "BomLines" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "Boms", "BomLines", "WarehouseLocations" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -5217,6 +5233,10 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Boms_OrgId_BomCode\" ON miniservice.\"Boms\" (\"OrgId\", \"BomCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"BomLines\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"BomId\" integer NOT NULL, \"PartCode\" text NOT NULL, \"PartName\" text NOT NULL, \"Unit\" text NOT NULL DEFAULT 'Cái', \"QtyMin\" numeric(18,4) NOT NULL DEFAULT 1, \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
             "CREATE INDEX IF NOT EXISTS \"IX_BomLines_OrgId_BomId\" ON miniservice.\"BomLines\" (\"OrgId\", \"BomId\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"WarehouseLocations\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"LocationCode\" text NOT NULL, \"LocationName\" text NOT NULL, \"DealerCode\" text NOT NULL, \"StockNo\" text NULL, \"Type\" integer NOT NULL DEFAULT 0, \"Surface\" text NULL, \"Height\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_DealerCode_LocationCode\" ON miniservice.\"WarehouseLocations\" (\"OrgId\", \"DealerCode\", \"LocationCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_DealerCode\" ON miniservice.\"WarehouseLocations\" (\"OrgId\", \"DealerCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_StockNo\" ON miniservice.\"WarehouseLocations\" (\"OrgId\", \"StockNo\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -6744,14 +6764,25 @@ public static class Seeder
             "CREATE TABLE IF NOT EXISTS \"BomLines\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"BomId\" INTEGER NOT NULL, \"PartCode\" TEXT NOT NULL, \"PartName\" TEXT NOT NULL, \"Unit\" TEXT NOT NULL DEFAULT 'Cái', \"QtyMin\" TEXT NOT NULL DEFAULT '1', \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL, FOREIGN KEY (\"BomId\") REFERENCES \"Boms\" (\"Id\") ON DELETE CASCADE);",
             "CREATE INDEX IF NOT EXISTS \"IX_BomLines_OrgId_BomId\" ON \"BomLines\" (\"OrgId\", \"BomId\");"
         };
-        foreach (var sql in bomSqls)
-        {
-            try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                foreach (var sql in bomSqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+                // Vị trí kệ/kho phụ tùng (Ser_Mst_Location) — SQLite
+                var locSqls = new[]
+                {
+                    "CREATE TABLE IF NOT EXISTS \"WarehouseLocations\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"LocationCode\" TEXT NOT NULL, \"LocationName\" TEXT NOT NULL, \"DealerCode\" TEXT NOT NULL, \"StockNo\" TEXT NULL, \"Type\" INTEGER NOT NULL DEFAULT 0, \"Surface\" TEXT NULL, \"Height\" TEXT NULL, \"IsActive\" INTEGER NOT NULL DEFAULT 1, \"CreatedBy\" TEXT NOT NULL DEFAULT 'web', \"CreatedAt\" TEXT NOT NULL, \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_DealerCode_LocationCode\" ON \"WarehouseLocations\" (\"OrgId\", \"DealerCode\", \"LocationCode\");",
+                    "CREATE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_DealerCode\" ON \"WarehouseLocations\" (\"OrgId\", \"DealerCode\");",
+                    "CREATE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_StockNo\" ON \"WarehouseLocations\" (\"OrgId\", \"StockNo\");"
+                };
+                foreach (var sql in locSqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+                foreach (var sql in sqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+            }
         }
-
-        foreach (var sql in sqls)
-        {
-            try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
-        }
-    }
-}

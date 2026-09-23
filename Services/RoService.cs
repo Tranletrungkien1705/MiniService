@@ -303,6 +303,14 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteDealerBankAccountAsync(int id);
     Task<DealerBankAccountSummaryDto> GetDealerBankAccountSummaryAsync();
     Task<List<string>> GetDistinctDealerCodesAsync();
+    // Warehouse Location — Vị trí kệ/kho phụ tùng (Ser_Mst_Location)
+    Task<List<WarehouseLocation>> WarehouseLocationsAsync(string? dealerCode, LocationType? type, bool? isActive, string? q);
+    Task<WarehouseLocation?> GetWarehouseLocationAsync(int id);
+    Task<WarehouseLocation?> GetWarehouseLocationByCodeAsync(string locationCode, string? dealerCode);
+    Task<int> CreateWarehouseLocationAsync(WarehouseLocation location);
+    Task<(bool ok, string msg)> UpdateWarehouseLocationAsync(WarehouseLocation location);
+    Task<(bool ok, string msg)> DeleteWarehouseLocationAsync(int id);
+    Task<WarehouseLocationSummaryDto> GetWarehouseLocationSummaryAsync();
     // Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment, Ser_SupplierPaymentDtl / MNU_QT_DL_QUANLYPHIEUXUATTRANHACUNGCAP)
     Task<List<Supplier>> SuppliersAsync(string? q);
     Task<Supplier?> GetSupplierAsync(int id);
@@ -388,7 +396,7 @@ public interface IRoService
     Task<int> CreateDealerHistoryRecordAsync(DealerHistoryRecord record, List<DealerHistoryItem> items);
     Task<(bool ok, string msg, int? recordId)> SyncLocalRoToHistoryAsync(int roId);
     Task<(bool ok, string msg)> DeleteDealerHistoryRecordAsync(int id);
-    Task<List<string>> GetDistinctDealerCodesAsync();
+    Task<List<string>> GetDistinctHistoryDealersAsync();
     Task<List<Car>> CarsWithPlateOrVinAsync(string? q = null);
     // Customer Group & Fleet Management (Ser_CustomerGroup, Ser_CustomerGroupCustomer / MNU_QT_DL_QUANLYKHACHDOAN)
     Task<List<CustomerGroupSummaryDto>> CustomerGroupSummariesAsync(string? q, bool? isActive, bool? creditExceededOnly);
@@ -5953,6 +5961,147 @@ public class RoService(AppDbContext db) : IRoService
             .OrderBy(d => d)
             .ToListAsync();
 
+    // --- Warehouse Location — Vị trí kệ/kho phụ tùng (Ser_Mst_Location) ---
+    public async Task<List<WarehouseLocation>> WarehouseLocationsAsync(string? dealerCode, LocationType? type, bool? isActive, string? q)
+    {
+        var query = db.WarehouseLocations.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim();
+            query = query.Where(l => l.DealerCode == dc);
+        }
+        if (type.HasValue) query = query.Where(l => l.Type == type.Value);
+        if (isActive.HasValue) query = query.Where(l => l.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(l => l.LocationCode.ToLower().Contains(s)
+                || l.LocationName.ToLower().Contains(s)
+                || (l.StockNo != null && l.StockNo.ToLower().Contains(s)));
+        }
+        return await query.OrderBy(l => l.DealerCode).ThenBy(l => l.LocationCode).ToListAsync();
+    }
+
+    public Task<WarehouseLocation?> GetWarehouseLocationAsync(int id) =>
+        db.WarehouseLocations.FirstOrDefaultAsync(l => l.Id == id);
+
+    public Task<WarehouseLocation?> GetWarehouseLocationByCodeAsync(string locationCode, string? dealerCode)
+    {
+        var clean = locationCode.Trim().ToUpperInvariant();
+        var query = db.WarehouseLocations.Where(l => l.LocationCode == clean);
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim();
+            query = query.Where(l => l.DealerCode == dc);
+        }
+        return query.FirstOrDefaultAsync();
+    }
+
+    public async Task<int> CreateWarehouseLocationAsync(WarehouseLocation location)
+    {
+        if (string.IsNullOrWhiteSpace(location.LocationCode))
+            throw new InvalidOperationException("Vui lòng nhập mã vị trí (LocationCode).");
+        if (string.IsNullOrWhiteSpace(location.LocationName))
+            throw new InvalidOperationException("Vui lòng nhập tên vị trí (LocationName).");
+        if (string.IsNullOrWhiteSpace(location.DealerCode))
+            throw new InvalidOperationException("Vui lòng chọn đại lý (DealerCode).");
+
+        location.LocationCode = location.LocationCode.Trim().ToUpperInvariant();
+        location.LocationName = location.LocationName.Trim();
+        location.DealerCode = location.DealerCode.Trim();
+        location.StockNo = string.IsNullOrWhiteSpace(location.StockNo) ? null : location.StockNo.Trim();
+
+        // Nguồn: checkExistLocationCode — chặn trùng mã vị trí trong cùng đại lý (IsActive = 1).
+        var exists = await db.WarehouseLocations.AnyAsync(l =>
+            l.LocationCode == location.LocationCode && l.DealerCode == location.DealerCode && l.IsActive);
+        if (exists)
+            throw new InvalidOperationException($"Mã vị trí {location.LocationCode} đã tồn tại trong đại lý {location.DealerCode}.");
+
+        location.CreatedAt = DateTime.Now;
+        location.LogLUDateTime = DateTime.Now;
+        location.LogLUBy = location.CreatedBy;
+        db.WarehouseLocations.Add(location);
+        await db.SaveChangesAsync();
+        return location.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateWarehouseLocationAsync(WarehouseLocation location)
+    {
+        var existing = await db.WarehouseLocations.FirstOrDefaultAsync(l => l.Id == location.Id);
+        if (existing == null) return (false, "Không tìm thấy vị trí kho.");
+        if (string.IsNullOrWhiteSpace(location.LocationName))
+            return (false, "Tên vị trí không được để trống.");
+
+        var newCode = location.LocationCode.Trim().ToUpperInvariant();
+        var newDealer = location.DealerCode.Trim();
+
+        // Nguồn: checkExistLocationCodeModify — chặn trùng mã vị trí với vị trí KHÁC trong cùng đại lý.
+        var dup = await db.WarehouseLocations.AnyAsync(l =>
+            l.Id != existing.Id && l.LocationCode == newCode && l.DealerCode == newDealer && l.IsActive);
+        if (dup)
+            return (false, $"Mã vị trí {newCode} đã tồn tại trong đại lý {newDealer}.");
+
+        existing.LocationCode = newCode;
+        existing.LocationName = location.LocationName.Trim();
+        existing.DealerCode = newDealer;
+        existing.StockNo = string.IsNullOrWhiteSpace(location.StockNo) ? null : location.StockNo.Trim();
+        existing.Type = location.Type;
+        existing.Surface = string.IsNullOrWhiteSpace(location.Surface) ? null : location.Surface.Trim();
+        existing.Height = string.IsNullOrWhiteSpace(location.Height) ? null : location.Height.Trim();
+        existing.IsActive = location.IsActive;
+        existing.LogLUBy = location.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật vị trí kho {existing.LocationCode}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteWarehouseLocationAsync(int id)
+    {
+        var existing = await db.WarehouseLocations.FirstOrDefaultAsync(l => l.Id == id);
+        if (existing == null) return (false, "Không tìm thấy vị trí kho.");
+
+        // Nguồn: Ser_Mst_Location_Delete — không xóa khi còn tồn kho tại vị trí (Ser_Inv_StockBalance.InStockQuantity > 0).
+        var code = existing.LocationCode;
+        var dealer = existing.DealerCode;
+        var stockBalance = await db.Parts
+            .Where(p => p.Location == code && p.InStock > 0)
+            .SumAsync(p => (decimal?)p.InStock) ?? 0m;
+        if (stockBalance > 0)
+            return (false, $"Không thể xóa vị trí {code}: vẫn còn {stockBalance:N0} phụ tùng tồn kho tại vị trí này.");
+
+        // Nguồn: không xóa khi còn phiếu nhập chưa hoàn tất (Status not in 4,5) tham chiếu vị trí.
+        var pendingIn = await db.StockInDetails
+            .Where(d => d.Location == code && d.StockIn.Status != StockInStatus.Finished && d.StockIn.Status != StockInStatus.Rejected)
+            .AnyAsync();
+        if (pendingIn)
+            return (false, $"Không thể xóa vị trí {code}: đang có phiếu nhập kho chưa hoàn tất tham chiếu vị trí này.");
+
+        // Nguồn: không xóa khi còn phiếu xuất chưa hoàn tất (Status not in 4,5) tham chiếu vị trí.
+        var pendingOut = await db.StockOutDetails
+            .Where(d => d.Location == code && d.StockOut.Status != StockOutStatus.Finished && d.StockOut.Status != StockOutStatus.Rejected)
+            .AnyAsync();
+        if (pendingOut)
+            return (false, $"Không thể xóa vị trí {code}: đang có phiếu xuất kho chưa hoàn tất tham chiếu vị trí này.");
+
+        db.WarehouseLocations.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa vị trí kho {code}.");
+    }
+
+    public async Task<WarehouseLocationSummaryDto> GetWarehouseLocationSummaryAsync()
+    {
+        var all = await db.WarehouseLocations.ToListAsync();
+        return new WarehouseLocationSummaryDto
+        {
+            TotalLocations = all.Count,
+            ActiveLocations = all.Count(l => l.IsActive),
+            InactiveLocations = all.Count(l => !l.IsActive),
+            DealerCount = all.Select(l => l.DealerCode).Distinct().Count(),
+            StockCount = all.Where(l => !string.IsNullOrWhiteSpace(l.StockNo)).Select(l => l.StockNo!).Distinct().Count()
+        };
+    }
+
     // --- Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment) ---
     public async Task<List<Supplier>> SuppliersAsync(string? q)
     {
@@ -7762,7 +7911,7 @@ public class RoService(AppDbContext db) : IRoService
         return (true, $"Đã xóa hồ sơ lịch sử sửa chữa {record.RecordNo}.");
     }
 
-    public Task<List<string>> GetDistinctDealerCodesAsync() =>
+    public Task<List<string>> GetDistinctHistoryDealersAsync() =>
         db.DealerHistoryRecords
             .Select(r => r.DealerName)
             .Distinct()

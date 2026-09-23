@@ -3738,6 +3738,141 @@ app.MapDelete("/api/boms/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Warehouse Location — Vị trí kệ/kho phụ tùng (Ser_Mst_Location)
+app.MapGet("/api/warehouse-locations", async (string? dealerCode, LocationType? type, bool? isActive, string? q, IRoService svc) =>
+{
+    var list = await svc.WarehouseLocationsAsync(dealerCode, type, isActive, q);
+    return Results.Ok(list.Select(l => new
+    {
+        l.Id,
+        l.LocationCode,
+        l.LocationName,
+        l.DealerCode,
+        l.StockNo,
+        type = l.Type.ToString(),
+        typeLabel = Ui.LocationTypeLabel(l.Type).text,
+        l.Surface,
+        l.Height,
+        l.IsActive,
+        status = Ui.LocationActive(l.IsActive).text,
+        l.CreatedBy,
+        l.CreatedAt,
+        l.LogLUBy,
+        l.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/warehouse-locations/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetWarehouseLocationSummaryAsync();
+    return Results.Ok(new
+    {
+        s.TotalLocations,
+        s.ActiveLocations,
+        s.InactiveLocations,
+        s.DealerCount,
+        s.StockCount
+    });
+});
+
+app.MapGet("/api/warehouse-locations/{id:int}", async (int id, IRoService svc) =>
+{
+    var l = await svc.GetWarehouseLocationAsync(id);
+    if (l == null) return Results.NotFound(new { error = "Không tìm thấy vị trí kho." });
+    return Results.Ok(new
+    {
+        l.Id,
+        l.LocationCode,
+        l.LocationName,
+        l.DealerCode,
+        l.StockNo,
+        type = l.Type.ToString(),
+        typeLabel = Ui.LocationTypeLabel(l.Type).text,
+        l.Surface,
+        l.Height,
+        l.IsActive,
+        status = Ui.LocationActive(l.IsActive).text,
+        l.CreatedBy,
+        l.CreatedAt,
+        l.LogLUBy,
+        l.LogLUDateTime
+    });
+});
+
+app.MapGet("/api/warehouse-locations/by-code/{code}", async (string code, string? dealerCode, IRoService svc) =>
+{
+    var l = await svc.GetWarehouseLocationByCodeAsync(code, dealerCode);
+    if (l == null) return Results.NotFound(new { error = "Không tìm thấy mã vị trí kho." });
+    return Results.Ok(new
+    {
+        l.Id,
+        l.LocationCode,
+        l.LocationName,
+        l.DealerCode,
+        l.StockNo,
+        type = l.Type.ToString(),
+        l.IsActive
+    });
+});
+
+app.MapPost("/api/warehouse-locations", async (CreateWarehouseLocationDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.LocationCode) || string.IsNullOrWhiteSpace(dto.LocationName) || string.IsNullOrWhiteSpace(dto.DealerCode))
+        return Results.BadRequest(new { error = "Vui lòng nhập Mã vị trí (LocationCode), Tên vị trí (LocationName) và Đại lý (DealerCode)." });
+
+    var loc = new WarehouseLocation
+    {
+        LocationCode = dto.LocationCode.Trim().ToUpperInvariant(),
+        LocationName = dto.LocationName.Trim(),
+        DealerCode = dto.DealerCode.Trim(),
+        StockNo = string.IsNullOrWhiteSpace(dto.StockNo) ? null : dto.StockNo.Trim(),
+        Type = dto.Type ?? LocationType.Rack,
+        Surface = string.IsNullOrWhiteSpace(dto.Surface) ? null : dto.Surface.Trim(),
+        Height = string.IsNullOrWhiteSpace(dto.Height) ? null : dto.Height.Trim(),
+        IsActive = dto.IsActive ?? true,
+        CreatedBy = dto.CreatedBy ?? "api"
+    };
+
+    try
+    {
+        var id = await svc.CreateWarehouseLocationAsync(loc);
+        return Results.Created($"/api/warehouse-locations/{id}", new { id, loc.LocationCode, loc.LocationName, message = "Đã tạo vị trí kho." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/warehouse-locations/{id:int}", async (int id, UpdateWarehouseLocationDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.LocationCode) || string.IsNullOrWhiteSpace(dto.LocationName) || string.IsNullOrWhiteSpace(dto.DealerCode))
+        return Results.BadRequest(new { error = "Vui lòng nhập Mã vị trí, Tên vị trí và Đại lý." });
+
+    var loc = new WarehouseLocation
+    {
+        Id = id,
+        LocationCode = dto.LocationCode.Trim().ToUpperInvariant(),
+        LocationName = dto.LocationName.Trim(),
+        DealerCode = dto.DealerCode.Trim(),
+        StockNo = string.IsNullOrWhiteSpace(dto.StockNo) ? null : dto.StockNo.Trim(),
+        Type = dto.Type ?? LocationType.Rack,
+        Surface = string.IsNullOrWhiteSpace(dto.Surface) ? null : dto.Surface.Trim(),
+        Height = string.IsNullOrWhiteSpace(dto.Height) ? null : dto.Height.Trim(),
+        IsActive = dto.IsActive ?? true,
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+
+    var (ok, msg) = await svc.UpdateWarehouseLocationAsync(loc);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/warehouse-locations/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteWarehouseLocationAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 // --- Suppliers & Return to Supplier Minimal APIs (Ser_Mst_Supplier, Ser_SupplierPayment) ---
 app.MapGet("/api/suppliers", async (string? q, IRoService svc) =>
 {
@@ -6418,6 +6553,8 @@ record UpdateCarModelDto(string ModelName, string? TradeMarkCode, string? Produc
 record CreateBomDto(string BomCode, string BomDesc, string? Remark, bool? IsActive, string? CreatedBy, List<CreateBomLineDto> Lines);
 record UpdateBomDto(string BomDesc, string? Remark, bool? IsActive, string? UpdatedBy, List<CreateBomLineDto> Lines);
 record CreateBomLineDto(string PartCode, string? PartName, string? Unit, decimal QtyMin);
+record CreateWarehouseLocationDto(string LocationCode, string LocationName, string DealerCode, string? StockNo, LocationType? Type, string? Surface, string? Height, bool? IsActive, string? CreatedBy);
+record UpdateWarehouseLocationDto(string LocationCode, string LocationName, string DealerCode, string? StockNo, LocationType? Type, string? Surface, string? Height, bool? IsActive, string? UpdatedBy);
 record CreateSupplierDto(string Code, string Name, string? Address, string? Phone, string? Email, string? ContactName, string? ContactPhone, string? TaxCode);
 record CreateSupplierPaymentDto(string? SupplierPaymentNo, int? SupplierId, string? SupplierName, string? Address, DateTime? PaymentDate, SupplierPaymentType PaymentType, int? OrderPartId, string? OrderPartNo, string? TSTRequestNo, string? Description, string? CreatedBy, List<CreateSupplierPaymentItemDto> Items);
 record CreateSupplierPaymentItemDto(int PartId, decimal QtyPay, decimal? Price, decimal? VatPercent, string? StockInNo, string? LocationCode, string? Reason);

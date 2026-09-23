@@ -3327,6 +3327,85 @@ public class BomController(IRoService svc) : Controller
     }
 }
 
+public class WarehouseLocationController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? dealerCode, LocationType? type, bool? isActive, string? q)
+    {
+        ViewBag.DealerCode = dealerCode;
+        ViewBag.Type = type;
+        ViewBag.IsActive = isActive;
+        ViewBag.Q = q;
+        ViewBag.Summary = await svc.GetWarehouseLocationSummaryAsync();
+        var list = await svc.WarehouseLocationsAsync(dealerCode, type, isActive, q);
+        return View(list);
+    }
+    public async Task<IActionResult> Detail(int id)
+    {
+        var loc = await svc.GetWarehouseLocationAsync(id);
+        if (loc == null) return NotFound();
+        return View(loc);
+    }
+    public IActionResult Create() => View();
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string locationCode, string locationName, string dealerCode, string? stockNo, LocationType type, string? surface, string? height)
+    {
+        if (string.IsNullOrWhiteSpace(locationCode) || string.IsNullOrWhiteSpace(locationName) || string.IsNullOrWhiteSpace(dealerCode))
+        {
+            TempData["Error"] = "Vui lòng nhập Mã vị trí, Tên vị trí và Đại lý.";
+            return RedirectToAction(nameof(Index));
+        }
+        try
+        {
+            var loc = new WarehouseLocation
+            {
+                LocationCode = locationCode.Trim().ToUpperInvariant(),
+                LocationName = locationName.Trim(),
+                DealerCode = dealerCode.Trim(),
+                StockNo = string.IsNullOrWhiteSpace(stockNo) ? null : stockNo.Trim(),
+                Type = type,
+                Surface = string.IsNullOrWhiteSpace(surface) ? null : surface.Trim(),
+                Height = string.IsNullOrWhiteSpace(height) ? null : height.Trim(),
+                IsActive = true,
+                CreatedBy = "web"
+            };
+            var id = await svc.CreateWarehouseLocationAsync(loc);
+            TempData["Success"] = $"Đã thêm vị trí kho [{loc.LocationCode}] {loc.LocationName}.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string locationCode, string locationName, string dealerCode, string? stockNo, LocationType type, string? surface, string? height, bool isActive)
+    {
+        var loc = new WarehouseLocation
+        {
+            Id = id,
+            LocationCode = locationCode,
+            LocationName = locationName,
+            DealerCode = dealerCode,
+            StockNo = stockNo,
+            Type = type,
+            Surface = surface,
+            Height = height,
+            IsActive = isActive,
+            LogLUBy = "web"
+        };
+        var (ok, msg) = await svc.UpdateWarehouseLocationAsync(loc);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteWarehouseLocationAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
 public class SupplierPaymentController(IRoService svc) : Controller
 {
     public async Task<IActionResult> Index(SupplierPaymentStatus? status, SupplierPaymentType? type, string? q, DateTime? fromDate, DateTime? toDate)
@@ -4317,8 +4396,7 @@ public class DealerHistoryController(IRoService svc) : Controller
         ViewBag.Dealer = dealer;
         ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
         ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
-        ViewBag.Dealers = await svc.GetDistinctDealerCodesAsync();
-
+        ViewBag.Dealers = await svc.GetDistinctHistoryDealersAsync();
         if (!string.IsNullOrWhiteSpace(q) && q.Trim().Length < 4)
         {
             TempData["Error"] = "Theo quy định hệ thống idn.CarService, tra cứu lịch sử sửa chữa yêu cầu nhập tối thiểu 4 ký tự biển số xe hoặc số khung VIN.";
