@@ -3178,3 +3178,48 @@ public class CarModelSummaryDto
     public int TradeMarkCount { get; set; }                   // Số thương hiệu khác nhau
     public int SegmentCount { get; set; }                     // Số phân khúc khác nhau
 }
+
+/// <summary>Định mức vật tư tối thiểu (Bill of Materials) — Mst_BOM trong idn.CarService.
+/// Mỗi BOM là một bộ danh mục phụ tùng tối thiểu (theo mã BOMCode) dùng để kiểm tra/đối chiếu
+/// tồn kho tối thiểu và gợi ý phụ tùng cần dự trữ. Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH).</summary>
+public class Bom : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string BomCode { get; set; } = "";                 // Mã BOM (BOMCode)
+    public string BomDesc { get; set; } = "";                 // Diễn giải BOM (BOMDesc)
+    public string? Remark { get; set; }                       // Ghi chú (Remark)
+    public bool IsActive { get; set; } = true;                // Cờ hiệu lực hoạt động (FlagActive)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (LogLUBy lần đầu)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+
+    public List<BomLine> Lines { get; set; } = [];
+}
+
+/// <summary>Dòng chi tiết định mức vật tư — Mst_BOMDtl trong idn.CarService.
+/// Mỗi dòng là một phụ tùng (PartCode) kèm số lượng tối thiểu (QtyMin) trong bộ BOM.</summary>
+public class BomLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int BomId { get; set; }                            // BOM cha (BOMCode -> Bom)
+    public Bom BomHeader { get; set; } = null!;               // BOM cha (navigation)
+    public string PartCode { get; set; } = "";                // Mã phụ tùng (PartCode)
+    public string PartName { get; set; } = "";                // Tên phụ tùng (PartName)
+    public string Unit { get; set; } = "Cái";                 // Đơn vị tính (Unit)
+    public decimal QtyMin { get; set; } = 1m;                 // Số lượng tối thiểu (QtyMin)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục BOM vật tư — phục vụ màn hình quản lý BOM.</summary>
+public class BomSummaryDto
+{
+    public int TotalBoms { get; set; }
+    public int ActiveBoms { get; set; }
+    public int InactiveBoms { get; set; }
+    public int TotalLines { get; set; }                       // Tổng số dòng phụ tùng trên mọi BOM
+    public int DistinctParts { get; set; }                    // Số phụ tùng khác nhau xuất hiện trong các BOM
+}

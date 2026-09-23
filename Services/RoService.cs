@@ -286,6 +286,14 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteCarModelAsync(int id);
     Task<CarModelSummaryDto> GetCarModelSummaryAsync();
     Task<List<string>> GetDistinctTradeMarksAsync();
+    // Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
+    Task<List<Bom>> BomsAsync(bool? isActive, string? q);
+    Task<Bom?> GetBomAsync(int id);
+    Task<Bom?> GetBomByCodeAsync(string bomCode);
+    Task<int> CreateBomAsync(Bom bom, List<BomLine> lines);
+    Task<(bool ok, string msg)> UpdateBomAsync(Bom bom, List<BomLine> lines);
+    Task<(bool ok, string msg)> DeleteBomAsync(int id);
+    Task<BomSummaryDto> GetBomSummaryAsync();
     // Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment, Ser_SupplierPaymentDtl / MNU_QT_DL_QUANLYPHIEUXUATTRANHACUNGCAP)
     Task<List<Supplier>> SuppliersAsync(string? q);
     Task<Supplier?> GetSupplierAsync(int id);
@@ -5718,6 +5726,117 @@ public class RoService(AppDbContext db) : IRoService
             .Distinct()
             .OrderBy(t => t)
             .ToListAsync();
+
+    // --- Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl) ---
+    public async Task<List<Bom>> BomsAsync(bool? isActive, string? q)
+    {
+        var query = db.Boms.Include(b => b.Lines).AsQueryable();
+        if (isActive.HasValue) query = query.Where(b => b.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(b => b.BomCode.ToLower().Contains(s)
+                || b.BomDesc.ToLower().Contains(s)
+                || (b.Remark != null && b.Remark.ToLower().Contains(s)));
+        }
+        return await query.OrderBy(b => b.BomCode).ToListAsync();
+    }
+
+    public Task<Bom?> GetBomAsync(int id) =>
+        db.Boms.Include(b => b.Lines).FirstOrDefaultAsync(b => b.Id == id);
+
+    public Task<Bom?> GetBomByCodeAsync(string bomCode)
+    {
+        var clean = bomCode.Trim().ToUpperInvariant();
+        return db.Boms.Include(b => b.Lines).FirstOrDefaultAsync(b => b.BomCode == clean);
+    }
+
+    public async Task<int> CreateBomAsync(Bom bom, List<BomLine> lines)
+    {
+        if (string.IsNullOrWhiteSpace(bom.BomCode))
+            throw new InvalidOperationException("Vui lòng nhập mã BOM (BOMCode).");
+        if (lines == null || lines.Count == 0)
+            throw new InvalidOperationException("Cần ít nhất một dòng phụ tùng trong định mức BOM.");
+
+        bom.BomCode = bom.BomCode.Trim().ToUpperInvariant();
+        bom.BomDesc = bom.BomDesc?.Trim() ?? "";
+
+        var exists = await db.Boms.AnyAsync(b => b.BomCode == bom.BomCode);
+        if (exists)
+            throw new InvalidOperationException($"Mã BOM {bom.BomCode} đã tồn tại trong danh mục.");
+
+        bom.CreatedAt = DateTime.Now;
+        bom.LogLUDateTime = DateTime.Now;
+        bom.LogLUBy = bom.CreatedBy;
+        bom.Lines = lines.Select(l => new BomLine
+        {
+            PartCode = l.PartCode?.Trim() ?? "",
+            PartName = l.PartName?.Trim() ?? "",
+            Unit = string.IsNullOrWhiteSpace(l.Unit) ? "Cái" : l.Unit.Trim(),
+            QtyMin = l.QtyMin <= 0 ? 1m : l.QtyMin,
+            LogLUBy = bom.CreatedBy,
+            LogLUDateTime = DateTime.Now
+        }).ToList();
+
+        db.Boms.Add(bom);
+        await db.SaveChangesAsync();
+        return bom.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateBomAsync(Bom bom, List<BomLine> lines)
+    {
+        var existing = await db.Boms.Include(b => b.Lines).FirstOrDefaultAsync(b => b.Id == bom.Id);
+        if (existing == null) return (false, "Không tìm thấy định mức BOM.");
+        if (lines == null || lines.Count == 0)
+            return (false, "Cần ít nhất một dòng phụ tùng trong định mức BOM.");
+
+        existing.BomDesc = bom.BomDesc?.Trim() ?? "";
+        existing.Remark = bom.Remark?.Trim();
+        existing.IsActive = bom.IsActive;
+        existing.LogLUBy = bom.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+
+        // Thay toàn bộ dòng chi tiết (nguồn: delete olds items rồi insert lại).
+        db.BomLines.RemoveRange(existing.Lines);
+        existing.Lines = lines.Select(l => new BomLine
+        {
+            BomId = existing.Id,
+            PartCode = l.PartCode?.Trim() ?? "",
+            PartName = l.PartName?.Trim() ?? "",
+            Unit = string.IsNullOrWhiteSpace(l.Unit) ? "Cái" : l.Unit.Trim(),
+            QtyMin = l.QtyMin <= 0 ? 1m : l.QtyMin,
+            LogLUBy = existing.LogLUBy,
+            LogLUDateTime = DateTime.Now
+        }).ToList();
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật định mức BOM {existing.BomCode}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteBomAsync(int id)
+    {
+        var existing = await db.Boms.Include(b => b.Lines).FirstOrDefaultAsync(b => b.Id == id);
+        if (existing == null) return (false, "Không tìm thấy định mức BOM.");
+
+        db.BomLines.RemoveRange(existing.Lines);
+        db.Boms.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa định mức BOM {existing.BomCode}.");
+    }
+
+    public async Task<BomSummaryDto> GetBomSummaryAsync()
+    {
+        var all = await db.Boms.Include(b => b.Lines).ToListAsync();
+        var lines = all.SelectMany(b => b.Lines).ToList();
+        return new BomSummaryDto
+        {
+            TotalBoms = all.Count,
+            ActiveBoms = all.Count(b => b.IsActive),
+            InactiveBoms = all.Count(b => !b.IsActive),
+            TotalLines = lines.Count,
+            DistinctParts = lines.Select(l => l.PartCode).Distinct().Count()
+        };
+    }
 
     // --- Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment) ---
     public async Task<List<Supplier>> SuppliersAsync(string? q)

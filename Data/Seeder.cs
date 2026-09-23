@@ -2534,6 +2534,57 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
+        if (!await db.Boms.AnyAsync())
+        {
+            var bom1 = new Bom
+            {
+                BomCode = "BOM-BD-1000",
+                BomDesc = "Định mức phụ tùng bảo dưỡng cấp 1.000 km",
+                Remark = "Bộ phụ tùng tối thiểu cho bảo dưỡng định kỳ 1.000 km (kiểm tra & thay dầu).",
+                IsActive = true,
+                CreatedBy = "Hệ thống HTC",
+                Lines =
+                [
+                    new() { PartCode = "26300-35505", PartName = "Lọc dầu động cơ", Unit = "Cái", QtyMin = 1 },
+                    new() { PartCode = "26320-2G000", PartName = "Lọc nhớt hộp số", Unit = "Cái", QtyMin = 1 },
+                    new() { PartCode = "97133-2E210", PartName = "Lọc gió điều hòa", Unit = "Cái", QtyMin = 1 }
+                ]
+            };
+            var bom2 = new Bom
+            {
+                BomCode = "BOM-BD-10000",
+                BomDesc = "Định mức phụ tùng bảo dưỡng cấp 10.000 km",
+                Remark = "Bộ phụ tùng tối thiểu cho bảo dưỡng định kỳ 10.000 km (thay dầu, lọc gió, bugi).",
+                IsActive = true,
+                CreatedBy = "Hệ thống HTC",
+                Lines =
+                [
+                    new() { PartCode = "26300-35505", PartName = "Lọc dầu động cơ", Unit = "Cái", QtyMin = 1 },
+                    new() { PartCode = "28113-1R100", PartName = "Lọc gió động cơ", Unit = "Cái", QtyMin = 1 },
+                    new() { PartCode = "97133-2E210", PartName = "Lọc gió điều hòa", Unit = "Cái", QtyMin = 1 },
+                    new() { PartCode = "18849-11051", PartName = "Bugi đánh lửa", Unit = "Cái", QtyMin = 4 }
+                ]
+            };
+            var bom3 = new Bom
+            {
+                BomCode = "BOM-BD-40000",
+                BomDesc = "Định mức phụ tùng bảo dưỡng cấp 40.000 km",
+                Remark = "Bộ phụ tùng tối thiểu cho bảo dưỡng định kỳ 40.000 km (dầu hộp số, dây curoa, lọc nhiên liệu).",
+                IsActive = true,
+                CreatedBy = "Hệ thống HTC",
+                Lines =
+                [
+                    new() { PartCode = "26300-35505", PartName = "Lọc dầu động cơ", Unit = "Cái", QtyMin = 1 },
+                    new() { PartCode = "31922-2H900", PartName = "Lọc nhiên liệu", Unit = "Cái", QtyMin = 1 },
+                    new() { PartCode = "25212-2B000", PartName = "Dây curoa tổng", Unit = "Sợi", QtyMin = 1 },
+                    new() { PartCode = "18849-11051", PartName = "Bugi đánh lửa", Unit = "Cái", QtyMin = 4 }
+                ]
+            };
+            db.Boms.AddRange(bom1, bom2, bom3);
+            await db.SaveChangesAsync();
+        }
+
         if (!await db.Suppliers.AnyAsync())
         {
             var s1 = new Supplier { Code = "HTC", Name = "Công ty Cổ phần Liên doanh Ô tô Hyundai Thành Công Việt Nam", Address = "Tòa nhà Epic Tower, Nam Từ Liêm, Hà Nội", Phone = "024.3826.2614", Email = "parts@hyundai-thanhcong.vn", ContactName = "Nguyễn Hoàng Minh", ContactPhone = "0912.345.678", TaxCode = "0102872391", BankAccount = "0011004568899", BankName = "Vietcombank - CN Sở Giao Dịch Hà Nội", IsActive = true };
@@ -5037,7 +5088,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "Boms", "BomLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -5162,6 +5213,10 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CarModels_OrgId_ModelCode\" ON miniservice.\"CarModels\" (\"OrgId\", \"ModelCode\")",
             "CREATE INDEX IF NOT EXISTS \"IX_CarModels_OrgId_TradeMarkCode\" ON miniservice.\"CarModels\" (\"OrgId\", \"TradeMarkCode\")",
             "CREATE INDEX IF NOT EXISTS \"IX_CarModels_OrgId_Segment\" ON miniservice.\"CarModels\" (\"OrgId\", \"Segment\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"Boms\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"BomCode\" text NOT NULL, \"BomDesc\" text NOT NULL, \"Remark\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Boms_OrgId_BomCode\" ON miniservice.\"Boms\" (\"OrgId\", \"BomCode\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"BomLines\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"BomId\" integer NOT NULL, \"PartCode\" text NOT NULL, \"PartName\" text NOT NULL, \"Unit\" text NOT NULL DEFAULT 'Cái', \"QtyMin\" numeric(18,4) NOT NULL DEFAULT 1, \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE INDEX IF NOT EXISTS \"IX_BomLines_OrgId_BomId\" ON miniservice.\"BomLines\" (\"OrgId\", \"BomId\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -6680,6 +6735,19 @@ public static class Seeder
             @"CREATE INDEX IF NOT EXISTS ""IX_CarModels_OrgId_TradeMarkCode"" ON ""CarModels"" (""OrgId"", ""TradeMarkCode"");",
             @"CREATE INDEX IF NOT EXISTS ""IX_CarModels_OrgId_Segment"" ON ""CarModels"" (""OrgId"", ""Segment"");"
         };
+
+        // Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl) — SQLite
+        var bomSqls = new[]
+        {
+            "CREATE TABLE IF NOT EXISTS \"Boms\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"BomCode\" TEXT NOT NULL, \"BomDesc\" TEXT NOT NULL, \"Remark\" TEXT NULL, \"IsActive\" INTEGER NOT NULL DEFAULT 1, \"CreatedBy\" TEXT NOT NULL DEFAULT 'web', \"CreatedAt\" TEXT NOT NULL, \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL);",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Boms_OrgId_BomCode\" ON \"Boms\" (\"OrgId\", \"BomCode\");",
+            "CREATE TABLE IF NOT EXISTS \"BomLines\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"BomId\" INTEGER NOT NULL, \"PartCode\" TEXT NOT NULL, \"PartName\" TEXT NOT NULL, \"Unit\" TEXT NOT NULL DEFAULT 'Cái', \"QtyMin\" TEXT NOT NULL DEFAULT '1', \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL, FOREIGN KEY (\"BomId\") REFERENCES \"Boms\" (\"Id\") ON DELETE CASCADE);",
+            "CREATE INDEX IF NOT EXISTS \"IX_BomLines_OrgId_BomId\" ON \"BomLines\" (\"OrgId\", \"BomId\");"
+        };
+        foreach (var sql in bomSqls)
+        {
+            try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+        }
 
         foreach (var sql in sqls)
         {

@@ -3596,6 +3596,148 @@ app.MapDelete("/api/car-models/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
+app.MapGet("/api/boms", async (bool? isActive, string? q, IRoService svc) =>
+{
+    var list = await svc.BomsAsync(isActive, q);
+    return Results.Ok(list.Select(b => new
+    {
+        b.Id,
+        b.BomCode,
+        b.BomDesc,
+        b.Remark,
+        b.IsActive,
+        status = Ui.BomActive(b.IsActive).text,
+        lineCount = b.Lines.Count,
+        totalQtyMin = b.Lines.Sum(l => l.QtyMin),
+        b.CreatedBy,
+        b.CreatedAt,
+        b.LogLUBy,
+        b.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/boms/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetBomSummaryAsync();
+    return Results.Ok(new
+    {
+        s.TotalBoms,
+        s.ActiveBoms,
+        s.InactiveBoms,
+        s.TotalLines,
+        s.DistinctParts
+    });
+});
+
+app.MapGet("/api/boms/{id:int}", async (int id, IRoService svc) =>
+{
+    var b = await svc.GetBomAsync(id);
+    if (b == null) return Results.NotFound(new { error = "Không tìm thấy định mức BOM." });
+    return Results.Ok(new
+    {
+        b.Id,
+        b.BomCode,
+        b.BomDesc,
+        b.Remark,
+        b.IsActive,
+        status = Ui.BomActive(b.IsActive).text,
+        b.CreatedBy,
+        b.CreatedAt,
+        b.LogLUBy,
+        b.LogLUDateTime,
+        lines = b.Lines.Select(l => new
+        {
+            l.Id,
+            l.PartCode,
+            l.PartName,
+            l.Unit,
+            l.QtyMin
+        })
+    });
+});
+
+app.MapGet("/api/boms/by-code/{code}", async (string code, IRoService svc) =>
+{
+    var b = await svc.GetBomByCodeAsync(code);
+    if (b == null) return Results.NotFound(new { error = "Không tìm thấy mã BOM." });
+    return Results.Ok(new
+    {
+        b.Id,
+        b.BomCode,
+        b.BomDesc,
+        b.IsActive,
+        lineCount = b.Lines.Count
+    });
+});
+
+app.MapPost("/api/boms", async (CreateBomDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.BomCode) || string.IsNullOrWhiteSpace(dto.BomDesc))
+        return Results.BadRequest(new { error = "Vui lòng nhập Mã BOM (BomCode) và Diễn giải (BomDesc)." });
+    if (dto.Lines == null || dto.Lines.Count == 0)
+        return Results.BadRequest(new { error = "Cần danh sách phụ tùng trong định mức (Lines)." });
+
+    var bom = new Bom
+    {
+        BomCode = dto.BomCode.Trim().ToUpperInvariant(),
+        BomDesc = dto.BomDesc.Trim(),
+        Remark = string.IsNullOrWhiteSpace(dto.Remark) ? null : dto.Remark.Trim(),
+        IsActive = dto.IsActive ?? true,
+        CreatedBy = dto.CreatedBy ?? "api"
+    };
+    var lines = dto.Lines.Select(l => new BomLine
+    {
+        PartCode = l.PartCode?.Trim() ?? "",
+        PartName = l.PartName?.Trim() ?? "",
+        Unit = string.IsNullOrWhiteSpace(l.Unit) ? "Cái" : l.Unit.Trim(),
+        QtyMin = l.QtyMin <= 0 ? 1m : l.QtyMin
+    }).ToList();
+
+    try
+    {
+        var id = await svc.CreateBomAsync(bom, lines);
+        return Results.Created($"/api/boms/{id}", new { id, bom.BomCode, bom.BomDesc, message = "Đã tạo định mức BOM." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/boms/{id:int}", async (int id, UpdateBomDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.BomDesc))
+        return Results.BadRequest(new { error = "Diễn giải BOM không được để trống." });
+    if (dto.Lines == null || dto.Lines.Count == 0)
+        return Results.BadRequest(new { error = "Cần danh sách phụ tùng trong định mức (Lines)." });
+
+    var bom = new Bom
+    {
+        Id = id,
+        BomDesc = dto.BomDesc.Trim(),
+        Remark = string.IsNullOrWhiteSpace(dto.Remark) ? null : dto.Remark.Trim(),
+        IsActive = dto.IsActive ?? true,
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+    var lines = dto.Lines.Select(l => new BomLine
+    {
+        PartCode = l.PartCode?.Trim() ?? "",
+        PartName = l.PartName?.Trim() ?? "",
+        Unit = string.IsNullOrWhiteSpace(l.Unit) ? "Cái" : l.Unit.Trim(),
+        QtyMin = l.QtyMin <= 0 ? 1m : l.QtyMin
+    }).ToList();
+
+    var (ok, msg) = await svc.UpdateBomAsync(bom, lines);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/boms/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteBomAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 // --- Suppliers & Return to Supplier Minimal APIs (Ser_Mst_Supplier, Ser_SupplierPayment) ---
 app.MapGet("/api/suppliers", async (string? q, IRoService svc) =>
 {
@@ -6273,6 +6415,9 @@ record UpdateServiceItemDto(string Name, ServiceROType ROType, decimal StdManHou
 record ApplyServiceToRoDto(int RoId, ExpenseType? ExpenseType, decimal? CustomHours, decimal? CustomPrice, string? Note);
 record CreateCarModelDto(string ModelCode, string ModelName, string TradeMarkCode, string? ProductionCode, string? DealerCode, CarModelSegment? Segment, int? ProductYear, bool? IsActive, string? CreatedBy);
 record UpdateCarModelDto(string ModelName, string? TradeMarkCode, string? ProductionCode, string? DealerCode, CarModelSegment? Segment, int? ProductYear, bool? IsActive, string? UpdatedBy);
+record CreateBomDto(string BomCode, string BomDesc, string? Remark, bool? IsActive, string? CreatedBy, List<CreateBomLineDto> Lines);
+record UpdateBomDto(string BomDesc, string? Remark, bool? IsActive, string? UpdatedBy, List<CreateBomLineDto> Lines);
+record CreateBomLineDto(string PartCode, string? PartName, string? Unit, decimal QtyMin);
 record CreateSupplierDto(string Code, string Name, string? Address, string? Phone, string? Email, string? ContactName, string? ContactPhone, string? TaxCode);
 record CreateSupplierPaymentDto(string? SupplierPaymentNo, int? SupplierId, string? SupplierName, string? Address, DateTime? PaymentDate, SupplierPaymentType PaymentType, int? OrderPartId, string? OrderPartNo, string? TSTRequestNo, string? Description, string? CreatedBy, List<CreateSupplierPaymentItemDto> Items);
 record CreateSupplierPaymentItemDto(int PartId, decimal QtyPay, decimal? Price, decimal? VatPercent, string? StockInNo, string? LocationCode, string? Reason);

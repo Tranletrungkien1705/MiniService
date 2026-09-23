@@ -88,6 +88,8 @@ public class AppDbContext : DbContext
     public DbSet<CusServiceFactor> CusServiceFactors => Set<CusServiceFactor>();
     public DbSet<RoHistory> RoHistories => Set<RoHistory>();
     public DbSet<CarModel> CarModels => Set<CarModel>();
+    public DbSet<Bom> Boms => Set<Bom>();
+    public DbSet<BomLine> BomLines => Set<BomLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -896,6 +898,18 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.OrgId, x.ModelCode }).IsUnique();
             e.HasIndex(x => new { x.OrgId, x.TradeMarkCode });
             e.HasIndex(x => new { x.OrgId, x.Segment });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Bom>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BomCode }).IsUnique();
+            e.HasMany(x => x.Lines).WithOne(l => l.BomHeader).HasForeignKey(l => l.BomId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<BomLine>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.BomId });
+            e.Property(x => x.QtyMin).HasPrecision(18, 4);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

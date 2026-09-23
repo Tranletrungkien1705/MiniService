@@ -476,6 +476,9 @@ public static class Ui
     public static (string text, string css) CarModelActive(bool isActive) =>
         isActive ? ("Đang áp dụng", "success") : ("Tạm dừng", "secondary");
 
+    public static (string text, string css) BomActive(bool isActive) =>
+        isActive ? ("Đang áp dụng", "success") : ("Tạm dừng", "secondary");
+
     public static (string text, string code, string css) SupplierPaymentStatus(SupplierPaymentStatus s) => s switch
     {
         Models.SupplierPaymentStatus.Pending => ("Chờ duyệt xuất", "PEND", "warning"),

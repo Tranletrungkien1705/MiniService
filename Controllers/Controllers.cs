@@ -3212,6 +3212,121 @@ public class CarModelController(IRoService svc) : Controller
     }
 }
 
+public class BomController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(bool? isActive, string? q)
+    {
+        ViewBag.IsActive = isActive;
+        ViewBag.Q = q;
+        ViewBag.Summary = await svc.GetBomSummaryAsync();
+        var list = await svc.BomsAsync(isActive, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var bom = await svc.GetBomAsync(id);
+        if (bom == null) return NotFound();
+        return View(bom);
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string bomCode, string bomDesc, string? remark, string[] partCode, string[] partName, string[] unit, decimal[] qtyMin)
+    {
+        if (string.IsNullOrWhiteSpace(bomCode) || string.IsNullOrWhiteSpace(bomDesc))
+        {
+            TempData["Error"] = "Vui lòng nhập Mã BOM (BOMCode) và Diễn giải (BOMDesc).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        var lines = BuildLines(partCode, partName, unit, qtyMin);
+        if (lines.Count == 0)
+        {
+            TempData["Error"] = "Cần ít nhất một dòng phụ tùng trong định mức BOM.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            var bom = new Bom
+            {
+                BomCode = bomCode.Trim().ToUpperInvariant(),
+                BomDesc = bomDesc.Trim(),
+                Remark = string.IsNullOrWhiteSpace(remark) ? null : remark.Trim(),
+                IsActive = true,
+                CreatedBy = "web"
+            };
+            var id = await svc.CreateBomAsync(bom, lines);
+            TempData["Success"] = $"Đã thêm định mức BOM [{bom.BomCode}] {bom.BomDesc}.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string bomDesc, string? remark, bool isActive, string[] partCode, string[] partName, string[] unit, decimal[] qtyMin)
+    {
+        if (string.IsNullOrWhiteSpace(bomDesc))
+        {
+            TempData["Error"] = "Diễn giải BOM không được để trống.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var lines = BuildLines(partCode, partName, unit, qtyMin);
+        if (lines.Count == 0)
+        {
+            TempData["Error"] = "Cần ít nhất một dòng phụ tùng trong định mức BOM.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var bom = new Bom
+        {
+            Id = id,
+            BomDesc = bomDesc.Trim(),
+            Remark = string.IsNullOrWhiteSpace(remark) ? null : remark.Trim(),
+            IsActive = isActive,
+            LogLUBy = "web"
+        };
+
+        var (ok, msg) = await svc.UpdateBomAsync(bom, lines);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteBomAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    private static List<BomLine> BuildLines(string[] partCode, string[] partName, string[] unit, decimal[] qtyMin)
+    {
+        var lines = new List<BomLine>();
+        if (partCode == null) return lines;
+        for (var i = 0; i < partCode.Length; i++)
+        {
+            var code = partCode[i]?.Trim();
+            if (string.IsNullOrWhiteSpace(code)) continue;
+            lines.Add(new BomLine
+            {
+                PartCode = code,
+                PartName = i < partName.Length ? (partName[i]?.Trim() ?? "") : "",
+                Unit = i < unit.Length && !string.IsNullOrWhiteSpace(unit[i]) ? unit[i].Trim() : "Cái",
+                QtyMin = i < qtyMin.Length && qtyMin[i] > 0 ? qtyMin[i] : 1m
+            });
+        }
+        return lines;
+    }
+}
+
 public class SupplierPaymentController(IRoService svc) : Controller
 {
     public async Task<IActionResult> Index(SupplierPaymentStatus? status, SupplierPaymentType? type, string? q, DateTime? fromDate, DateTime? toDate)

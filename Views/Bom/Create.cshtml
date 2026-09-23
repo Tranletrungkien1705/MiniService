@@ -1,0 +1,79 @@
+@{
+    ViewData["Title"] = "Thêm định mức vật tư tối thiểu (BOM)";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/Bom" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Danh mục BOM</a>
+        <h5 class="mb-0 fw-bold mt-1"><i class="bi bi-list-check me-2 text-primary"></i>Thêm định mức vật tư tối thiểu</h5>
+    </div>
+</div>
+
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin BOM</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Mã BOM (BOMCode) <span class="text-danger">*</span></label>
+                    <input name="bomCode" class="form-control font-monospace" placeholder="VD: BOM-BD-10000" required style="text-transform:uppercase" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small fw-semibold">Diễn giải (BOMDesc) <span class="text-danger">*</span></label>
+                    <input name="bomDesc" class="form-control" placeholder="VD: Định mức phụ tùng bảo dưỡng cấp 10.000 km" required />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Ghi chú (Remark)</label>
+                    <textarea name="remark" class="form-control" rows="2" placeholder="Mô tả mục đích sử dụng bộ định mức..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <span class="fw-semibold"><i class="bi bi-box-seam me-1 text-primary"></i>Danh sách phụ tùng trong định mức</span>
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><i class="bi bi-plus-lg me-1"></i>Thêm dòng</button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0" id="lineTable">
+                    <thead>
+                        <tr>
+                            <th style="width:180px">Mã phụ tùng <span class="text-danger">*</span></th>
+                            <th>Tên phụ tùng</th>
+                            <th style="width:120px">Đơn vị</th>
+                            <th style="width:130px">SL tối thiểu</th>
+                            <th style="width:60px"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="lineBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu định mức BOM</button>
+        <a href="/Bom" class="btn btn-secondary">Hủy</a>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    function addRow(code, name, unit, qty) {
+        const tbody = document.getElementById('lineBody');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td><input name="partCode" class="form-control form-control-sm font-monospace" value="${code || ''}" placeholder="VD: 26300-35505" /></td>
+            <td><input name="partName" class="form-control form-control-sm" value="${name || ''}" placeholder="Tên phụ tùng" /></td>
+            <td><input name="unit" class="form-control form-control-sm" value="${unit || 'Cái'}" /></td>
+            <td><input name="qtyMin" type="number" min="0" step="0.01" class="form-control form-control-sm font-monospace" value="${qty || 1}" /></td>
+            <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-x-lg"></i></button></td>`;
+        tbody.appendChild(tr);
+    }
+    addRow();
+</script>
+}
