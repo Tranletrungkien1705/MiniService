@@ -490,6 +490,9 @@ public class Customer : IOrgOwned
     public string Name { get; set; } = "";
     public string? Phone { get; set; }
     public string? Email { get; set; }
+    public DateTime? DateOfBirth { get; set; }
+    public string? Address { get; set; }
+    public string? Gender { get; set; }
     public int? CustomerGroupId { get; set; }
     public CustomerGroup? CustomerGroup { get; set; }
     public List<Car> Cars { get; set; } = [];
@@ -497,6 +500,7 @@ public class Customer : IOrgOwned
     public List<CusDebit> CusDebits { get; set; } = [];
     public List<CusDebitPayment> CusDebitPayments { get; set; } = [];
     public List<CustomerGroupMember> GroupMemberships { get; set; } = [];
+    public List<CustomerCareBirthday> BirthdayCares { get; set; } = [];
 }
 
 public class Car : IOrgOwned
@@ -546,6 +550,9 @@ public class RepairOrder : IOrgOwned
     public int? CustomerGroupId { get; set; }
     public CustomerGroup? CustomerGroup { get; set; }
     public decimal CustomerGroupDiscountAmount { get; set; } = 0;
+    public decimal BirthdayDiscountAmount { get; set; } = 0;
+    public int? BirthdayCareId { get; set; }
+    public string? BirthdayVoucherCode { get; set; }
     public int? BulletinId { get; set; }
     public Bulletin? Bulletin { get; set; }
     public int? PdiRequestId { get; set; }
@@ -572,12 +579,13 @@ public class RepairOrder : IOrgOwned
     public List<CusDebit> CusDebits { get; set; } = [];
     public List<InsuranceDebit> InsuranceDebits { get; set; } = [];
     public List<PartPriceRequest> PartPriceRequests { get; set; } = [];
+    public List<CustomerCareBirthday> CustomerCareBirthdays { get; set; } = [];
 
-    public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount);
+    public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount - BirthdayDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
     public decimal PartTotal => Lines.Where(l => l.Type == LineType.Part).Sum(l => l.Amount);
-    public decimal CustomerTotal => Math.Max(0, Lines.Where(l => l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount);
+    public decimal CustomerTotal => Math.Max(0, Lines.Where(l => l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount - BirthdayDiscountAmount);
     public decimal WarrantyTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Warranty).Sum(l => l.Amount);
     public decimal InsuranceTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Insurance).Sum(l => l.Amount);
     public decimal PaidAmount => Payments.Where(p => p.Status == PaymentStatus.Completed).Sum(p => p.PaymentAmount);
@@ -715,6 +723,8 @@ public class Appointment : IOrgOwned
     public ReceptionSheet? ReceptionSheet { get; set; }
     public int? CustomerCareMaceId { get; set; }
     public CustomerCareMace? CustomerCareMace { get; set; }
+    public int? CustomerCareBirthdayId { get; set; }
+    public CustomerCareBirthday? CustomerCareBirthday { get; set; }
 }
 
 /// <summary>Phiếu Nhập kho phụ tùng — Ser_Inv_StockIn trong idn.CarService.</summary>
@@ -2597,4 +2607,106 @@ public class ComplaintDiagnosticSummaryDto
     public int BodyPaintCount { get; set; }
     public int TotalUsageCount { get; set; }
     public List<ComplaintDiagnosticError> TopUsedErrors { get; set; } = [];
+}
+
+/// <summary>Trạng thái Phiếu Chăm sóc sinh nhật khách hàng — theo Ser_CustomerCareBth Status (0: Chưa liên hệ, 1: Đã liên hệ, 2: Không liên hệ) trong idn.CarService.</summary>
+public enum CustomerCareBirthdayStatus
+{
+    Pending = 0,      // 0: Chưa liên hệ (Chờ gọi chúc mừng & tặng voucher)
+    Contacted = 1,    // 1: Đã liên hệ (Đã gửi lời chúc, cấp mã voucher tri ân)
+    NotContacted = 2  // 2: Không liên hệ được (Máy bận, không nghe máy, sai số)
+}
+
+/// <summary>Kênh liên hệ chăm sóc chúc mừng sinh nhật khách hàng.</summary>
+public enum BirthdayContactChannel
+{
+    Call = 0,        // Gọi điện thoại trực tiếp
+    SMS = 1,         // Tin nhắn SMS Brandname
+    Zalo = 2,        // Tin nhắn Zalo ZNS / CSKH
+    InPerson = 3     // Trực tiếp tại xưởng dịch vụ
+}
+
+/// <summary>Phiếu Chăm sóc & Chúc mừng sinh nhật khách hàng — Ser_CustomerCareBth trong idn.CarService (Quản lý Chúc mừng SN Khách hàng - FrmCSCCustomerCareDOB).</summary>
+public class CustomerCareBirthday : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CareBthNo { get; set; } = "";                                 // Mã phiếu CSKH SN (VD: BTH260427-001)
+    public int CustomerId { get; set; }                                         // Khách hàng sinh nhật (CusId)
+    public int? CarId { get; set; }                                              // Xe đại diện của khách (CarId)
+    public DateTime? DateOfBirth { get; set; }                                   // Ngày tháng năm sinh gốc của khách (DOB)
+    public DateTime DateBth { get; set; }                                        // Ngày sinh nhật trong năm (DateBth, luật 29/02 lùi 28/02 năm thường)
+    public CustomerCareBirthdayStatus Status { get; set; } = CustomerCareBirthdayStatus.Pending; // Trạng thái 0/1/2
+    public DateTime? ContactDate { get; set; }                                   // Thời điểm liên hệ
+    public string? ContactedBy { get; set; }                                     // Nhân viên CSKH liên hệ
+    public BirthdayContactChannel ContactChannel { get; set; } = BirthdayContactChannel.Call; // Kênh liên hệ
+    public string? Remark { get; set; }                                          // Ghi chú chăm sóc / Lời chúc / Phản hồi của KH
+
+    // Quà tặng & Voucher tri ân sinh nhật tiêu chuẩn đại lý Hyundai
+    public string? GiftVoucherCode { get; set; }                                 // Mã voucher quà tặng (VD: BDAY-2026-X9Y2)
+    public decimal GiftVoucherValue { get; set; } = 300_000m;                    // Trị giá voucher quà tặng (VNĐ)
+    public decimal DiscountPercent { get; set; } = 10m;                          // Tỷ lệ giảm giá công/phụ tùng (%)
+    public DateTime? VoucherValidUntil { get; set; }                             // Hạn sử dụng voucher (hết tháng sinh + 30 ngày)
+    public bool IsVoucherUsed { get; set; } = false;                             // Cờ đã áp dụng voucher vào RO
+    public int? UsedInROId { get; set; }                                         // Lệnh sửa chữa đã sử dụng voucher
+
+    // Đặt lịch hẹn làm dịch vụ nhân dịp sinh nhật
+    public int? AppointmentId { get; set; }                                      // Lịch hẹn đón tiếp phát sinh từ cuộc gọi CSKH
+
+    // Nhật ký & Audit (khớp lược đồ Ser_CustomerCareBth nguồn)
+    public string CreatedBy { get; set; } = "system";                            // Người tạo (hệ thống quét hoặc nhân viên tạo)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;                      // Ngày tạo
+    public DateTime? UpdatedAt { get; set; }                                     // Cập nhật gần nhất
+    public string? UpdatedBy { get; set; }
+    public DateTime? LogLuDateTime { get; set; }                                 // Thời điểm cập nhật cuối (LogLuDateTime nguồn)
+    public string? LogLUBy { get; set; }                                         // Người cập nhật cuối (LogLUBy nguồn)
+
+    public Customer Customer { get; set; } = null!;
+    public Car? Car { get; set; }
+    public RepairOrder? UsedInRO { get; set; }
+    public Appointment? Appointment { get; set; }
+
+    // Helpers tính toán hiển thị UI
+    public int BirthMonth => DateBth.Month;
+    public int BirthDay => DateBth.Day;
+    public int CurrentAge => DateOfBirth.HasValue ? Math.Max(0, DateTime.Today.Year - DateOfBirth.Value.Year) : 0;
+    public bool IsTodayBirthday => DateBth.Month == DateTime.Today.Month && DateBth.Day == DateTime.Today.Day;
+    public bool IsThisMonthBirthday => DateBth.Month == DateTime.Today.Month;
+    public int DaysUntilBirthday
+    {
+        get
+        {
+            var today = DateTime.Today;
+            var target = new DateTime(today.Year, DateBth.Month, Math.Min(DateBth.Day, DateTime.DaysInMonth(today.Year, DateBth.Month)));
+            if (target < today) target = target.AddYears(1);
+            return (target - today).Days;
+        }
+    }
+
+    /// <summary>Luật tính ngày sinh nhật trong năm: Nếu sinh ngày 29/02 mà năm đích không nhuận thì lùi về 28/02.</summary>
+    public static DateTime CalculateDateBth(DateTime dob, int targetYear)
+    {
+        int month = dob.Month;
+        int day = dob.Day;
+        if (month == 2 && day == 29 && !DateTime.IsLeapYear(targetYear))
+        {
+            day = 28;
+        }
+        return new DateTime(targetYear, month, day);
+    }
+}
+
+/// <summary>DTO Tổng hợp chỉ số Chăm sóc sinh nhật khách hàng — Ser_CustomerCareBth_Sumary trong idn.CarService.</summary>
+public class CustomerCareBirthdaySummaryDto
+{
+    public int TotalCount { get; set; }
+    public int ThisMonthCount { get; set; }
+    public int TodayCount { get; set; }
+    public int PendingCount { get; set; }
+    public int ContactedCount { get; set; }
+    public int NotContactedCount { get; set; }
+    public int VouchersIssuedCount { get; set; }
+    public int VouchersUsedCount { get; set; }
+    public decimal TotalVoucherValue { get; set; }
+    public decimal ContactCompletionRate => TotalCount > 0 ? Math.Round((decimal)ContactedCount * 100m / TotalCount, 1) : 0m;
 }

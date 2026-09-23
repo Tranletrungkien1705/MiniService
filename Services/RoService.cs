@@ -29,7 +29,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int ActiveCusDebits = 0, decimal TotalCusDebitBalance = 0, int OverdueCusDebits = 0,
     int TotalCustomerGroups = 0, int ActiveCustomerGroups = 0, int TotalFleetCars = 0,
     int PendingPartPriceRequests = 0, int RespondedPartPriceRequests = 0,
-    int TotalComplaintDiagnosticErrors = 0, int TotalComplaintCodes = 0, int TotalDiagnosticCodes = 0);
+    int TotalComplaintDiagnosticErrors = 0, int TotalComplaintCodes = 0, int TotalDiagnosticCodes = 0,
+    int TotalBirthdays = 0, int ThisMonthBirthdays = 0, int TodayBirthdays = 0, int PendingBirthdays = 0);
 
 public interface IRoService
 {
@@ -97,6 +98,17 @@ public interface IRoService
     Task<(bool ok, string msg)> UpdateCustomerCare72hSurveyAsync(int id, CustomerCare72hStatus status, bool? serviceExplained, bool? basicNeedsMet, bool hasTechnicalProblem, string? problemDetails, bool? fixedRightFirstTime, int? satisfactionRating, string? customerFeedback, string? reRepairAction, string? internalNote, string? contactedBy);
     Task<(bool ok, string msg, int? roId)> CreateReRepairFromCare72hAsync(int id, string? technician = null, string? note = null);
     Task<(bool ok, string msg)> DeleteCustomerCare72hAsync(int id);
+    // customer care birthday & loyalty gifts (Ser_CustomerCareBth)
+    Task<List<CustomerCareBirthday>> CustomerCareBirthdaysAsync(int? month, CustomerCareBirthdayStatus? status, string? q, bool? todayOnly = null);
+    Task<CustomerCareBirthday?> GetCustomerCareBirthdayAsync(int id);
+    Task<CustomerCareBirthdaySummaryDto> GetCustomerCareBirthdaySummaryAsync();
+    Task<int> CreateCustomerCareBirthdayAsync(CustomerCareBirthday care);
+    Task<(int generated, int skipped)> ScanAndGenerateBirthdayCaresAsync(int? year = null, string? createdBy = null);
+    Task<(bool ok, string msg)> UpdateCustomerCareBirthdayContactAsync(int id, CustomerCareBirthdayStatus status, BirthdayContactChannel channel, string? remark, string? giftVoucherCode, decimal giftVoucherValue, decimal discountPercent, DateTime? validUntil, string? contactedBy);
+    Task<(bool ok, string msg, int? appointmentId)> BookAppointmentFromBirthdayCareAsync(int id, DateTime appointmentDate, AppointmentServiceType serviceType, string? note);
+    Task<(bool ok, string msg)> ApplyBirthdayVoucherToROAsync(int id, int roId);
+    Task<(bool ok, string msg)> DeleteCustomerCareBirthdayAsync(int id);
+    Task<List<Customer>> CustomersEligibleForBirthdayCareAsync(int year);
     // payment (Ser_Payment)
     Task<List<Payment>> PaymentsAsync(PaymentStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId = null);
     Task<Payment?> GetPaymentAsync(int id);
@@ -920,6 +932,14 @@ public class RoService(AppDbContext db) : IRoService
         var totalComplaintCodes = await db.ComplaintDiagnosticErrors.CountAsync(e => e.ErrorType == ComplaintErrorType.Complaint && e.FlagActive);
         var totalDiagnosticCodes = await db.ComplaintDiagnosticErrors.CountAsync(e => e.ErrorType == ComplaintErrorType.Diagnostic && e.FlagActive);
 
+        var curBthMonth = today.Month;
+        var curBthDay = today.Day;
+        var allBirthdays = await db.CustomerCareBirthdays.ToListAsync();
+        var totalBirthdays = allBirthdays.Count;
+        var thisMonthBirthdays = allBirthdays.Count(b => b.DateBth.Month == curBthMonth);
+        var todayBirthdays = allBirthdays.Count(b => b.DateBth.Month == curBthMonth && b.DateBth.Day == curBthDay);
+        var pendingBirthdays = allBirthdays.Count(b => b.Status == CustomerCareBirthdayStatus.Pending);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -981,7 +1001,11 @@ public class RoService(AppDbContext db) : IRoService
             respondedPartPriceRequests,
             totalComplaintDiagnosticErrors,
             totalComplaintCodes,
-            totalDiagnosticCodes);
+            totalDiagnosticCodes,
+            totalBirthdays,
+            thisMonthBirthdays,
+            todayBirthdays,
+            pendingBirthdays);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -8610,5 +8634,266 @@ public class RoService(AppDbContext db) : IRoService
             .OrderByDescending(r => r.CreatedAt)
             .Take(30)
             .ToListAsync();
+
+    // --- Customer Birthday Care & Loyalty Gifts (Ser_CustomerCareBth) ---
+    public async Task<List<CustomerCareBirthday>> CustomerCareBirthdaysAsync(int? month, CustomerCareBirthdayStatus? status, string? q, bool? todayOnly = null)
+    {
+        var query = db.CustomerCareBirthdays
+            .Include(c => c.Customer)
+            .Include(c => c.Car)
+            .Include(c => c.UsedInRO)
+            .Include(c => c.Appointment)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(c => c.Status == status.Value);
+        if (month.HasValue && month.Value >= 1 && month.Value <= 12)
+        {
+            query = query.Where(c => c.DateBth.Month == month.Value);
+        }
+        if (todayOnly == true)
+        {
+            var tMonth = DateTime.Today.Month;
+            var tDay = DateTime.Today.Day;
+            query = query.Where(c => c.DateBth.Month == tMonth && c.DateBth.Day == tDay);
+        }
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(c => c.CareBthNo.ToLower().Contains(kw)
+                || c.Customer.Name.ToLower().Contains(kw)
+                || (c.Customer.Phone != null && c.Customer.Phone.ToLower().Contains(kw))
+                || (c.Car != null && c.Car.Plate.ToLower().Contains(kw))
+                || (c.GiftVoucherCode != null && c.GiftVoucherCode.ToLower().Contains(kw)));
+        }
+
+        return await query.OrderBy(c => c.DateBth.Month).ThenBy(c => c.DateBth.Day).ToListAsync();
+    }
+
+    public Task<CustomerCareBirthday?> GetCustomerCareBirthdayAsync(int id) =>
+        db.CustomerCareBirthdays
+            .Include(c => c.Customer).ThenInclude(cus => cus.Cars)
+            .Include(c => c.Car)
+            .Include(c => c.UsedInRO)
+            .Include(c => c.Appointment)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<CustomerCareBirthdaySummaryDto> GetCustomerCareBirthdaySummaryAsync()
+    {
+        var all = await db.CustomerCareBirthdays.ToListAsync();
+        var today = DateTime.Today;
+        return new CustomerCareBirthdaySummaryDto
+        {
+            TotalCount = all.Count,
+            ThisMonthCount = all.Count(x => x.DateBth.Month == today.Month),
+            TodayCount = all.Count(x => x.DateBth.Month == today.Month && x.DateBth.Day == today.Day),
+            PendingCount = all.Count(x => x.Status == CustomerCareBirthdayStatus.Pending),
+            ContactedCount = all.Count(x => x.Status == CustomerCareBirthdayStatus.Contacted),
+            NotContactedCount = all.Count(x => x.Status == CustomerCareBirthdayStatus.NotContacted),
+            VouchersIssuedCount = all.Count(x => !string.IsNullOrEmpty(x.GiftVoucherCode)),
+            VouchersUsedCount = all.Count(x => x.IsVoucherUsed),
+            TotalVoucherValue = all.Where(x => !string.IsNullOrEmpty(x.GiftVoucherCode)).Sum(x => x.GiftVoucherValue)
+        };
+    }
+
+    public async Task<int> CreateCustomerCareBirthdayAsync(CustomerCareBirthday care)
+    {
+        var cus = await db.Customers.Include(c => c.Cars).FirstOrDefaultAsync(c => c.Id == care.CustomerId);
+        if (cus == null) throw new InvalidOperationException("Khách hàng không tồn tại.");
+
+        if (care.CarId == null || care.CarId <= 0)
+        {
+            care.CarId = cus.Cars.FirstOrDefault()?.Id;
+        }
+
+        if (care.DateOfBirth.HasValue)
+        {
+            cus.DateOfBirth = care.DateOfBirth.Value;
+            var targetYear = care.DateBth != default ? care.DateBth.Year : DateTime.Today.Year;
+            care.DateBth = CustomerCareBirthday.CalculateDateBth(care.DateOfBirth.Value, targetYear);
+        }
+
+        var count = await db.CustomerCareBirthdays.CountAsync();
+        care.CareBthNo = $"BTH{DateTime.Today:yyMMdd}-{(count + 1):D3}";
+        if (string.IsNullOrWhiteSpace(care.GiftVoucherCode))
+        {
+            care.GiftVoucherCode = $"BDAY{care.DateBth.Year}-{cus.Code}";
+        }
+        if (care.VoucherValidUntil == null)
+        {
+            care.VoucherValidUntil = new DateTime(care.DateBth.Year, care.DateBth.Month, DateTime.DaysInMonth(care.DateBth.Year, care.DateBth.Month)).AddDays(30);
+        }
+        care.CreatedAt = DateTime.Now;
+
+        db.CustomerCareBirthdays.Add(care);
+        await db.SaveChangesAsync();
+        return care.Id;
+    }
+
+    public async Task<(int generated, int skipped)> ScanAndGenerateBirthdayCaresAsync(int? year = null, string? createdBy = null)
+    {
+        var targetYear = year ?? DateTime.Today.Year;
+        var customers = await db.Customers.Include(c => c.Cars).Where(c => c.DateOfBirth.HasValue).ToListAsync();
+        int generated = 0;
+        int skipped = 0;
+
+        foreach (var cus in customers)
+        {
+            var dateBth = CustomerCareBirthday.CalculateDateBth(cus.DateOfBirth!.Value, targetYear);
+            var exists = await db.CustomerCareBirthdays.AnyAsync(b => b.CustomerId == cus.Id && b.DateBth.Year == targetYear);
+            if (exists)
+            {
+                skipped++;
+                continue;
+            }
+
+            var count = await db.CustomerCareBirthdays.CountAsync() + generated;
+            var care = new CustomerCareBirthday
+            {
+                CareBthNo = $"BTH{DateTime.Today:yyMMdd}-{(count + 1):D3}",
+                CustomerId = cus.Id,
+                CarId = cus.Cars.FirstOrDefault()?.Id,
+                DateOfBirth = cus.DateOfBirth,
+                DateBth = dateBth,
+                Status = CustomerCareBirthdayStatus.Pending,
+                GiftVoucherCode = $"BDAY{targetYear}-{cus.Code}",
+                GiftVoucherValue = 300_000m,
+                DiscountPercent = 10m,
+                VoucherValidUntil = new DateTime(targetYear, dateBth.Month, DateTime.DaysInMonth(targetYear, dateBth.Month)).AddDays(30),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "auto-scanner" : createdBy.Trim(),
+                CreatedAt = DateTime.Now
+            };
+
+            db.CustomerCareBirthdays.Add(care);
+            generated++;
+        }
+
+        if (generated > 0)
+        {
+            await db.SaveChangesAsync();
+        }
+
+        return (generated, skipped);
+    }
+
+    public async Task<(bool ok, string msg)> UpdateCustomerCareBirthdayContactAsync(int id, CustomerCareBirthdayStatus status, BirthdayContactChannel channel, string? remark, string? giftVoucherCode, decimal giftVoucherValue, decimal discountPercent, DateTime? validUntil, string? contactedBy)
+    {
+        var care = await db.CustomerCareBirthdays.Include(c => c.Customer).FirstOrDefaultAsync(c => c.Id == id);
+        if (care == null) return (false, "Không tìm thấy phiếu CSKH sinh nhật.");
+
+        care.Status = status;
+        care.ContactChannel = channel;
+        care.ContactDate = DateTime.Now;
+        care.ContactedBy = string.IsNullOrWhiteSpace(contactedBy) ? "CSKH" : contactedBy.Trim();
+        if (!string.IsNullOrWhiteSpace(remark)) care.Remark = remark.Trim();
+        if (!string.IsNullOrWhiteSpace(giftVoucherCode)) care.GiftVoucherCode = giftVoucherCode.Trim();
+        if (giftVoucherValue >= 0) care.GiftVoucherValue = giftVoucherValue;
+        if (discountPercent >= 0) care.DiscountPercent = discountPercent;
+        if (validUntil.HasValue) care.VoucherValidUntil = validUntil.Value;
+
+        care.UpdatedAt = DateTime.Now;
+        care.UpdatedBy = care.ContactedBy;
+        care.LogLuDateTime = DateTime.Now;
+        care.LogLUBy = care.ContactedBy;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật trạng thái liên hệ: {Ui.CustomerCareBirthdayStatus(care.Status).text} qua {Ui.BirthdayContactChannel(channel).text}.");
+    }
+
+    public async Task<(bool ok, string msg, int? appointmentId)> BookAppointmentFromBirthdayCareAsync(int id, DateTime appointmentDate, AppointmentServiceType serviceType, string? note)
+    {
+        var care = await db.CustomerCareBirthdays.Include(c => c.Customer).Include(c => c.Car).FirstOrDefaultAsync(c => c.Id == id);
+        if (care == null) return (false, "Không tìm thấy phiếu CSKH sinh nhật.", null);
+
+        var carId = care.CarId ?? care.Customer.Cars.FirstOrDefault()?.Id;
+        if (carId == null) return (false, "Khách hàng chưa có thông tin xe trong hệ thống.", null);
+
+        var appCount = await db.Appointments.CountAsync();
+        var app = new Appointment
+        {
+            AppNo = $"APP{DateTime.Today:yyMMdd}-{(appCount + 1):D3}",
+            CarId = carId.Value,
+            CustomerId = care.CustomerId,
+            AppointmentDate = appointmentDate,
+            ServiceType = serviceType,
+            Status = AppointmentStatus.Confirmed,
+            Advisor = "CVDV Tiếp nhận SN",
+            CustomerRequest = $"Bảo dưỡng/Dịch vụ tri ân dịp sinh nhật. Áp dụng Voucher: {care.GiftVoucherCode} (Giảm {care.DiscountPercent}% hoặc {care.GiftVoucherValue:N0}đ)",
+            Note = note?.Trim(),
+            Source = "CSKH Sinh nhật",
+            CreatedBy = care.ContactedBy ?? "CSKH",
+            CreatedAt = DateTime.Now,
+            CustomerCareBirthdayId = care.Id
+        };
+
+        db.Appointments.Add(app);
+        await db.SaveChangesAsync();
+
+        care.AppointmentId = app.Id;
+        care.Status = CustomerCareBirthdayStatus.Contacted;
+        care.UpdatedAt = DateTime.Now;
+        await db.SaveChangesAsync();
+
+        return (true, $"Đã tạo lịch hẹn dịch vụ {app.AppNo} thành công cho xe ngày {appointmentDate:dd/MM/yyyy HH:mm}.", app.Id);
+    }
+
+    public async Task<(bool ok, string msg)> ApplyBirthdayVoucherToROAsync(int id, int roId)
+    {
+        var care = await db.CustomerCareBirthdays.Include(c => c.Customer).FirstOrDefaultAsync(c => c.Id == id);
+        if (care == null) return (false, "Không tìm thấy phiếu CSKH sinh nhật.");
+
+        var ro = await db.ROs.Include(r => r.Lines).FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa chỉ định.");
+
+        if (ro.Status == ROStatus.Finished || ro.Status == ROStatus.Paid || ro.Status == ROStatus.Rejected)
+            return (false, "Không thể áp dụng voucher cho RO đã thanh toán/hoàn tất hoặc bị hủy.");
+
+        decimal discount = 0;
+        if (care.DiscountPercent > 0)
+        {
+            var laborTotal = ro.Lines.Where(l => l.Type == LineType.Labor && l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount);
+            discount = Math.Round(laborTotal * (care.DiscountPercent / 100m), 0);
+        }
+        if (discount < care.GiftVoucherValue && care.GiftVoucherValue > 0)
+        {
+            discount = care.GiftVoucherValue;
+        }
+
+        ro.BirthdayDiscountAmount = discount;
+        ro.BirthdayCareId = care.Id;
+        ro.BirthdayVoucherCode = care.GiftVoucherCode;
+
+        care.IsVoucherUsed = true;
+        care.UsedInROId = ro.Id;
+        care.UpdatedAt = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã áp dụng Voucher sinh nhật {care.GiftVoucherCode} vào RO {ro.Code}, giảm trừ {discount:N0}đ.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCustomerCareBirthdayAsync(int id)
+    {
+        var care = await db.CustomerCareBirthdays.FirstOrDefaultAsync(c => c.Id == id);
+        if (care == null) return (false, "Không tìm thấy phiếu CSKH sinh nhật.");
+        if (care.IsVoucherUsed) return (false, "Không thể xóa phiếu sinh nhật có voucher đã sử dụng trong Lệnh sửa chữa.");
+
+        db.CustomerCareBirthdays.Remove(care);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu CSKH sinh nhật {care.CareBthNo}.");
+    }
+
+    public async Task<List<Customer>> CustomersEligibleForBirthdayCareAsync(int year)
+    {
+        var existingCustomerIds = await db.CustomerCareBirthdays
+            .Where(b => b.DateBth.Year == year)
+            .Select(b => b.CustomerId)
+            .ToListAsync();
+
+        return await db.Customers
+            .Include(c => c.Cars)
+            .Where(c => !existingCustomerIds.Contains(c.Id))
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+    }
 }
 

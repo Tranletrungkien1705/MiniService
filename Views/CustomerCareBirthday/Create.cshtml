@@ -1,0 +1,85 @@
+@{
+    ViewData["Title"] = "Lập phiếu CSKH Chúc mừng sinh nhật";
+    var customers = (List<Customer>?)ViewBag.Customers ?? [];
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold text-primary"><i class="bi bi-cake2 me-2"></i>Lập phiếu Chăm sóc sinh nhật khách hàng</h5>
+                    <a href="/CustomerCareBirthday" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="/CustomerCareBirthday/Create">
+                    @Html.AntiForgeryToken()
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Khách hàng <span class="text-danger">*</span></label>
+                        <select name="customerId" class="form-select" required id="selectCustomer">
+                            <option value="">— Chọn khách hàng nhận chăm sóc sinh nhật —</option>
+                            @foreach (var c in customers)
+                            {
+                                var carInfo = c.Cars.FirstOrDefault() != null ? $" — Xe: {c.Cars.First().Plate} ({c.Cars.First().Model})" : "";
+                                var dobInfo = c.DateOfBirth.HasValue ? $" [SN: {c.DateOfBirth.Value:dd/MM/yyyy}]" : " [Chưa có ngày sinh]";
+                                <option value="@c.Id" data-dob="@(c.DateOfBirth?.ToString("yyyy-MM-dd") ?? "")">
+                                    @c.Name (@(c.Phone ?? "Không SĐT"))@dobInfo@carInfo
+                                </option>
+                            }
+                        </select>
+                        <div class="form-text">Hệ thống liệt kê các khách hàng chưa có phiếu CSKH sinh nhật trong năm nay.</div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Ngày sinh nhật (DOB)</label>
+                            <input type="date" name="dateOfBirth" class="form-control" id="inputDob" />
+                            <div class="form-text">Nếu sinh ngày 29/02 năm nhuận, hệ thống sẽ tự động chuyển sang 28/02 đối với các năm thường.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mã Voucher ưu đãi</label>
+                            <input type="text" name="giftVoucherCode" class="form-control" placeholder="Để trống để tự sinh BDAY2026-..." />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Trị giá Voucher quà tặng (VNĐ)</label>
+                            <input type="number" name="giftVoucherValue" class="form-control" value="300000" step="50000" />
+                            <div class="form-text">Số tiền được cấn trừ trực tiếp vào hóa đơn Lệnh sửa chữa RO.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Tỷ lệ giảm giá công lao động / phụ tùng (%)</label>
+                            <input type="number" name="discountPercent" class="form-control" value="10" min="0" max="100" />
+                            <div class="form-text">Mức chiết khấu đặc quyền tri ân sinh nhật.</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label fw-semibold">Ghi chú ban đầu / Lời chúc dự kiến</label>
+                        <textarea name="remark" rows="3" class="form-control" placeholder="Ghi chú sở thích khách hàng, quà tặng đi kèm (áo mưa, dù Hyundai, voucher bảo dưỡng)..."></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="/CustomerCareBirthday" class="btn btn-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary fw-bold px-4"><i class="bi bi-check-lg me-1"></i>Tạo phiếu CSKH SN</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('selectCustomer')?.addEventListener('change', function() {
+        var opt = this.options[this.selectedIndex];
+        var dob = opt.getAttribute('data-dob');
+        if (dob) {
+            document.getElementById('inputDob').value = dob;
+        }
+    });
+</script>
+}

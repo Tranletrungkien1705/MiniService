@@ -4155,6 +4155,178 @@ public static class Seeder
 
             await db.SaveChangesAsync();
         }
+
+        // --- Chăm sóc sinh nhật khách hàng & Voucher tri ân (Ser_CustomerCareBth / FrmCSCCustomerCareDOB) ---
+        var existingCustomers = await db.Customers.Include(c => c.Cars).ToListAsync();
+        if (existingCustomers.Count > 0)
+        {
+            var today = DateTime.Today;
+            var c0 = existingCustomers[0];
+            if (!c0.DateOfBirth.HasValue) c0.DateOfBirth = new DateTime(1988, today.Month, today.Day); // Sinh nhật HÔM NAY!
+            if (string.IsNullOrEmpty(c0.Address)) c0.Address = "128 Cầu Giấy, Hà Nội";
+            if (string.IsNullOrEmpty(c0.Gender)) c0.Gender = "Nam";
+
+            if (existingCustomers.Count > 1)
+            {
+                var c1 = existingCustomers[1];
+                if (!c1.DateOfBirth.HasValue) c1.DateOfBirth = new DateTime(1992, today.Month, Math.Min(28, DateTime.DaysInMonth(today.Year, today.Month))); // Sinh nhật trong tháng này
+                if (string.IsNullOrEmpty(c1.Address)) c1.Address = "45 Nguyễn Trãi, Thanh Xuân, Hà Nội";
+                if (string.IsNullOrEmpty(c1.Gender)) c1.Gender = "Nữ";
+            }
+
+            // Khách hàng đặc biệt sinh nhật ngày nhuận 29/02 để kiểm chứng luật tính năm thường (28/02)
+            var leapCus = existingCustomers.FirstOrDefault(c => c.Code == "KH0009" || (c.DateOfBirth.HasValue && c.DateOfBirth.Value.Month == 2 && c.DateOfBirth.Value.Day == 29));
+            if (leapCus == null)
+            {
+                leapCus = new Customer
+                {
+                    Code = "KH0009",
+                    Name = "Lê Hoàng Phúc",
+                    Phone = "0908290290",
+                    Email = "phuc.lh@gmail.com",
+                    DateOfBirth = new DateTime(1996, 2, 29), // Sinh ngày 29/02 năm nhuận
+                    Address = "72 Lê Văn Lương, Hà Nội",
+                    Gender = "Nam",
+                    Cars = [new Car { Plate = "30H-888.29", Model = "Hyundai Santa Fe 2.5 HTRAC", Year = 2024, Vin = "RLHXXSF2902" }]
+                };
+                db.Customers.Add(leapCus);
+            }
+
+            // Khách hàng sinh nhật tháng tiếp theo
+            var nextMonthCus = existingCustomers.FirstOrDefault(c => c.Code == "KH0010");
+            if (nextMonthCus == null)
+            {
+                var nm = today.Month == 12 ? 1 : today.Month + 1;
+                nextMonthCus = new Customer
+                {
+                    Code = "KH0010",
+                    Name = "Phạm Quỳnh Chi",
+                    Phone = "0912345678",
+                    Email = "chi.pq@gmail.com",
+                    DateOfBirth = new DateTime(1995, nm, 15),
+                    Address = "15 Hoàng Đạo Thúy, Cầu Giấy, Hà Nội",
+                    Gender = "Nữ",
+                    Cars = [new Car { Plate = "30F-999.55", Model = "Hyundai Creta 1.5 Cao Cấp", Year = 2023, Vin = "RLHXXCR999" }]
+                };
+                db.Customers.Add(nextMonthCus);
+            }
+
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.CustomerCareBirthdays.AnyAsync())
+        {
+            var allCus = await db.Customers.Include(c => c.Cars).ToListAsync();
+            var today = DateTime.Today;
+            var targetYear = today.Year;
+
+            // 1. Khách hàng sinh nhật HÔM NAY (Pending - Chờ CSKH gọi chúc mừng & tặng voucher)
+            var cToday = allCus.FirstOrDefault(c => c.DateOfBirth.HasValue && c.DateOfBirth.Value.Month == today.Month && c.DateOfBirth.Value.Day == today.Day)
+                         ?? allCus.FirstOrDefault();
+            if (cToday != null)
+            {
+                var care1 = new CustomerCareBirthday
+                {
+                    CareBthNo = $"BTH{today:yyMMdd}-001",
+                    CustomerId = cToday.Id,
+                    CarId = cToday.Cars.FirstOrDefault()?.Id,
+                    DateOfBirth = cToday.DateOfBirth ?? new DateTime(1988, today.Month, today.Day),
+                    DateBth = new DateTime(targetYear, today.Month, today.Day),
+                    Status = CustomerCareBirthdayStatus.Pending,
+                    GiftVoucherCode = $"BDAY{targetYear}-{cToday.Code}",
+                    GiftVoucherValue = 500_000m,
+                    DiscountPercent = 15m,
+                    VoucherValidUntil = new DateTime(targetYear, today.Month, DateTime.DaysInMonth(targetYear, today.Month)).AddDays(30),
+                    IsVoucherUsed = false,
+                    Remark = "Khách hàng thân thiết. Hôm nay sinh nhật, đề xuất tặng thêm áo mưa cao cấp Hyundai và voucher giảm 15% tiền công bảo dưỡng.",
+                    CreatedBy = "system"
+                };
+                db.CustomerCareBirthdays.Add(care1);
+            }
+
+            // 2. Khách hàng sinh nhật trong THÁNG NÀY (ĐÃ LIÊN HỆ - CONTACTED - Đã tặng voucher & hẹn mang xe)
+            if (allCus.Count > 1)
+            {
+                var cContacted = allCus[1];
+                var bthMonth = today.Month;
+                var bthDay = Math.Max(1, today.Day - 3);
+                var care2 = new CustomerCareBirthday
+                {
+                    CareBthNo = $"BTH{today:yyMMdd}-002",
+                    CustomerId = cContacted.Id,
+                    CarId = cContacted.Cars.FirstOrDefault()?.Id,
+                    DateOfBirth = cContacted.DateOfBirth ?? new DateTime(1992, bthMonth, bthDay),
+                    DateBth = new DateTime(targetYear, bthMonth, bthDay),
+                    Status = CustomerCareBirthdayStatus.Contacted,
+                    ContactDate = today.AddDays(-1).AddHours(14),
+                    ContactedBy = "CSKH - Minh Thư",
+                    ContactChannel = BirthdayContactChannel.Call,
+                    GiftVoucherCode = $"BDAY{targetYear}-{cContacted.Code}",
+                    GiftVoucherValue = 300_000m,
+                    DiscountPercent = 10m,
+                    VoucherValidUntil = new DateTime(targetYear, bthMonth, DateTime.DaysInMonth(targetYear, bthMonth)).AddDays(30),
+                    IsVoucherUsed = false,
+                    Remark = "Đã gọi điện chúc mừng sinh nhật chị. Chị rất hài lòng và hào hứng nhận voucher dịch vụ. Đã hẹn mang xe tới bảo dưỡng cuối tuần.",
+                    CreatedBy = "system"
+                };
+                db.CustomerCareBirthdays.Add(care2);
+            }
+
+            // 3. Khách hàng sinh nhật 29/02 (Năm thường tính 28/02 - Áp dụng luật ngày nhuận)
+            var cLeap = allCus.FirstOrDefault(c => c.DateOfBirth.HasValue && c.DateOfBirth.Value.Month == 2 && c.DateOfBirth.Value.Day == 29);
+            if (cLeap != null)
+            {
+                var dateBth = CustomerCareBirthday.CalculateDateBth(cLeap.DateOfBirth!.Value, targetYear);
+                var care3 = new CustomerCareBirthday
+                {
+                    CareBthNo = $"BTH{today:yyMMdd}-003",
+                    CustomerId = cLeap.Id,
+                    CarId = cLeap.Cars.FirstOrDefault()?.Id,
+                    DateOfBirth = cLeap.DateOfBirth,
+                    DateBth = dateBth, // 28/02 if not leap year!
+                    Status = CustomerCareBirthdayStatus.Contacted,
+                    ContactDate = new DateTime(targetYear, 2, 28, 10, 30, 0),
+                    ContactedBy = "CSKH - Thanh Hằng",
+                    ContactChannel = BirthdayContactChannel.Zalo,
+                    GiftVoucherCode = $"BDAY{targetYear}-{cLeap.Code}",
+                    GiftVoucherValue = 400_000m,
+                    DiscountPercent = 10m,
+                    VoucherValidUntil = new DateTime(targetYear, 3, 31),
+                    IsVoucherUsed = true, // Demo voucher đã áp dụng
+                    Remark = "Sinh nhật ngày nhuận 29/02 đặc biệt (chúc mừng ngày 28/02). Đã gửi thiệp điện tử Zalo ZNS và khách đã sử dụng voucher khi làm dịch vụ.",
+                    CreatedBy = "system"
+                };
+                db.CustomerCareBirthdays.Add(care3);
+            }
+
+            // 4. Khách hàng gọi chưa nghe máy (NotContacted)
+            var cNotContact = allCus.LastOrDefault(c => c.Id != cToday?.Id && c.Id != cLeap?.Id);
+            if (cNotContact != null)
+            {
+                var care4 = new CustomerCareBirthday
+                {
+                    CareBthNo = $"BTH{today:yyMMdd}-004",
+                    CustomerId = cNotContact.Id,
+                    CarId = cNotContact.Cars.FirstOrDefault()?.Id,
+                    DateOfBirth = cNotContact.DateOfBirth ?? new DateTime(1990, today.Month, Math.Min(25, DateTime.DaysInMonth(targetYear, today.Month))),
+                    DateBth = CustomerCareBirthday.CalculateDateBth(cNotContact.DateOfBirth ?? new DateTime(1990, today.Month, Math.Min(25, DateTime.DaysInMonth(targetYear, today.Month))), targetYear),
+                    Status = CustomerCareBirthdayStatus.NotContacted,
+                    ContactDate = today.AddHours(-3),
+                    ContactedBy = "CSKH - Minh Thư",
+                    ContactChannel = BirthdayContactChannel.Call,
+                    GiftVoucherCode = $"BDAY{targetYear}-{cNotContact.Code}",
+                    GiftVoucherValue = 300_000m,
+                    DiscountPercent = 10m,
+                    VoucherValidUntil = new DateTime(targetYear, today.Month, DateTime.DaysInMonth(targetYear, today.Month)).AddDays(30),
+                    IsVoucherUsed = false,
+                    Remark = "Gọi 2 cuộc khách không nghe máy (máy bận). Sẽ liên hệ lại vào buổi chiều hoặc gửi tin nhắn SMS chúc mừng kèm voucher.",
+                    CreatedBy = "system"
+                };
+                db.CustomerCareBirthdays.Add(care4);
+            }
+
+            await db.SaveChangesAsync();
+        }
     }
 
 
@@ -4195,7 +4367,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -4270,6 +4442,18 @@ public static class Seeder
             "CREATE INDEX IF NOT EXISTS \"IX_CustomerCare72hs_OrgId_CarId\" ON miniservice.\"CustomerCare72hs\" (\"OrgId\", \"CarId\")",
             "CREATE INDEX IF NOT EXISTS \"IX_CustomerCare72hs_OrgId_CustomerId\" ON miniservice.\"CustomerCare72hs\" (\"OrgId\", \"CustomerId\")",
             "CREATE INDEX IF NOT EXISTS \"IX_CustomerCare72hs_OrgId_Status\" ON miniservice.\"CustomerCare72hs\" (\"OrgId\", \"Status\")",
+            "ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"DateOfBirth\" timestamp NULL",
+            "ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"Address\" text NULL",
+            "ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"Gender\" text NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"BirthdayDiscountAmount\" numeric(18,2) NOT NULL DEFAULT 0",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"BirthdayCareId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"BirthdayVoucherCode\" text NULL",
+            "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"CustomerCareBirthdayId\" integer NULL",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"CustomerCareBirthdays\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"CareBthNo\" text NOT NULL, \"CustomerId\" integer NOT NULL, \"CarId\" integer NULL, \"DateOfBirth\" timestamp NULL, \"DateBth\" timestamp NOT NULL, \"Status\" integer NOT NULL DEFAULT 0, \"ContactDate\" timestamp NULL, \"ContactedBy\" text NULL, \"ContactChannel\" integer NOT NULL DEFAULT 0, \"Remark\" text NULL, \"GiftVoucherCode\" text NULL, \"GiftVoucherValue\" numeric(18,2) NOT NULL DEFAULT 300000, \"DiscountPercent\" numeric(5,2) NOT NULL DEFAULT 10, \"VoucherValidUntil\" timestamp NULL, \"IsVoucherUsed\" boolean NOT NULL DEFAULT false, \"UsedInROId\" integer NULL, \"AppointmentId\" integer NULL, \"CreatedBy\" text NOT NULL DEFAULT 'system', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"UpdatedAt\" timestamp NULL, \"UpdatedBy\" text NULL, \"LogLuDateTime\" timestamp NULL, \"LogLUBy\" text NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CustomerCareBirthdays_OrgId_CareBthNo\" ON miniservice.\"CustomerCareBirthdays\" (\"OrgId\", \"CareBthNo\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerCareBirthdays_OrgId_CustomerId\" ON miniservice.\"CustomerCareBirthdays\" (\"OrgId\", \"CustomerId\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerCareBirthdays_OrgId_DateBth\" ON miniservice.\"CustomerCareBirthdays\" (\"OrgId\", \"DateBth\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerCareBirthdays_OrgId_Status\" ON miniservice.\"CustomerCareBirthdays\" (\"OrgId\", \"Status\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -5506,7 +5690,49 @@ public static class Seeder
             @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_ROId"" ON ""CustomerCare72hs"" (""OrgId"", ""ROId"");",
             @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_CarId"" ON ""CustomerCare72hs"" (""OrgId"", ""CarId"");",
             @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_CustomerId"" ON ""CustomerCare72hs"" (""OrgId"", ""CustomerId"");",
-            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_Status"" ON ""CustomerCare72hs"" (""OrgId"", ""Status"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_Status"" ON ""CustomerCare72hs"" (""OrgId"", ""Status"");",
+            @"ALTER TABLE ""Customers"" ADD COLUMN ""DateOfBirth"" TEXT NULL;",
+            @"ALTER TABLE ""Customers"" ADD COLUMN ""Address"" TEXT NULL;",
+            @"ALTER TABLE ""Customers"" ADD COLUMN ""Gender"" TEXT NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""BirthdayDiscountAmount"" NUMERIC NOT NULL DEFAULT 0;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""BirthdayCareId"" INTEGER NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""BirthdayVoucherCode"" TEXT NULL;",
+            @"ALTER TABLE ""Appointments"" ADD COLUMN ""CustomerCareBirthdayId"" INTEGER NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""CustomerCareBirthdays"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""CareBthNo"" TEXT NOT NULL,
+                ""CustomerId"" INTEGER NOT NULL,
+                ""CarId"" INTEGER NULL,
+                ""DateOfBirth"" TEXT NULL,
+                ""DateBth"" TEXT NOT NULL,
+                ""Status"" INTEGER NOT NULL DEFAULT 0,
+                ""ContactDate"" TEXT NULL,
+                ""ContactedBy"" TEXT NULL,
+                ""ContactChannel"" INTEGER NOT NULL DEFAULT 0,
+                ""Remark"" TEXT NULL,
+                ""GiftVoucherCode"" TEXT NULL,
+                ""GiftVoucherValue"" NUMERIC NOT NULL DEFAULT 300000,
+                ""DiscountPercent"" NUMERIC NOT NULL DEFAULT 10,
+                ""VoucherValidUntil"" TEXT NULL,
+                ""IsVoucherUsed"" INTEGER NOT NULL DEFAULT 0,
+                ""UsedInROId"" INTEGER NULL,
+                ""AppointmentId"" INTEGER NULL,
+                ""CreatedBy"" TEXT NOT NULL DEFAULT 'system',
+                ""CreatedAt"" TEXT NOT NULL,
+                ""UpdatedAt"" TEXT NULL,
+                ""UpdatedBy"" TEXT NULL,
+                ""LogLuDateTime"" TEXT NULL,
+                ""LogLUBy"" TEXT NULL,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""UsedInROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""AppointmentId"") REFERENCES ""Appointments"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerCareBirthdays_OrgId_CareBthNo"" ON ""CustomerCareBirthdays"" (""OrgId"", ""CareBthNo"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCareBirthdays_OrgId_CustomerId"" ON ""CustomerCareBirthdays"" (""OrgId"", ""CustomerId"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCareBirthdays_OrgId_DateBth"" ON ""CustomerCareBirthdays"" (""OrgId"", ""DateBth"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCareBirthdays_OrgId_Status"" ON ""CustomerCareBirthdays"" (""OrgId"", ""Status"");"
         };
 
         foreach (var sql in sqls)

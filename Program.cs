@@ -5424,6 +5424,157 @@ app.MapDelete("/api/customercare72h/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Chăm sóc sinh nhật khách hàng & Voucher tri ân (Ser_CustomerCareBth / FrmCSCCustomerCareDOB)
+app.MapGet("/api/customer-care-birthdays", async (int? month, CustomerCareBirthdayStatus? status, string? q, bool? todayOnly, IRoService svc) =>
+{
+    var list = await svc.CustomerCareBirthdaysAsync(month, status, q, todayOnly);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.CareBthNo,
+        c.CustomerId,
+        customerName = c.Customer.Name,
+        customerPhone = c.Customer.Phone,
+        customerCode = c.Customer.Code,
+        c.CarId,
+        plate = c.Car?.Plate,
+        model = c.Car?.Model,
+        c.DateOfBirth,
+        c.DateBth,
+        birthMonth = c.BirthMonth,
+        birthDay = c.BirthDay,
+        currentAge = c.CurrentAge,
+        isTodayBirthday = c.IsTodayBirthday,
+        isThisMonthBirthday = c.IsThisMonthBirthday,
+        daysUntilBirthday = c.DaysUntilBirthday,
+        status = Ui.CustomerCareBirthdayStatus(c.Status).text,
+        statusCode = Ui.CustomerCareBirthdayStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.ContactDate,
+        c.ContactedBy,
+        channel = Ui.BirthdayContactChannel(c.ContactChannel).text,
+        channelValue = (int)c.ContactChannel,
+        c.Remark,
+        c.GiftVoucherCode,
+        c.GiftVoucherValue,
+        c.DiscountPercent,
+        c.VoucherValidUntil,
+        c.IsVoucherUsed,
+        c.UsedInROId,
+        usedInRoCode = c.UsedInRO?.Code,
+        c.AppointmentId,
+        appointmentNo = c.Appointment?.AppNo,
+        c.CreatedAt,
+        c.CreatedBy
+    }));
+});
+
+app.MapGet("/api/customer-care-birthdays/summary", async (IRoService svc) =>
+{
+    var summary = await svc.GetCustomerCareBirthdaySummaryAsync();
+    return Results.Ok(summary);
+});
+
+app.MapGet("/api/customer-care-birthdays/{id:int}", async (int id, IRoService svc) =>
+{
+    var c = await svc.GetCustomerCareBirthdayAsync(id);
+    if (c == null) return Results.NotFound(new { error = "Không tìm thấy phiếu CSKH sinh nhật." });
+    return Results.Ok(new
+    {
+        c.Id,
+        c.CareBthNo,
+        c.CustomerId,
+        customerName = c.Customer.Name,
+        customerPhone = c.Customer.Phone,
+        customerCode = c.Customer.Code,
+        customerEmail = c.Customer.Email,
+        c.CarId,
+        plate = c.Car?.Plate,
+        model = c.Car?.Model,
+        c.DateOfBirth,
+        c.DateBth,
+        birthMonth = c.BirthMonth,
+        birthDay = c.BirthDay,
+        currentAge = c.CurrentAge,
+        isTodayBirthday = c.IsTodayBirthday,
+        isThisMonthBirthday = c.IsThisMonthBirthday,
+        daysUntilBirthday = c.DaysUntilBirthday,
+        status = Ui.CustomerCareBirthdayStatus(c.Status).text,
+        statusCode = Ui.CustomerCareBirthdayStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.ContactDate,
+        c.ContactedBy,
+        channel = Ui.BirthdayContactChannel(c.ContactChannel).text,
+        channelValue = (int)c.ContactChannel,
+        c.Remark,
+        c.GiftVoucherCode,
+        c.GiftVoucherValue,
+        c.DiscountPercent,
+        c.VoucherValidUntil,
+        c.IsVoucherUsed,
+        c.UsedInROId,
+        usedInRoCode = c.UsedInRO?.Code,
+        c.AppointmentId,
+        appointmentNo = c.Appointment?.AppNo,
+        c.CreatedAt,
+        c.CreatedBy
+    });
+});
+
+app.MapPost("/api/customer-care-birthdays", async (CreateCustomerCareBirthdayDto dto, IRoService svc) =>
+{
+    try
+    {
+        var care = new CustomerCareBirthday
+        {
+            CustomerId = dto.CustomerId,
+            DateOfBirth = dto.DateOfBirth,
+            DateBth = dto.DateOfBirth.HasValue ? CustomerCareBirthday.CalculateDateBth(dto.DateOfBirth.Value, DateTime.Today.Year) : DateTime.Today,
+            GiftVoucherCode = dto.GiftVoucherCode?.Trim(),
+            GiftVoucherValue = dto.GiftVoucherValue ?? 300_000m,
+            DiscountPercent = dto.DiscountPercent ?? 10m,
+            Remark = dto.Remark?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreateCustomerCareBirthdayAsync(care);
+        return Results.Created($"/api/customer-care-birthdays/{id}", new { id, care.CareBthNo, message = "Đã lập phiếu CSKH sinh nhật thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/customer-care-birthdays/scan-auto", async (int? year, IRoService svc) =>
+{
+    var (gen, skip) = await svc.ScanAndGenerateBirthdayCaresAsync(year, "api-scanner");
+    return Results.Ok(new { generated = gen, skipped = skip, message = $"Quét tự động hoàn tất: {gen} mới, {skip} đã có." });
+});
+
+app.MapPost("/api/customer-care-birthdays/{id:int}/contact", async (int id, UpdateBirthdayContactDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.UpdateCustomerCareBirthdayContactAsync(id, dto.Status, dto.Channel, dto.Remark, dto.GiftVoucherCode, dto.GiftVoucherValue, dto.DiscountPercent, dto.ValidUntil, dto.ContactedBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/customer-care-birthdays/{id:int}/book-appointment", async (int id, BookBirthdayAppointmentDto dto, IRoService svc) =>
+{
+    var (ok, msg, appId) = await svc.BookAppointmentFromBirthdayCareAsync(id, dto.AppointmentDate, dto.ServiceType, dto.Note);
+    return ok ? Results.Ok(new { message = msg, appointmentId = appId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/customer-care-birthdays/{id:int}/apply-to-ro/{roId:int}", async (int id, int roId, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ApplyBirthdayVoucherToROAsync(id, roId);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/customer-care-birthdays/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCustomerCareBirthdayAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -5569,6 +5720,10 @@ record ApplyErrorToRoDto(int RoId, int ErrorId, string? Target);
 record CreateCustomerCare72hDto(int RoId, string? InternalNote, string? CreatedBy);
 record SubmitCare72hSurveyDto(CustomerCare72hStatus Status, bool? ServiceExplained, bool? BasicNeedsMet, bool HasTechnicalProblem, string? ProblemDetails, bool? FixedRightFirstTime, int? SatisfactionRating, string? CustomerFeedback, string? ReRepairAction, string? InternalNote, string? ContactedBy);
 record CreateReRepairFromCare72hDto(string? Technician, string? Note);
+
+record CreateCustomerCareBirthdayDto(int CustomerId, DateTime? DateOfBirth, string? GiftVoucherCode, decimal? GiftVoucherValue, decimal? DiscountPercent, string? Remark, string? CreatedBy);
+record UpdateBirthdayContactDto(CustomerCareBirthdayStatus Status, BirthdayContactChannel Channel, string? Remark, string? GiftVoucherCode, decimal GiftVoucherValue, decimal DiscountPercent, DateTime? ValidUntil, string? ContactedBy);
+record BookBirthdayAppointmentDto(DateTime AppointmentDate, AppointmentServiceType ServiceType, string? Note);
 
 
 

@@ -5152,4 +5152,124 @@ public class CustomerCare72hController(IRoService svc) : Controller
     }
 }
 
+public class CustomerCareBirthdayController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? month, CustomerCareBirthdayStatus? status, string? q, bool? todayOnly)
+    {
+        ViewBag.Month = month;
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.TodayOnly = todayOnly ?? false;
+
+        var summary = await svc.GetCustomerCareBirthdaySummaryAsync();
+        ViewBag.Summary = summary;
+
+        var list = await svc.CustomerCareBirthdaysAsync(month, status, q, todayOnly);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Customers = await svc.CustomersEligibleForBirthdayCareAsync(DateTime.Today.Year);
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int customerId, DateTime? dateOfBirth, decimal giftVoucherValue, decimal discountPercent, string? giftVoucherCode, string? remark)
+    {
+        if (customerId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn khách hàng.";
+            ViewBag.Customers = await svc.CustomersEligibleForBirthdayCareAsync(DateTime.Today.Year);
+            return View();
+        }
+
+        try
+        {
+            var care = new CustomerCareBirthday
+            {
+                CustomerId = customerId,
+                DateOfBirth = dateOfBirth,
+                DateBth = dateOfBirth.HasValue ? CustomerCareBirthday.CalculateDateBth(dateOfBirth.Value, DateTime.Today.Year) : DateTime.Today,
+                GiftVoucherValue = giftVoucherValue > 0 ? giftVoucherValue : 300_000m,
+                DiscountPercent = discountPercent >= 0 ? discountPercent : 10m,
+                GiftVoucherCode = giftVoucherCode?.Trim(),
+                Remark = remark?.Trim(),
+                Status = CustomerCareBirthdayStatus.Pending,
+                CreatedBy = "web"
+            };
+
+            var id = await svc.CreateCustomerCareBirthdayAsync(care);
+            TempData["Success"] = $"Đã lập phiếu CSKH Sinh nhật {care.CareBthNo} cho khách hàng thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Customers = await svc.CustomersEligibleForBirthdayCareAsync(DateTime.Today.Year);
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var care = await svc.GetCustomerCareBirthdayAsync(id);
+        if (care == null) return NotFound();
+
+        var openROs = await svc.ROsAsync(null, care.Customer.Code);
+        ViewBag.OpenROs = openROs.Where(r => r.CustomerId == care.CustomerId && r.Status != ROStatus.Finished && r.Status != ROStatus.Paid && r.Status != ROStatus.Rejected).ToList();
+
+        return View(care);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Contact(int id, CustomerCareBirthdayStatus status, BirthdayContactChannel channel,
+        string? remark, string? giftVoucherCode, decimal giftVoucherValue, decimal discountPercent, DateTime? validUntil, string? contactedBy)
+    {
+        var (ok, msg) = await svc.UpdateCustomerCareBirthdayContactAsync(id, status, channel, remark, giftVoucherCode, giftVoucherValue, discountPercent, validUntil, contactedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ScanAuto(int? year)
+    {
+        var (gen, skip) = await svc.ScanAndGenerateBirthdayCaresAsync(year, "Quản lý CSKH");
+        TempData["Success"] = $"Quét tự động hoàn tất: Đã sinh mới {gen} phiếu CSKH sinh nhật ({skip} khách hàng đã có phiếu).";
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> BookAppointment(int id, DateTime appointmentDate, AppointmentServiceType serviceType, string? note)
+    {
+        var (ok, msg, appId) = await svc.BookAppointmentFromBirthdayCareAsync(id, appointmentDate, serviceType, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyVoucher(int id, int roId)
+    {
+        var (ok, msg) = await svc.ApplyBirthdayVoucherToROAsync(id, roId);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var care = await svc.GetCustomerCareBirthdayAsync(id);
+        if (care == null) return NotFound();
+        return View(care);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCustomerCareBirthdayAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
+
 

@@ -1,0 +1,393 @@
+@model CustomerCareBirthday
+@{
+    ViewData["Title"] = $"Phiếu CSKH Sinh nhật {Model.CareBthNo}";
+    var (stText, stCode, stCss) = Ui.CustomerCareBirthdayStatus(Model.Status);
+    var openROs = (List<RepairOrder>?)ViewBag.OpenROs ?? [];
+    var isToday = Model.IsTodayBirthday;
+    var isThisMonth = Model.IsThisMonthBirthday;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="mb-0 fw-bold text-primary"><i class="bi bi-cake2 me-2"></i>@Model.CareBthNo</h4>
+            <span class="badge bg-@stCss fs-6">@stCode — @stText</span>
+            <span class="badge bg-light text-dark border">Quy trình Chúc mừng sinh nhật &amp; Loyalty</span>
+        </div>
+        <div class="text-muted small mt-1">
+            Khách hàng: <b>@Model.Customer.Name</b> ·
+            Sinh nhật năm nay: <b>@Model.DateBth.ToString("dd/MM/yyyy")</b>
+            @if (Model.DateOfBirth.HasValue)
+            {
+                <span> (Năm sinh: @Model.DateOfBirth.Value.Year — <b>@Model.CurrentAge tuổi</b>)</span>
+            }
+            @if (Model.ContactDate.HasValue)
+            {
+                <span> · Đã liên hệ lúc: <b>@Model.ContactDate.Value.ToString("dd/MM/yyyy HH:mm")</b> (@(Model.ContactedBy ?? "CSKH"))</span>
+            }
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/CustomerCareBirthday" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Sổ CSKH SN</a>
+        <a href="/CustomerCareBirthday/Print/@Model.Id" class="btn btn-sm btn-outline-dark" target="_blank"><i class="bi bi-printer me-1"></i>In thiệp chúc mừng</a>
+        <form method="post" action="/CustomerCareBirthday/Delete/@Model.Id" onsubmit="return confirm('Bạn có chắc chắn muốn xóa phiếu CSKH sinh nhật này?')" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button class="btn btn-sm btn-outline-danger" @(Model.IsVoucherUsed ? "disabled title='Voucher đã được dùng trong RO, không thể xóa'" : "")><i class="bi bi-trash"></i></button>
+        </form>
+    </div>
+</div>
+
+@if (isToday)
+{
+    <div class="alert alert-warning shadow-sm mb-3 border-warning">
+        <div class="d-flex align-items-center gap-3">
+            <div class="display-6 text-danger"><i class="bi bi-cake2-fill"></i></div>
+            <div>
+                <h5 class="fw-bold mb-1 text-danger">HÔM NAY LÀ SINH NHẬT CỦA KHÁCH HÀNG @Model.Customer.Name!</h5>
+                <div>Hãy ưu tiên gọi điện chúc mừng và gửi tặng mã voucher ưu đãi dịch vụ đặc biệt ngay hôm nay.</div>
+            </div>
+        </div>
+    </div>
+}
+else if (isThisMonth)
+{
+    <div class="alert alert-info shadow-sm mb-3">
+        <i class="bi bi-bell-fill me-2"></i>Khách hàng có ngày sinh nhật trong <b>tháng @Model.BirthMonth</b> (ngày @Model.BirthDay/@Model.BirthMonth, còn <b>@Model.DaysUntilBirthday ngày</b> nữa).
+    </div>
+}
+
+<div class="row g-3">
+    <!-- Cột trái: Thông tin khách hàng, xe, voucher, appointment -->
+    <div class="col-lg-5">
+        <!-- Thẻ Khách hàng -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white py-2 fw-bold text-secondary">
+                <i class="bi bi-person-circle me-1"></i>Thông tin Khách hàng
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted" style="width:120px">Họ và tên:</td>
+                        <td class="fw-bold text-dark">@Model.Customer.Name</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Mã khách hàng:</td>
+                        <td><span class="badge bg-light text-secondary border">@Model.Customer.Code</span></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Điện thoại:</td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(Model.Customer.Phone))
+                            {
+                                <a href="tel:@Model.Customer.Phone" class="fw-bold text-primary text-decoration-none">
+                                    <i class="bi bi-telephone-outbound me-1"></i>@Model.Customer.Phone
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="text-muted">Chưa có SĐT</span>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Email:</td>
+                        <td>@(Model.Customer.Email ?? "Chưa có email")</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Ngày sinh (DOB):</td>
+                        <td>
+                            <b>@Model.DateBth.ToString("dd/MM")</b>
+                            @if (Model.DateOfBirth.HasValue)
+                            {
+                                <span> (Năm sinh: @Model.DateOfBirth.Value.ToString("dd/MM/yyyy"))</span>
+                            }
+                            @if (Model.DateOfBirth.HasValue && Model.DateOfBirth.Value.Month == 2 && Model.DateOfBirth.Value.Day == 29)
+                            {
+                                <span class="badge bg-warning text-dark ms-1" title="Sinh ngày 29/02 năm nhuận">29/02</span>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Tuổi hiện tại:</td>
+                        <td><span class="badge bg-info text-dark">@Model.CurrentAge tuổi</span></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <!-- Thẻ Xe & Lịch sử -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white py-2 fw-bold text-secondary">
+                <i class="bi bi-car-front-fill me-1"></i>Thông tin Phương tiện
+            </div>
+            <div class="card-body">
+                @if (Model.Car != null)
+                {
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="badge bg-dark fs-6">@Model.Car.Plate</span>
+                        <span class="fw-semibold">@Model.Car.Model</span>
+                        <span class="text-muted small">(@Model.Car.Year)</span>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.Car.Vin))
+                    {
+                        <div class="text-muted small mb-2">Số khung (VIN): <code>@Model.Car.Vin</code></div>
+                    }
+                }
+                else
+                {
+                    <div class="text-muted small">Chưa chỉ định xe đại diện.</div>
+                }
+
+                @if (Model.Customer.Cars.Count > 1)
+                {
+                    <div class="mt-2 pt-2 border-top">
+                        <div class="text-muted small mb-1">Các xe khác của khách hàng:</div>
+                        @foreach (var c in Model.Customer.Cars.Where(x => x.Id != Model.CarId))
+                        {
+                            <span class="badge bg-light text-dark border me-1">@c.Plate (@c.Model)</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Thẻ Voucher Tri ân Sinh nhật -->
+        <div class="card shadow-sm mb-3 border-primary">
+            <div class="card-header bg-primary text-white py-2 fw-bold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-gift-fill me-1"></i>Voucher Tri Ân Sinh Nhật</span>
+                @if (Model.IsVoucherUsed)
+                {
+                    <span class="badge bg-success">Đã áp dụng</span>
+                }
+                else
+                {
+                    <span class="badge bg-warning text-dark">Có hiệu lực</span>
+                }
+            </div>
+            <div class="card-body">
+                <div class="text-center py-2 mb-3 bg-light rounded border">
+                    <div class="text-muted small text-uppercase">Mã Voucher Quà Tặng</div>
+                    <div class="fs-4 fw-bold text-primary font-monospace">@(Model.GiftVoucherCode ?? "CHƯA CẤP")</div>
+                    <div class="fw-bold text-success mt-1">Giảm @Model.GiftVoucherValue.ToString("N0")đ (@Model.DiscountPercent% tiền công)</div>
+                </div>
+
+                <div class="small">
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Hạn sử dụng:</span>
+                        <b>@(Model.VoucherValidUntil?.ToString("dd/MM/yyyy") ?? "Hết tháng sinh nhật")</b>
+                    </div>
+                    <div class="d-flex justify-content-between py-1 border-bottom">
+                        <span class="text-muted">Tình trạng voucher:</span>
+                        <span>
+                            @if (Model.IsVoucherUsed)
+                            {
+                                <span class="badge bg-success">Đã sử dụng trong RO</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-success border">Chưa sử dụng</span>
+                            }
+                        </span>
+                    </div>
+                    @if (Model.UsedInROId.HasValue)
+                    {
+                        <div class="d-flex justify-content-between py-1 border-bottom">
+                            <span class="text-muted">Gắn với Lệnh SC:</span>
+                            <a href="/RO/Detail/@Model.UsedInROId.Value" class="fw-bold text-primary">
+                                @(Model.UsedInRO?.Code ?? $"RO #{Model.UsedInROId.Value}")
+                            </a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Thẻ Lịch hẹn phát sinh -->
+        @if (Model.AppointmentId.HasValue)
+        {
+            <div class="card shadow-sm mb-3 border-info">
+                <div class="card-header bg-info text-white py-2 fw-bold">
+                    <i class="bi bi-calendar2-check me-1"></i>Lịch hẹn dịch vụ phát sinh
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-bold text-primary">
+                                <a href="/Appointment" class="text-decoration-none">
+                                    @(Model.Appointment?.AppNo ?? $"APP #{Model.AppointmentId.Value}")
+                                </a>
+                            </div>
+                            <div class="small text-muted">
+                                Ngày hẹn: <b>@Model.Appointment?.AppointmentDate.ToString("dd/MM/yyyy HH:mm")</b>
+                            </div>
+                            <div class="small text-muted">
+                                Cố vấn dịch vụ: @(Model.Appointment?.Advisor ?? "CVDV Tiếp nhận")
+                            </div>
+                        </div>
+                        <span class="badge bg-success">Đã đặt hẹn</span>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Cột phải: Form cập nhật liên hệ & Các tác vụ nhanh -->
+    <div class="col-lg-7">
+        <!-- Form Cập nhật Liên hệ & Lời chúc -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white py-2 fw-bold text-primary">
+                <i class="bi bi-telephone-inbound me-1"></i>Cập nhật kết quả Liên hệ &amp; Chăm sóc
+            </div>
+            <div class="card-body">
+                <form method="post" action="/CustomerCareBirthday/Contact/@Model.Id">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Trạng thái chăm sóc <span class="text-danger">*</span></label>
+                            <select name="status" class="form-select" required>
+                                @foreach (CustomerCareBirthdayStatus s in Enum.GetValues(typeof(CustomerCareBirthdayStatus)))
+                                {
+                                    var (name, code, _) = Ui.CustomerCareBirthdayStatus(s);
+                                    <option value="@((int)s)" selected="@(Model.Status == s)">[@code] @name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Kênh liên hệ</label>
+                            <select name="channel" class="form-select">
+                                @foreach (BirthdayContactChannel ch in Enum.GetValues(typeof(BirthdayContactChannel)))
+                                {
+                                    var (name, _, _) = Ui.BirthdayContactChannel(ch);
+                                    <option value="@((int)ch)" selected="@(Model.ContactChannel == ch)">@name</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Nhân viên CSKH liên hệ</label>
+                            <input type="text" name="contactedBy" class="form-control" value="@(Model.ContactedBy ?? "CSKH - Minh Thư")" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Hạn dùng Voucher</label>
+                            <input type="date" name="validUntil" class="form-control" value="@(Model.VoucherValidUntil?.ToString("yyyy-MM-dd") ?? "")" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Mã Voucher</label>
+                            <input type="text" name="giftVoucherCode" class="form-control font-monospace" value="@Model.GiftVoucherCode" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Trị giá Voucher (VNĐ)</label>
+                            <input type="number" name="giftVoucherValue" class="form-control" value="@Model.GiftVoucherValue" step="50000" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">% Giảm giá công/phụ tùng</label>
+                            <input type="number" name="discountPercent" class="form-control" value="@Model.DiscountPercent" min="0" max="100" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Nội dung trao đổi / Lời chúc &amp; Phản hồi của Khách hàng</label>
+                        <textarea name="remark" rows="3" class="form-control" placeholder="Ghi nhận phản hồi của khách hàng (KH rất vui và đồng ý đặt hẹn vào thứ 7 tuần này, tặng kèm dù Hyundai...)">@Model.Remark</textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary fw-bold"><i class="bi bi-save me-1"></i>Lưu kết quả liên hệ</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tác vụ nhanh 1: Đặt lịch hẹn đón tiếp xe -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white py-2 fw-bold text-success d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-calendar-plus me-1"></i>Đặt hẹn dịch vụ nhân dịp sinh nhật</span>
+                @if (Model.AppointmentId.HasValue)
+                {
+                    <span class="badge bg-success">Đã tạo lịch hẹn</span>
+                }
+            </div>
+            <div class="card-body">
+                <form method="post" action="/CustomerCareBirthday/BookAppointment/@Model.Id">
+                    @Html.AntiForgeryToken()
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Thời gian hẹn mang xe đến xưởng</label>
+                            <input type="datetime-local" name="appointmentDate" class="form-control form-control-sm" value="@DateTime.Today.AddDays(2).AddHours(9).ToString("yyyy-MM-ddTHH:mm")" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Loại dịch vụ</label>
+                            <select name="serviceType" class="form-select form-select-sm">
+                                <option value="0">Bảo dưỡng định kỳ</option>
+                                <option value="1">Sửa chữa chung</option>
+                                <option value="2">Đồng sơn</option>
+                                <option value="4">Chăm sóc làm đẹp xe</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <input type="text" name="note" class="form-control form-control-sm" placeholder="Ghi chú hẹn (VD: Khách yêu cầu rửa khoang máy và kiểm tra phanh)" />
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-sm btn-outline-success fw-bold">
+                            <i class="bi bi-calendar-check me-1"></i>Xác nhận Đặt hẹn Dịch vụ
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Tác vụ nhanh 2: Áp dụng voucher vào RO đang mở -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white py-2 fw-bold text-warning-emphasis d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-receipt me-1"></i>Áp dụng Voucher vào Lệnh sửa chữa (RO)</span>
+                @if (Model.IsVoucherUsed)
+                {
+                    <span class="badge bg-secondary">Voucher đã được dùng</span>
+                }
+            </div>
+            <div class="card-body">
+                @if (Model.IsVoucherUsed)
+                {
+                    <div class="text-muted small">
+                        Voucher này đã được áp dụng vào Lệnh sửa chữa <a href="/RO/Detail/@Model.UsedInROId">@(Model.UsedInRO?.Code ?? $"RO #{Model.UsedInROId}")</a>.
+                    </div>
+                }
+                else if (openROs.Count == 0)
+                {
+                    <div class="text-muted small">
+                        Hiện tại khách hàng không có Lệnh sửa chữa nào đang mở để áp dụng voucher.
+                    </div>
+                }
+                else
+                {
+                    <form method="post" action="/CustomerCareBirthday/ApplyVoucher/@Model.Id">
+                        @Html.AntiForgeryToken()
+                        <div class="mb-3">
+                            <label class="form-label small fw-semibold">Chọn Lệnh sửa chữa đang mở của khách hàng:</label>
+                            <select name="roId" class="form-select form-select-sm" required>
+                                @foreach (var ro in openROs)
+                                {
+                                    <option value="@ro.Id">
+                                        @ro.Code — Xe: @(ro.Car?.Plate) — Tiền công: @ro.LaborTotal.ToString("N0")đ — Tổng: @ro.CustomerTotal.ToString("N0")đ
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text">Hệ thống sẽ tự động tính giảm trừ chi phí theo mức ưu đãi sinh nhật.</div>
+                        </div>
+                        <div class="d-flex justify-content-end">
+                            <button type="submit" class="btn btn-sm btn-warning fw-bold text-dark" onclick="return confirm('Xác nhận áp dụng voucher sinh nhật vào Lệnh sửa chữa này?')">
+                                <i class="bi bi-tag-fill me-1"></i>Áp dụng Voucher vào RO
+                            </button>
+                        </div>
+                    </form>
+                }
+            </div>
+        </div>
+    </div>
+</div>

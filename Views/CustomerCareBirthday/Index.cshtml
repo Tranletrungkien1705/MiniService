@@ -1,0 +1,238 @@
+@model List<CustomerCareBirthday>
+@{
+    ViewData["Title"] = "Chăm sóc sinh nhật khách hàng & Voucher tri ân (Care Birthday)";
+    var curStatus = (CustomerCareBirthdayStatus?)ViewBag.Status;
+    int? curMonth = ViewBag.Month;
+    var summary = (CustomerCareBirthdaySummaryDto?)ViewBag.Summary ?? new CustomerCareBirthdaySummaryDto();
+    bool todayOnly = ViewBag.TodayOnly ?? false;
+    var currentMonth = DateTime.Today.Month;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Tổng khách sinh nhật</div>
+            <div class="stat-num text-primary">@summary.TotalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Sinh nhật tháng @currentMonth</div>
+            <div class="stat-num text-info">@summary.ThisMonthCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm border-danger"><div class="card-body">
+            <div class="text-muted small text-danger fw-bold"><i class="bi bi-cake2-fill me-1"></i>Hôm nay sinh nhật</div>
+            <div class="stat-num text-danger">@summary.TodayCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Chờ liên hệ</div>
+            <div class="stat-num text-warning">@summary.PendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Đã liên hệ chúc mừng</div>
+            <div class="stat-num text-success">@summary.ContactedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Tỷ lệ hoàn thành</div>
+            <div class="stat-num text-dark">@summary.ContactCompletionRate<span style="font-size:14px">%</span></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã phiếu / Tên KH / SĐT / Biển số / Voucher..." style="max-width:260px" />
+                <select name="month" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:160px">
+                    <option value="">— Tất cả các tháng —</option>
+                    @for (int m = 1; m <= 12; m++)
+                    {
+                        <option value="@m" selected="@(curMonth == m)">Tháng @m @(m == currentMonth ? "(Tháng này)" : "")</option>
+                    }
+                </select>
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:190px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (CustomerCareBirthdayStatus s in Enum.GetValues(typeof(CustomerCareBirthdayStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.CustomerCareBirthdayStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <div class="form-check form-check-inline mb-0 ms-1">
+                    <input class="form-check-input" type="checkbox" id="todayOnly" name="todayOnly" value="true" @(todayOnly ? "checked" : "") onchange="this.form.submit()" />
+                    <label class="form-check-label small fw-semibold text-danger" for="todayOnly"><i class="bi bi-gift-fill me-1"></i>Hôm nay</label>
+                </div>
+                <button class="btn btn-sm btn-primary"><i class="bi bi-filter me-1"></i>Lọc</button>
+            </form>
+
+            <div class="d-flex gap-2">
+                <form method="post" action="/CustomerCareBirthday/ScanAuto" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <button type="submit" class="btn btn-sm btn-outline-info" title="Tự động phát hiện khách hàng có sinh nhật trong năm để tạo phiếu">
+                        <i class="bi bi-arrow-repeat me-1"></i>Quét tự động SN (@DateTime.Today.Year)
+                    </button>
+                </form>
+                <a href="/CustomerCareBirthday/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập phiếu SN</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:130px">Mã phiếu</th>
+                        <th>Khách hàng</th>
+                        <th>Xe</th>
+                        <th>Ngày sinh</th>
+                        <th>Tuổi</th>
+                        <th>Trạng thái</th>
+                        <th>Voucher tri ân</th>
+                        <th>Liên hệ</th>
+                        <th class="text-end" style="width:130px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center py-4 text-muted">
+                                <i class="bi bi-cake2 display-6 d-block mb-2 text-secondary"></i>
+                                Không tìm thấy phiếu chăm sóc sinh nhật nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var item in Model)
+                    {
+                        var (stText, stCode, stCss) = Ui.CustomerCareBirthdayStatus(item.Status);
+                        var isToday = item.IsTodayBirthday;
+                        var isThisMonth = item.IsThisMonthBirthday;
+
+                        <tr class="@(isToday ? "table-warning fw-semibold" : "")">
+                            <td>
+                                <a href="/CustomerCareBirthday/Detail/@item.Id" class="fw-bold text-decoration-none text-primary">
+                                    @item.CareBthNo
+                                </a>
+                            </td>
+                            <td>
+                                <div><a href="/CustomerCareBirthday/Detail/@item.Id" class="text-dark fw-semibold">@item.Customer.Name</a></div>
+                                <div class="text-muted small">
+                                    <i class="bi bi-telephone me-1"></i>@(item.Customer.Phone ?? "Chưa có SĐT")
+                                    @if (!string.IsNullOrEmpty(item.Customer.Code)) { <span class="badge bg-light text-secondary border ms-1">@item.Customer.Code</span> }
+                                </div>
+                            </td>
+                            <td>
+                                @if (item.Car != null)
+                                {
+                                    <span class="badge bg-dark">@item.Car.Plate</span>
+                                    <div class="text-muted small">@item.Car.Model</div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center gap-1">
+                                    <i class="bi bi-calendar-event text-info"></i>
+                                    <span>@item.DateBth.ToString("dd/MM")</span>
+                                    @if (item.DateOfBirth.HasValue)
+                                    {
+                                        <span class="text-muted small">/@item.DateOfBirth.Value.ToString("yyyy")</span>
+                                    }
+                                </div>
+                                @if (isToday)
+                                {
+                                    <span class="badge bg-danger animate__animated animate__pulse"><i class="bi bi-cake2-fill me-1"></i>Hôm nay!</span>
+                                }
+                                else if (isThisMonth)
+                                {
+                                    <span class="badge bg-info text-dark">Tháng này</span>
+                                }
+                                else if (item.DaysUntilBirthday > 0 && item.DaysUntilBirthday <= 30)
+                                {
+                                    <span class="badge bg-light text-dark border">Còn @item.DaysUntilBirthday ngày</span>
+                                }
+                            </td>
+                            <td>
+                                @if (item.CurrentAge > 0)
+                                {
+                                    <span class="badge bg-light text-dark border fw-bold">@item.CurrentAge tuổi</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-@stCss">@stCode — @stText</span>
+                                @if (item.ContactDate.HasValue)
+                                {
+                                    <div class="text-muted small" style="font-size:11px">@item.ContactDate.Value.ToString("dd/MM HH:mm")</div>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(item.GiftVoucherCode))
+                                {
+                                    <div>
+                                        <code class="fw-bold">@item.GiftVoucherCode</code>
+                                        @if (item.IsVoucherUsed)
+                                        {
+                                            <span class="badge bg-success ms-1">Đã dùng</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-light text-primary border ms-1">Khả dụng</span>
+                                        }
+                                    </div>
+                                    <div class="text-muted small">
+                                        Giảm @item.GiftVoucherValue.ToString("N0")đ (@item.DiscountPercent%)
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Chưa cấp</span>
+                                }
+                            </td>
+                            <td>
+                                @if (item.Status == CustomerCareBirthdayStatus.Contacted)
+                                {
+                                    var (chText, chIcon, chCss) = Ui.BirthdayContactChannel(item.ContactChannel);
+                                    <span class="badge bg-@chCss"><i class="bi @chIcon me-1"></i>@chText</span>
+                                    @if (!string.IsNullOrWhiteSpace(item.ContactedBy))
+                                    {
+                                        <div class="text-muted small" style="font-size:11px">@item.ContactedBy</div>
+                                    }
+                                }
+                                else if (item.Status == CustomerCareBirthdayStatus.NotContacted)
+                                {
+                                    <span class="badge bg-secondary">Không liên hệ được</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>Chờ gọi</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <a href="/CustomerCareBirthday/Detail/@item.Id" class="btn btn-sm btn-outline-primary" title="Xem chi tiết & Cập nhật liên hệ">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="/CustomerCareBirthday/Print/@item.Id" target="_blank" class="btn btn-sm btn-outline-dark" title="In thiệp chúc mừng & Voucher">
+                                    <i class="bi bi-printer"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

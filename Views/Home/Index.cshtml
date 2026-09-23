@@ -116,6 +116,12 @@
     </div>
     <div class="col-6 col-lg">
         <div class="card"><div class="card-body">
+            <div class="text-muted small">CSKH Sinh nhật (Birthday)</div>
+            <div class="stat-num" style="font-size:18px;color:#e11d48"><a href="/CustomerCareBirthday" class="text-decoration-none" style="color:#e11d48">@d.ThisMonthBirthdays tháng này</a> @if(d.TodayBirthdays > 0){<span class="badge bg-danger ms-1">@d.TodayBirthdays hôm nay!</span>}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
             <div class="text-muted small">Nhắc bảo dưỡng định kỳ</div>
             <div class="stat-num" style="font-size:18px;color:#8b5cf6"><a href="/CareMace" class="text-decoration-none" style="color:#8b5cf6">@d.PendingCareMaces chờ gọi</a> @if(d.OverdueCareMaces > 0){<span class="text-danger" style="font-size:13px;font-weight:normal">(@d.OverdueCareMaces quá hạn)</span>}</div>
         </div></div>
@@ -186,10 +192,11 @@
         <a href="/Payment" class="btn btn-outline-success w-100 mb-2"><i class="bi bi-cash-coin me-1"></i>Thu ngân &amp; Phiếu thu (Payment) @if(d.PendingPayments > 0){<span class="badge bg-warning text-dark ms-1">@d.PendingPayments chờ thu</span>}</a>
         <a href="/CusDebit" class="btn btn-outline-danger w-100 mb-2"><i class="bi bi-wallet2 me-1"></i>Công nợ khách hàng (Debits) @if(d.TotalCusDebitBalance > 0){<span class="badge bg-danger ms-1">@d.TotalCusDebitBalance.ToString("N0")đ</span>}</a>
         <a href="/CustomerCare" class="btn btn-outline-info w-100 mb-2"><i class="bi bi-headset me-1"></i>Chăm sóc khách hàng 24h @if(d.PendingCustomerCares > 0){<span class="badge bg-warning text-dark ms-1">@d.PendingCustomerCares chờ</span>}@if(d.FeedbackCustomerCares > 0){<span class="badge bg-danger ms-1">@d.FeedbackCustomerCares khiếu nại</span>}</a>
+        <a href="/CustomerCareBirthday" class="btn btn-outline-danger w-100 mb-2" style="border-color:#e11d48;color:#e11d48"><i class="bi bi-cake2 me-1"></i>Chăm sóc sinh nhật khách hàng @if(d.TodayBirthdays > 0){<span class="badge bg-danger ms-1">@d.TodayBirthdays sinh nhật hôm nay!</span>}else if(d.PendingBirthdays > 0){<span class="badge bg-warning text-dark ms-1">@d.PendingBirthdays chờ gọi</span>}</a>
         <a href="/CareMace" class="btn btn-outline-primary w-100 mb-2" style="border-color:#8b5cf6;color:#8b5cf6"><i class="bi bi-bell me-1"></i>Nhắc bảo dưỡng xe định kỳ (Care Mace) @if(d.PendingCareMaces > 0){<span class="badge bg-warning text-dark ms-1">@d.PendingCareMaces chờ</span>}@if(d.OverdueCareMaces > 0){<span class="badge bg-danger ms-1">@d.OverdueCareMaces quá hạn</span>}</a>
         <a href="/Campaign" class="btn btn-outline-warning w-100 mb-2"><i class="bi bi-megaphone me-1"></i>Chiến dịch khuyến mãi dịch vụ (@d.ActiveCampaigns đang chạy)</a>
         <a href="/Warranty" class="btn btn-outline-success w-100 mb-2"><i class="bi bi-shield-check me-1"></i>Báo cáo bảo hành xe (Warranty) @if(d.PendingWarranty > 0){<span class="badge bg-warning text-dark ms-1">@d.PendingWarranty chờ duyệt</span>}</a>
         <a href="/ComplaintDiagnostic" class="btn btn-outline-primary w-100 mb-2"><i class="bi bi-bug me-1"></i>Từ điển Mã lỗi &amp; Chẩn đoán (@d.TotalComplaintDiagnosticErrors mã lỗi) <span class="badge bg-warning text-dark ms-1">@d.TotalComplaintCodes PN</span> <span class="badge bg-info text-dark ms-1">@d.TotalDiagnosticCodes CD</span></a>
-        <div class="text-muted small mt-2">API tra cứu: <code>GET /api/complaint-diagnostic-errors</code> · <code>GET /api/ro?plate=30A</code> · <code>GET /api/cusdebits</code> · <code>GET /api/caremaces</code> · <code>GET /api/campaigns</code> · <code>GET /api/assignments</code> · <code>GET /api/receptions</code> · <code>GET /api/cavities</code> · <code>GET /api/appointments</code> · <code>GET /api/parts</code> · <code>GET /api/quotes</code> · <code>GET /api/stockin</code> · <code>GET /api/stockout</code> · <code>GET /api/payments</code> · <code>GET /api/warranty</code> · <code>GET /api/customercare</code></div>
+        <div class="text-muted small mt-2">API tra cứu: <code>GET /api/customer-care-birthdays</code> · <code>GET /api/complaint-diagnostic-errors</code> · <code>GET /api/ro?plate=30A</code> · <code>GET /api/cusdebits</code> · <code>GET /api/caremaces</code> · <code>GET /api/campaigns</code> · <code>GET /api/assignments</code> · <code>GET /api/receptions</code> · <code>GET /api/cavities</code> · <code>GET /api/appointments</code> · <code>GET /api/parts</code> · <code>GET /api/quotes</code> · <code>GET /api/stockin</code> · <code>GET /api/stockout</code> · <code>GET /api/payments</code> · <code>GET /api/warranty</code> · <code>GET /api/customercare</code></div>
     </div></div></div>
 </div>

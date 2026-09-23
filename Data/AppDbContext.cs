@@ -75,6 +75,7 @@ public class AppDbContext : DbContext
     public DbSet<PartPriceRequestLine> PartPriceRequestLines => Set<PartPriceRequestLine>();
     public DbSet<ComplaintDiagnosticError> ComplaintDiagnosticErrors => Set<ComplaintDiagnosticError>();
     public DbSet<CustomerCare72h> CustomerCare72hs => Set<CustomerCare72h>();
+    public DbSet<CustomerCareBirthday> CustomerCareBirthdays => Set<CustomerCareBirthday>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -109,6 +110,7 @@ public class AppDbContext : DbContext
             e.Ignore(x => x.PaidAmount); e.Ignore(x => x.RemainingBalance);
             e.Property(x => x.CampaignDiscountAmount).HasPrecision(18, 2);
             e.Property(x => x.CustomerGroupDiscountAmount).HasPrecision(18, 2);
+            e.Property(x => x.BirthdayDiscountAmount).HasPrecision(18, 2);
             e.HasOne(x => x.CustomerGroup).WithMany(g => g.RepairOrders).HasForeignKey(x => x.CustomerGroupId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
@@ -769,6 +771,26 @@ public class AppDbContext : DbContext
             e.Ignore(x => x.SystemGroupName);
             e.Ignore(x => x.BadgeTypeClass);
             e.Ignore(x => x.BadgeGroupClass);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CustomerCareBirthday>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CareBthNo }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.CustomerId });
+            e.HasIndex(x => new { x.OrgId, x.DateBth });
+            e.HasIndex(x => new { x.OrgId, x.Status });
+            e.Property(x => x.GiftVoucherValue).HasPrecision(18, 2);
+            e.Property(x => x.DiscountPercent).HasPrecision(5, 2);
+            e.Ignore(x => x.BirthMonth);
+            e.Ignore(x => x.BirthDay);
+            e.Ignore(x => x.CurrentAge);
+            e.Ignore(x => x.IsTodayBirthday);
+            e.Ignore(x => x.IsThisMonthBirthday);
+            e.Ignore(x => x.DaysUntilBirthday);
+            e.HasOne(x => x.Customer).WithMany(c => c.BirthdayCares).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.UsedInRO).WithMany(r => r.CustomerCareBirthdays).HasForeignKey(x => x.UsedInROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

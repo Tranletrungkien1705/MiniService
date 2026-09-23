@@ -650,5 +650,22 @@ public static class Ui
         1 => "★☆☆☆☆ (Rất thất vọng)",
         _ => "Chưa đánh giá"
     };
+
+    public static (string text, string code, string css) CustomerCareBirthdayStatus(CustomerCareBirthdayStatus s) => s switch
+    {
+        Models.CustomerCareBirthdayStatus.Pending => ("Chưa liên hệ", "PEND", "warning"),
+        Models.CustomerCareBirthdayStatus.Contacted => ("Đã liên hệ", "CONT", "success"),
+        Models.CustomerCareBirthdayStatus.NotContacted => ("Không liên hệ được", "NOCONT", "secondary"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) BirthdayContactChannel(BirthdayContactChannel c) => c switch
+    {
+        Models.BirthdayContactChannel.Call => ("Gọi điện thoại", "bi-telephone-fill", "primary"),
+        Models.BirthdayContactChannel.SMS => ("Tin nhắn SMS", "bi-chat-dots-fill", "info"),
+        Models.BirthdayContactChannel.Zalo => ("Zalo ZNS", "bi-chat-heart-fill", "success"),
+        Models.BirthdayContactChannel.InPerson => ("Tại xưởng dịch vụ", "bi-person-check-fill", "secondary"),
+        _ => (c.ToString(), "bi-chat", "light")
+    };
 }
 
