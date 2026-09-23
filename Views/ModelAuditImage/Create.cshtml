@@ -1,0 +1,41 @@
+@{
+    ViewData["Title"] = "Thêm Ảnh minh chứng Tiếp nhận - Giao xe (Model Audit Image)";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/ModelAuditImage" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Danh mục ảnh minh chứng</a>
+        <h5 class="mb-0 fw-bold mt-1"><i class="bi bi-image-fill me-2 text-primary"></i>Thêm Ảnh minh chứng Mới (Ser_Mst_ModelAudImage)</h5>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0" style="max-width:640px">
+    <div class="card-body">
+        <form asp-action="Create" method="post">
+            @Html.AntiForgeryToken()
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Mã dòng xe (ModelCode) <span class="text-danger">*</span></label>
+                    <input name="modelCode" class="form-control font-monospace" placeholder="VD: TUCSON, SANTAFE, ACCENT..." style="text-transform:uppercase" required />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Đầu mục kiểm tra (ReceptionFAudType) <span class="text-danger">*</span></label>
+                    <input name="receptionFAudType" class="form-control" placeholder="VD: KHOANGLAI.DTL, THANVO.DEN..." required />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">File ảnh minh chứng (FilePath) <span class="text-danger">*</span></label>
+                    <input name="filePath" class="form-control font-monospace" placeholder="VD: TUCSON/KHOANGLAI.DTL.jpg" required />
+                    <div class="form-text">Không khoảng trắng, chỉ chữ/số và . _ - / (tối đa 200 ký tự).</div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Ghi chú (Remark)</label>
+                    <input name="remark" class="form-control" placeholder="Ghi chú thêm (nếu có)" />
+                </div>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu ảnh minh chứng</button>
+                <a href="/ModelAuditImage" class="btn btn-outline-secondary">Hủy</a>
+            </div>
+        </form>
+    </div>
+</div>

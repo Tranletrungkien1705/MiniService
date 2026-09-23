@@ -558,6 +558,15 @@ public interface IRoService
     Task<int> CreateSharePartAsync(SharePart sheet, List<SharePartLine> lines);
     Task<(bool ok, string msg)> DeleteSharePartAsync(int id);
     Task<List<Part>> PartsForSharePartAsync(string? dealerCode);
+    // Model Audit Image — Ảnh minh chứng Tiếp nhận - Giao xe theo dòng xe (Ser_Mst_ModelAudImage)
+    Task<List<ModelAuditImage>> ModelAuditImagesAsync(string? modelCode, string? audType, bool? isActive, string? q);
+    Task<ModelAuditImage?> GetModelAuditImageAsync(int id);
+    Task<int> CreateModelAuditImageAsync(ModelAuditImage row);
+    Task<(bool ok, string msg)> UpdateModelAuditImageAsync(ModelAuditImage row);
+    Task<(bool ok, string msg)> DeleteModelAuditImageAsync(int id);
+    Task<ModelAuditImageSummaryDto> GetModelAuditImageSummaryAsync();
+    Task<List<string>> GetDistinctModelAuditImageModelsAsync();
+    Task<List<string>> GetDistinctModelAuditImageAudTypesAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -11741,6 +11750,129 @@ public class RoService(AppDbContext db) : IRoService
             DealerCount = all.Select(x => x.DealerCode).Distinct().Count(),
             WithLogoCount = all.Count(x => !string.IsNullOrWhiteSpace(x.Logo))
         };
+    }
+
+    // --- Model Audit Image — Ảnh minh chứng Tiếp nhận - Giao xe theo dòng xe (Ser_Mst_ModelAudImage) ---
+    public async Task<List<ModelAuditImage>> ModelAuditImagesAsync(string? modelCode, string? audType, bool? isActive, string? q)
+    {
+        var query = db.ModelAuditImages.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(modelCode))
+        {
+            var mc = modelCode.Trim().ToUpperInvariant();
+            query = query.Where(x => x.ModelCode == mc);
+        }
+        if (!string.IsNullOrWhiteSpace(audType))
+        {
+            var at = audType.Trim();
+            query = query.Where(x => x.ReceptionFAudType == at);
+        }
+        if (isActive.HasValue)
+            query = query.Where(x => x.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(x => x.ModelCode.ToLower().Contains(s)
+                || x.ReceptionFAudType.ToLower().Contains(s)
+                || x.FilePath.ToLower().Contains(s));
+        }
+        return await query.OrderBy(x => x.ModelCode).ThenBy(x => x.ReceptionFAudType).ToListAsync();
+    }
+
+    public Task<ModelAuditImage?> GetModelAuditImageAsync(int id) =>
+        db.ModelAuditImages.FirstOrDefaultAsync(x => x.Id == id);
+
+    public async Task<int> CreateModelAuditImageAsync(ModelAuditImage row)
+    {
+        NormalizeModelAuditImage(row);
+        ValidateModelAuditImage(row);
+
+        var exists = await db.ModelAuditImages.AnyAsync(x => x.ModelCode == row.ModelCode && x.ReceptionFAudType == row.ReceptionFAudType);
+        if (exists)
+            throw new InvalidOperationException($"Ảnh minh chứng cho dòng xe '{row.ModelCode}' - đầu mục '{row.ReceptionFAudType}' đã tồn tại.");
+
+        row.CreatedAt = DateTime.Now;
+        row.LogLUDateTime = DateTime.Now;
+        row.LogLUBy = row.CreatedBy;
+        db.ModelAuditImages.Add(row);
+        await db.SaveChangesAsync();
+        return row.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateModelAuditImageAsync(ModelAuditImage row)
+    {
+        var existing = await db.ModelAuditImages.FirstOrDefaultAsync(x => x.Id == row.Id);
+        if (existing == null) return (false, "Không tìm thấy ảnh minh chứng.");
+
+        NormalizeModelAuditImage(row);
+        try { ValidateModelAuditImage(row); }
+        catch (InvalidOperationException ex) { return (false, ex.Message); }
+
+        var dup = await db.ModelAuditImages.AnyAsync(x => x.Id != row.Id && x.ModelCode == row.ModelCode && x.ReceptionFAudType == row.ReceptionFAudType);
+        if (dup) return (false, $"Ảnh minh chứng cho dòng xe '{row.ModelCode}' - đầu mục '{row.ReceptionFAudType}' đã tồn tại.");
+
+        existing.ModelCode = row.ModelCode;
+        existing.ReceptionFAudType = row.ReceptionFAudType;
+        existing.FilePath = row.FilePath;
+        existing.Remark = row.Remark;
+        existing.IsActive = row.IsActive;
+        existing.LogLUBy = row.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật ảnh minh chứng [{existing.Id}] {existing.ModelCode} - {existing.ReceptionFAudType}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteModelAuditImageAsync(int id)
+    {
+        var existing = await db.ModelAuditImages.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return (false, "Không tìm thấy ảnh minh chứng.");
+
+        db.ModelAuditImages.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa ảnh minh chứng [{id}] {existing.ModelCode} - {existing.ReceptionFAudType}.");
+    }
+
+    public async Task<ModelAuditImageSummaryDto> GetModelAuditImageSummaryAsync()
+    {
+        var all = await db.ModelAuditImages.ToListAsync();
+        return new ModelAuditImageSummaryDto
+        {
+            TotalImages = all.Count,
+            ActiveImages = all.Count(x => x.IsActive),
+            InactiveImages = all.Count(x => !x.IsActive),
+            ModelCount = all.Select(x => x.ModelCode).Distinct().Count(),
+            AudTypeCount = all.Select(x => x.ReceptionFAudType).Distinct().Count()
+        };
+    }
+
+    public Task<List<string>> GetDistinctModelAuditImageModelsAsync() =>
+        db.ModelAuditImages.Select(x => x.ModelCode).Distinct().OrderBy(x => x).ToListAsync();
+
+    public Task<List<string>> GetDistinctModelAuditImageAudTypesAsync() =>
+        db.ModelAuditImages.Select(x => x.ReceptionFAudType).Distinct().OrderBy(x => x).ToListAsync();
+
+    private static void NormalizeModelAuditImage(ModelAuditImage row)
+    {
+        row.ModelCode = (row.ModelCode ?? "").Trim().ToUpperInvariant();
+        row.ReceptionFAudType = (row.ReceptionFAudType ?? "").Trim();
+        row.FilePath = (row.FilePath ?? "").Trim();
+        row.Remark = string.IsNullOrWhiteSpace(row.Remark) ? null : row.Remark.Trim();
+    }
+
+    private static void ValidateModelAuditImage(ModelAuditImage row)
+    {
+        if (string.IsNullOrWhiteSpace(row.ModelCode))
+            throw new InvalidOperationException("Vui lòng chọn dòng xe (ModelCode).");
+        if (string.IsNullOrWhiteSpace(row.ReceptionFAudType))
+            throw new InvalidOperationException("Vui lòng chọn đầu mục kiểm tra (ReceptionFAudType).");
+        if (string.IsNullOrWhiteSpace(row.FilePath))
+            throw new InvalidOperationException("Vui lòng nhập đường dẫn / tên file ảnh (FilePath).");
+        if (row.FilePath.Length > 200)
+            throw new InvalidOperationException("Đường dẫn ảnh (FilePath) tối đa 200 ký tự.");
+        if (row.FilePath.Contains(' '))
+            throw new InvalidOperationException("Đường dẫn ảnh (FilePath) không được chứa khoảng trắng.");
+        if (System.Text.RegularExpressions.Regex.IsMatch(row.FilePath, @"[^a-zA-Z0-9._\-/]"))
+            throw new InvalidOperationException("Đường dẫn ảnh (FilePath) chỉ được chứa chữ, số và các ký tự . _ - /");
     }
 }
 

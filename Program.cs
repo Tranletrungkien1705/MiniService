@@ -7088,6 +7088,93 @@ app.MapDelete("/api/trade-marks/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Ảnh minh chứng Tiếp nhận - Giao xe theo dòng xe (Ser_Mst_ModelAudImage)
+app.MapGet("/api/model-audit-images", async (string? modelCode, string? audType, bool? isActive, string? q, IRoService svc) =>
+{
+    var list = await svc.ModelAuditImagesAsync(modelCode, audType, isActive, q);
+    return Results.Ok(list.Select(x => new
+    {
+        x.Id,
+        x.ModelCode,
+        x.ReceptionFAudType,
+        x.FilePath,
+        x.Remark,
+        x.IsActive,
+        x.CreatedBy,
+        x.CreatedAt,
+        x.LogLUBy,
+        x.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/model-audit-images/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetModelAuditImageSummaryAsync();
+    return Results.Ok(new { s.TotalImages, s.ActiveImages, s.InactiveImages, s.ModelCount, s.AudTypeCount });
+});
+
+app.MapGet("/api/model-audit-images/{id:int}", async (int id, IRoService svc) =>
+{
+    var x = await svc.GetModelAuditImageAsync(id);
+    if (x == null) return Results.NotFound(new { error = "Không tìm thấy ảnh minh chứng." });
+    return Results.Ok(new
+    {
+        x.Id,
+        x.ModelCode,
+        x.ReceptionFAudType,
+        x.FilePath,
+        x.Remark,
+        x.IsActive,
+        x.CreatedBy,
+        x.CreatedAt,
+        x.LogLUBy,
+        x.LogLUDateTime
+    });
+});
+
+app.MapPost("/api/model-audit-images", async (CreateModelAuditImageDto dto, IRoService svc) =>
+{
+    try
+    {
+        var row = new ModelAuditImage
+        {
+            ModelCode = dto.ModelCode ?? "",
+            ReceptionFAudType = dto.ReceptionFAudType ?? "",
+            FilePath = dto.FilePath ?? "",
+            Remark = dto.Remark,
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreateModelAuditImageAsync(row);
+        return Results.Ok(new { modelAuditImageId = id, message = "Đã thêm ảnh minh chứng vào danh mục." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/model-audit-images/{id:int}", async (int id, UpdateModelAuditImageDto dto, IRoService svc) =>
+{
+    var row = new ModelAuditImage
+    {
+        Id = id,
+        ModelCode = dto.ModelCode ?? "",
+        ReceptionFAudType = dto.ReceptionFAudType ?? "",
+        FilePath = dto.FilePath ?? "",
+        Remark = dto.Remark,
+        IsActive = dto.IsActive ?? true,
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+    var (ok, msg) = await svc.UpdateModelAuditImageAsync(row);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/model-audit-images/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteModelAuditImageAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -7285,6 +7372,10 @@ record ImportVinModelOriginRowDto(string VINCode, string ModelCode, string Orgin
 // Danh mục Thương hiệu xe (Ser_Mst_TradeMark)
 record CreateTradeMarkDto(string TradeMarkCode, string TradeMarkName, string? DealerCode, string? Logo, string? CreatedBy);
 record UpdateTradeMarkDto(string TradeMarkCode, string TradeMarkName, string? DealerCode, bool? IsActive, string? Logo, string? UpdatedBy);
+
+// Ảnh minh chứng Tiếp nhận - Giao xe theo dòng xe (Ser_Mst_ModelAudImage)
+record CreateModelAuditImageDto(string ModelCode, string ReceptionFAudType, string FilePath, string? Remark, string? CreatedBy);
+record UpdateModelAuditImageDto(string ModelCode, string ReceptionFAudType, string FilePath, bool? IsActive, string? Remark, string? UpdatedBy);
 
 
 

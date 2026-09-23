@@ -101,6 +101,7 @@ public class AppDbContext : DbContext
     public DbSet<PartPrice> PartPrices => Set<PartPrice>();
     public DbSet<VinModelOrigin> VinModelOrigins => Set<VinModelOrigin>();
     public DbSet<TradeMark> TradeMarks => Set<TradeMark>();
+    public DbSet<ModelAuditImage> ModelAuditImages => Set<ModelAuditImage>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -1000,6 +1001,12 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.TradeMarkCode, x.DealerCode }).IsUnique();
             e.HasIndex(x => new { x.OrgId, x.DealerCode });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ModelAuditImage>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ModelCode, x.ReceptionFAudType }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.ModelCode });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

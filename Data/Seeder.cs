@@ -2645,6 +2645,22 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Ảnh minh chứng Tiếp nhận - Giao xe theo dòng xe (Ser_Mst_ModelAudImage) — bộ ảnh walk-around mẫu
+        if (!await db.ModelAuditImages.AnyAsync())
+        {
+            db.ModelAuditImages.AddRange(
+                new ModelAuditImage { ModelCode = "TUCSON", ReceptionFAudType = "KHOANGLAI.DTL", FilePath = "TUCSON/KHOANGLAI.DTL.jpg", Remark = "Ảnh mẫu khoang lái dòng Tucson", CreatedBy = "Hệ thống HTC" },
+                new ModelAuditImage { ModelCode = "TUCSON", ReceptionFAudType = "THANVO.DEN", FilePath = "TUCSON/THANVO.DEN.jpg", Remark = "Ảnh mẫu thân vỏ & đèn dòng Tucson", CreatedBy = "Hệ thống HTC" },
+                new ModelAuditImage { ModelCode = "TUCSON", ReceptionFAudType = "KHOANGDONGCO.DDC", FilePath = "TUCSON/KHOANGDONGCO.DDC.jpg", Remark = "Ảnh mẫu khoang động cơ dòng Tucson", CreatedBy = "Hệ thống HTC" },
+                new ModelAuditImage { ModelCode = "SANTAFE", ReceptionFAudType = "KHOANGLAI.DTL", FilePath = "SANTAFE/KHOANGLAI.DTL.jpg", Remark = "Ảnh mẫu khoang lái dòng SantaFe", CreatedBy = "Hệ thống HTC" },
+                new ModelAuditImage { ModelCode = "SANTAFE", ReceptionFAudType = "LOPXE.PHANH", FilePath = "SANTAFE/LOPXE.PHANH.jpg", Remark = "Ảnh mẫu lốp xe & phanh dòng SantaFe", CreatedBy = "Hệ thống HTC" },
+                new ModelAuditImage { ModelCode = "ACCENT", ReceptionFAudType = "THANVO.DEN", FilePath = "ACCENT/THANVO.DEN.jpg", Remark = "Ảnh mẫu thân vỏ & đèn dòng Accent", CreatedBy = "Hệ thống HTC" },
+                new ModelAuditImage { ModelCode = "ACCENT", ReceptionFAudType = "COPSAU.DONGHE", FilePath = "ACCENT/COPSAU.DONGHE.jpg", Remark = "Ảnh mẫu cốp sau & đồ nghề dòng Accent", CreatedBy = "Hệ thống HTC" },
+                new ModelAuditImage { ModelCode = "CRETA", ReceptionFAudType = "KHOANGLAI.DTL", FilePath = "CRETA/KHOANGLAI.DTL.jpg", Remark = "Ảnh mẫu khoang lái dòng Creta", CreatedBy = "Hệ thống HTC" }
+            );
+            await db.SaveChangesAsync();
+        }
+
         // Seed Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
         if (!await db.Boms.AnyAsync())
         {
@@ -5303,7 +5319,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "ServiceTypes", "Boms", "BomLines", "WarehouseLocations", "WorkingCalendars", "ShareParts", "SharePartLines" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "ServiceTypes", "Boms", "BomLines", "WarehouseLocations", "WorkingCalendars", "ShareParts", "SharePartLines", "ModelAuditImages" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -5346,6 +5362,9 @@ public static class Seeder
             "CREATE TABLE IF NOT EXISTS miniservice.\"TradeMarks\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"TradeMarkCode\" text NOT NULL, \"DealerCode\" text NOT NULL DEFAULT '', \"TradeMarkName\" text NOT NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"Logo\" text NULL, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TradeMarks_OrgId_TradeMarkCode_DealerCode\" ON miniservice.\"TradeMarks\" (\"OrgId\", \"TradeMarkCode\", \"DealerCode\")",
             "CREATE INDEX IF NOT EXISTS \"IX_TradeMarks_OrgId_DealerCode\" ON miniservice.\"TradeMarks\" (\"OrgId\", \"DealerCode\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"ModelAuditImages\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ModelCode\" text NOT NULL, \"ReceptionFAudType\" text NOT NULL, \"FilePath\" text NOT NULL, \"Remark\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ModelAuditImages_OrgId_ModelCode_ReceptionFAudType\" ON miniservice.\"ModelAuditImages\" (\"OrgId\", \"ModelCode\", \"ReceptionFAudType\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_ModelAuditImages_OrgId_ModelCode\" ON miniservice.\"ModelAuditImages\" (\"OrgId\", \"ModelCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"Suppliers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Address\" text NULL, \"Phone\" text NULL, \"Email\" text NULL, \"ContactName\" text NULL, \"ContactPhone\" text NULL, \"TaxCode\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankAccount\" text NULL",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankName\" text NULL",
@@ -7066,6 +7085,17 @@ public static class Seeder
                     "CREATE INDEX IF NOT EXISTS \"IX_TradeMarks_OrgId_DealerCode\" ON \"TradeMarks\" (\"OrgId\", \"DealerCode\");"
                 };
                 foreach (var sql in tradeMarkSqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+                // Ảnh minh chứng Tiếp nhận - Giao xe theo dòng xe (Ser_Mst_ModelAudImage) — SQLite
+                var modelAudImageSqls = new[]
+                {
+                    "CREATE TABLE IF NOT EXISTS \"ModelAuditImages\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"ModelCode\" TEXT NOT NULL, \"ReceptionFAudType\" TEXT NOT NULL, \"FilePath\" TEXT NOT NULL, \"Remark\" TEXT NULL, \"IsActive\" INTEGER NOT NULL DEFAULT 1, \"CreatedBy\" TEXT NOT NULL DEFAULT 'web', \"CreatedAt\" TEXT NOT NULL, \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ModelAuditImages_OrgId_ModelCode_ReceptionFAudType\" ON \"ModelAuditImages\" (\"OrgId\", \"ModelCode\", \"ReceptionFAudType\");",
+                    "CREATE INDEX IF NOT EXISTS \"IX_ModelAuditImages_OrgId_ModelCode\" ON \"ModelAuditImages\" (\"OrgId\", \"ModelCode\");"
+                };
+                foreach (var sql in modelAudImageSqls)
                 {
                     try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
                 }

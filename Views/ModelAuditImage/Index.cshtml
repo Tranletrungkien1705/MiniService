@@ -1,0 +1,180 @@
+@model List<ModelAuditImage>
+@{
+    ViewData["Title"] = "Ảnh minh chứng Tiếp nhận - Giao xe (Model Audit Image)";
+    var summary = ViewBag.Summary as ModelAuditImageSummaryDto ?? new ModelAuditImageSummaryDto();
+    var models = ViewBag.Models as List<string> ?? [];
+    var audTypes = ViewBag.AudTypes as List<string> ?? [];
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số ảnh minh chứng</div>
+                <div class="stat-num text-primary">@summary.TotalImages</div>
+                <div class="text-muted" style="font-size:11.5px">Danh mục ảnh (Ser_Mst_ModelAudImage)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đang hoạt động</div>
+                <div class="stat-num text-success">@summary.ActiveImages</div>
+                <div class="text-muted" style="font-size:11.5px">Ảnh đang áp dụng</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Dòng xe áp dụng</div>
+                <div class="stat-num text-info">@summary.ModelCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số dòng xe (ModelCode)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đầu mục kiểm tra</div>
+                <div class="stat-num text-warning">@summary.AudTypeCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số đầu mục (ReceptionFAudType)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:260px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Dòng xe, đầu mục, file ảnh..." />
+                </div>
+                <select name="modelCode" class="form-select form-select-sm" style="width:170px" onchange="this.form.submit()">
+                    <option value="">-- Dòng xe --</option>
+                    @foreach (var mc in models)
+                    {
+                        <option value="@mc" selected="@(ViewBag.ModelCode == mc)">@mc</option>
+                    }
+                </select>
+                <select name="audType" class="form-select form-select-sm" style="width:190px" onchange="this.form.submit()">
+                    <option value="">-- Đầu mục kiểm tra --</option>
+                    @foreach (var at in audTypes)
+                    {
+                        <option value="@at" selected="@(ViewBag.AudType == at)">@at</option>
+                    }
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || !string.IsNullOrEmpty(ViewBag.ModelCode as string) || !string.IsNullOrEmpty(ViewBag.AudType as string))
+                {
+                    <a href="/ModelAuditImage" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/Reception" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clipboard-check me-1"></i>Phiếu tiếp nhận</a>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createImageModal">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm ảnh minh chứng
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:70px">ID</th>
+                        <th style="width:150px">Dòng xe</th>
+                        <th>Đầu mục kiểm tra</th>
+                        <th>File ảnh minh chứng</th>
+                        <th style="width:110px" class="text-center">Trạng thái</th>
+                        <th class="text-end" style="width:110px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <i class="bi bi-images fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy ảnh minh chứng nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var x in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace text-secondary">@x.Id</td>
+                            <td><span class="badge bg-light text-dark border font-monospace">@x.ModelCode</span></td>
+                            <td>
+                                <a asp-action="Detail" asp-route-id="@x.Id" class="fw-semibold text-dark text-decoration-none">
+                                    @x.ReceptionFAudType
+                                </a>
+                            </td>
+                            <td class="font-monospace small text-truncate" style="max-width:320px">@x.FilePath</td>
+                            <td class="text-center">
+                                @if (x.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Hoạt động</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border">Tạm dừng</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@x.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm ảnh minh chứng mới -->
+<div class="modal fade" id="createImageModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-image-fill me-2 text-primary"></i>Thêm Ảnh minh chứng Mới (Ser_Mst_ModelAudImage)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Mã dòng xe (ModelCode) <span class="text-danger">*</span></label>
+                            <input name="modelCode" class="form-control font-monospace" placeholder="VD: TUCSON, SANTAFE..." style="text-transform:uppercase" required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Đầu mục kiểm tra (ReceptionFAudType) <span class="text-danger">*</span></label>
+                            <input name="receptionFAudType" class="form-control" placeholder="VD: KHOANGLAI.DTL, THANVO.DEN..." required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">File ảnh minh chứng (FilePath) <span class="text-danger">*</span></label>
+                            <input name="filePath" class="form-control font-monospace" placeholder="VD: TUCSON/KHOANGLAI.DTL.jpg" required />
+                            <div class="form-text">Không khoảng trắng, chỉ chữ/số và . _ - / (tối đa 200 ký tự).</div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Ghi chú (Remark)</label>
+                            <input name="remark" class="form-control" placeholder="Ghi chú thêm (nếu có)" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu ảnh minh chứng</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

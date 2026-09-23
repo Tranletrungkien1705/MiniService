@@ -6751,3 +6751,78 @@ public class TradeMarkController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+public class ModelAuditImageController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? modelCode, string? audType, bool? isActive, string? q)
+    {
+        ViewBag.ModelCode = modelCode;
+        ViewBag.AudType = audType;
+        ViewBag.IsActive = isActive;
+        ViewBag.Q = q;
+        ViewBag.Models = await svc.GetDistinctModelAuditImageModelsAsync();
+        ViewBag.AudTypes = await svc.GetDistinctModelAuditImageAudTypesAsync();
+        ViewBag.Summary = await svc.GetModelAuditImageSummaryAsync();
+        var list = await svc.ModelAuditImagesAsync(modelCode, audType, isActive, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var row = await svc.GetModelAuditImageAsync(id);
+        if (row == null) return NotFound();
+        return View(row);
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string modelCode, string receptionFAudType, string filePath, string? remark)
+    {
+        try
+        {
+            var row = new ModelAuditImage
+            {
+                ModelCode = modelCode ?? "",
+                ReceptionFAudType = receptionFAudType ?? "",
+                FilePath = filePath ?? "",
+                Remark = remark,
+                CreatedBy = "web"
+            };
+            var id = await svc.CreateModelAuditImageAsync(row);
+            TempData["Success"] = $"Đã thêm ảnh minh chứng [{id}] {row.ModelCode} - {row.ReceptionFAudType} vào danh mục.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string modelCode, string receptionFAudType, string filePath, string? remark, bool isActive)
+    {
+        var row = new ModelAuditImage
+        {
+            Id = id,
+            ModelCode = modelCode ?? "",
+            ReceptionFAudType = receptionFAudType ?? "",
+            FilePath = filePath ?? "",
+            Remark = remark,
+            IsActive = isActive,
+            LogLUBy = "web"
+        };
+        var (ok, msg) = await svc.UpdateModelAuditImageAsync(row);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteModelAuditImageAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

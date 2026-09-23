@@ -3598,3 +3598,34 @@ public class TradeMarkSummaryDto
     public int DealerCount { get; set; }                      // Số đại lý khác nhau
     public int WithLogoCount { get; set; }                    // Số thương hiệu có logo
 }
+/// <summary>Ảnh minh chứng trên phiếu Tiếp nhận - Giao xe theo dòng xe (Model Audit Image) — Ser_Mst_ModelAudImage trong idn.CarService.
+/// Mỗi dòng gắn một ảnh minh chứng (FilePath) cho một đầu mục kiểm tra (ReceptionFAudType) của một dòng xe (ModelCode).
+/// Dùng để chuẩn hóa bộ ảnh walk-around mẫu theo từng dòng xe khi tiếp nhận & bàn giao xe.
+/// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH) / đại lý (Dealer).
+/// Nghiệp vụ: Ser_Mst_ModelAudImage_Get / _Create / _Update / _Delete.
+/// Luật kiểm tra khi lưu: ModelCode & ReceptionFAudType bắt buộc; FilePath bắt buộc, không chứa khoảng trắng,
+/// không chứa ký tự đặc biệt (chỉ chữ/số/._-), tối đa 200 ký tự; không trùng cặp (ModelCode, ReceptionFAudType).</summary>
+public class ModelAuditImage : IOrgOwned
+{
+    public int Id { get; set; }                               // Khóa chính nội bộ
+    public Guid OrgId { get; set; }
+    public string ModelCode { get; set; } = "";               // Mã dòng xe áp dụng (ModelCode)
+    public string ReceptionFAudType { get; set; } = "";       // Đầu mục kiểm tra tiếp nhận (ReceptionFAudType)
+    public string FilePath { get; set; } = "";                // Đường dẫn / tên file ảnh minh chứng (FilePath)
+    public string? Remark { get; set; }                       // Ghi chú (Remark)
+    public bool IsActive { get; set; } = true;                // Cờ hoạt động (FlagActive)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo (CreatedDate)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục Ảnh minh chứng Tiếp nhận - Giao xe — phục vụ màn hình quản lý ModelAuditImage.</summary>
+public class ModelAuditImageSummaryDto
+{
+    public int TotalImages { get; set; }                      // Tổng số ảnh minh chứng
+    public int ActiveImages { get; set; }                     // Số ảnh đang hoạt động
+    public int InactiveImages { get; set; }                   // Số ảnh tạm dừng
+    public int ModelCount { get; set; }                       // Số dòng xe (ModelCode) khác nhau
+    public int AudTypeCount { get; set; }                     // Số đầu mục kiểm tra (ReceptionFAudType) khác nhau
+}
