@@ -1,0 +1,343 @@
+@model CustomerGroup
+@{
+    ViewData["Title"] = $"Khách đoàn: {Model.GroupName} ({Model.GroupNo})";
+    var availableCars = (List<Car>)ViewBag.AvailableCars;
+    decimal totalRevenue = ViewBag.TotalRevenue ?? 0;
+    decimal totalDiscount = ViewBag.TotalDiscount ?? 0;
+    decimal currentDebt = ViewBag.CurrentDebt ?? 0;
+    bool isCreditExceeded = ViewBag.IsCreditExceeded ?? false;
+    var (statusText, statusCss) = Ui.CustomerGroupStatus(Model.IsActive);
+    var (creditText, creditCss, creditIcon) = Ui.CreditStatus(Model.CreditLimit, currentDebt);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <a href="/CustomerGroup" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i></a>
+            <h5 class="fw-bold mb-0">@Model.GroupName</h5>
+            <span class="badge bg-secondary font-monospace">@Model.GroupNo</span>
+            <span class="badge bg-@statusCss">@statusText</span>
+        </div>
+        <div class="text-muted small">Hồ sơ khách đoàn, thỏa thuận chiết khấu bảo dưỡng &amp; danh bạ đội xe ô tô doanh nghiệp</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/CustomerGroup/Print/@Model.Id" target="_blank" class="btn btn-outline-dark"><i class="bi bi-printer me-1"></i>In thỏa thuận</a>
+        <a href="/CustomerGroup/Edit/@Model.Id" class="btn btn-outline-primary"><i class="bi bi-pencil me-1"></i>Sửa thông tin</a>
+        <form asp-action="Delete" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa/dừng khách đoàn này?');">
+            @Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+            <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa / Tạm dừng</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card border-primary"><div class="card-body">
+            <div class="text-muted small">Ưu đãi chiết khấu đoàn</div>
+            <div class="d-flex gap-2 align-items-baseline mt-1">
+                <span class="fs-4 fw-bold text-primary">-@Model.DiscountPercentLabor%</span> <span class="small text-muted">công</span>
+                <span class="fs-4 fw-bold text-info ms-2">-@Model.DiscountPercentPart%</span> <span class="small text-muted">vật tư</span>
+            </div>
+            <div class="text-muted small mt-1">Tự động áp dụng vào Lệnh RO đoàn</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card @(isCreditExceeded ? "border-danger bg-danger bg-opacity-10" : "")"><div class="card-body">
+            <div class="text-muted small">Hạn mức &amp; Dư nợ đội xe</div>
+            <div class="stat-num @(isCreditExceeded ? "text-danger" : "text-dark")" style="font-size:20px">
+                @currentDebt.ToString("N0")đ <span class="text-muted" style="font-size:13px;font-weight:normal">/ @Model.CreditLimit.ToString("N0")đ</span>
+            </div>
+            <div class="text-muted small mt-1">
+                <span class="badge bg-@creditCss"><i class="bi @creditIcon me-1"></i>@creditText</span>
+                <span class="ms-1">Hạn thanh toán: @Model.PaymentTermDays ngày</span>
+            </div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Số lượng xe trong đoàn</div>
+            <div class="stat-num text-info" style="font-size:22px">@Model.Members.Count(m => m.IsActive) xe</div>
+            <div class="text-muted small mt-1">@Model.RepairOrders.Count lượt làm dịch vụ tại xưởng</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Doanh thu dịch vụ tích lũy</div>
+            <div class="stat-num text-success" style="font-size:22px">@totalRevenue.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">Đã ưu đãi: <b class="text-danger">-@totalDiscount.ToString("N0")đ</b></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Cột trái: Danh sách xe thuộc đoàn -->
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                <span class="fw-bold"><i class="bi bi-car-front text-primary me-2"></i>Danh bạ xe thuộc đoàn (@Model.Members.Count(m => m.IsActive) xe)</span>
+                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm xe vào đoàn
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Biển số xe</th>
+                            <th>Dòng xe / Model</th>
+                            <th>Tài xế phụ trách</th>
+                            <th>SĐT tài xế</th>
+                            <th>Ngày vào đoàn</th>
+                            <th>Ghi chú xe</th>
+                            <th class="text-end" style="width:70px">Gỡ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Members.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    Chưa có xe nào trong đoàn. Nhấn nút <b>"Thêm xe vào đoàn"</b> để gán xe.
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var m in Model.Members.OrderByDescending(x => x.IsActive).ThenBy(x => x.PlateNo))
+                        {
+                            <tr class="@(!m.IsActive ? "text-muted bg-light" : "")">
+                                <td>
+                                    <span class="fw-bold font-monospace text-dark">@m.PlateNo</span>
+                                    @if (!m.IsActive)
+                                    {
+                                        <span class="badge bg-secondary ms-1" style="font-size:10px">Đã ra đoàn</span>
+                                    }
+                                </td>
+                                <td>
+                                    <div>@(m.Car?.Model ?? "—")</div>
+                                    <div class="text-muted small">VIN: @(m.Car?.Vin ?? "—")</div>
+                                </td>
+                                <td>@(m.DriverName ?? m.Customer?.Name ?? "—")</td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(m.DriverPhone ?? m.Customer?.Phone))
+                                    {
+                                        <a href="tel:@(m.DriverPhone ?? m.Customer?.Phone)" class="text-decoration-none">
+                                            <i class="bi bi-telephone me-1"></i>@(m.DriverPhone ?? m.Customer?.Phone)
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td class="small text-muted">@m.JoinedDate.ToString("dd/MM/yyyy")</td>
+                                <td class="small text-muted">@(m.Note ?? "—")</td>
+                                <td class="text-end">
+                                    @if (m.IsActive)
+                                    {
+                                        <form asp-action="RemoveMember" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc muốn đưa xe @m.PlateNo ra khỏi đoàn?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="groupId" value="@Model.Id" />
+                                            <input type="hidden" name="memberId" value="@m.Id" />
+                                            <button type="submit" class="btn btn-outline-danger btn-sm p-1" title="Đưa xe ra khỏi đoàn">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        </form>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-white py-2">
+                <span class="fw-bold"><i class="bi bi-clock-history text-primary me-2"></i>Lịch sử Lệnh sửa chữa (RO) của đoàn xe (@Model.RepairOrders.Count lượt)</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã Lệnh RO</th>
+                            <th>Biển số xe</th>
+                            <th>Ngày tiếp nhận</th>
+                            <th class="text-center">Trạng thái</th>
+                            <th class="text-end">Chiết khấu đoàn</th>
+                            <th class="text-end">Tổng thanh toán</th>
+                            <th class="text-end" style="width:70px">Xem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.RepairOrders.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">
+                                    Đoàn xe chưa phát sinh Lệnh sửa chữa nào.
+                                </td>
+                            </tr>
+                        }
+                        @foreach (var ro in Model.RepairOrders.OrderByDescending(r => r.CreatedAt))
+                        {
+                            var (roTxt, roCode, roCss) = Ui.Status(ro.Status);
+                            <tr>
+                                <td>
+                                    <a href="/RO/Detail/@ro.Id" class="fw-bold font-monospace text-primary">@ro.Code</a>
+                                </td>
+                                <td>
+                                    <span class="font-monospace fw-semibold">@(ro.Car?.Plate ?? "—")</span>
+                                    <div class="text-muted small">@(ro.Car?.Model ?? "")</div>
+                                </td>
+                                <td class="small text-muted">@ro.CreatedAt.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td class="text-center">
+                                    <span class="badge bg-@roCss">@roCode</span>
+                                    <div class="small text-muted" style="font-size:11px">@roTxt</div>
+                                </td>
+                                <td class="text-end text-danger fw-semibold">
+                                    @if (ro.CustomerGroupDiscountAmount > 0)
+                                    {
+                                        <span>-@ro.CustomerGroupDiscountAmount.ToString("N0")đ</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">0đ</span>
+                                    }
+                                </td>
+                                <td class="text-end fw-bold text-primary">@ro.Total.ToString("N0")đ</td>
+                                <td class="text-end">
+                                    <a href="/RO/Detail/@ro.Id" class="btn btn-sm btn-outline-primary p-1" title="Chi tiết RO"><i class="bi bi-eye"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột phải: Thông tin Hợp đồng & Pháp nhân -->
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2 fw-bold">
+                <i class="bi bi-info-circle text-primary me-2"></i>Thông tin Doanh nghiệp / Pháp nhân
+            </div>
+            <div class="card-body small">
+                <div class="mb-2">
+                    <span class="text-muted d-block">Tên doanh nghiệp:</span>
+                    <strong class="fs-6">@Model.GroupName</strong>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted d-block">Mã số thuế:</span>
+                    <code>@(Model.TaxCode ?? "Chưa cập nhật")</code>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted d-block">Địa chỉ trụ sở:</span>
+                    <span>@(Model.Address ?? "Chưa cập nhật")</span>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted d-block">Điện thoại / Hotline:</span>
+                    <span>@(Model.Telephone ?? "Chưa cập nhật")</span>
+                    @if (!string.IsNullOrWhiteSpace(Model.Fax))
+                    {
+                        <span class="ms-2 text-muted">(Fax: @Model.Fax)</span>
+                    }
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted d-block">Hòm thư điện tử:</span>
+                    <span>@(Model.Email ?? "Chưa cập nhật")</span>
+                </div>
+                <hr class="my-2" />
+                <div class="mb-2">
+                    <span class="text-muted d-block">Người đại diện / Phụ trách đội xe:</span>
+                    <strong>@(Model.ContactPerson ?? "Chưa cập nhật")</strong>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted d-block">SĐT người đại diện:</span>
+                    <span>@(Model.ContactPhone ?? "Chưa cập nhật")</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header bg-white py-2 fw-bold">
+                <i class="bi bi-file-earmark-text text-primary me-2"></i>Hợp đồng Dịch vụ Đội xe
+            </div>
+            <div class="card-body small">
+                <div class="mb-2">
+                    <span class="text-muted d-block">Số hợp đồng bảo dưỡng:</span>
+                    <strong>@(Model.ContractNo ?? "Chưa ký kết số HĐ")</strong>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted d-block">Thời hạn hiệu lực:</span>
+                    @if (Model.ContractStartDate.HasValue || Model.ContractEndDate.HasValue)
+                    {
+                        <span>@(Model.ContractStartDate?.ToString("dd/MM/yyyy") ?? "...") đến @(Model.ContractEndDate?.ToString("dd/MM/yyyy") ?? "...")</span>
+                    }
+                    else
+                    {
+                        <span class="text-muted">Không xác định thời hạn</span>
+                    }
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted d-block">Hạn mức công nợ tối đa:</span>
+                    <strong class="text-danger fs-6">@Model.CreditLimit.ToString("N0") VNĐ</strong>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted d-block">Kỳ hạn thanh toán công nợ:</span>
+                    <span>Trong vòng <b>@Model.PaymentTermDays ngày</b> kể từ ngày xuất hóa đơn</span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.Description))
+                {
+                    <hr class="my-2" />
+                    <div>
+                        <span class="text-muted d-block">Ghi chú &amp; Điều khoản thỏa thuận:</span>
+                        <div class="p-2 bg-light rounded text-muted mt-1" style="white-space:pre-wrap">@Model.Description</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm xe vào đoàn -->
+<div class="modal fade" id="addMemberModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <form asp-action="AddMember" method="post" class="modal-content">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="groupId" value="@Model.Id" />
+            <div class="modal-header">
+                <h6 class="modal-title fw-bold"><i class="bi bi-plus-circle text-primary me-2"></i>Thêm xe vào Khách đoàn @Model.GroupName</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Chọn xe đưa vào đoàn <span class="text-danger">*</span></label>
+                    <select name="carId" class="form-select form-select-sm" required>
+                        <option value="">-- Chọn xe theo biển số / dòng xe --</option>
+                        @foreach (var c in availableCars)
+                        {
+                            <option value="@c.Id">@c.Plate — @c.Model (@(c.Customer?.Name ?? "Chưa có KH"))</option>
+                        }
+                    </select>
+                </div>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Tên tài xế thường xuyên</label>
+                        <input type="text" name="driverName" class="form-control form-control-sm" placeholder="VD: Nguyễn Văn A" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold">Số điện thoại tài xế</label>
+                        <input type="text" name="driverPhone" class="form-control form-control-sm" placeholder="VD: 0912.345.678" />
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small fw-bold">Ghi chú xe trong đoàn</label>
+                    <input type="text" name="note" class="form-control form-control-sm" placeholder="VD: Xe taxi ca ngày, xe đưa đón cán bộ..." />
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check2 me-1"></i>Thêm vào đoàn</button>
+            </div>
+        </form>
+    </div>
+</div>

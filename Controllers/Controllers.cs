@@ -4523,3 +4523,164 @@ public class InsuranceDebitController(IRoService svc) : Controller
     }
 }
 
+
+public class CustomerGroupController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? isActive, bool? creditExceededOnly)
+    {
+        ViewBag.Q = q;
+        ViewBag.IsActive = isActive;
+        ViewBag.CreditExceededOnly = creditExceededOnly;
+
+        var summaries = await svc.CustomerGroupSummariesAsync(q, isActive, creditExceededOnly);
+        var allSummaries = (q == null && isActive == null && creditExceededOnly == null)
+            ? summaries
+            : await svc.CustomerGroupSummariesAsync(null, null, null);
+
+        ViewBag.TotalGroups = allSummaries.Count;
+        ViewBag.ActiveGroups = allSummaries.Count(s => s.IsActive);
+        ViewBag.TotalFleetCars = allSummaries.Sum(s => s.MemberCount);
+        ViewBag.TotalFleetRevenue = allSummaries.Sum(s => s.TotalRevenue);
+        ViewBag.TotalFleetDebt = allSummaries.Sum(s => s.CurrentDebt);
+        ViewBag.CreditExceededCount = allSummaries.Count(s => s.IsCreditExceeded);
+
+        return View(summaries);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var group = await svc.GetCustomerGroupAsync(id);
+        if (group == null) return NotFound();
+
+        ViewBag.AvailableCars = await svc.CarsForCustomerGroupSelectAsync(id);
+
+        var activeRos = group.RepairOrders.Where(r => r.Status != ROStatus.Rejected).ToList();
+        ViewBag.TotalRevenue = activeRos.Sum(r => r.Total);
+        ViewBag.TotalDiscount = group.RepairOrders.Sum(r => r.CustomerGroupDiscountAmount);
+
+        var summaries = await svc.CustomerGroupSummariesAsync(group.GroupNo, null, null);
+        var summary = summaries.FirstOrDefault(s => s.Id == id);
+        ViewBag.CurrentDebt = summary?.CurrentDebt ?? 0;
+        ViewBag.IsCreditExceeded = summary?.IsCreditExceeded ?? false;
+
+        return View(group);
+    }
+
+    public IActionResult Create()
+    {
+        return View(new CustomerGroup
+        {
+            DiscountPercentLabor = 10,
+            DiscountPercentPart = 5,
+            CreditLimit = 100_000_000,
+            PaymentTermDays = 30,
+            ContractStartDate = DateTime.Today,
+            ContractEndDate = DateTime.Today.AddYears(1)
+        });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(CustomerGroup model)
+    {
+        if (string.IsNullOrWhiteSpace(model.GroupName))
+        {
+            ModelState.AddModelError("GroupName", "Vui lòng nhập tên khách đoàn.");
+            return View(model);
+        }
+
+        try
+        {
+            var id = await svc.CreateCustomerGroupAsync(model);
+            TempData["Success"] = $"Đã tạo khách đoàn '{model.GroupName}' (Mã: {model.GroupNo}) thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return View(model);
+        }
+    }
+
+    public async Task<IActionResult> Edit(int id)
+    {
+        var group = await svc.GetCustomerGroupAsync(id);
+        if (group == null) return NotFound();
+        return View(group);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, CustomerGroup model)
+    {
+        if (string.IsNullOrWhiteSpace(model.GroupName))
+        {
+            ModelState.AddModelError("GroupName", "Vui lòng nhập tên khách đoàn.");
+            return View(model);
+        }
+
+        var (ok, msg) = await svc.UpdateCustomerGroupAsync(id, model);
+        if (ok)
+        {
+            TempData["Success"] = msg;
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        TempData["Error"] = msg;
+        return View(model);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCustomerGroupAsync(id);
+        if (ok) TempData["Success"] = msg;
+        else TempData["Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddMember(int groupId, int carId, string? driverName, string? driverPhone, string? note)
+    {
+        if (carId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn xe để thêm vào đoàn.";
+            return RedirectToAction(nameof(Detail), new { id = groupId });
+        }
+
+        var (ok, msg, _) = await svc.AddMemberToCustomerGroupAsync(groupId, carId, driverName, driverPhone, note);
+        if (ok) TempData["Success"] = msg;
+        else TempData["Error"] = msg;
+
+        return RedirectToAction(nameof(Detail), new { id = groupId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> RemoveMember(int groupId, int memberId)
+    {
+        var (ok, msg) = await svc.RemoveMemberFromCustomerGroupAsync(memberId);
+        if (ok) TempData["Success"] = msg;
+        else TempData["Error"] = msg;
+
+        return RedirectToAction(nameof(Detail), new { id = groupId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyToRo(int roId, int groupId)
+    {
+        var (ok, msg, _) = await svc.ApplyCustomerGroupDiscountToRoAsync(roId, groupId);
+        if (ok) TempData["Success"] = msg;
+        else TempData["Error"] = msg;
+
+        return RedirectToAction("Detail", "RO", new { id = roId });
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var group = await svc.GetCustomerGroupAsync(id);
+        if (group == null) return NotFound();
+
+        var summaries = await svc.CustomerGroupSummariesAsync(group.GroupNo, null, null);
+        ViewBag.Summary = summaries.FirstOrDefault(s => s.Id == id);
+
+        return View(group);
+    }
+}

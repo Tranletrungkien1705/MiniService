@@ -26,7 +26,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingPdiRequests = 0, int CompletedPdiVehicles = 0,
     int PendingOrderComplains = 0, int ApprovedOrderComplains = 0,
     int PendingPartOOs = 0, int StockAvailablePartOOs = 0,
-    int ActiveCusDebits = 0, decimal TotalCusDebitBalance = 0, int OverdueCusDebits = 0);
+    int ActiveCusDebits = 0, decimal TotalCusDebitBalance = 0, int OverdueCusDebits = 0,
+    int TotalCustomerGroups = 0, int ActiveCustomerGroups = 0, int TotalFleetCars = 0);
 
 public interface IRoService
 {
@@ -336,6 +337,20 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteDealerHistoryRecordAsync(int id);
     Task<List<string>> GetDistinctDealerCodesAsync();
     Task<List<Car>> CarsWithPlateOrVinAsync(string? q = null);
+    // Customer Group & Fleet Management (Ser_CustomerGroup, Ser_CustomerGroupCustomer / MNU_QT_DL_QUANLYKHACHDOAN)
+    Task<List<CustomerGroupSummaryDto>> CustomerGroupSummariesAsync(string? q, bool? isActive, bool? creditExceededOnly);
+    Task<List<CustomerGroup>> CustomerGroupsAsync(string? q, bool? isActive);
+    Task<CustomerGroup?> GetCustomerGroupAsync(int id);
+    Task<CustomerGroup?> GetCustomerGroupByGroupNoAsync(string groupNo);
+    Task<int> CreateCustomerGroupAsync(CustomerGroup group);
+    Task<(bool ok, string msg)> UpdateCustomerGroupAsync(int id, CustomerGroup input);
+    Task<(bool ok, string msg)> DeleteCustomerGroupAsync(int id);
+    Task<(bool ok, string msg, int? memberId)> AddMemberToCustomerGroupAsync(int groupId, int carId, string? driverName, string? driverPhone, string? note);
+    Task<(bool ok, string msg)> RemoveMemberFromCustomerGroupAsync(int memberId);
+    Task<CustomerGroupMember?> CheckCarCustomerGroupAsync(int carId);
+    Task<CustomerGroupMember?> CheckPlateCustomerGroupAsync(string plate);
+    Task<(bool ok, string msg, decimal discountAmount)> ApplyCustomerGroupDiscountToRoAsync(int roId, int groupId);
+    Task<List<Car>> CarsForCustomerGroupSelectAsync(int? currentGroupId = null);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -571,6 +586,7 @@ public class RoService(AppDbContext db) : IRoService
           .Include(r => r.AssignmentWorks).ThenInclude(a => a.Engineers).ThenInclude(e => e.Engineer)
           .Include(r => r.InsuranceClaims).ThenInclude(c => c.InsuranceCompany)
           .Include(r => r.InsuranceDebits).ThenInclude(d => d.Payments)
+          .Include(r => r.CustomerGroup)
           .Include(r => r.Bulletin).ThenInclude(b => b!.Items)
           .Include(r => r.TechnicalLibraries)
           .FirstOrDefaultAsync(r => r.Id == id);
@@ -581,6 +597,16 @@ public class RoService(AppDbContext db) : IRoService
         ro.CustomerId = car.CustomerId;
         ro.Code = $"RO{DateTime.Now:yyMMdd}-{await db.ROs.CountAsync() + 1:D3}";
         ro.Status = ROStatus.Created;
+
+        // Tự động nhận diện xe thuộc Khách đoàn để liên kết CustomerGroup
+        var groupMember = await db.CustomerGroupMembers
+            .Include(m => m.CustomerGroup)
+            .FirstOrDefaultAsync(m => m.CarId == ro.CarId && m.IsActive);
+        if (groupMember?.CustomerGroup != null && groupMember.CustomerGroup.IsActive)
+        {
+            ro.CustomerGroupId = groupMember.CustomerGroupId;
+        }
+
         db.ROs.Add(ro);
         await db.SaveChangesAsync();
         return ro.Id;
@@ -829,6 +855,10 @@ public class RoService(AppDbContext db) : IRoService
         var totalCusDebitBalance = activeCusDebitsList.Sum(d => d.DebitAmount - d.PaidAmount);
         var overdueCusDebits = activeCusDebitsList.Count(d => d.DueDate.HasValue && d.DueDate.Value.Date < today);
 
+        var totalCustomerGroups = await db.CustomerGroups.CountAsync();
+        var activeCustomerGroups = await db.CustomerGroups.CountAsync(g => g.IsActive);
+        var totalFleetCars = await db.CustomerGroupMembers.CountAsync(m => m.IsActive);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -882,7 +912,10 @@ public class RoService(AppDbContext db) : IRoService
             stockAvailablePartOOs,
             activeCusDebits,
             totalCusDebitBalance,
-            overdueCusDebits);
+            overdueCusDebits,
+            totalCustomerGroups,
+            activeCustomerGroups,
+            totalFleetCars);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -7455,5 +7488,296 @@ public class RoService(AppDbContext db) : IRoService
             .OrderByDescending(c => c.CreatedAt)
             .Take(30)
             .ToListAsync();
+
+    // =========================================================================
+    // QUẢN LÝ KHÁCH ĐOÀN & HỢP ĐỒNG ĐỘI XE (Ser_CustomerGroup, Ser_CustomerGroupCustomer / MNU_QT_DL_QUANLYKHACHDOAN)
+    // =========================================================================
+
+    public async Task<List<CustomerGroupSummaryDto>> CustomerGroupSummariesAsync(string? q, bool? isActive, bool? creditExceededOnly)
+    {
+        var query = db.CustomerGroups
+            .Include(g => g.Members).ThenInclude(m => m.Car)
+            .Include(g => g.RepairOrders).ThenInclude(r => r.Lines)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(g => g.GroupNo.ToLower().Contains(s)
+                || g.GroupName.ToLower().Contains(s)
+                || (g.TaxCode != null && g.TaxCode.ToLower().Contains(s))
+                || (g.ContactPerson != null && g.ContactPerson.ToLower().Contains(s))
+                || (g.ContactPhone != null && g.ContactPhone.ToLower().Contains(s))
+                || g.Members.Any(m => m.PlateNo.ToLower().Contains(s)));
+        }
+
+        if (isActive.HasValue)
+            query = query.Where(g => g.IsActive == isActive.Value);
+
+        var groups = await query.OrderByDescending(g => g.CreatedAt).ToListAsync();
+
+        var result = new List<CustomerGroupSummaryDto>();
+        foreach (var g in groups)
+        {
+            var carIds = g.Members.Where(m => m.IsActive).Select(m => m.CarId).ToList();
+            var customerIds = g.Members.Where(m => m.IsActive && m.CustomerId.HasValue).Select(m => m.CustomerId!.Value).ToList();
+
+            var currentDebt = await db.CusDebits
+                .Where(d => d.Status == CusDebitStatus.Active && (customerIds.Contains(d.CustomerId) || (d.CarId.HasValue && carIds.Contains(d.CarId.Value))))
+                .SumAsync(d => d.DebitAmount - d.PaidAmount);
+
+            var activeRos = g.RepairOrders.Where(r => r.Status != ROStatus.Rejected).ToList();
+            var totalRev = activeRos.Sum(r => r.Total);
+            var totalDisc = g.RepairOrders.Sum(r => r.CustomerGroupDiscountAmount);
+
+            var summary = new CustomerGroupSummaryDto
+            {
+                Id = g.Id,
+                GroupNo = g.GroupNo,
+                GroupName = g.GroupName,
+                TaxCode = g.TaxCode,
+                Address = g.Address,
+                Telephone = g.Telephone,
+                ContactPerson = g.ContactPerson,
+                ContactPhone = g.ContactPhone,
+                DiscountPercentLabor = g.DiscountPercentLabor,
+                DiscountPercentPart = g.DiscountPercentPart,
+                CreditLimit = g.CreditLimit,
+                PaymentTermDays = g.PaymentTermDays,
+                ContractNo = g.ContractNo,
+                ContractStartDate = g.ContractStartDate,
+                ContractEndDate = g.ContractEndDate,
+                IsActive = g.IsActive,
+                MemberCount = g.Members.Count(m => m.IsActive),
+                ROCount = g.RepairOrders.Count,
+                TotalRevenue = totalRev,
+                TotalDiscountGiven = totalDisc,
+                CurrentDebt = currentDebt
+            };
+
+            if (creditExceededOnly == true && !summary.IsCreditExceeded)
+                continue;
+
+            result.Add(summary);
+        }
+
+        return result;
+    }
+
+    public Task<List<CustomerGroup>> CustomerGroupsAsync(string? q, bool? isActive)
+    {
+        var query = db.CustomerGroups.Include(g => g.Members).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(g => g.GroupNo.ToLower().Contains(s) || g.GroupName.ToLower().Contains(s));
+        }
+        if (isActive.HasValue) query = query.Where(g => g.IsActive == isActive.Value);
+        return query.OrderBy(g => g.GroupName).ToListAsync();
+    }
+
+    public Task<CustomerGroup?> GetCustomerGroupAsync(int id) =>
+        db.CustomerGroups
+            .Include(g => g.Members.OrderBy(m => m.PlateNo)).ThenInclude(m => m.Car).ThenInclude(c => c.Customer)
+            .Include(g => g.Members).ThenInclude(m => m.Customer)
+            .Include(g => g.RepairOrders.OrderByDescending(r => r.CreatedAt).Take(30)).ThenInclude(r => r.Car)
+            .Include(g => g.RepairOrders).ThenInclude(r => r.Lines)
+            .FirstOrDefaultAsync(g => g.Id == id);
+
+    public Task<CustomerGroup?> GetCustomerGroupByGroupNoAsync(string groupNo) =>
+        db.CustomerGroups
+            .Include(g => g.Members).ThenInclude(m => m.Car)
+            .FirstOrDefaultAsync(g => g.GroupNo == groupNo);
+
+    public async Task<int> CreateCustomerGroupAsync(CustomerGroup group)
+    {
+        if (string.IsNullOrWhiteSpace(group.GroupName))
+            throw new InvalidOperationException("Tên khách đoàn không được để trống.");
+
+        if (string.IsNullOrWhiteSpace(group.GroupNo))
+        {
+            var count = await db.CustomerGroups.CountAsync() + 1;
+            group.GroupNo = $"KD{DateTime.Now:yyMM}-{count:D3}";
+        }
+        else
+        {
+            group.GroupNo = group.GroupNo.Trim().ToUpperInvariant();
+        }
+
+        var exists = await db.CustomerGroups.AnyAsync(g => g.GroupNo == group.GroupNo);
+        if (exists) throw new InvalidOperationException($"Mã khách đoàn '{group.GroupNo}' đã tồn tại trong hệ thống.");
+
+        group.CreatedAt = DateTime.Now;
+        db.CustomerGroups.Add(group);
+        await db.SaveChangesAsync();
+        return group.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateCustomerGroupAsync(int id, CustomerGroup input)
+    {
+        var group = await db.CustomerGroups.FirstOrDefaultAsync(g => g.Id == id);
+        if (group == null) return (false, "Không tìm thấy khách đoàn.");
+
+        group.GroupName = input.GroupName.Trim();
+        group.TaxCode = input.TaxCode?.Trim();
+        group.Address = input.Address?.Trim();
+        group.Telephone = input.Telephone?.Trim();
+        group.Fax = input.Fax?.Trim();
+        group.Email = input.Email?.Trim();
+        group.ContactPerson = input.ContactPerson?.Trim();
+        group.ContactPhone = input.ContactPhone?.Trim();
+        group.Description = input.Description?.Trim();
+        group.IsActive = input.IsActive;
+        group.DiscountPercentLabor = input.DiscountPercentLabor;
+        group.DiscountPercentPart = input.DiscountPercentPart;
+        group.CreditLimit = input.CreditLimit;
+        group.PaymentTermDays = input.PaymentTermDays > 0 ? input.PaymentTermDays : 30;
+        group.ContractNo = input.ContractNo?.Trim();
+        group.ContractStartDate = input.ContractStartDate;
+        group.ContractEndDate = input.ContractEndDate;
+        group.UpdatedAt = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, "Đã cập nhật thông tin khách đoàn thành công.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCustomerGroupAsync(int id)
+    {
+        var group = await db.CustomerGroups
+            .Include(g => g.RepairOrders)
+            .Include(g => g.Members)
+            .FirstOrDefaultAsync(g => g.Id == id);
+
+        if (group == null) return (false, "Không tìm thấy khách đoàn.");
+        if (group.RepairOrders.Count > 0)
+        {
+            group.IsActive = false;
+            group.UpdatedAt = DateTime.Now;
+            await db.SaveChangesAsync();
+            return (true, "Khách đoàn đã có Lệnh sửa chữa nên đã được chuyển sang trạng thái Tạm dừng (Inactive).");
+        }
+
+        db.CustomerGroupMembers.RemoveRange(group.Members);
+        db.CustomerGroups.Remove(group);
+        await db.SaveChangesAsync();
+        return (true, "Đã xóa khách đoàn thành công.");
+    }
+
+    public async Task<(bool ok, string msg, int? memberId)> AddMemberToCustomerGroupAsync(int groupId, int carId, string? driverName, string? driverPhone, string? note)
+    {
+        var group = await db.CustomerGroups.FirstOrDefaultAsync(g => g.Id == groupId);
+        if (group == null) return (false, "Không tìm thấy khách đoàn.", null);
+
+        var car = await db.Cars.Include(c => c.Customer).FirstOrDefaultAsync(c => c.Id == carId);
+        if (car == null) return (false, "Không tìm thấy thông tin xe.", null);
+
+        var existingMember = await db.CustomerGroupMembers.FirstOrDefaultAsync(m => m.CustomerGroupId == groupId && m.CarId == carId);
+        if (existingMember != null)
+        {
+            if (existingMember.IsActive)
+                return (false, $"Xe biển số {car.Plate} đã có trong danh sách đoàn.", existingMember.Id);
+
+            existingMember.IsActive = true;
+            existingMember.DriverName = driverName ?? existingMember.DriverName;
+            existingMember.DriverPhone = driverPhone ?? existingMember.DriverPhone;
+            existingMember.Note = note ?? existingMember.Note;
+            await db.SaveChangesAsync();
+            return (true, $"Đã kích hoạt lại xe {car.Plate} trong đoàn {group.GroupName}.", existingMember.Id);
+        }
+
+        var member = new CustomerGroupMember
+        {
+            CustomerGroupId = groupId,
+            CarId = carId,
+            CustomerId = car.CustomerId,
+            PlateNo = car.Plate,
+            DriverName = driverName?.Trim() ?? car.Customer?.Name,
+            DriverPhone = driverPhone?.Trim() ?? car.Customer?.Phone,
+            Note = note?.Trim(),
+            JoinedDate = DateTime.Now,
+            IsActive = true
+        };
+
+        db.CustomerGroupMembers.Add(member);
+
+        if (car.Customer != null && !car.Customer.CustomerGroupId.HasValue)
+        {
+            car.Customer.CustomerGroupId = groupId;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã thêm xe {car.Plate} vào khách đoàn {group.GroupName}.", member.Id);
+    }
+
+    public async Task<(bool ok, string msg)> RemoveMemberFromCustomerGroupAsync(int memberId)
+    {
+        var member = await db.CustomerGroupMembers.Include(m => m.Car).FirstOrDefaultAsync(m => m.Id == memberId);
+        if (member == null) return (false, "Không tìm thấy xe trong đoàn.");
+
+        db.CustomerGroupMembers.Remove(member);
+        await db.SaveChangesAsync();
+        return (true, $"Đã đưa xe {member.PlateNo} ra khỏi khách đoàn.");
+    }
+
+    public Task<CustomerGroupMember?> CheckCarCustomerGroupAsync(int carId) =>
+        db.CustomerGroupMembers
+            .Include(m => m.CustomerGroup)
+            .Include(m => m.Car).ThenInclude(c => c.Customer)
+            .FirstOrDefaultAsync(m => m.CarId == carId && m.IsActive && m.CustomerGroup.IsActive);
+
+    public Task<CustomerGroupMember?> CheckPlateCustomerGroupAsync(string plate)
+    {
+        var clean = plate.Trim().ToUpperInvariant();
+        return db.CustomerGroupMembers
+            .Include(m => m.CustomerGroup)
+            .Include(m => m.Car).ThenInclude(c => c.Customer)
+            .FirstOrDefaultAsync(m => m.PlateNo.ToUpper() == clean && m.IsActive && m.CustomerGroup.IsActive);
+    }
+
+    public async Task<(bool ok, string msg, decimal discountAmount)> ApplyCustomerGroupDiscountToRoAsync(int roId, int groupId)
+    {
+        var ro = await db.ROs
+            .Include(r => r.Lines)
+            .Include(r => r.CustomerGroup)
+            .FirstOrDefaultAsync(r => r.Id == roId);
+
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa (RO).", 0);
+        if (ro.Status is ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected)
+            return (false, "Lệnh sửa chữa đã hoàn tất hoặc bị hủy — không thể thay đổi chiết khấu.", 0);
+
+        var group = await db.CustomerGroups.FirstOrDefaultAsync(g => g.Id == groupId);
+        if (group == null) return (false, "Không tìm thấy khách đoàn.", 0);
+        if (!group.IsActive) return (false, "Khách đoàn đang ở trạng thái Tạm dừng.", 0);
+
+        var customerLaborLines = ro.Lines.Where(l => l.Type == LineType.Labor && l.ExpenseType == ExpenseType.Customer).ToList();
+        var customerPartLines = ro.Lines.Where(l => l.Type == LineType.Part && l.ExpenseType == ExpenseType.Customer).ToList();
+
+        var laborTotal = customerLaborLines.Sum(l => l.Amount);
+        var partTotal = customerPartLines.Sum(l => l.Amount);
+
+        var laborDiscount = laborTotal * (group.DiscountPercentLabor / 100m);
+        var partDiscount = partTotal * (group.DiscountPercentPart / 100m);
+        var discountTotal = Math.Round(laborDiscount + partDiscount, 0);
+
+        ro.CustomerGroupId = group.Id;
+        ro.CustomerGroupDiscountAmount = discountTotal;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã áp dụng chiết khấu đoàn '{group.GroupName}': Tiền công -{group.DiscountPercentLabor}% ({laborDiscount:N0}đ), Phụ tùng -{group.DiscountPercentPart}% ({partDiscount:N0}đ). Tổng giảm: {discountTotal:N0}đ.", discountTotal);
+    }
+
+    public async Task<List<Car>> CarsForCustomerGroupSelectAsync(int? currentGroupId = null)
+    {
+        var query = db.Cars.Include(c => c.Customer).AsQueryable();
+        if (currentGroupId.HasValue)
+        {
+            var existingCarIds = await db.CustomerGroupMembers
+                .Where(m => m.CustomerGroupId == currentGroupId.Value && m.IsActive)
+                .Select(m => m.CarId)
+                .ToListAsync();
+            query = query.Where(c => !existingCarIds.Contains(c.Id));
+        }
+        return await query.OrderBy(c => c.Plate).ToListAsync();
+    }
 }
 

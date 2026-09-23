@@ -4711,6 +4711,197 @@ app.MapDelete("/api/insurancedebits/payments/{paymentId:int}", async (int paymen
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// =========================================================================
+// API Quản lý Khách đoàn & Hợp đồng Đội xe (Ser_CustomerGroup, Ser_CustomerGroupCustomer - MNU_QT_DL_QUANLYKHACHDOAN)
+// =========================================================================
+
+app.MapGet("/api/customer-groups", async (string? q, bool? isActive, bool? creditExceededOnly, IRoService svc) =>
+{
+    var list = await svc.CustomerGroupSummariesAsync(q, isActive, creditExceededOnly);
+    return Results.Ok(list);
+});
+
+app.MapGet("/api/customer-groups/{id:int}", async (int id, IRoService svc) =>
+{
+    var g = await svc.GetCustomerGroupAsync(id);
+    if (g == null) return Results.NotFound(new { error = "Không tìm thấy khách đoàn." });
+    return Results.Ok(new
+    {
+        g.Id,
+        g.GroupNo,
+        g.GroupName,
+        g.TaxCode,
+        g.Address,
+        g.Telephone,
+        g.Fax,
+        g.Email,
+        g.ContactPerson,
+        g.ContactPhone,
+        g.Description,
+        g.IsActive,
+        g.DiscountPercentLabor,
+        g.DiscountPercentPart,
+        g.CreditLimit,
+        g.PaymentTermDays,
+        g.ContractNo,
+        g.ContractStartDate,
+        g.ContractEndDate,
+        g.CreatedAt,
+        g.UpdatedAt,
+        members = g.Members.Select(m => new
+        {
+            m.Id,
+            m.CarId,
+            m.PlateNo,
+            model = m.Car?.Model,
+            vin = m.Car?.Vin,
+            year = m.Car?.Year,
+            customerId = m.CustomerId,
+            customerName = m.Customer?.Name,
+            customerPhone = m.Customer?.Phone,
+            m.DriverName,
+            m.DriverPhone,
+            m.JoinedDate,
+            m.IsActive,
+            m.Note
+        }),
+        recentROs = g.RepairOrders.Select(r => new
+        {
+            r.Id,
+            r.Code,
+            plate = r.Car?.Plate,
+            model = r.Car?.Model,
+            status = Ui.Status(r.Status).text,
+            r.Total,
+            r.CustomerGroupDiscountAmount,
+            r.CreatedAt,
+            r.FinishedAt
+        })
+    });
+});
+
+app.MapPost("/api/customer-groups", async (CreateCustomerGroupDto dto, IRoService svc) =>
+{
+    try
+    {
+        var group = new CustomerGroup
+        {
+            GroupNo = dto.GroupNo?.Trim() ?? "",
+            GroupName = dto.GroupName.Trim(),
+            TaxCode = dto.TaxCode?.Trim(),
+            Address = dto.Address?.Trim(),
+            Telephone = dto.Telephone?.Trim(),
+            Fax = dto.Fax?.Trim(),
+            Email = dto.Email?.Trim(),
+            ContactPerson = dto.ContactPerson?.Trim(),
+            ContactPhone = dto.ContactPhone?.Trim(),
+            Description = dto.Description?.Trim(),
+            IsActive = dto.IsActive ?? true,
+            DiscountPercentLabor = dto.DiscountPercentLabor ?? 0,
+            DiscountPercentPart = dto.DiscountPercentPart ?? 0,
+            CreditLimit = dto.CreditLimit ?? 0,
+            PaymentTermDays = dto.PaymentTermDays ?? 30,
+            ContractNo = dto.ContractNo?.Trim(),
+            ContractStartDate = dto.ContractStartDate,
+            ContractEndDate = dto.ContractEndDate,
+            CreatedBy = "API"
+        };
+        var id = await svc.CreateCustomerGroupAsync(group);
+        return Results.Created($"/api/customer-groups/{id}", new { id, group.GroupNo, group.GroupName, message = "Đã tạo khách đoàn thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/customer-groups/{id:int}", async (int id, UpdateCustomerGroupDto dto, IRoService svc) =>
+{
+    var group = new CustomerGroup
+    {
+        GroupName = dto.GroupName,
+        TaxCode = dto.TaxCode,
+        Address = dto.Address,
+        Telephone = dto.Telephone,
+        Fax = dto.Fax,
+        Email = dto.Email,
+        ContactPerson = dto.ContactPerson,
+        ContactPhone = dto.ContactPhone,
+        Description = dto.Description,
+        IsActive = dto.IsActive ?? true,
+        DiscountPercentLabor = dto.DiscountPercentLabor ?? 0,
+        DiscountPercentPart = dto.DiscountPercentPart ?? 0,
+        CreditLimit = dto.CreditLimit ?? 0,
+        PaymentTermDays = dto.PaymentTermDays ?? 30,
+        ContractNo = dto.ContractNo,
+        ContractStartDate = dto.ContractStartDate,
+        ContractEndDate = dto.ContractEndDate
+    };
+    var (ok, msg) = await svc.UpdateCustomerGroupAsync(id, group);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/customer-groups/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCustomerGroupAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapGet("/api/customer-groups/check-car/{carId:int}", async (int carId, IRoService svc) =>
+{
+    var member = await svc.CheckCarCustomerGroupAsync(carId);
+    if (member == null) return Results.Ok(new { belongsToGroup = false });
+    return Results.Ok(new
+    {
+        belongsToGroup = true,
+        groupId = member.CustomerGroupId,
+        groupNo = member.CustomerGroup.GroupNo,
+        groupName = member.CustomerGroup.GroupName,
+        discountPercentLabor = member.CustomerGroup.DiscountPercentLabor,
+        discountPercentPart = member.CustomerGroup.DiscountPercentPart,
+        creditLimit = member.CustomerGroup.CreditLimit,
+        paymentTermDays = member.CustomerGroup.PaymentTermDays,
+        member.DriverName,
+        member.DriverPhone
+    });
+});
+
+app.MapGet("/api/customer-groups/check-plate/{plate}", async (string plate, IRoService svc) =>
+{
+    var member = await svc.CheckPlateCustomerGroupAsync(plate);
+    if (member == null) return Results.Ok(new { belongsToGroup = false });
+    return Results.Ok(new
+    {
+        belongsToGroup = true,
+        groupId = member.CustomerGroupId,
+        groupNo = member.CustomerGroup.GroupNo,
+        groupName = member.CustomerGroup.GroupName,
+        discountPercentLabor = member.CustomerGroup.DiscountPercentLabor,
+        discountPercentPart = member.CustomerGroup.DiscountPercentPart,
+        creditLimit = member.CustomerGroup.CreditLimit,
+        paymentTermDays = member.CustomerGroup.PaymentTermDays,
+        member.DriverName,
+        member.DriverPhone
+    });
+});
+
+app.MapPost("/api/customer-groups/{id:int}/members", async (int id, AddCustomerGroupMemberDto dto, IRoService svc) =>
+{
+    var (ok, msg, memberId) = await svc.AddMemberToCustomerGroupAsync(id, dto.CarId, dto.DriverName, dto.DriverPhone, dto.Note);
+    return ok ? Results.Ok(new { memberId, message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/customer-groups/members/{memberId:int}", async (int memberId, IRoService svc) =>
+{
+    var (ok, msg) = await svc.RemoveMemberFromCustomerGroupAsync(memberId);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/customer-groups/{id:int}/apply-ro/{roId:int}", async (int id, int roId, IRoService svc) =>
+{
+    var (ok, msg, discountAmount) = await svc.ApplyCustomerGroupDiscountToRoAsync(roId, id);
+    return ok ? Results.Ok(new { discountAmount, message = msg }) : Results.BadRequest(new { error = msg });
+});
 
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
@@ -4837,4 +5028,9 @@ record CreateInsuranceDebitFromRoDto(int RoId, int? CompanyId, decimal? DebitAmo
 record CreateInsuranceDebitFromClaimDto(int ClaimId, DateTime? DueDate, string? Note);
 record CancelInsuranceDebitDto(string? Reason);
 record CreateInsuranceDebitPaymentDto(int InsuranceCompanyId, int? InsuranceDebitId, decimal PaymentAmount, DateTime? PaymentDate, PaymentMethod? Method, string? PayPersonName, string? PayPersonIdCard, string? PayPersonPhone, string? BankAccount, string? BankName, string? TransactionRef, string? Note, string? Cashier);
+
+record CreateCustomerGroupDto(string? GroupNo, string GroupName, string? TaxCode, string? Address, string? Telephone, string? Fax, string? Email, string? ContactPerson, string? ContactPhone, string? Description, bool? IsActive, decimal? DiscountPercentLabor, decimal? DiscountPercentPart, decimal? CreditLimit, int? PaymentTermDays, string? ContractNo, DateTime? ContractStartDate, DateTime? ContractEndDate);
+record UpdateCustomerGroupDto(string GroupName, string? TaxCode, string? Address, string? Telephone, string? Fax, string? Email, string? ContactPerson, string? ContactPhone, string? Description, bool? IsActive, decimal? DiscountPercentLabor, decimal? DiscountPercentPart, decimal? CreditLimit, int? PaymentTermDays, string? ContractNo, DateTime? ContractStartDate, DateTime? ContractEndDate);
+record AddCustomerGroupMemberDto(int CarId, string? DriverName, string? DriverPhone, string? Note);
+
 

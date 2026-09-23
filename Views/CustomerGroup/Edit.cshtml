@@ -1,0 +1,135 @@
+@model CustomerGroup
+@{
+    ViewData["Title"] = $"Chỉnh sửa Khách đoàn: {Model.GroupName}";
+}
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <a href="/CustomerGroup/Detail/@Model.Id" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i></a>
+    <div>
+        <h5 class="fw-bold mb-0">Chỉnh sửa Khách đoàn: @Model.GroupName</h5>
+        <div class="text-muted small">Cập nhật chính sách chiết khấu, hạn mức công nợ và thông tin hợp đồng đội xe</div>
+    </div>
+</div>
+
+<form asp-action="Edit" asp-route-id="@Model.Id" method="post" class="card shadow-sm">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="Id" />
+    <input type="hidden" asp-for="GroupNo" />
+    <div class="card-body">
+        <h6 class="fw-bold text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-building me-1"></i>1. Thông tin Doanh nghiệp / Pháp nhân
+        </h6>
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Mã khách đoàn (Group No)</label>
+                <input value="@Model.GroupNo" class="form-control form-control-sm font-monospace bg-light" readonly />
+                <span class="text-muted" style="font-size:11px">Mã định danh hệ thống (không thay đổi)</span>
+            </div>
+            <div class="col-md-8">
+                <label class="form-label small fw-bold">Tên Doanh nghiệp / Khách đoàn <span class="text-danger">*</span></label>
+                <input asp-for="GroupName" class="form-control form-control-sm" required />
+                <span asp-validation-for="GroupName" class="text-danger small"></span>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Mã số thuế (Tax Code)</label>
+                <input asp-for="TaxCode" class="form-control form-control-sm font-monospace" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Điện thoại bàn / Hotline</label>
+                <input asp-for="Telephone" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Số Fax</label>
+                <input asp-for="Fax" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-8">
+                <label class="form-label small fw-bold">Địa chỉ trụ sở</label>
+                <input asp-for="Address" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Hòm thư điện tử (Email)</label>
+                <input asp-for="Email" type="email" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <h6 class="fw-bold text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-person-badge me-1"></i>2. Người đại diện phụ trách Đội xe
+        </h6>
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <label class="form-label small fw-bold">Họ tên người liên hệ / Trưởng phòng kỹ thuật</label>
+                <input asp-for="ContactPerson" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label small fw-bold">Số điện thoại di động người đại diện</label>
+                <input asp-for="ContactPhone" class="form-control form-control-sm" />
+            </div>
+        </div>
+
+        <h6 class="fw-bold text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-percent me-1"></i>3. Chính sách Ưu đãi &amp; Hạn mức Công nợ đội xe
+        </h6>
+        <div class="row g-3 mb-4">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">% Chiết khấu Tiền công (Labor)</label>
+                <div class="input-group input-group-sm">
+                    <input asp-for="DiscountPercentLabor" type="number" step="0.5" min="0" max="100" class="form-control" />
+                    <span class="input-group-text">%</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">% Chiết khấu Phụ tùng (Parts)</label>
+                <div class="input-group input-group-sm">
+                    <input asp-for="DiscountPercentPart" type="number" step="0.5" min="0" max="100" class="form-control" />
+                    <span class="input-group-text">%</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Hạn mức Tín dụng / Công nợ (VNĐ)</label>
+                <div class="input-group input-group-sm">
+                    <input asp-for="CreditLimit" type="number" step="1000000" min="0" class="form-control" />
+                    <span class="input-group-text">đ</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Thời hạn thanh toán (Ngày)</label>
+                <div class="input-group input-group-sm">
+                    <input asp-for="PaymentTermDays" type="number" step="1" min="1" class="form-control" />
+                    <span class="input-group-text">ngày</span>
+                </div>
+            </div>
+        </div>
+
+        <h6 class="fw-bold text-primary border-bottom pb-2 mb-3">
+            <i class="bi bi-file-earmark-ruled me-1"></i>4. Hợp đồng &amp; Thỏa thuận dịch vụ
+        </h6>
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Số hợp đồng dịch vụ</label>
+                <input asp-for="ContractNo" class="form-control form-control-sm font-monospace" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Ngày bắt đầu hợp đồng</label>
+                <input asp-for="ContractStartDate" type="date" class="form-control form-control-sm" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold">Ngày kết thúc hợp đồng</label>
+                <input asp-for="ContractEndDate" type="date" class="form-control form-control-sm" />
+            </div>
+            <div class="col-12">
+                <label class="form-label small fw-bold">Mô tả &amp; Điều khoản thỏa thuận đặc thù</label>
+                <textarea asp-for="Description" rows="3" class="form-control form-control-sm"></textarea>
+            </div>
+            <div class="col-12">
+                <div class="form-check form-switch">
+                    <input asp-for="IsActive" class="form-check-input" type="checkbox" id="isActiveEditCheck" />
+                    <label class="form-check-label small fw-bold" for="isActiveEditCheck">Khách đoàn đang có hiệu lực hoạt động</label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card-footer bg-light d-flex justify-content-end gap-2 py-2">
+        <a href="/CustomerGroup/Detail/@Model.Id" class="btn btn-sm btn-outline-secondary">Hủy bỏ</a>
+        <button type="submit" class="btn btn-sm btn-primary px-4"><i class="bi bi-check2 me-1"></i>Cập nhật thông tin</button>
+    </div>
+</form>

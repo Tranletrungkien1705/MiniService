@@ -481,10 +481,13 @@ public class Customer : IOrgOwned
     public string Name { get; set; } = "";
     public string? Phone { get; set; }
     public string? Email { get; set; }
+    public int? CustomerGroupId { get; set; }
+    public CustomerGroup? CustomerGroup { get; set; }
     public List<Car> Cars { get; set; } = [];
     public List<Quote> Quotes { get; set; } = [];
     public List<CusDebit> CusDebits { get; set; } = [];
     public List<CusDebitPayment> CusDebitPayments { get; set; } = [];
+    public List<CustomerGroupMember> GroupMemberships { get; set; } = [];
 }
 
 public class Car : IOrgOwned
@@ -497,6 +500,7 @@ public class Car : IOrgOwned
     public int Year { get; set; }
     public int CustomerId { get; set; }
     public Customer Customer { get; set; } = null!;
+    public List<CustomerGroupMember> GroupMemberships { get; set; } = [];
 }
 
 /// <summary>Lệnh sửa chữa (Repair Order) — chứng từ trung tâm.</summary>
@@ -527,6 +531,9 @@ public class RepairOrder : IOrgOwned
     public int? CampaignMarketingId { get; set; }
     public CampaignMarketing? CampaignMarketing { get; set; }
     public decimal CampaignDiscountAmount { get; set; } = 0;
+    public int? CustomerGroupId { get; set; }
+    public CustomerGroup? CustomerGroup { get; set; }
+    public decimal CustomerGroupDiscountAmount { get; set; } = 0;
     public int? BulletinId { get; set; }
     public Bulletin? Bulletin { get; set; }
     public int? PdiRequestId { get; set; }
@@ -550,11 +557,11 @@ public class RepairOrder : IOrgOwned
     public List<CusDebit> CusDebits { get; set; } = [];
     public List<InsuranceDebit> InsuranceDebits { get; set; } = [];
 
-    public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount);
+    public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
     public decimal PartTotal => Lines.Where(l => l.Type == LineType.Part).Sum(l => l.Amount);
-    public decimal CustomerTotal => Math.Max(0, Lines.Where(l => l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount) - CampaignDiscountAmount);
+    public decimal CustomerTotal => Math.Max(0, Lines.Where(l => l.ExpenseType == ExpenseType.Customer).Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount);
     public decimal WarrantyTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Warranty).Sum(l => l.Amount);
     public decimal InsuranceTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Insurance).Sum(l => l.Amount);
     public decimal PaidAmount => Payments.Where(p => p.Status == PaymentStatus.Completed).Sum(p => p.PaymentAmount);
@@ -2256,6 +2263,90 @@ public class InsuranceCompanyDebitSummaryDto
     public bool HasDebit => RemainingDebit > 0;
     public DateTime? LastDebitDate { get; set; }
     public DateTime? LastPaymentDate { get; set; }
+}
+
+/// <summary>Khách đoàn / Nhóm khách hàng doanh nghiệp & đội xe — Ser_CustomerGroup trong idn.CarService (MNU_QT_DL_QUANLYKHACHDOAN).</summary>
+public class CustomerGroup : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string GroupNo { get; set; } = "";             // Mã khách đoàn (GroupNo)
+    public string GroupName { get; set; } = "";           // Tên khách đoàn (GroupName)
+    public string? TaxCode { get; set; }                 // Mã số thuế (TaxCode)
+    public string? Address { get; set; }                 // Địa chỉ (Address)
+    public string? Telephone { get; set; }               // Điện thoại bàn / Hotline (TelePhone)
+    public string? Fax { get; set; }                     // Fax
+    public string? Email { get; set; }                   // Email
+    public string? ContactPerson { get; set; }          // Người đại diện / Phụ trách đội xe
+    public string? ContactPhone { get; set; }           // SĐT người đại diện
+    public string? Description { get; set; }             // Mô tả / Điều khoản hợp đồng (Description)
+    public bool IsActive { get; set; } = true;           // Trạng thái hiệu lực (IsActive)
+
+    // Chính sách ưu đãi đoàn & Hạn mức tín dụng / công nợ
+    public decimal DiscountPercentLabor { get; set; } = 0;  // % Chiết khấu tiền công (0 - 100%)
+    public decimal DiscountPercentPart { get; set; } = 0;   // % Chiết khấu phụ tùng (0 - 100%)
+    public decimal CreditLimit { get; set; } = 0;           // Hạn mức tín dụng / công nợ tối đa (VNĐ)
+    public int PaymentTermDays { get; set; } = 30;          // Thời hạn thanh toán (ngày)
+    public string? ContractNo { get; set; }                 // Số hợp đồng dịch vụ đội xe
+    public DateTime? ContractStartDate { get; set; }        // Ngày bắt đầu hợp đồng
+    public DateTime? ContractEndDate { get; set; }          // Ngày kết thúc hợp đồng
+
+    public string CreatedBy { get; set; } = "Hệ thống";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? UpdatedAt { get; set; }
+
+    public List<CustomerGroupMember> Members { get; set; } = [];
+    public List<RepairOrder> RepairOrders { get; set; } = [];
+    public List<Customer> Customers { get; set; } = [];
+}
+
+/// <summary>Thành viên xe / tài xế thuộc Khách đoàn — Ser_CustomerGroupCustomer trong idn.CarService.</summary>
+public class CustomerGroupMember : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int CustomerGroupId { get; set; }
+    public CustomerGroup CustomerGroup { get; set; } = null!;
+
+    public int? CustomerId { get; set; }
+    public Customer? Customer { get; set; }
+
+    public int CarId { get; set; }
+    public Car Car { get; set; } = null!;
+
+    public string PlateNo { get; set; } = "";             // Biển số xe thuộc đoàn (PlateNo)
+    public string? DriverName { get; set; }              // Tên tài xế phụ trách xe (CusName)
+    public string? DriverPhone { get; set; }             // Điện thoại tài xế (Mobile)
+    public string? Note { get; set; }                    // Ghi chú xe (Description)
+    public DateTime JoinedDate { get; set; } = DateTime.Now;
+    public bool IsActive { get; set; } = true;
+}
+
+/// <summary>DTO Tổng hợp chỉ số kinh doanh & công nợ theo Khách đoàn (Fleet Group Summary).</summary>
+public class CustomerGroupSummaryDto
+{
+    public int Id { get; set; }
+    public string GroupNo { get; set; } = "";
+    public string GroupName { get; set; } = "";
+    public string? TaxCode { get; set; }
+    public string? Address { get; set; }
+    public string? Telephone { get; set; }
+    public string? ContactPerson { get; set; }
+    public string? ContactPhone { get; set; }
+    public decimal DiscountPercentLabor { get; set; }
+    public decimal DiscountPercentPart { get; set; }
+    public decimal CreditLimit { get; set; }
+    public int PaymentTermDays { get; set; }
+    public string? ContractNo { get; set; }
+    public DateTime? ContractStartDate { get; set; }
+    public DateTime? ContractEndDate { get; set; }
+    public bool IsActive { get; set; }
+    public int MemberCount { get; set; }
+    public int ROCount { get; set; }
+    public decimal TotalRevenue { get; set; }
+    public decimal TotalDiscountGiven { get; set; }
+    public decimal CurrentDebt { get; set; }
+    public bool IsCreditExceeded => CreditLimit > 0 && CurrentDebt > CreditLimit;
 }
 
 

@@ -1,0 +1,183 @@
+@model List<CustomerGroupSummaryDto>
+@{
+    ViewData["Title"] = "Quản lý Khách đoàn & Đội xe (Fleet Management)";
+    int totalGroups = ViewBag.TotalGroups ?? 0;
+    int activeGroups = ViewBag.ActiveGroups ?? 0;
+    int totalFleetCars = ViewBag.TotalFleetCars ?? 0;
+    decimal totalFleetRevenue = ViewBag.TotalFleetRevenue ?? 0;
+    decimal totalFleetDebt = ViewBag.TotalFleetDebt ?? 0;
+    int creditExceededCount = ViewBag.CreditExceededCount ?? 0;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-0"><i class="bi bi-buildings text-primary me-2"></i>Quản lý Khách đoàn &amp; Đội xe (Fleet Groups)</h5>
+        <div class="text-muted small">Quản lý đối tác doanh nghiệp, taxi, vận tải, chính sách chiết khấu giờ công/phụ tùng và hạn mức tín dụng bảo dưỡng (MNU_QT_DL_QUANLYKHACHDOAN)</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/CustomerGroup/Create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Thêm Khách đoàn mới</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card border-primary"><div class="card-body">
+            <div class="text-muted small">Tổng số Khách đoàn</div>
+            <div class="stat-num text-primary" style="font-size:22px">@totalGroups</div>
+            <div class="text-muted small mt-1">@activeGroups đoàn đang hoạt động ký kết</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số xe thuộc biên chế đoàn</div>
+            <div class="stat-num text-info" style="font-size:22px">@totalFleetCars</div>
+            <div class="text-muted small mt-1">Taxi, xe cho thuê, xe doanh nghiệp</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng doanh thu dịch vụ đội xe</div>
+            <div class="stat-num text-success" style="font-size:22px">@totalFleetRevenue.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">Lũy kế từ các Lệnh sửa chữa RO đoàn</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card @(creditExceededCount > 0 ? "border-danger bg-danger bg-opacity-10" : "")"><div class="card-body">
+            <div class="text-muted small">Tổng dư nợ đội xe hiện tại</div>
+            <div class="stat-num @(creditExceededCount > 0 ? "text-danger" : "text-dark")" style="font-size:22px">@totalFleetDebt.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">
+                @if (creditExceededCount > 0)
+                {
+                    <span class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle-fill me-1"></i>@creditExceededCount đoàn vượt hạn mức</span>
+                }
+                else
+                {
+                    <span class="text-success"><i class="bi bi-shield-check me-1"></i>Nằm trong hạn mức an toàn</span>
+                }
+            </div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="row g-2 align-items-center">
+            <div class="col-md-5">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" name="q" value="@ViewBag.Q" class="form-control" placeholder="Tìm theo Mã đoàn, Tên đoàn, MST, Người đại diện, SĐT, Biển số xe..." />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select name="isActive" class="form-select form-select-sm">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="true" selected="@(ViewBag.IsActive == true)">Đang hoạt động</option>
+                    <option value="false" selected="@(ViewBag.IsActive == false)">Tạm dừng (Inactive)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <div class="form-check form-switch pt-1">
+                    <input class="form-check-input" type="checkbox" name="creditExceededOnly" value="true" id="creditExceededSwitch" checked="@(ViewBag.CreditExceededOnly == true)" />
+                    <label class="form-check-label small" for="creditExceededSwitch">Vượt hạn mức</label>
+                </div>
+            </div>
+            <div class="col-md-2 d-flex gap-1">
+                <button type="submit" class="btn btn-sm btn-primary flex-fill"><i class="bi bi-funnel me-1"></i>Lọc</button>
+                <a href="/CustomerGroup" class="btn btn-sm btn-outline-secondary" title="Xóa bộ lọc"><i class="bi bi-arrow-counterclockwise"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:110px">Mã đoàn</th>
+                    <th>Tên khách đoàn / Doanh nghiệp</th>
+                    <th style="width:140px">Liên hệ đại diện</th>
+                    <th style="width:130px" class="text-center">Ưu đãi chiết khấu</th>
+                    <th style="width:180px">Hợp đồng &amp; Hạn mức</th>
+                    <th style="width:120px" class="text-center">Quy mô đoàn</th>
+                    <th style="width:110px" class="text-center">Trạng thái</th>
+                    <th style="width:120px" class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                            Không tìm thấy khách đoàn nào phù hợp với điều kiện tìm kiếm.
+                        </td>
+                    </tr>
+                }
+                @foreach (var g in Model)
+                {
+                    var (statusText, statusCss) = Ui.CustomerGroupStatus(g.IsActive);
+                    var (creditText, creditCss, creditIcon) = Ui.CreditStatus(g.CreditLimit, g.CurrentDebt);
+                    <tr>
+                        <td>
+                            <a href="/CustomerGroup/Detail/@g.Id" class="fw-bold text-primary font-monospace">@g.GroupNo</a>
+                        </td>
+                        <td>
+                            <div class="fw-bold"><a href="/CustomerGroup/Detail/@g.Id" class="text-dark text-decoration-none">@g.GroupName</a></div>
+                            <div class="text-muted small">
+                                @if (!string.IsNullOrWhiteSpace(g.TaxCode))
+                                {
+                                    <span>MST: <code>@g.TaxCode</code></span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(g.Address))
+                                {
+                                    <span class="ms-2"><i class="bi bi-geo-alt me-1"></i>@g.Address</span>
+                                }
+                            </div>
+                        </td>
+                        <td>
+                            <div class="small fw-semibold">@(g.ContactPerson ?? "Chưa chỉ định")</div>
+                            @if (!string.IsNullOrWhiteSpace(g.ContactPhone))
+                            {
+                                <div class="text-muted small"><i class="bi bi-telephone me-1"></i>@g.ContactPhone</div>
+                            }
+                        </td>
+                        <td class="text-center">
+                            <div class="badge bg-primary bg-opacity-10 text-primary border border-primary px-2 py-1 mb-1">
+                                Công: <b>-@g.DiscountPercentLabor%</b>
+                            </div>
+                            <div class="badge bg-info bg-opacity-10 text-info border border-info px-2 py-1">
+                                Vật tư: <b>-@g.DiscountPercentPart%</b>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="small">Hạn mức: <b>@g.CreditLimit.ToString("N0")đ</b> (@g.PaymentTermDays ngày)</div>
+                            <div class="small text-muted">
+                                Dư nợ: <span class="fw-bold @(g.IsCreditExceeded ? "text-danger" : "text-dark")">@g.CurrentDebt.ToString("N0")đ</span>
+                                <span class="badge bg-@creditCss ms-1" style="font-size:10px"><i class="bi @creditIcon me-1"></i>@creditText</span>
+                            </div>
+                            @if (!string.IsNullOrWhiteSpace(g.ContractNo))
+                            {
+                                <div class="text-muted" style="font-size:11px"><i class="bi bi-file-text me-1"></i>HĐ: @g.ContractNo</div>
+                            }
+                        </td>
+                        <td class="text-center">
+                            <div><span class="badge bg-secondary fs-6">@g.MemberCount xe</span></div>
+                            <div class="text-muted small mt-1">@g.ROCount lượt RO</div>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-@statusCss">@statusText</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/CustomerGroup/Detail/@g.Id" class="btn btn-outline-primary" title="Chi tiết hồ sơ đoàn"><i class="bi bi-eye"></i></a>
+                                <a href="/CustomerGroup/Edit/@g.Id" class="btn btn-outline-secondary" title="Sửa thông tin"><i class="bi bi-pencil"></i></a>
+                                <a href="/CustomerGroup/Print/@g.Id" class="btn btn-outline-dark" target="_blank" title="In thỏa thuận bảo dưỡng"><i class="bi bi-printer"></i></a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

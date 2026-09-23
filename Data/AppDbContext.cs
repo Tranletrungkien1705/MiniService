@@ -69,12 +69,18 @@ public class AppDbContext : DbContext
     public DbSet<DealerHistoryItem> DealerHistoryItems => Set<DealerHistoryItem>();
     public DbSet<InsuranceDebit> InsuranceDebits => Set<InsuranceDebit>();
     public DbSet<InsuranceDebitPayment> InsuranceDebitPayments => Set<InsuranceDebitPayment>();
+    public DbSet<CustomerGroup> CustomerGroups => Set<CustomerGroup>();
+    public DbSet<CustomerGroupMember> CustomerGroupMembers => Set<CustomerGroupMember>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
         if (Database.IsNpgsql()) b.HasDefaultSchema("miniservice");
         b.Entity<Org>().HasIndex(x => x.ApiKey).IsUnique();
-        b.Entity<Customer>(e => { e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique(); e.HasQueryFilter(x => x.OrgId == _orgId); });
+        b.Entity<Customer>(e => {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
+            e.HasOne(x => x.CustomerGroup).WithMany(g => g.Customers).HasForeignKey(x => x.CustomerGroupId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
         b.Entity<Car>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.Plate }).IsUnique();
@@ -98,6 +104,8 @@ public class AppDbContext : DbContext
             e.Ignore(x => x.CustomerTotal); e.Ignore(x => x.WarrantyTotal); e.Ignore(x => x.InsuranceTotal);
             e.Ignore(x => x.PaidAmount); e.Ignore(x => x.RemainingBalance);
             e.Property(x => x.CampaignDiscountAmount).HasPrecision(18, 2);
+            e.Property(x => x.CustomerGroupDiscountAmount).HasPrecision(18, 2);
+            e.HasOne(x => x.CustomerGroup).WithMany(g => g.RepairOrders).HasForeignKey(x => x.CustomerGroupId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
@@ -692,6 +700,25 @@ public class AppDbContext : DbContext
             e.Property(x => x.PaymentAmount).HasPrecision(18, 2);
             e.HasOne(x => x.InsuranceCompany).WithMany(x => x.Payments).HasForeignKey(x => x.InsuranceCompanyId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.InsuranceDebit).WithMany(x => x.Payments).HasForeignKey(x => x.InsuranceDebitId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CustomerGroup>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.GroupNo }).IsUnique();
+            e.Property(x => x.DiscountPercentLabor).HasPrecision(5, 2);
+            e.Property(x => x.DiscountPercentPart).HasPrecision(5, 2);
+            e.Property(x => x.CreditLimit).HasPrecision(18, 2);
+            e.HasMany(x => x.Members).WithOne(m => m.CustomerGroup).HasForeignKey(m => m.CustomerGroupId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.RepairOrders).WithOne(r => r.CustomerGroup).HasForeignKey(r => r.CustomerGroupId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CustomerGroupMember>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CustomerGroupId, x.CarId });
+            e.HasIndex(x => new { x.OrgId, x.PlateNo });
+            e.HasOne(x => x.CustomerGroup).WithMany(g => g.Members).HasForeignKey(x => x.CustomerGroupId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.Car).WithMany(c => c.GroupMemberships).HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Customer).WithMany(c => c.GroupMemberships).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

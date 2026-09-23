@@ -577,5 +577,16 @@ public static class Ui
         flagClaim
             ? (!string.IsNullOrWhiteSpace(claimNo) ? ($"Bảo hành: {claimNo}", "warning") : ("Hồ sơ bảo hành", "warning"))
             : ("Dịch vụ thường", "secondary");
+
+    public static (string text, string css) CustomerGroupStatus(bool isActive) =>
+        isActive ? ("Đang hoạt động", "success") : ("Tạm dừng", "secondary");
+
+    public static (string text, string css, string icon) CreditStatus(decimal creditLimit, decimal currentDebt)
+    {
+        if (creditLimit <= 0) return ("Không giới hạn", "info", "bi-infinity");
+        if (currentDebt > creditLimit) return ("Vượt hạn mức", "danger", "bi-exclamation-octagon-fill");
+        if (currentDebt >= creditLimit * 0.8m) return ("Sắp chạm mức", "warning", "bi-exclamation-triangle-fill");
+        return ("An toàn", "success", "bi-shield-check");
+    }
 }
 

@@ -144,6 +144,12 @@
             <div class="stat-num" style="font-size:18px;color:#dc2626"><a href="/CusDebit" class="text-decoration-none" style="color:#dc2626">@d.TotalCusDebitBalance.ToString("N0")đ</a> @if(d.ActiveCusDebits > 0){<span class="text-muted" style="font-size:12px;font-weight:normal">(@d.ActiveCusDebits khoản @if(d.OverdueCusDebits > 0){<span class="text-danger">· @d.OverdueCusDebits quá hạn</span>})</span>}</div>
         </div></div>
     </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Khách đoàn &amp; Đội xe (Fleet)</div>
+            <div class="stat-num" style="font-size:18px;color:#0369a1"><a href="/CustomerGroup" class="text-decoration-none" style="color:#0369a1">@d.ActiveCustomerGroups đoàn</a> @if(d.TotalFleetCars > 0){<span class="text-muted" style="font-size:12px;font-weight:normal">(@d.TotalFleetCars xe đoàn)</span>}</div>
+        </div></div>
+    </div>
 </div>
 <div class="row g-3">
     <div class="col-lg-7"><div class="card"><div class="card-body">

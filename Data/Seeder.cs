@@ -3503,6 +3503,135 @@ public static class Seeder
             db.InsuranceDebitPayments.AddRange(payments);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.CustomerGroups.AnyAsync())
+        {
+            var cars = await db.Cars.Include(c => c.Customer).ToListAsync();
+            var car1 = cars.FirstOrDefault(c => c.Plate == "30A-123.45") ?? cars.FirstOrDefault();
+            var car2 = cars.FirstOrDefault(c => c.Plate == "51G-678.90") ?? cars.Skip(1).FirstOrDefault();
+
+            // 1. Tập đoàn Mai Linh - Taxi Mai Linh Hà Nội
+            var gMaiLinh = new CustomerGroup
+            {
+                GroupNo = "KD-MAILINH",
+                GroupName = "Công ty CP Tập đoàn Mai Linh - Chi nhánh Hà Nội",
+                TaxCode = "0101234567",
+                Address = "Số 41 Hai Bà Trưng, P. Tràng Tiền, Q. Hoàn Kiếm, Hà Nội",
+                Telephone = "024-38333333",
+                Fax = "024-38333334",
+                Email = "fleet.hanoi@mailinh.vn",
+                ContactPerson = "Nguyễn Tuấn Anh (Trưởng phòng Quản lý Phương tiện)",
+                ContactPhone = "0912.345.678",
+                Description = "Thỏa thuận bảo dưỡng định kỳ đội xe taxi Mai Linh: Ưu tiên khoang sửa chữa nhanh SCS, miễn phí rửa xe hút bụi sau bảo dưỡng, hỗ trợ cứu hộ 24/7.",
+                IsActive = true,
+                DiscountPercentLabor = 10,
+                DiscountPercentPart = 5,
+                CreditLimit = 200_000_000,
+                PaymentTermDays = 30,
+                ContractNo = "HD-ML-2026/HYUNDAI-HN",
+                ContractStartDate = DateTime.Today.AddMonths(-3),
+                ContractEndDate = DateTime.Today.AddMonths(9),
+                CreatedBy = "Hệ thống",
+                CreatedAt = DateTime.Now.AddMonths(-3)
+            };
+
+            // 2. Vinasun Taxi
+            var gVinasun = new CustomerGroup
+            {
+                GroupNo = "KD-VINASUN",
+                GroupName = "Công ty Cổ phần Ánh Dương Việt Nam (Vinasun Taxi)",
+                TaxCode = "0302032309",
+                Address = "Số 648 Nguyễn Trãi, Phường 11, Quận 5, TP. Hồ Chí Minh",
+                Telephone = "028-38272727",
+                Email = "kythuat@vinasuntaxi.com",
+                ContactPerson = "Lê Minh Trí (Giám đốc Kỹ thuật & Bảo dưỡng Đội xe)",
+                ContactPhone = "0988.777.666",
+                Description = "Hợp đồng sửa chữa lớn đồng sơn và đại tu đội xe vận tải du lịch & taxi thương quyền Vinasun.",
+                IsActive = true,
+                DiscountPercentLabor = 12,
+                DiscountPercentPart = 7,
+                CreditLimit = 300_000_000,
+                PaymentTermDays = 45,
+                ContractNo = "HD-VNS-2026/HYUNDAI-SGN",
+                ContractStartDate = DateTime.Today.AddMonths(-2),
+                ContractEndDate = DateTime.Today.AddMonths(10),
+                CreatedBy = "Hệ thống",
+                CreatedAt = DateTime.Now.AddMonths(-2)
+            };
+
+            // 3. Đội xe Vietcombank Hội sở
+            var gVcb = new CustomerGroup
+            {
+                GroupNo = "KD-VIETCOMBANK",
+                GroupName = "Ngân hàng TMCP Ngoại thương Việt Nam (Đội xe VCB Hội sở)",
+                TaxCode = "0100112437",
+                Address = "Số 198 Trần Quang Khải, Q. Hoàn Kiếm, Hà Nội",
+                Telephone = "024-39343137",
+                Email = "doixe@vietcombank.com.vn",
+                ContactPerson = "Hoàng Quốc Dũng (Đội trưởng Đội xe Ban Quản trị Trụ sở)",
+                ContactPhone = "0903.111.222",
+                Description = "Đội xe chuyên chở cán bộ lãnh đạo ngân hàng Vietcombank; yêu cầu kiểm tra kỹ thuật an toàn định kỳ nghiêm ngặt.",
+                IsActive = true,
+                DiscountPercentLabor = 8,
+                DiscountPercentPart = 5,
+                CreditLimit = 150_000_000,
+                PaymentTermDays = 30,
+                ContractNo = "HD-VCB-2025/HYUNDAI-FLEET",
+                ContractStartDate = DateTime.Today.AddMonths(-6),
+                ContractEndDate = DateTime.Today.AddMonths(6),
+                CreatedBy = "Hệ thống",
+                CreatedAt = DateTime.Now.AddMonths(-6)
+            };
+
+            db.CustomerGroups.AddRange(gMaiLinh, gVinasun, gVcb);
+            await db.SaveChangesAsync();
+
+            // Gán thành viên xe vào các đoàn
+            if (car1 != null)
+            {
+                db.CustomerGroupMembers.Add(new CustomerGroupMember
+                {
+                    CustomerGroupId = gMaiLinh.Id,
+                    CarId = car1.Id,
+                    CustomerId = car1.CustomerId,
+                    PlateNo = car1.Plate,
+                    DriverName = "Phạm Văn Tuấn",
+                    DriverPhone = "0912.888.777",
+                    Note = "Xe taxi ca ngày - Đội xe Mai Linh Hoàn Kiếm",
+                    JoinedDate = DateTime.Today.AddMonths(-3),
+                    IsActive = true
+                });
+            }
+
+            if (car2 != null)
+            {
+                db.CustomerGroupMembers.Add(new CustomerGroupMember
+                {
+                    CustomerGroupId = gVinasun.Id,
+                    CarId = car2.Id,
+                    CustomerId = car2.CustomerId,
+                    PlateNo = car2.Plate,
+                    DriverName = "Trần Đình Khang",
+                    DriverPhone = "0988.666.555",
+                    Note = "Xe hợp đồng đưa đón đối tác cao cấp",
+                    JoinedDate = DateTime.Today.AddMonths(-2),
+                    IsActive = true
+                });
+            }
+
+            await db.SaveChangesAsync();
+
+            // Cập nhật Lệnh RO mẫu liên kết khách đoàn
+            var ro = await db.ROs.Include(r => r.Lines).FirstOrDefaultAsync();
+            if (ro != null)
+            {
+                ro.CustomerGroupId = gMaiLinh.Id;
+                var laborTotal = ro.Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
+                var partTotal = ro.Lines.Where(l => l.Type == LineType.Part).Sum(l => l.Amount);
+                ro.CustomerGroupDiscountAmount = Math.Round(laborTotal * 0.10m + partTotal * 0.05m, 0);
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
 
@@ -3543,7 +3672,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -3590,6 +3719,15 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_InsuranceDebits_OrgId_DebitNo\" ON miniservice.\"InsuranceDebits\" (\"OrgId\", \"DebitNo\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"InsuranceDebitPayments\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"PaymentNo\" text NOT NULL, \"InsuranceCompanyId\" integer NOT NULL, \"InsNo\" text NOT NULL, \"InsName\" text NOT NULL, \"InsuranceDebitId\" integer NULL, \"PaymentDate\" timestamp NOT NULL, \"PaymentAmount\" numeric(18,2) NOT NULL, \"Method\" integer NOT NULL, \"PayPersonName\" text NOT NULL, \"PayPersonIdCard\" text NULL, \"PayPersonPhone\" text NULL, \"BankAccount\" text NULL, \"BankName\" text NULL, \"TransactionRef\" text NULL, \"Note\" text NULL, \"Cashier\" text NOT NULL, \"Status\" integer NOT NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_InsuranceDebitPayments_OrgId_PaymentNo\" ON miniservice.\"InsuranceDebitPayments\" (\"OrgId\", \"PaymentNo\")",
+            "ALTER TABLE miniservice.\"Customers\" ADD COLUMN IF NOT EXISTS \"CustomerGroupId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CustomerGroupId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CustomerGroupDiscountAmount\" numeric(18,2) NOT NULL DEFAULT 0",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"CustomerGroups\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"GroupNo\" text NOT NULL, \"GroupName\" text NOT NULL, \"TaxCode\" text NULL, \"Address\" text NULL, \"Telephone\" text NULL, \"Fax\" text NULL, \"Email\" text NULL, \"ContactPerson\" text NULL, \"ContactPhone\" text NULL, \"Description\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"DiscountPercentLabor\" numeric(5,2) NOT NULL DEFAULT 0, \"DiscountPercentPart\" numeric(5,2) NOT NULL DEFAULT 0, \"CreditLimit\" numeric(18,2) NOT NULL DEFAULT 0, \"PaymentTermDays\" integer NOT NULL DEFAULT 30, \"ContractNo\" text NULL, \"ContractStartDate\" timestamp NULL, \"ContractEndDate\" timestamp NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"UpdatedAt\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CustomerGroups_OrgId_GroupNo\" ON miniservice.\"CustomerGroups\" (\"OrgId\", \"GroupNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"CustomerGroupMembers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"CustomerGroupId\" integer NOT NULL, \"CustomerId\" integer NULL, \"CarId\" integer NOT NULL, \"PlateNo\" text NOT NULL, \"DriverName\" text NULL, \"DriverPhone\" text NULL, \"Note\" text NULL, \"JoinedDate\" timestamp NOT NULL DEFAULT now(), \"IsActive\" boolean NOT NULL DEFAULT true)",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerGroupMembers_OrgId_CustomerGroupId\" ON miniservice.\"CustomerGroupMembers\" (\"OrgId\", \"CustomerGroupId\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerGroupMembers_OrgId_CarId\" ON miniservice.\"CustomerGroupMembers\" (\"OrgId\", \"CarId\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerGroupMembers_OrgId_PlateNo\" ON miniservice.\"CustomerGroupMembers\" (\"OrgId\", \"PlateNo\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -4672,7 +4810,55 @@ public static class Seeder
                 ""CreatedAt"" TEXT NOT NULL,
                 FOREIGN KEY (""InsuranceCompanyId"") REFERENCES ""InsuranceCompanies"" (""Id"") ON DELETE RESTRICT
             );",
-            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_InsuranceDebitPayments_OrgId_PaymentNo"" ON ""InsuranceDebitPayments"" (""OrgId"", ""PaymentNo"");"
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_InsuranceDebitPayments_OrgId_PaymentNo"" ON ""InsuranceDebitPayments"" (""OrgId"", ""PaymentNo"");",
+            @"ALTER TABLE ""Customers"" ADD COLUMN ""CustomerGroupId"" INTEGER NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""CustomerGroupId"" INTEGER NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""CustomerGroupDiscountAmount"" TEXT NULL;",
+            @"UPDATE ""ROs"" SET ""CustomerGroupDiscountAmount"" = '0' WHERE ""CustomerGroupDiscountAmount"" IS NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""CustomerGroups"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""GroupNo"" TEXT NOT NULL,
+                ""GroupName"" TEXT NOT NULL,
+                ""TaxCode"" TEXT NULL,
+                ""Address"" TEXT NULL,
+                ""Telephone"" TEXT NULL,
+                ""Fax"" TEXT NULL,
+                ""Email"" TEXT NULL,
+                ""ContactPerson"" TEXT NULL,
+                ""ContactPhone"" TEXT NULL,
+                ""Description"" TEXT NULL,
+                ""IsActive"" INTEGER NOT NULL DEFAULT 1,
+                ""DiscountPercentLabor"" TEXT NOT NULL DEFAULT '0',
+                ""DiscountPercentPart"" TEXT NOT NULL DEFAULT '0',
+                ""CreditLimit"" TEXT NOT NULL DEFAULT '0',
+                ""PaymentTermDays"" INTEGER NOT NULL DEFAULT 30,
+                ""ContractNo"" TEXT NULL,
+                ""ContractStartDate"" TEXT NULL,
+                ""ContractEndDate"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""UpdatedAt"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerGroups_OrgId_GroupNo"" ON ""CustomerGroups"" (""OrgId"", ""GroupNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""CustomerGroupMembers"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""CustomerGroupId"" INTEGER NOT NULL,
+                ""CustomerId"" INTEGER NULL,
+                ""CarId"" INTEGER NOT NULL,
+                ""PlateNo"" TEXT NOT NULL,
+                ""DriverName"" TEXT NULL,
+                ""DriverPhone"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                ""JoinedDate"" TEXT NOT NULL,
+                ""IsActive"" INTEGER NOT NULL DEFAULT 1,
+                FOREIGN KEY (""CustomerGroupId"") REFERENCES ""CustomerGroups"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerGroupMembers_OrgId_CustomerGroupId"" ON ""CustomerGroupMembers"" (""OrgId"", ""CustomerGroupId"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerGroupMembers_OrgId_CarId"" ON ""CustomerGroupMembers"" (""OrgId"", ""CarId"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerGroupMembers_OrgId_PlateNo"" ON ""CustomerGroupMembers"" (""OrgId"", ""PlateNo"");"
         };
 
         foreach (var sql in sqls)
