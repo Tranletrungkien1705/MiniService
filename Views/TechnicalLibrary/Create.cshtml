@@ -1,0 +1,186 @@
+@{
+    ViewData["Title"] = "Lập Cẩm nang Kỹ thuật & Xử lý Pan bệnh xe";
+    var preModel = ViewBag.PreModel as string ?? "";
+    var prePlate = ViewBag.PrePlate as string ?? "";
+    var preRemark = ViewBag.PreRemark as string ?? "";
+    var ro = ViewBag.RO as RepairOrder;
+    var models = ViewBag.Models as List<string> ?? [];
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <div>
+                <a href="/TechnicalLibrary" class="btn btn-sm btn-outline-secondary me-2"><i class="bi bi-arrow-left me-1"></i>Quay lại danh sách</a>
+                <span class="text-muted small">Cẩm nang kỹ thuật &gt; Lập hồ sơ giải pháp pan bệnh mới</span>
+            </div>
+            @if (ro != null)
+            {
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                    <i class="bi bi-link-45deg me-1"></i>Đúc kết từ Lệnh RO: @ro.Code
+                </span>
+            }
+        </div>
+
+        <div class="card shadow-sm">
+            <div class="card-header bg-white py-3">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-journal-plus text-primary fs-4"></i>
+                    <div>
+                        <h6 class="mb-0 fw-bold">Hồ sơ Cẩm nang Kỹ thuật &amp; Xử lý Pan bệnh (Ser_Technical_Library)</h6>
+                        <small class="text-muted">Ghi nhận phương pháp chẩn đoán, nguyên nhân gốc rễ và giải pháp xử lý triệt để đã nghiệm thu thực tế</small>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="/TechnicalLibrary/Create">
+                    @Html.AntiForgeryToken()
+                    @if (ro != null)
+                    {
+                        <input type="hidden" name="roId" value="@ro.Id" />
+                    }
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12"><h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-car-front me-2"></i>1. Thông tin Xe &amp; Cấu hình Kỹ thuật</h6></div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Dòng xe (Model) <span class="text-danger">*</span></label>
+                            <input name="model" value="@preModel" list="modelList" class="form-control" placeholder="VD: Hyundai Tucson, Santa Fe..." required />
+                            <datalist id="modelList">
+                                <option value="Hyundai Santa Fe" />
+                                <option value="Hyundai Tucson" />
+                                <option value="Hyundai Creta" />
+                                <option value="Hyundai Accent" />
+                                <option value="Hyundai Elantra" />
+                                <option value="Hyundai Custin" />
+                                <option value="Hyundai Palisade" />
+                                <option value="Hyundai Stargazer" />
+                                <option value="Hyundai Grand i10" />
+                                <option value="Hyundai Ioniq 5" />
+                                @foreach (var m in models)
+                                {
+                                    <option value="@m" />
+                                }
+                            </datalist>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Biển số xe phát hiện pan</label>
+                            <input name="plateNo" value="@prePlate" class="form-control text-uppercase" placeholder="VD: 30A-123.45" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Phiên bản xe (Version)</label>
+                            <input name="version" class="form-control" placeholder="VD: 1.6 Turbo, 2.0 Đặc biệt, Cao cấp..." />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Loại động cơ (Engine)</label>
+                            <input name="engine" list="engineList" class="form-control" placeholder="VD: SmartStream G1.6 T-GDi, D2.2 CRDi, Kappa 1.4..." />
+                            <datalist id="engineList">
+                                <option value="SmartStream G1.6 T-GDi" />
+                                <option value="SmartStream G2.0 MPI" />
+                                <option value="SmartStream D2.2 CRDi" />
+                                <option value="SmartStream G1.5" />
+                                <option value="Kappa 1.4 MPI" />
+                                <option value="Nu 2.0 MPI" />
+                                <option value="Kappa 1.2 MPI" />
+                                <option value="Động cơ điện Dual Motor (AWD)" />
+                            </datalist>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Loại hộp số (Gear)</label>
+                            <input name="gear" list="gearList" class="form-control" placeholder="VD: 7DCT, 8AT, 8DCT ướt, IVT, 6AT, 6MT..." />
+                            <datalist id="gearList">
+                                <option value="Ly hợp kép 7 cấp (7DCT)" />
+                                <option value="Ly hợp kép ướt 8 cấp (8DCT)" />
+                                <option value="Tự động 8 cấp (8AT)" />
+                                <option value="Tự động 6 cấp (6AT)" />
+                                <option value="Vô cấp thông minh (IVT)" />
+                                <option value="Số sàn 6 cấp (6MT)" />
+                                <option value="Hộp số đơn cấp xe điện (Single Speed EV)" />
+                            </datalist>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12"><h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-diagram-3 me-2"></i>2. Phân loại Cẩm nang &amp; Hệ thống Kỹ thuật</h6></div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Hệ thống kỹ thuật xe <span class="text-danger">*</span></label>
+                            <select name="reRepairType" class="form-select" required>
+                                @foreach (TechnicalLibraryReRepairType rt in Enum.GetValues(typeof(TechnicalLibraryReRepairType)))
+                                {
+                                    var (rtText, _, _) = Ui.TechnicalLibraryReRepairType(rt);
+                                    <option value="@((int)rt)">@rtText</option>
+                                }
+                            </select>
+                            <div class="form-text">Phân nhóm hệ thống để kỹ thuật viên tra cứu nhanh theo mã sự cố</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Loại hồ sơ cẩm nang <span class="text-danger">*</span></label>
+                            <select name="type" class="form-select" required>
+                                <option value="0">Cẩm nang kỹ thuật chuẩn (Tài liệu tiêu chuẩn xưởng)</option>
+                                <option value="1">Xử lý phản tu &amp; Pan bệnh khó (Re-Repair Case Study)</option>
+                            </select>
+                            <div class="form-text">Phản tu: trường hợp xe đã sửa nhiều lần hoặc pan bệnh phức tạp hiếm gặp</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12"><h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-search me-2"></i>3. Hiện tượng Hư hỏng &amp; Quy trình Đo kiểm Chẩn đoán</h6></div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Mô tả hiện tượng hư hỏng / Triệu chứng cụ thể <span class="text-danger">*</span></label>
+                            <textarea name="reRepairRemark" class="form-control" rows="3" placeholder="Mô tả cụ thể biểu hiện bất thường của xe, đèn báo taplo, âm thanh lạ, điều kiện xuất hiện (tốc độ, nhiệt độ, thời tiết)..." required>@preRemark</textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Phản ánh từ khách hàng &amp; Ghi nhận của thợ thử xe</label>
+                            <textarea name="reRepairFeedback" class="form-control" rows="2" placeholder="Ý kiến khách hàng, lịch sử can thiệp trước đó ở gara ngoài hoặc đại lý khác..."></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Phương pháp kiểm tra loại trừ &amp; Đo đạc thông số thực nghiệm (Exclusion Test)</label>
+                            <textarea name="exclusionTest" class="form-control" rows="3" placeholder="Ghi nhận các bước đo điện trở, áp suất, đọc dữ liệu cảm biến Current Data bằng máy chẩn đoán GDS Mobile, phương pháp cô lập từng cụm chi tiết để loại trừ nguyên nhân..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12"><h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-check-circle me-2"></i>4. Nguyên nhân Gốc rễ &amp; Biện pháp Khắc phục Triệt để</h6></div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold text-danger">Nguyên nhân hư hỏng gốc rễ (Root Cause) <span class="text-danger">*</span></label>
+                            <textarea name="reRepairReason" class="form-control border-danger-subtle" rows="3" placeholder="Nguyên nhân căn bản dẫn đến sự cố (hỏng hóc linh kiện, lỏng giắc cắm, cặn bẩn, mòn cơ khí, lỗi phần mềm điều khiển...)" required></textarea>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold text-success">Biện pháp khắc phục triệt để đã xử lý thành công (Solution) <span class="text-danger">*</span></label>
+                            <textarea name="reRepairSolution" class="form-control border-success-subtle" rows="4" placeholder="Hướng dẫn chi tiết các bước xử lý: tháo lắp, thay thế mã phụ tùng nào, quy trình cài đặt học lại (Adaptation/Calibration), lực siết bu-lông, thử nghiệm bàn giao xe..." required></textarea>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12"><h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-person-gear me-2"></i>5. Đơn vị Báo cáo &amp; Kỹ thuật viên Thực hiện</h6></div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Mã đại lý</label>
+                            <input name="dealerCode" value="HYUNDAI-MAIN" class="form-control" readonly />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Tên đại lý</label>
+                            <input name="dealerName" value="Hyundai Giải Phóng" class="form-control" readonly />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Kỹ thuật viên / CVDV lập hồ sơ</label>
+                            <input name="createdBy" value="KTV Trưởng Nguyễn Văn Minh" class="form-control" required />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+                        <a href="/TechnicalLibrary" class="btn btn-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary px-4"><i class="bi bi-save me-1"></i>Lưu cẩm nang kỹ thuật</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

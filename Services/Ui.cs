@@ -426,4 +426,26 @@ public static class Ui
         Models.ComplainSolution.RejectClaim => ("Từ chối bồi thường", "danger"),
         _ => (s.ToString(), "secondary")
     };
+
+    public static (string text, string code, string css) TechnicalLibraryType(TechnicalLibraryType t) => t switch
+    {
+        Models.TechnicalLibraryType.Normal => ("Cẩm nang chuẩn", "NORM", "info"),
+        Models.TechnicalLibraryType.ReRepair => ("Phản tu / Pan khó", "RREP", "danger"),
+        _ => (t.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) TechnicalLibraryReRepairType(TechnicalLibraryReRepairType t) => t switch
+    {
+        Models.TechnicalLibraryReRepairType.Engine => ("Động cơ & Nhiên liệu", "bi-fuel-pump", "danger"),
+        Models.TechnicalLibraryReRepairType.Transmission => ("Hộp số & Truyền động", "bi-gear-wide-connected", "primary"),
+        Models.TechnicalLibraryReRepairType.Electrical => ("Hệ thống Điện & Cảm biến", "bi-lightning-charge", "warning"),
+        Models.TechnicalLibraryReRepairType.Chassis => ("Khung gầm & Treo lái", "bi-diagram-3", "secondary"),
+        Models.TechnicalLibraryReRepairType.BrakeADAS => ("Phanh an toàn & ADAS", "bi-shield-check", "success"),
+        Models.TechnicalLibraryReRepairType.AirConditioning => ("Điều hòa nhiệt độ (AC)", "bi-snow", "info"),
+        Models.TechnicalLibraryReRepairType.BodyPaint => ("Thân vỏ & Sơn", "bi-palette", "dark"),
+        _ => (t.ToString(), "bi-tools", "secondary")
+    };
+
+    public static (string text, string code, string css) TechnicalLibraryStatus(bool isActive) =>
+        isActive ? ("Đã duyệt ban hành", "ACTIVE", "success") : ("Chờ thẩm định HQ", "PEND", "warning");
 }

@@ -3061,6 +3061,181 @@ app.MapDelete("/api/ordercomplains/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Thư viện Kỹ thuật & Cẩm nang xử lý pan bệnh sửa chữa xe (Ser_Technical_Library / MH 63)
+app.MapGet("/api/technicallibraries", async (string? model, TechnicalLibraryReRepairType? reRepairType, TechnicalLibraryType? type, bool? isActive, string? q, IRoService svc) =>
+{
+    var list = await svc.TechnicalLibrariesAsync(model, reRepairType, type, isActive, q);
+    return Results.Ok(list.Select(t => new
+    {
+        t.Id,
+        t.TechnicalLibraryCode,
+        t.DealerCode,
+        t.DealerName,
+        t.PlateNo,
+        t.Model,
+        t.Engine,
+        t.Gear,
+        t.Version,
+        type = Ui.TechnicalLibraryType(t.Type).text,
+        typeCode = Ui.TechnicalLibraryType(t.Type).code,
+        typeValue = (int)t.Type,
+        reRepairType = Ui.TechnicalLibraryReRepairType(t.ReRepairType).text,
+        reRepairTypeIcon = Ui.TechnicalLibraryReRepairType(t.ReRepairType).icon,
+        reRepairTypeValue = (int)t.ReRepairType,
+        t.ReRepairRemark,
+        t.ReRepairFeedback,
+        t.ExclusionTest,
+        t.ReRepairReason,
+        t.ReRepairSolution,
+        status = Ui.TechnicalLibraryStatus(t.IsActive).text,
+        statusCode = Ui.TechnicalLibraryStatus(t.IsActive).code,
+        t.IsActive,
+        roId = t.ROId,
+        roCode = t.RO?.Code,
+        t.CreatedBy,
+        t.CreatedAt,
+        t.ApprovedAt,
+        t.ApprovedBy
+    }));
+});
+
+app.MapGet("/api/technicallibraries/{id:int}", async (int id, IRoService svc) =>
+{
+    var t = await svc.GetTechnicalLibraryAsync(id);
+    if (t == null) return Results.NotFound(new { error = "Không tìm thấy hồ sơ kỹ thuật." });
+    return Results.Ok(new
+    {
+        t.Id,
+        t.TechnicalLibraryCode,
+        t.DealerCode,
+        t.DealerName,
+        t.PlateNo,
+        t.Model,
+        t.Engine,
+        t.Gear,
+        t.Version,
+        type = Ui.TechnicalLibraryType(t.Type).text,
+        typeCode = Ui.TechnicalLibraryType(t.Type).code,
+        typeValue = (int)t.Type,
+        reRepairType = Ui.TechnicalLibraryReRepairType(t.ReRepairType).text,
+        reRepairTypeIcon = Ui.TechnicalLibraryReRepairType(t.ReRepairType).icon,
+        reRepairTypeValue = (int)t.ReRepairType,
+        t.ReRepairRemark,
+        t.ReRepairFeedback,
+        t.ExclusionTest,
+        t.ReRepairReason,
+        t.ReRepairSolution,
+        status = Ui.TechnicalLibraryStatus(t.IsActive).text,
+        statusCode = Ui.TechnicalLibraryStatus(t.IsActive).code,
+        t.IsActive,
+        ro = t.RO != null ? new { t.RO.Id, t.RO.Code, plate = t.RO.Car?.Plate, model = t.RO.Car?.Model, customer = t.RO.Customer?.Name } : null,
+        t.CreatedBy,
+        t.CreatedAt,
+        t.ApprovedAt,
+        t.ApprovedBy
+    });
+});
+
+app.MapGet("/api/technicallibraries/by-code/{code}", async (string code, IRoService svc) =>
+{
+    var t = await svc.GetTechnicalLibraryByCodeAsync(code);
+    if (t == null) return Results.NotFound(new { error = "Không tìm thấy mã hồ sơ kỹ thuật." });
+    return Results.Ok(new
+    {
+        t.Id,
+        t.TechnicalLibraryCode,
+        t.DealerCode,
+        t.DealerName,
+        t.PlateNo,
+        t.Model,
+        t.Engine,
+        t.Gear,
+        t.Version,
+        type = Ui.TechnicalLibraryType(t.Type).text,
+        reRepairType = Ui.TechnicalLibraryReRepairType(t.ReRepairType).text,
+        t.ReRepairRemark,
+        t.ReRepairFeedback,
+        t.ExclusionTest,
+        t.ReRepairReason,
+        t.ReRepairSolution,
+        t.IsActive,
+        t.CreatedBy,
+        t.CreatedAt
+    });
+});
+
+app.MapPost("/api/technicallibraries", async (CreateTechnicalLibraryDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.Model))
+            return Results.BadRequest(new { error = "Vui lòng nhập dòng xe (Model)." });
+        if (string.IsNullOrWhiteSpace(dto.ReRepairRemark))
+            return Results.BadRequest(new { error = "Vui lòng nhập mô tả hiện tượng hư hỏng (ReRepairRemark)." });
+        if (string.IsNullOrWhiteSpace(dto.ReRepairReason))
+            return Results.BadRequest(new { error = "Vui lòng nhập nguyên nhân gốc rễ (ReRepairReason)." });
+        if (string.IsNullOrWhiteSpace(dto.ReRepairSolution))
+            return Results.BadRequest(new { error = "Vui lòng nhập biện pháp khắc phục (ReRepairSolution)." });
+
+        var item = new TechnicalLibrary
+        {
+            TechnicalLibraryCode = dto.TechnicalLibraryCode?.Trim() ?? "",
+            DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? "HYUNDAI-MAIN" : dto.DealerCode.Trim(),
+            DealerName = string.IsNullOrWhiteSpace(dto.DealerName) ? "Hyundai Giải Phóng" : dto.DealerName.Trim(),
+            PlateNo = dto.PlateNo?.Trim(),
+            Model = dto.Model.Trim(),
+            Engine = dto.Engine?.Trim(),
+            Gear = dto.Gear?.Trim(),
+            Version = dto.Version?.Trim(),
+            ReRepairType = dto.ReRepairType,
+            Type = dto.Type ?? TechnicalLibraryType.Normal,
+            ReRepairRemark = dto.ReRepairRemark.Trim(),
+            ReRepairFeedback = dto.ReRepairFeedback?.Trim(),
+            ExclusionTest = dto.ExclusionTest?.Trim(),
+            ReRepairReason = dto.ReRepairReason.Trim(),
+            ReRepairSolution = dto.ReRepairSolution.Trim(),
+            ROId = (dto.RoId.HasValue && dto.RoId.Value > 0) ? dto.RoId : null,
+            CreatedBy = dto.CreatedBy ?? "api",
+            IsActive = false
+        };
+
+        var id = await svc.CreateTechnicalLibraryAsync(item);
+        return Results.Ok(new { technicalLibraryId = id, technicalLibraryCode = item.TechnicalLibraryCode, message = "Đã lưu hồ sơ cẩm nang kỹ thuật thành công (chờ thẩm định HQ)." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/technicallibraries/{id:int}/approve", async (int id, ApproveTechnicalLibraryDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ApproveTechnicalLibraryAsync(id, dto?.ApprovedBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/technicallibraries/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTechnicalLibraryAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapGet("/api/technicallibraries/suggest-for-ro/{roId:int}", async (int roId, IRoService svc) =>
+{
+    var list = await svc.SearchSolutionsForRoAsync(roId);
+    return Results.Ok(list.Select(t => new
+    {
+        t.Id,
+        t.TechnicalLibraryCode,
+        t.Model,
+        type = Ui.TechnicalLibraryType(t.Type).text,
+        reRepairType = Ui.TechnicalLibraryReRepairType(t.ReRepairType).text,
+        t.ReRepairRemark,
+        t.ReRepairReason,
+        t.ReRepairSolution
+    }));
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -3152,3 +3327,5 @@ record PassPdiDto(string? Inspector);
 record CreateOrderComplainDto(string? OrderComplainNo, string? DealerCode, string? DealerName, OrderComplainType ComplainType, int? OrderPartId, int PartId, decimal Quantity, decimal? UnitPrice, string? VIN, string Description, string? RequestOrderNo, string? TransportUnit, DateTime? DeliveryDateTime, string? DeliveryBy, string? DeliveryLocation, string? ReceiveBy, DateTime? AssembleDateTime, string? AssembleBy, string? CreatedBy, List<CreateOrderComplainAttachDto>? AttachFiles);
 record CreateOrderComplainAttachDto(string ImageType, string FileName, string? FilePath, string? Note);
 record ReviewOrderComplainDto(TSTOrderComplainStatus TSTStatus, ComplainSolution Solution, string? SolutionNote);
+record CreateTechnicalLibraryDto(string? TechnicalLibraryCode, string? DealerCode, string? DealerName, string? PlateNo, string Model, string? Engine, string? Gear, string? Version, TechnicalLibraryReRepairType ReRepairType, TechnicalLibraryType? Type, string ReRepairRemark, string? ReRepairFeedback, string? ExclusionTest, string ReRepairReason, string ReRepairSolution, int? RoId, string? CreatedBy);
+record ApproveTechnicalLibraryDto(string? ApprovedBy);

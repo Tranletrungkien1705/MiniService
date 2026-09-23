@@ -344,6 +344,25 @@ public enum ComplainSolution
     RejectClaim = 3   // Từ chối bồi hoàn (Lỗi do ngoại lực/bảo quản)
 }
 
+/// <summary>Phân loại cẩm nang kỹ thuật — theo Type trong Ser_Technical_Library idn.CarService.</summary>
+public enum TechnicalLibraryType
+{
+    Normal = 0,    // "0" — Cẩm nang kỹ thuật thông thường / Tài liệu tiêu chuẩn xưởng
+    ReRepair = 1   // "1" — Xử lý pan bệnh khó & Phản tu lặp lại (Re-Repair Case)
+}
+
+/// <summary>Phân loại hệ thống kỹ thuật xe — theo ReRepairType trong Ser_Technical_Library idn.CarService.</summary>
+public enum TechnicalLibraryReRepairType
+{
+    Engine = 0,          // Động cơ & Nhiên liệu
+    Transmission = 1,    // Hộp số & Hệ thống truyền lực
+    Electrical = 2,      // Hệ thống Điện - Điện tử ô tô & Cảm biến
+    Chassis = 3,         // Khung gầm, Hệ thống treo & Lái
+    BrakeADAS = 4,       // Phanh an toàn & Hệ thống hỗ trợ lái ADAS (SmartSense)
+    AirConditioning = 5, // Hệ thống Điều hòa nhiệt độ ô tô (HVAC)
+    BodyPaint = 6        // Thân vỏ & Sơn (Body & Paint)
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -413,6 +432,7 @@ public class RepairOrder : IOrgOwned
     public List<InsuranceClaim> InsuranceClaims { get; set; } = [];
     public List<CustomerCareMace> CustomerCareMaces { get; set; } = [];
     public List<PdiRequestItem> PdiRequestItems { get; set; } = [];
+    public List<TechnicalLibrary> TechnicalLibraries { get; set; } = [];
 
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
@@ -1533,6 +1553,39 @@ public class OrderComplainAttachFile : IOrgOwned
     public DateTime UploadedAt { get; set; } = DateTime.Now;
 
     public OrderComplain OrderComplain { get; set; } = null!;
+}
+
+/// <summary>Hồ sơ Thư viện Kỹ thuật & Cẩm nang xử lý pan bệnh — Ser_Technical_Library trong idn.CarService.</summary>
+public class TechnicalLibrary : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string TechnicalLibraryCode { get; set; } = "";        // Mã hồ sơ cẩm nang kỹ thuật (VD: TLIB260427-001)
+    public string DealerCode { get; set; } = "HYUNDAI-MAIN";      // Mã đại lý lập hồ sơ (DealerCode)
+    public string DealerName { get; set; } = "Hyundai Giải Phóng"; // Tên đại lý
+    public string? PlateNo { get; set; }                          // Biển số xe phát hiện pan bệnh
+    public string Model { get; set; } = "";                       // Dòng xe (Model: Tucson, Santa Fe, Accent, Creta...)
+    public string? Engine { get; set; }                           // Loại động cơ (Engine)
+    public string? Gear { get; set; }                             // Loại hộp số (Gear)
+    public string? Version { get; set; }                          // Phiên bản xe (Version)
+    public TechnicalLibraryReRepairType ReRepairType { get; set; } = TechnicalLibraryReRepairType.Engine; // Phân loại kỹ thuật
+    public string ReRepairRemark { get; set; } = "";              // Hiện tượng hư hỏng / Triệu chứng pan bệnh cụ thể (ReRepairRemark)
+    public string? ReRepairFeedback { get; set; }                 // Phản ánh khách hàng & Kỹ thuật viên (ReRepairFeedback)
+    public string? ExclusionTest { get; set; }                    // Phương pháp kiểm tra loại trừ & Đo đạc thông số thực nghiệm (ExclusionTest)
+    public string ReRepairReason { get; set; } = "";              // Nguyên nhân hư hỏng gốc rễ (ReRepairReason)
+    public string ReRepairSolution { get; set; } = "";            // Biện pháp khắc phục triệt để đã xử lý thành công (ReRepairSolution)
+    public TechnicalLibraryType Type { get; set; } = TechnicalLibraryType.Normal; // Loại cẩm nang (0: Thường, 1: Phản tu)
+    public bool IsActive { get; set; } = false;                   // Trạng thái phê duyệt (false: Chờ thẩm định HQ, true: Đã duyệt ban hành áp dụng)
+    public int? ROId { get; set; }                                // Lệnh sửa chữa phát hiện pan bệnh (nếu có)
+    public string CreatedBy { get; set; } = "Kỹ thuật viên";      // Người tạo hồ sơ
+    public DateTime CreatedAt { get; set; } = DateTime.Now;       // Ngày lập hồ sơ
+    public DateTime? ApprovedAt { get; set; }                     // Ngày HQ phê duyệt
+    public string? ApprovedBy { get; set; }                       // Người phê duyệt ban hành
+
+    public RepairOrder? RO { get; set; }
+
+    public bool IsApproved => IsActive;
+    public string StatusText => IsActive ? "Đã duyệt ban hành" : "Chờ thẩm định HQ";
 }
 
 

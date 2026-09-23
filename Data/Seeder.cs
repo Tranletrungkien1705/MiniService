@@ -2175,6 +2175,108 @@ public static class Seeder
             db.OrderComplains.AddRange(c1, c2, c3);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.TechnicalLibraries.AnyAsync())
+        {
+            var ro1 = await db.ROs.FirstOrDefaultAsync();
+            var t1 = new TechnicalLibrary
+            {
+                TechnicalLibraryCode = "TLIB260427-001",
+                DealerCode = "HYUNDAI-MAIN",
+                DealerName = "Hyundai Giải Phóng",
+                PlateNo = "30A-123.45",
+                Model = "Hyundai Tucson",
+                Engine = "SmartStream G1.6 T-GDi",
+                Gear = "7DCT",
+                Version = "1.6T Đặc biệt",
+                ReRepairType = TechnicalLibraryReRepairType.Engine,
+                Type = TechnicalLibraryType.ReRepair,
+                IsActive = true,
+                ROId = ro1?.Id,
+                ReRepairRemark = "Xe tăng tốc từ 40-60 km/h bị hụt ga, giật cục nhẹ, đèn Check Engine nhấp nháy báo lỗi mã DTC P0014 (Exhaust Camshaft Position Timing - Over-Advanced Bank 1).",
+                ReRepairFeedback = "Khách hàng phản ánh xe đã thay dầu bảo dưỡng 1 tuần trước nhưng hiện tượng rung giật vẫn tái diễn khi vượt xe trên cao tốc. Xưởng đã kiểm tra bugi và bô-bin nhưng không hết.",
+                ExclusionTest = "Đo áp suất dầu động cơ đạt chuẩn 2.4 bar tại 1500 RPM. Kiểm tra điện trở van điều khiển dầu cam xả OCV (Oil Control Valve) đo được 7.2 Ohm (chuẩn 6.9 - 7.9 Ohm). Tuy nhiên khi kích hoạt van OCV bằng máy chẩn đoán GDS Mobile thì lõi van phản hồi trễ 0.8s do cặn dầu bám nghẹt lưới lọc vi mô van OCV cam xả.",
+                ReRepairReason = "Lưới lọc dầu vi mô (oil micro-filter) lắp trước cổng van OCV cam xả bị mạt muội than dầu cũ bám két làm giảm lưu lượng dầu cấp vào bánh răng điều khiển góc mở sớm CVVT cam xả.",
+                ReRepairSolution = "Tháo cụm van OCV cam xả, ngâm rửa siêu âm làm sạch lưới lọc dầu vi mô bằng dung dịch tẩy cặn chuyên dụng Hyundai Carb Cleaner; vệ sinh rãnh dẫn dầu nắp quy-lát; lắp lại xiết lực 10 Nm; xóa lỗi DTC và thực hiện quy trình CVVT Learn Adaptation trên máy GDS. Chạy thử nghiệm 25 km xe mượt mà, không tái diễn.",
+                CreatedBy = "KTV Trưởng Nguyễn Văn Minh",
+                CreatedAt = DateTime.Now.AddDays(-3),
+                ApprovedAt = DateTime.Now.AddDays(-2),
+                ApprovedBy = "Phòng Kỹ thuật HTC (HQ)"
+            };
+
+            var t2 = new TechnicalLibrary
+            {
+                TechnicalLibraryCode = "TLIB260427-002",
+                DealerCode = "HYUNDAI-MAIN",
+                DealerName = "Hyundai Giải Phóng",
+                PlateNo = "51G-678.90",
+                Model = "Hyundai Santa Fe",
+                Engine = "SmartStream D2.2 CRDi",
+                Gear = "8DCT ướt",
+                Version = "2.2D Cao cấp",
+                ReRepairType = TechnicalLibraryReRepairType.AirConditioning,
+                Type = TechnicalLibraryType.Normal,
+                IsActive = true,
+                ReRepairRemark = "Điều hòa làm lạnh yếu hoặc mất lạnh ngắt quãng khi xe chạy đường trường trên 30 phút, dừng xe nổ máy tại chỗ thì mát lại bình thường.",
+                ReRepairFeedback = "Khách hàng mang xe kiểm tra ở gara ngoài đã nạp lại ga R134a và thay lọc gió điều hòa nhưng chạy cao tốc trời nắng vẫn bị ngắt lốc lạnh.",
+                ExclusionTest = "Đo áp suất ga bằng đồng hồ chuyên dụng: Áp suất thấp (Low side) dao động bất thường từ 1.8 đến 3.8 bar, áp suất cao (High side) ổn định 14.5 bar. Kiểm tra tín hiệu PWM điều khiển van điện tử ECV (Electronic Control Valve) trên lốc nén: khi mất lạnh, hộp FATC vẫn phát tín hiệu xung PWM 80% nhưng độ mở van cơ khí bị kẹt không đổi.",
+                ReRepairReason = "Van điều khiển dung tích biến thiên ECV của lốc nén (Compressor) bị mòn kẹt lò xo van hồi lưu khi lốc đạt nhiệt độ cao sau thời gian hoạt động liên tục.",
+                ReRepairSolution = "Thu hồi môi chất lạnh ga R134a; tháo phe hãm thay thế van điều khiển điện tử ECV mới chính hãng mã 97674-2S000; hút chân không hệ thống tối thiểu 30 phút; nạp lại đúng định lượng 550g ± 25g ga R134a và bổ sung 30ml dầu bôi trơn lốc PAG46. Kiểm tra nhiệt độ cửa gió đạt 5.5°C ổn định.",
+                CreatedBy = "CVDV Hoàng Quốc Bảo",
+                CreatedAt = DateTime.Now.AddDays(-2),
+                ApprovedAt = DateTime.Now.AddDays(-1),
+                ApprovedBy = "Chuyên viên Kỹ thuật HTC Trần Đức"
+            };
+
+            var t3 = new TechnicalLibrary
+            {
+                TechnicalLibraryCode = "TLIB260427-003",
+                DealerCode = "HYUNDAI-MAIN",
+                DealerName = "Hyundai Giải Phóng",
+                PlateNo = "30E-888.66",
+                Model = "Hyundai Accent",
+                Engine = "Kappa 1.4 MPI",
+                Gear = "6AT",
+                Version = "1.4 AT Đặc biệt",
+                ReRepairType = TechnicalLibraryReRepairType.Electrical,
+                Type = TechnicalLibraryType.ReRepair,
+                IsActive = false,
+                ReRepairRemark = "Vô lăng rung nhẹ và có tiếng kêu 'cục... cục' ở trục lái khi đánh lái chết tại chỗ hoặc khi xe di chuyển tốc độ chậm < 15 km/h vào cua.",
+                ReRepairFeedback = "Khách hàng băn khoăn về an toàn khi lái xe, cảm nhận tay lái có độ rơ lớn hơn bình thường sau khi đi qua đoạn đường gồ ghề ngập nước.",
+                ExclusionTest = "Kiểm tra thước lái cơ khí, rô-tuyn lái trong/ngoài và khớp các-đăng cột lái đều chắc chắn, không rơ lỏng. Dùng máy chẩn đoán GDS kiểm tra mã lỗi hệ thống MDPS không có lỗi DTC. Lắc nhẹ vô lăng xác định tiếng kêu phát ra từ khớp nối hoa thị đệm giảm chấn cao su bên trong cụm mô tơ trợ lực điện MDPS.",
+                ReRepairReason = "Vòng đệm cao su giảm chấn khớp nối mô tơ trợ lực lái MDPS (Flexible Coupler) bị lão hóa nứt vỡ sau 4 năm sử dụng, tạo khe hở va đập giữa các cánh hoa thị truyền lực.",
+                ReRepairSolution = "Hạ cụm cột lái MDPS; tách vỏ mô tơ trợ lực điện; làm sạch vụn cao su cũ; thay thế đệm hoa thị giảm chấn MDPS mới chính hãng mã 56315-2K000FFF; lắp lại và hiệu chỉnh điểm 0 cảm biến góc lái (Steering Angle Sensor ASP Calibration) trên GDS Mobile.",
+                CreatedBy = "KTV Đỗ Hoàng Nam",
+                CreatedAt = DateTime.Now.AddDays(-1)
+            };
+
+            var t4 = new TechnicalLibrary
+            {
+                TechnicalLibraryCode = "TLIB260427-004",
+                DealerCode = "HYUNDAI-MAIN",
+                DealerName = "Hyundai Giải Phóng",
+                PlateNo = "29H-921.34",
+                Model = "Hyundai Creta",
+                Engine = "SmartStream G1.5",
+                Gear = "IVT",
+                Version = "1.5 Cao cấp (SmartSense)",
+                ReRepairType = TechnicalLibraryReRepairType.BrakeADAS,
+                Type = TechnicalLibraryType.Normal,
+                IsActive = true,
+                ReRepairRemark = "Hệ thống cảnh báo va chạm trước FCA và hỗ trợ giữ làn LKA thỉnh thoảng báo tạm ngắt 'Check SmartSense System' trên màn hình đồng hồ khi trời mưa lớn hoặc sáng sớm sương mù.",
+                ReRepairFeedback = "Khách hàng lo ngại camera trên kính lái bị hỏng vì lỗi chỉ xuất hiện ngắt quãng lúc thời tiết ẩm ướt.",
+                ExclusionTest = "Đọc lỗi máy GDS: DTC C161108 - CAN Communication Time-out Camera. Kiểm tra ngoại quan mặt kính chắn gió phía trước cụm Multifunction Front Camera phát hiện có lớp màng hơi nước đọng mờ bên trong nắp chụp ốp camera.",
+                ReRepairReason = "Nắp chụp chống chói camera kính lái bị hở gioăng xốp đệm viền, làm hơi ẩm điều hòa bốc lên ngưng tụ thành sương che khuất ống kính cảm biến hình ảnh CMOS.",
+                ReRepairSolution = "Tháo ốp gương chiếu hậu và nắp bảo vệ camera kính lái; vệ sinh sạch mặt trong kính lái và tròng kính camera bằng khăn sợi microfiber chuyên dụng; thay mới dải đệm mút xốp chống ẩm chính hãng 86190-C9000; dùng máy chẩn đoán GDS chạy quy trình Front Radar & Camera Calibration Alignment.",
+                CreatedBy = "KTV Trưởng Nguyễn Văn Minh",
+                CreatedAt = DateTime.Now.AddDays(-5),
+                ApprovedAt = DateTime.Now.AddDays(-4),
+                ApprovedBy = "Phòng Dịch vụ HTC"
+            };
+
+            db.TechnicalLibraries.AddRange(t1, t2, t3, t4);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static List<PdiChecklistItem> CreateDefaultChecklist() =>
@@ -2214,7 +2316,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -2232,6 +2334,8 @@ public static class Seeder
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartNo\" text NULL",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"TechnicalLibraries\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"TechnicalLibraryCode\" text NOT NULL, \"DealerCode\" text NOT NULL, \"DealerName\" text NOT NULL, \"PlateNo\" text NULL, \"Model\" text NOT NULL, \"Engine\" text NULL, \"Gear\" text NULL, \"Version\" text NULL, \"ReRepairType\" integer NOT NULL, \"ReRepairRemark\" text NOT NULL, \"ReRepairFeedback\" text NULL, \"ExclusionTest\" text NULL, \"ReRepairReason\" text NOT NULL, \"ReRepairSolution\" text NOT NULL, \"Type\" integer NOT NULL, \"IsActive\" boolean NOT NULL DEFAULT false, \"ROId\" integer NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ApprovedAt\" timestamp NULL, \"ApprovedBy\" text NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TechnicalLibraries_OrgId_TechnicalLibraryCode\" ON miniservice.\"TechnicalLibraries\" (\"OrgId\", \"TechnicalLibraryCode\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -3025,7 +3129,35 @@ public static class Seeder
                 ""Note"" TEXT NULL,
                 ""UploadedAt"" TEXT NOT NULL,
                 FOREIGN KEY (""OrderComplainId"") REFERENCES ""OrderComplains"" (""Id"") ON DELETE CASCADE
-            );"
+            );",
+            @"CREATE TABLE IF NOT EXISTS ""TechnicalLibraries"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""TechnicalLibraryCode"" TEXT NOT NULL,
+                ""DealerCode"" TEXT NOT NULL,
+                ""DealerName"" TEXT NOT NULL,
+                ""PlateNo"" TEXT NULL,
+                ""Model"" TEXT NOT NULL,
+                ""Engine"" TEXT NULL,
+                ""Gear"" TEXT NULL,
+                ""Version"" TEXT NULL,
+                ""ReRepairType"" INTEGER NOT NULL,
+                ""ReRepairRemark"" TEXT NOT NULL,
+                ""ReRepairFeedback"" TEXT NULL,
+                ""ExclusionTest"" TEXT NULL,
+                ""ReRepairReason"" TEXT NOT NULL,
+                ""ReRepairSolution"" TEXT NOT NULL,
+                ""Type"" INTEGER NOT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""ROId"" INTEGER NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ApprovedAt"" TEXT NULL,
+                ""ApprovedBy"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TechnicalLibraries_OrgId_TechnicalLibraryCode"" ON ""TechnicalLibraries"" (""OrgId"", ""TechnicalLibraryCode"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_TechnicalLibraries_OrgId_Model"" ON ""TechnicalLibraries"" (""OrgId"", ""Model"");"
         };
 
         foreach (var sql in sqls)

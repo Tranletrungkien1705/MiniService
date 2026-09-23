@@ -53,6 +53,7 @@ public class AppDbContext : DbContext
     public DbSet<PdiChecklistItem> PdiChecklistItems => Set<PdiChecklistItem>();
     public DbSet<OrderComplain> OrderComplains => Set<OrderComplain>();
     public DbSet<OrderComplainAttachFile> OrderComplainAttachFiles => Set<OrderComplainAttachFile>();
+    public DbSet<TechnicalLibrary> TechnicalLibraries => Set<TechnicalLibrary>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -482,6 +483,14 @@ public class AppDbContext : DbContext
         });
         b.Entity<OrderComplainAttachFile>(e =>
         {
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<TechnicalLibrary>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.TechnicalLibraryCode }).IsUnique();
+            e.Ignore(x => x.IsApproved);
+            e.Ignore(x => x.StatusText);
+            e.HasOne(x => x.RO).WithMany(x => x.TechnicalLibraries).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

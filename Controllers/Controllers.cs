@@ -2853,6 +2853,140 @@ public class OrderComplainController(IRoService svc) : Controller
     }
 }
 
+public class TechnicalLibraryController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? model, TechnicalLibraryReRepairType? reRepairType, TechnicalLibraryType? type, bool? isActive, string? q)
+    {
+        ViewBag.Model = model;
+        ViewBag.ReRepairType = reRepairType;
+        ViewBag.Type = type;
+        ViewBag.IsActive = isActive;
+        ViewBag.Q = q;
+        ViewBag.Models = await svc.GetDistinctModelsAsync();
+
+        var list = await svc.TechnicalLibrariesAsync(model, reRepairType, type, isActive, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.Models = await svc.GetDistinctModelsAsync();
+        if (roId.HasValue && roId.Value > 0)
+        {
+            var ro = await svc.GetROAsync(roId.Value);
+            if (ro != null)
+            {
+                ViewBag.RO = ro;
+                ViewBag.PreModel = ro.Car?.Model;
+                ViewBag.PrePlate = ro.Car?.Plate;
+                ViewBag.PreRemark = ro.IntakeNote;
+            }
+        }
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        string model,
+        TechnicalLibraryReRepairType reRepairType,
+        TechnicalLibraryType type,
+        string reRepairRemark,
+        string reRepairReason,
+        string reRepairSolution,
+        string? plateNo,
+        string? engine,
+        string? gear,
+        string? version,
+        string? reRepairFeedback,
+        string? exclusionTest,
+        int? roId,
+        string? dealerCode,
+        string? dealerName,
+        string? createdBy)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+        {
+            TempData["Error"] = "Vui lòng nhập hoặc chọn dòng xe (Model).";
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+        if (string.IsNullOrWhiteSpace(reRepairRemark))
+        {
+            TempData["Error"] = "Vui lòng mô tả hiện tượng hư hỏng / triệu chứng pan bệnh.";
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+        if (string.IsNullOrWhiteSpace(reRepairReason))
+        {
+            TempData["Error"] = "Vui lòng nhập nguyên nhân hư hỏng gốc rễ.";
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+        if (string.IsNullOrWhiteSpace(reRepairSolution))
+        {
+            TempData["Error"] = "Vui lòng nhập biện pháp khắc phục triệt để đã xử lý.";
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+
+        var item = new TechnicalLibrary
+        {
+            Model = model.Trim(),
+            ReRepairType = reRepairType,
+            Type = type,
+            ReRepairRemark = reRepairRemark.Trim(),
+            ReRepairReason = reRepairReason.Trim(),
+            ReRepairSolution = reRepairSolution.Trim(),
+            PlateNo = plateNo?.Trim(),
+            Engine = engine?.Trim(),
+            Gear = gear?.Trim(),
+            Version = version?.Trim(),
+            ReRepairFeedback = reRepairFeedback?.Trim(),
+            ExclusionTest = exclusionTest?.Trim(),
+            ROId = (roId.HasValue && roId.Value > 0) ? roId : null,
+            DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? "HYUNDAI-MAIN" : dealerCode.Trim(),
+            DealerName = string.IsNullOrWhiteSpace(dealerName) ? "Hyundai Giải Phóng" : dealerName.Trim(),
+            CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Kỹ thuật viên" : createdBy.Trim(),
+            IsActive = false
+        };
+
+        var id = await svc.CreateTechnicalLibraryAsync(item);
+        TempData["Success"] = $"Đã lập hồ sơ cẩm nang kỹ thuật {item.TechnicalLibraryCode} thành công.";
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var item = await svc.GetTechnicalLibraryAsync(id);
+        if (item == null) return NotFound();
+
+        if (item.ROId.HasValue)
+        {
+            ViewBag.RelatedSolutions = await svc.SearchSolutionsForRoAsync(item.ROId.Value);
+        }
+        return View(item);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id, string? approvedBy)
+    {
+        var (ok, msg) = await svc.ApproveTechnicalLibraryAsync(id, approvedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTechnicalLibraryAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var item = await svc.GetTechnicalLibraryAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

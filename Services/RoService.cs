@@ -228,6 +228,15 @@ public interface IRoService
     Task<(bool ok, string msg)> ReviewOrderComplainAsync(int id, TSTOrderComplainStatus tstStatus, ComplainSolution solution, string? solutionNote);
     Task<(bool ok, string msg)> DeleteOrderComplainAsync(int id);
     Task<List<OrderPart>> OrderPartsForComplainSelectAsync();
+    // Technical Library & Re-Repair Knowledge Base (Ser_Technical_Library / MH 63)
+    Task<List<TechnicalLibrary>> TechnicalLibrariesAsync(string? model, TechnicalLibraryReRepairType? reRepairType, TechnicalLibraryType? type, bool? isActive, string? q);
+    Task<TechnicalLibrary?> GetTechnicalLibraryAsync(int id);
+    Task<TechnicalLibrary?> GetTechnicalLibraryByCodeAsync(string code);
+    Task<int> CreateTechnicalLibraryAsync(TechnicalLibrary item);
+    Task<(bool ok, string msg)> ApproveTechnicalLibraryAsync(int id, string? approvedBy = null);
+    Task<(bool ok, string msg)> DeleteTechnicalLibraryAsync(int id);
+    Task<List<TechnicalLibrary>> SearchSolutionsForRoAsync(int roId);
+    Task<List<string>> GetDistinctModelsAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -445,6 +454,7 @@ public class RoService(AppDbContext db) : IRoService
           .Include(r => r.AssignmentWorks).ThenInclude(a => a.Engineers).ThenInclude(e => e.Engineer)
           .Include(r => r.InsuranceClaims).ThenInclude(c => c.InsuranceCompany)
           .Include(r => r.Bulletin).ThenInclude(b => b!.Items)
+          .Include(r => r.TechnicalLibraries)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -4659,5 +4669,134 @@ public class RoService(AppDbContext db) : IRoService
             .Include(o => o.Lines).ThenInclude(l => l.Part)
             .OrderByDescending(o => o.OrderDate)
             .ThenByDescending(o => o.Id)
+            .ToListAsync();
+
+    // --- Technical Library & Re-Repair Knowledge Base (Ser_Technical_Library / MH 63) ---
+    public async Task<List<TechnicalLibrary>> TechnicalLibrariesAsync(string? model, TechnicalLibraryReRepairType? reRepairType, TechnicalLibraryType? type, bool? isActive, string? q)
+    {
+        var query = db.TechnicalLibraries
+            .Include(t => t.RO).ThenInclude(r => r!.Car)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(model))
+            query = query.Where(t => t.Model.ToLower().Contains(model.Trim().ToLower()));
+
+        if (reRepairType.HasValue)
+            query = query.Where(t => t.ReRepairType == reRepairType.Value);
+
+        if (type.HasValue)
+            query = query.Where(t => t.Type == type.Value);
+
+        if (isActive.HasValue)
+            query = query.Where(t => t.IsActive == isActive.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(t => t.TechnicalLibraryCode.ToLower().Contains(s)
+                || (t.PlateNo != null && t.PlateNo.ToLower().Contains(s))
+                || t.Model.ToLower().Contains(s)
+                || t.ReRepairRemark.ToLower().Contains(s)
+                || t.ReRepairReason.ToLower().Contains(s)
+                || t.ReRepairSolution.ToLower().Contains(s));
+        }
+
+        return await query.OrderByDescending(t => t.CreatedAt).ToListAsync();
+    }
+
+    public Task<TechnicalLibrary?> GetTechnicalLibraryAsync(int id) =>
+        db.TechnicalLibraries
+            .Include(t => t.RO).ThenInclude(r => r!.Car)
+            .Include(t => t.RO).ThenInclude(r => r!.Customer)
+            .FirstOrDefaultAsync(t => t.Id == id);
+
+    public Task<TechnicalLibrary?> GetTechnicalLibraryByCodeAsync(string code)
+    {
+        var clean = code.Trim().ToUpperInvariant();
+        return db.TechnicalLibraries
+            .Include(t => t.RO).ThenInclude(r => r!.Car)
+            .FirstOrDefaultAsync(t => t.TechnicalLibraryCode == clean);
+    }
+
+    public async Task<int> CreateTechnicalLibraryAsync(TechnicalLibrary item)
+    {
+        if (string.IsNullOrWhiteSpace(item.TechnicalLibraryCode))
+        {
+            var count = await db.TechnicalLibraries.CountAsync() + 1;
+            item.TechnicalLibraryCode = $"TLIB{DateTime.Today:yyMMdd}-{count:D3}";
+        }
+        else
+        {
+            item.TechnicalLibraryCode = item.TechnicalLibraryCode.Trim().ToUpperInvariant();
+        }
+
+        if (string.IsNullOrWhiteSpace(item.DealerCode))
+            item.DealerCode = "HYUNDAI-MAIN";
+        if (string.IsNullOrWhiteSpace(item.DealerName))
+            item.DealerName = "Hyundai Giải Phóng";
+
+        item.Model = item.Model.Trim();
+        item.ReRepairRemark = item.ReRepairRemark.Trim();
+        item.ReRepairReason = item.ReRepairReason.Trim();
+        item.ReRepairSolution = item.ReRepairSolution.Trim();
+        item.CreatedAt = DateTime.Now;
+
+        db.TechnicalLibraries.Add(item);
+        await db.SaveChangesAsync();
+        return item.Id;
+    }
+
+    public async Task<(bool ok, string msg)> ApproveTechnicalLibraryAsync(int id, string? approvedBy = null)
+    {
+        var item = await db.TechnicalLibraries.FirstOrDefaultAsync(t => t.Id == id);
+        if (item == null) return (false, "Không tìm thấy hồ sơ kỹ thuật.");
+
+        if (item.IsActive)
+            return (false, "Hồ sơ kỹ thuật đã được phê duyệt áp dụng trước đó.");
+
+        item.IsActive = true;
+        item.ApprovedAt = DateTime.Now;
+        item.ApprovedBy = !string.IsNullOrWhiteSpace(approvedBy) ? approvedBy.Trim() : "Phòng Dịch vụ Kỹ thuật HTC";
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã phê duyệt ban hành cẩm nang kỹ thuật {item.TechnicalLibraryCode} ({item.Model}).");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteTechnicalLibraryAsync(int id)
+    {
+        var item = await db.TechnicalLibraries.FirstOrDefaultAsync(t => t.Id == id);
+        if (item == null) return (false, "Không tìm thấy hồ sơ kỹ thuật.");
+
+        db.TechnicalLibraries.Remove(item);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa hồ sơ kỹ thuật {item.TechnicalLibraryCode}.");
+    }
+
+    public async Task<List<TechnicalLibrary>> SearchSolutionsForRoAsync(int roId)
+    {
+        var ro = await db.ROs.Include(r => r.Car).FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null || ro.Car == null) return [];
+
+        var modelName = ro.Car.Model.ToLower();
+        var intakeWords = (ro.IntakeNote ?? "").ToLower().Split([' ', ',', '.', ';', '-', '/'], StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length >= 3).ToList();
+
+        var candidates = await db.TechnicalLibraries
+            .Where(t => t.IsActive)
+            .OrderByDescending(t => t.Type)
+            .ThenByDescending(t => t.CreatedAt)
+            .ToListAsync();
+
+        return candidates.Where(t =>
+            modelName.Contains(t.Model.ToLower()) || t.Model.ToLower().Contains(modelName) ||
+            intakeWords.Any(w => t.ReRepairRemark.ToLower().Contains(w) || t.ReRepairReason.ToLower().Contains(w))
+        ).Take(5).ToList();
+    }
+
+    public async Task<List<string>> GetDistinctModelsAsync() =>
+        await db.TechnicalLibraries
+            .Select(t => t.Model)
+            .Distinct()
+            .OrderBy(m => m)
             .ToListAsync();
 }

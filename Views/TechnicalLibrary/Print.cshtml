@@ -1,0 +1,133 @@
+@model TechnicalLibrary
+@{
+    Layout = null;
+    var (typeName, _, _) = Ui.TechnicalLibraryType(Model.Type);
+    var (sysName, _, _) = Ui.TechnicalLibraryReRepairType(Model.ReRepairType);
+    var (stName, stCode, _) = Ui.TechnicalLibraryStatus(Model.IsActive);
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>Cẩm nang Kỹ thuật &amp; Báo cáo Pan bệnh - @Model.TechnicalLibraryCode</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet" />
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #1f2937; background: #f3f4f6; padding: 20px 0; }
+        .print-container { max-width: 900px; margin: 0 auto; background: #fff; padding: 36px 44px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); border-radius: 4px; }
+        .table-print th { background-color: #f8fafc !important; font-size: 11.5px; text-transform: uppercase; font-weight: 700; border: 1px solid #cbd5e1; }
+        .table-print td { border: 1px solid #cbd5e1; font-size: 12px; padding: 6px 8px; }
+        .sign-title { font-weight: 700; font-size: 12px; text-transform: uppercase; margin-bottom: 60px; }
+        @@media print {
+            body { background: #fff; padding: 0; font-size: 12px; }
+            .print-container { box-shadow: none; padding: 0; max-width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print text-center mb-3">
+        <button type="button" class="btn btn-primary px-4 me-2" onclick="window.print()"><i class="bi bi-printer me-1"></i>In cẩm nang</button>
+        <button type="button" class="btn btn-outline-secondary" onclick="window.close()"><i class="bi bi-x-lg me-1"></i>Đóng</button>
+    </div>
+
+    <div class="print-container">
+        <!-- Header -->
+        <div class="row align-items-center mb-3 pb-3 border-bottom">
+            <div class="col-7">
+                <div class="fw-bold fs-6 text-uppercase text-primary">TRUNG TÂM DỊCH VỤ Ô TÔ TIÊU CHUẨN HYUNDAI</div>
+                <div class="small text-muted">Hệ thống Quản lý Dịch vụ &amp; Sửa chữa Ô tô Car Service</div>
+                <div class="small text-muted">Đại lý: <b>@Model.DealerName</b> (Mã: @Model.DealerCode)</div>
+                <div class="small text-muted">Phòng Kỹ thuật &amp; Hỗ trợ dịch vụ: 1900 6868</div>
+            </div>
+            <div class="col-5 text-end">
+                <div class="fw-bold fs-5 text-dark">Mã cẩm nang: @Model.TechnicalLibraryCode</div>
+                <div class="small text-muted">Ngày lập: <b>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</b></div>
+                <div class="small text-muted">Trạng thái phê chuẩn: <b>@stName</b></div>
+                @if (Model.IsActive && Model.ApprovedAt.HasValue)
+                {
+                    <div class="small text-muted">Phê duyệt: <b>@Model.ApprovedAt.Value.ToString("dd/MM/yyyy")</b> (@Model.ApprovedBy)</div>
+                }
+            </div>
+        </div>
+
+        <!-- Document Title -->
+        <div class="text-center my-4">
+            <h4 class="fw-bold text-uppercase mb-1">BÁO CÁO CẨM NANG KỸ THUẬT &amp; GIẢI PHÁP XỬ LÝ PAN BỆNH Ô TÔ</h4>
+            <div class="text-muted fst-italic">(Theo chuẩn quy trình Quản lý Thư viện Kỹ thuật Ser_Technical_Library — Hyundai Car Services)</div>
+            <div class="d-flex justify-content-center gap-2 mt-2">
+                <span class="badge bg-primary">Dòng xe: @Model.Model</span>
+                <span class="badge bg-dark">Hệ thống: @sysName</span>
+                <span class="badge bg-secondary">Phân loại: @typeName</span>
+            </div>
+        </div>
+
+        <!-- Vehicle Info Box -->
+        <div class="row g-2 mb-3 bg-light p-3 rounded border">
+            <div class="col-4"><b>Dòng xe (Model):</b> @Model.Model</div>
+            <div class="col-4"><b>Biển số xe:</b> @(string.IsNullOrWhiteSpace(Model.PlateNo) ? "Chưa cung cấp" : Model.PlateNo)</div>
+            <div class="col-4"><b>Phiên bản xe:</b> @(string.IsNullOrWhiteSpace(Model.Version) ? "Tiêu chuẩn" : Model.Version)</div>
+            <div class="col-4"><b>Động cơ:</b> @(string.IsNullOrWhiteSpace(Model.Engine) ? "—" : Model.Engine)</div>
+            <div class="col-4"><b>Hộp số:</b> @(string.IsNullOrWhiteSpace(Model.Gear) ? "—" : Model.Gear)</div>
+            <div class="col-4"><b>Lệnh RO liên quan:</b> @(Model.RO != null ? Model.RO.Code : "—")</div>
+        </div>
+
+        <!-- Content Sections -->
+        <div class="mb-3">
+            <h6 class="fw-bold text-uppercase text-dark border-bottom pb-1 mb-2">1. Hiện tượng Hư hỏng &amp; Triệu chứng Pan bệnh</h6>
+            <div class="p-3 bg-light rounded border" style="white-space:pre-line">
+                @Model.ReRepairRemark
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Model.ReRepairFeedback))
+            {
+                <div class="mt-2 p-2 bg-light-subtle border rounded small text-muted">
+                    <b>Phản ánh từ khách hàng &amp; KTV xưởng:</b> @Model.ReRepairFeedback
+                </div>
+            }
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(Model.ExclusionTest))
+        {
+            <div class="mb-3">
+                <h6 class="fw-bold text-uppercase text-dark border-bottom pb-1 mb-2">2. Phương pháp Kiểm tra Loại trừ &amp; Đo đạc Thông số (Exclusion Test)</h6>
+                <div class="p-3 bg-light rounded border" style="white-space:pre-line">
+                    @Model.ExclusionTest
+                </div>
+            </div>
+        }
+
+        <div class="mb-3">
+            <h6 class="fw-bold text-uppercase text-danger border-bottom pb-1 mb-2">3. Nguyên nhân Hư hỏng Gốc rễ (Root Cause)</h6>
+            <div class="p-3 bg-light rounded border border-danger-subtle text-danger-emphasis" style="white-space:pre-line">
+                @Model.ReRepairReason
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <h6 class="fw-bold text-uppercase text-success border-bottom pb-1 mb-2">4. Biện pháp Khắc phục Triệt để Đã Xử lý Thành công (Solution)</h6>
+            <div class="p-3 bg-light rounded border border-success-subtle text-success-emphasis" style="white-space:pre-line">
+                @Model.ReRepairSolution
+            </div>
+        </div>
+
+        <!-- Signatures -->
+        <div class="row text-center mt-5 pt-3">
+            <div class="col-4">
+                <div class="sign-title">KỸ THUẬT VIÊN LẬP</div>
+                <div class="fw-bold">@Model.CreatedBy</div>
+                <div class="small text-muted">Bộ phận Kỹ thuật xưởng</div>
+            </div>
+            <div class="col-4">
+                <div class="sign-title">QUẢN ĐỐC XƯỞNG</div>
+                <div class="fw-bold">Kỹ sư Trưởng Dịch vụ</div>
+                <div class="small text-muted">Đại lý @Model.DealerName</div>
+            </div>
+            <div class="col-4">
+                <div class="sign-title">PHÊ DUYỆT HQ (HTC)</div>
+                <div class="fw-bold">@(Model.IsActive ? (Model.ApprovedBy ?? "Phòng Kỹ thuật HTC") : "Chờ phê chuẩn")</div>
+                <div class="small text-muted">Khối Dịch vụ Sau bán hàng HTC</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

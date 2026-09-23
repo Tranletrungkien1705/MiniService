@@ -1,0 +1,181 @@
+@model List<TechnicalLibrary>
+@{
+    ViewData["Title"] = "Thư viện Kỹ thuật & Cẩm nang Pan bệnh xe (Technical Library)";
+    var curModel = ViewBag.Model as string;
+    var curReRepairType = (TechnicalLibraryReRepairType?)ViewBag.ReRepairType;
+    var curType = (TechnicalLibraryType?)ViewBag.Type;
+    var curIsActive = (bool?)ViewBag.IsActive;
+    var models = ViewBag.Models as List<string> ?? [];
+
+    var totalCount = Model.Count;
+    var normalCount = Model.Count(t => t.Type == TechnicalLibraryType.Normal);
+    var reRepairCount = Model.Count(t => t.Type == TechnicalLibraryType.ReRepair);
+    var activeCount = Model.Count(t => t.IsActive);
+    var pendingCount = Model.Count(t => !t.IsActive);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số hồ sơ cẩm nang</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Cẩm nang tiêu chuẩn</div>
+            <div class="stat-num text-info">@normalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Pan khó / Phản tu</div>
+            <div class="stat-num text-danger">@reRepairCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã duyệt ban hành (HQ)</div>
+            <div class="stat-num text-success">@activeCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ thẩm định HQ</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã cẩm nang / Biển số / Triệu chứng / Nguyên nhân..." style="max-width:260px" />
+                <select name="model" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả dòng xe —</option>
+                    @foreach (var m in models)
+                    {
+                        <option value="@m" selected="@(curModel == m)">@m</option>
+                    }
+                </select>
+                <select name="reRepairType" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:200px">
+                    <option value="">— Hệ thống kỹ thuật —</option>
+                    @foreach (TechnicalLibraryReRepairType rt in Enum.GetValues(typeof(TechnicalLibraryReRepairType)))
+                    {
+                        var (rtText, _, _) = Ui.TechnicalLibraryReRepairType(rt);
+                        <option value="@((int)rt)" selected="@(curReRepairType == rt)">@rtText</option>
+                    }
+                </select>
+                <select name="type" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:160px">
+                    <option value="">— Loại cẩm nang —</option>
+                    <option value="0" selected="@(curType == TechnicalLibraryType.Normal)">Cẩm nang chuẩn</option>
+                    <option value="1" selected="@(curType == TechnicalLibraryType.ReRepair)">Phản tu / Pan khó</option>
+                </select>
+                <select name="isActive" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:170px">
+                    <option value="">— Phê duyệt HQ —</option>
+                    <option value="true" selected="@(curIsActive == true)">Đã duyệt ban hành</option>
+                    <option value="false" selected="@(curIsActive == false)">Chờ thẩm định HQ</option>
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (!string.IsNullOrEmpty(curModel) || curReRepairType.HasValue || curType.HasValue || curIsActive.HasValue || !string.IsNullOrEmpty(ViewBag.Q))
+                {
+                    <a href="/TechnicalLibrary" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/RO" class="btn btn-sm btn-outline-secondary"><i class="bi bi-clipboard2-pulse me-1"></i>Lệnh sửa chữa (RO)</a>
+                <a href="/TechnicalLibrary/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Thêm cẩm nang kỹ thuật</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã cẩm nang</th>
+                        <th>Dòng xe &amp; Cấu hình</th>
+                        <th>Hệ thống kỹ thuật</th>
+                        <th>Phân loại</th>
+                        <th>Triệu chứng &amp; Hiện tượng pan bệnh</th>
+                        <th>Nguyên nhân gốc rễ &amp; Biện pháp khắc phục</th>
+                        <th>Trạng thái HQ</th>
+                        <th>Người lập</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">
+                                <i class="bi bi-journal-x fs-3 d-block mb-2"></i>Chưa có hồ sơ cẩm nang kỹ thuật nào phù hợp.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var t in Model)
+                    {
+                        var (typeName, typeCode, typeCss) = Ui.TechnicalLibraryType(t.Type);
+                        var (sysName, sysIcon, sysCss) = Ui.TechnicalLibraryReRepairType(t.ReRepairType);
+                        var (stName, stCode, stCss) = Ui.TechnicalLibraryStatus(t.IsActive);
+                        <tr>
+                            <td>
+                                <a href="/TechnicalLibrary/Detail/@t.Id" class="fw-bold text-decoration-none">@t.TechnicalLibraryCode</a>
+                                @if (!string.IsNullOrWhiteSpace(t.PlateNo))
+                                {
+                                    <div class="small text-muted"><i class="bi bi-car-front me-1"></i>@t.PlateNo</div>
+                                }
+                                @if (t.RO != null)
+                                {
+                                    <div class="small"><a href="/RO/Detail/@t.ROId" class="badge bg-light text-dark border text-decoration-none"><i class="bi bi-clipboard2-pulse me-1"></i>@t.RO.Code</a></div>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@t.Model</div>
+                                <div class="small text-muted">
+                                    @if (!string.IsNullOrWhiteSpace(t.Engine)) { <span>@t.Engine</span> }
+                                    @if (!string.IsNullOrWhiteSpace(t.Gear)) { <span> · @t.Gear</span> }
+                                    @if (!string.IsNullOrWhiteSpace(t.Version)) { <span> · @t.Version</span> }
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-@sysCss-subtle text-@sysCss border border-@sysCss-subtle">
+                                    <i class="bi @sysIcon me-1"></i>@sysName
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-@typeCss">@typeName</span>
+                            </td>
+                            <td style="max-width:280px">
+                                <div class="text-truncate-2 small fw-medium" title="@t.ReRepairRemark">@t.ReRepairRemark</div>
+                                @if (!string.IsNullOrWhiteSpace(t.ReRepairFeedback))
+                                {
+                                    <div class="text-truncate small text-muted fst-italic" title="@t.ReRepairFeedback">KH: @t.ReRepairFeedback</div>
+                                }
+                            </td>
+                            <td style="max-width:300px">
+                                <div class="small text-danger text-truncate" title="@t.ReRepairReason"><strong>NN:</strong> @t.ReRepairReason</div>
+                                <div class="small text-success text-truncate" title="@t.ReRepairSolution"><strong>GP:</strong> @t.ReRepairSolution</div>
+                            </td>
+                            <td>
+                                <span class="badge bg-@stCss">@stName</span>
+                                @if (t.IsActive && t.ApprovedAt.HasValue)
+                                {
+                                    <div class="small text-muted" style="font-size:11px">@t.ApprovedAt.Value.ToString("dd/MM/yyyy")</div>
+                                }
+                            </td>
+                            <td>
+                                <div class="small fw-semibold">@t.CreatedBy</div>
+                                <div class="small text-muted" style="font-size:11px">@t.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                            </td>
+                            <td class="text-end text-nowrap">
+                                <a href="/TechnicalLibrary/Detail/@t.Id" class="btn btn-sm btn-outline-primary" title="Xem chi tiết"><i class="bi bi-eye"></i></a>
+                                <a href="/TechnicalLibrary/Print/@t.Id" target="_blank" class="btn btn-sm btn-outline-secondary" title="In phiếu cẩm nang kỹ thuật"><i class="bi bi-printer"></i></a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

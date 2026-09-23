@@ -474,6 +474,38 @@
                 </div>
             }
         </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-journal-bookmark text-primary me-1"></i>Thư viện Kỹ thuật</h6>
+                <a href="/TechnicalLibrary/Create?roId=@Model.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>Đúc kết pan</a>
+            </div>
+            @if (Model.TechnicalLibraries.Count > 0)
+            {
+                <div class="list-group list-group-flush small">
+                    @foreach (var t in Model.TechnicalLibraries)
+                    {
+                        var (ttxt, tcode, tcss) = Ui.TechnicalLibraryType(t.Type);
+                        var (libStTxt, _, libStCss) = Ui.TechnicalLibraryStatus(t.IsActive);
+                        <a href="/TechnicalLibrary/Detail/@t.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold">@t.TechnicalLibraryCode</div>
+                                <div class="text-muted text-truncate" style="font-size:11px;max-width:180px">@t.ReRepairRemark</div>
+                            </div>
+                            <span class="badge bg-@libStCss">@libStTxt</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small">
+                    Ghi nhận giải pháp pan bệnh hoặc phản tu vào Cẩm nang kỹ thuật để chia sẻ toàn xưởng.
+                    <div class="mt-1"><a href="/TechnicalLibrary?q=@Model.Car.Model" class="text-decoration-none small"><i class="bi bi-search me-1"></i>Tra cứu cẩm nang cho xe này</a></div>
+                </div>
+            }
+        </div></div>
+
         <div class="card"><div class="card-body">
             <h6 class="fw-bold mb-2">Mốc thời gian</h6>
             <ul class="list-unstyled small mb-0">

@@ -1,0 +1,186 @@
+@model TechnicalLibrary
+@{
+    ViewData["Title"] = $"Cẩm nang Kỹ thuật: {Model.TechnicalLibraryCode} — {Model.Model}";
+    var (typeName, typeCode, typeCss) = Ui.TechnicalLibraryType(Model.Type);
+    var (sysName, sysIcon, sysCss) = Ui.TechnicalLibraryReRepairType(Model.ReRepairType);
+    var (stName, stCode, stCss) = Ui.TechnicalLibraryStatus(Model.IsActive);
+    var related = ViewBag.RelatedSolutions as List<TechnicalLibrary> ?? [];
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
+    <div>
+        <a href="/TechnicalLibrary" class="btn btn-sm btn-outline-secondary me-2"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+        <span class="text-muted small">Cẩm nang kỹ thuật &gt; @Model.TechnicalLibraryCode</span>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/TechnicalLibrary/Print/@Model.Id" target="_blank" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-printer me-1"></i>In cẩm nang
+        </a>
+        @if (!Model.IsActive)
+        {
+            <form method="post" action="/TechnicalLibrary/Approve" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn phê duyệt ban hành cẩm nang kỹ thuật này toàn hệ thống?');">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" value="@Model.Id" />
+                <input type="hidden" name="approvedBy" value="Phòng Kỹ thuật HTC (HQ)" />
+                <button type="submit" class="btn btn-sm btn-success">
+                    <i class="bi bi-patch-check me-1"></i>Phê duyệt ban hành (HQ)
+                </button>
+            </form>
+        }
+        <form method="post" action="/TechnicalLibrary/Delete" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa hồ sơ cẩm nang kỹ thuật này?');">
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="id" value="@Model.Id" />
+            <button type="submit" class="btn btn-sm btn-outline-danger">
+                <i class="bi bi-trash me-1"></i>Xóa
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="fs-4 fw-bold">@Model.TechnicalLibraryCode</span>
+                            <span class="badge bg-@typeCss">@typeName</span>
+                            <span class="badge bg-@stCss">@stName</span>
+                        </div>
+                        <h5 class="text-primary fw-bold mb-1">@Model.Model</h5>
+                        <div class="text-muted small">
+                            @if (!string.IsNullOrWhiteSpace(Model.Engine)) { <span class="me-2"><i class="bi bi-fuel-pump me-1"></i>@Model.Engine</span> }
+                            @if (!string.IsNullOrWhiteSpace(Model.Gear)) { <span class="me-2"><i class="bi bi-gear-wide me-1"></i>@Model.Gear</span> }
+                            @if (!string.IsNullOrWhiteSpace(Model.Version)) { <span class="me-2"><i class="bi bi-tag me-1"></i>@Model.Version</span> }
+                            @if (!string.IsNullOrWhiteSpace(Model.PlateNo)) { <span class="me-2"><i class="bi bi-car-front me-1"></i>Biển số: <strong>@Model.PlateNo</strong></span> }
+                        </div>
+                    </div>
+                    <span class="badge bg-@sysCss-subtle text-@sysCss border border-@sysCss-subtle p-2">
+                        <i class="bi @sysIcon me-1"></i>@sysName
+                    </span>
+                </div>
+
+                <div class="alert alert-light border mb-4">
+                    <h6 class="fw-bold text-dark mb-2"><i class="bi bi-exclamation-triangle-fill text-warning me-2"></i>Hiện tượng Hư hỏng &amp; Triệu chứng Cụ thể</h6>
+                    <div class="ps-3 border-start border-3 border-warning" style="white-space:pre-line">
+                        @Model.ReRepairRemark
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(Model.ReRepairFeedback))
+                    {
+                        <div class="mt-3 pt-2 border-top text-muted small">
+                            <i class="bi bi-chat-quote-fill me-1 text-primary"></i><strong>Ý kiến phản ánh từ khách hàng &amp; thợ thử xe:</strong>
+                            <div class="ps-3 fst-italic">@Model.ReRepairFeedback</div>
+                        </div>
+                    }
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(Model.ExclusionTest))
+                {
+                    <div class="card bg-light border-0 mb-4">
+                        <div class="card-body">
+                            <h6 class="fw-bold text-secondary mb-2"><i class="bi bi-clipboard-pulse me-2"></i>Phương pháp Kiểm tra Loại trừ &amp; Đo đạc Thông số (Exclusion Test)</h6>
+                            <div class="ps-3 border-start border-3 border-secondary" style="white-space:pre-line">
+                                @Model.ExclusionTest
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                <div class="card border-danger-subtle bg-danger-subtle bg-opacity-10 mb-4">
+                    <div class="card-body">
+                        <h6 class="fw-bold text-danger mb-2"><i class="bi bi-x-circle-fill me-2"></i>Nguyên nhân Hư hỏng Gốc rễ (Root Cause)</h6>
+                        <div class="ps-3 border-start border-3 border-danger text-dark" style="white-space:pre-line">
+                            @Model.ReRepairReason
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border-success-subtle bg-success-subtle bg-opacity-10">
+                    <div class="card-body">
+                        <h6 class="fw-bold text-success mb-2"><i class="bi bi-check-circle-fill me-2"></i>Biện pháp Khắc phục Triệt để Đã Xử lý Thành công (Solution)</h6>
+                        <div class="ps-3 border-start border-3 border-success text-dark" style="white-space:pre-line">
+                            @Model.ReRepairSolution
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-info-circle text-primary me-2"></i>Thông tin Hồ sơ Kỹ thuật</h6>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0 small">
+                    <dt class="col-5 text-muted">Mã cẩm nang:</dt>
+                    <dd class="col-7 fw-bold">@Model.TechnicalLibraryCode</dd>
+
+                    <dt class="col-5 text-muted">Đại lý lập:</dt>
+                    <dd class="col-7">@Model.DealerName (@Model.DealerCode)</dd>
+
+                    <dt class="col-5 text-muted">Người lập:</dt>
+                    <dd class="col-7">@Model.CreatedBy</dd>
+
+                    <dt class="col-5 text-muted">Thời điểm lập:</dt>
+                    <dd class="col-7">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</dd>
+
+                    <dt class="col-5 text-muted">Phê duyệt HQ:</dt>
+                    <dd class="col-7">
+                        <span class="badge bg-@stCss">@stName</span>
+                    </dd>
+
+                    @if (Model.IsActive && Model.ApprovedAt.HasValue)
+                    {
+                        <dt class="col-5 text-muted">Người duyệt:</dt>
+                        <dd class="col-7">@(Model.ApprovedBy ?? "HTC Technical Dept")</dd>
+
+                        <dt class="col-5 text-muted">Ngày duyệt:</dt>
+                        <dd class="col-7">@Model.ApprovedAt.Value.ToString("dd/MM/yyyy HH:mm")</dd>
+                    }
+                </dl>
+            </div>
+        </div>
+
+        @if (Model.RO != null)
+        {
+            <div class="card mb-3">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-clipboard2-pulse text-primary me-2"></i>Lệnh Sửa chữa gốc (RO)</h6>
+                    <a href="/RO/Detail/@Model.RO.Id" class="btn btn-sm btn-outline-primary py-0 px-2">Xem RO</a>
+                </div>
+                <div class="card-body small">
+                    <div class="fw-bold mb-1">Mã RO: @Model.RO.Code</div>
+                    <div class="text-muted mb-1">Biển số: @Model.RO.Car?.Plate · @Model.RO.Car?.Model</div>
+                    <div class="text-muted mb-1">Khách hàng: @Model.RO.Customer?.Name (@Model.RO.Customer?.Phone)</div>
+                    <div class="text-muted mb-2">Trạng thái RO: <span class="badge bg-info-subtle text-info border">@Ui.Status(Model.RO.Status).text</span></div>
+                    <div class="fw-semibold text-primary">Tổng chi phí: @Model.RO.Total.ToString("N0") đ</div>
+                </div>
+            </div>
+        }
+
+        @if (related.Count > 0)
+        {
+            <div class="card">
+                <div class="card-header bg-white py-3">
+                    <h6 class="mb-0 fw-bold"><i class="bi bi-lightbulb text-warning me-2"></i>Pan bệnh tương tự (@Model.Model)</h6>
+                </div>
+                <div class="list-group list-group-flush">
+                    @foreach (var r in related.Where(x => x.Id != Model.Id).Take(4))
+                    {
+                        var (rType, _, rCss) = Ui.TechnicalLibraryType(r.Type);
+                        <a href="/TechnicalLibrary/Detail/@r.Id" class="list-group-item list-group-item-action py-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="fw-bold text-primary small">@r.TechnicalLibraryCode</span>
+                                <span class="badge bg-@rCss" style="font-size:10px">@rType</span>
+                            </div>
+                            <div class="small text-truncate-2" title="@r.ReRepairRemark">@r.ReRepairRemark</div>
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
