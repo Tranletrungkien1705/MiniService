@@ -2502,6 +2502,184 @@ public class BulletinController(IRoService svc) : Controller
     }
 }
 
+public class PdiController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(PdiRequestStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+
+        var list = await svc.PdiRequestsAsync(status, q, fromDate, toDate);
+        return View(list);
+    }
+
+    public IActionResult Create()
+    {
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        string? pdiReqNo,
+        string? dealerCode,
+        DateTime? createdDate,
+        string? remark,
+        string? createdBy,
+        bool flagAccessory,
+        string[]? vins,
+        string[]? models,
+        string[]? specs,
+        string[]? colors,
+        string[]? contractNos,
+        string[]? customerNames,
+        string[]? customerPhones,
+        DateTime[]? expectedDates,
+        bool[]? itemAccessories,
+        string[]? accessoryNotes)
+    {
+        if (vins == null || vins.Length == 0 || string.IsNullOrWhiteSpace(vins[0]))
+        {
+            TempData["Error"] = "Vui lòng nhập ít nhất một xe (Số khung VIN) cần kiểm tra xuất xưởng PDI.";
+            return View();
+        }
+
+        try
+        {
+            var req = new PdiRequest
+            {
+                PdiReqNo = pdiReqNo?.Trim() ?? "",
+                DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? "HYUNDAI-MAIN" : dealerCode.Trim(),
+                CreatedDate = createdDate ?? DateTime.Today,
+                Remark = remark?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Phòng Bán hàng (DMS Sales)" : createdBy.Trim(),
+                FlagAccessory = flagAccessory,
+                Status = PdiRequestStatus.Pending
+            };
+
+            var items = new List<PdiRequestItem>();
+            for (int i = 0; i < vins.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(vins[i])) continue;
+                var itemVin = vins[i].Trim().ToUpperInvariant();
+                var itemModel = (models != null && models.Length > i) ? models[i]?.Trim() ?? "Hyundai" : "Hyundai";
+                var itemSpec = (specs != null && specs.Length > i) ? specs[i]?.Trim() : null;
+                var itemColor = (colors != null && colors.Length > i) ? colors[i]?.Trim() : null;
+                var itemContract = (contractNos != null && contractNos.Length > i) ? contractNos[i]?.Trim() ?? "" : "";
+                var itemCustomer = (customerNames != null && customerNames.Length > i) ? customerNames[i]?.Trim() ?? "" : "";
+                var itemPhone = (customerPhones != null && customerPhones.Length > i) ? customerPhones[i]?.Trim() : null;
+                var itemDate = (expectedDates != null && expectedDates.Length > i && expectedDates[i] != default) ? expectedDates[i] : DateTime.Today.AddDays(2);
+                var itemHasAcc = (itemAccessories != null && itemAccessories.Length > i) ? itemAccessories[i] : flagAccessory;
+                var itemAccNote = (accessoryNotes != null && accessoryNotes.Length > i) ? accessoryNotes[i]?.Trim() : null;
+
+                items.Add(new PdiRequestItem
+                {
+                    VIN = itemVin,
+                    Model = itemModel,
+                    Spec = itemSpec,
+                    Color = itemColor,
+                    ContractNo = itemContract,
+                    CustomerName = itemCustomer,
+                    CustomerPhone = itemPhone,
+                    ExpectedDeliveryDate = itemDate,
+                    FlagAccessory = itemHasAcc,
+                    AccessoryNote = itemAccNote,
+                    Status = PdiItemStatus.Pending
+                });
+            }
+
+            var id = await svc.CreatePdiRequestAsync(req, items);
+            TempData["Success"] = $"Đã lập Phiếu yêu cầu PDI {req.PdiReqNo} thành công ({items.Count} xe cần kiểm tra).";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id, int? selectedItemId)
+    {
+        var req = await svc.GetPdiRequestAsync(id);
+        if (req == null) return NotFound();
+        ViewBag.Next = RoService.AllowedNextPdiRequest(req.Status);
+        ViewBag.SelectedItemId = selectedItemId ?? req.Items.FirstOrDefault()?.Id;
+        return View(req);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Transition(int id, PdiRequestStatus to, string? approvedBy)
+    {
+        var (ok, msg) = await svc.TransitionPdiRequestStatusAsync(id, to, approvedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateRO(int id, int itemId, string? technician)
+    {
+        var (ok, msg, roId) = await svc.CreateROFromPdiItemAsync(itemId, technician);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok && roId.HasValue)
+        {
+            return RedirectToAction("Detail", "RO", new { id = roId.Value });
+        }
+        return RedirectToAction(nameof(Detail), new { id, selectedItemId = itemId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateChecklist(
+        int id,
+        int itemId,
+        string? inspector,
+        string? notes,
+        int[] checkIds,
+        int[] statuses,
+        string[]? itemNotes)
+    {
+        var updates = new List<(int checkId, AuditStatus status, string? note)>();
+        if (checkIds != null && checkIds.Length > 0)
+        {
+            for (int i = 0; i < checkIds.Length; i++)
+            {
+                var s = (statuses != null && statuses.Length > i) ? (AuditStatus)statuses[i] : AuditStatus.Good;
+                var n = (itemNotes != null && itemNotes.Length > i) ? itemNotes[i]?.Trim() : null;
+                updates.Add((checkIds[i], s, n));
+            }
+        }
+
+        var (ok, msg) = await svc.UpdatePdiItemChecklistAsync(itemId, updates, inspector, notes);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id, selectedItemId = itemId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> PassItem(int id, int itemId, string? inspector)
+    {
+        var (ok, msg) = await svc.PassPdiItemAsync(itemId, inspector);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id, selectedItemId = itemId });
+    }
+
+    public async Task<IActionResult> Print(int id, int? itemId)
+    {
+        var req = await svc.GetPdiRequestAsync(id);
+        if (req == null) return NotFound();
+        ViewBag.SelectedItem = itemId.HasValue ? req.Items.FirstOrDefault(i => i.Id == itemId.Value) : req.Items.FirstOrDefault();
+        return View(req);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeletePdiRequestAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

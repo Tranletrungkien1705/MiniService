@@ -80,6 +80,12 @@
     </div>
     <div class="col-6 col-lg">
         <div class="card"><div class="card-body">
+            <div class="text-muted small">Kiểm tra xuất xưởng PDI</div>
+            <div class="stat-num" style="font-size:18px;color:#0284c7"><a href="/Pdi" class="text-decoration-none" style="color:#0284c7">@d.CompletedPdiVehicles xe đạt</a> @if(d.PendingPdiRequests > 0){<span class="text-warning" style="font-size:13px;font-weight:normal">(@d.PendingPdiRequests chờ)</span>}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
             <div class="text-muted small">Hồ sơ bảo hiểm</div>
             <div class="stat-num" style="font-size:18px;color:#0d9488"><a href="/Insurance" class="text-decoration-none" style="color:#0d9488"><span class="text-warning">@d.PendingInsuranceClaims chờ</span> · @d.ApprovedInsuranceAmount.ToString("N0")đ</a></div>
         </div></div>

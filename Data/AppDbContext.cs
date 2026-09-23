@@ -48,6 +48,9 @@ public class AppDbContext : DbContext
     public DbSet<Bulletin> Bulletins => Set<Bulletin>();
     public DbSet<BulletinDetail> BulletinDetails => Set<BulletinDetail>();
     public DbSet<BulletinVin> BulletinVins => Set<BulletinVin>();
+    public DbSet<PdiRequest> PdiRequests => Set<PdiRequest>();
+    public DbSet<PdiRequestItem> PdiRequestItems => Set<PdiRequestItem>();
+    public DbSet<PdiChecklistItem> PdiChecklistItems => Set<PdiChecklistItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -91,6 +94,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.ReceptionSheet).WithMany().HasForeignKey(x => x.ReceptionSheetId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.AssignmentWorks).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.InsuranceClaims).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.PdiRequest).WithMany(x => x.RepairOrders).HasForeignKey(x => x.PdiRequestId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -429,6 +433,33 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.BulletinId, x.VinNo });
             e.HasOne(x => x.RO).WithMany().HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PdiRequest>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PdiReqNo }).IsUnique();
+            e.Ignore(x => x.VinTotal);
+            e.Ignore(x => x.VinFTotal);
+            e.Ignore(x => x.VinPendingTotal);
+            e.Ignore(x => x.CompletionRate);
+            e.Ignore(x => x.IsAllPassed);
+            e.HasMany(x => x.Items).WithOne(x => x.PdiRequest).HasForeignKey(x => x.PdiRequestId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.RepairOrders).WithOne(x => x.PdiRequest).HasForeignKey(x => x.PdiRequestId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PdiRequestItem>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PdiRequestId, x.VIN });
+            e.Ignore(x => x.TotalChecklistCount);
+            e.Ignore(x => x.PassedChecklistCount);
+            e.Ignore(x => x.IssueChecklistCount);
+            e.Ignore(x => x.IsReadyForDelivery);
+            e.HasOne(x => x.RO).WithMany(x => x.PdiRequestItems).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.ChecklistItems).WithOne(x => x.PdiRequestItem).HasForeignKey(x => x.PdiRequestItemId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PdiChecklistItem>(e =>
+        {
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

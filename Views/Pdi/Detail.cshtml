@@ -1,0 +1,343 @@
+@model PdiRequest
+@{
+    ViewData["Title"] = $"Phiếu PDI: {Model.PdiReqNo}";
+    var (stText, _, stCss) = Ui.PdiRequestStatus(Model.Status);
+    var nextStatuses = (PdiRequestStatus[]?)ViewBag.Next ?? [];
+    var selectedItemId = (int?)ViewBag.SelectedItemId;
+    var selectedItem = Model.Items.FirstOrDefault(i => i.Id == selectedItemId) ?? Model.Items.FirstOrDefault();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h5 class="fw-bold mb-0 font-monospace text-primary">@Model.PdiReqNo</h5>
+            <span class="badge bg-@stCss fs-6">@stText</span>
+            @if (Model.IsAllPassed)
+            {
+                <span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-check-all me-1"></i>Tất cả xe đạt PDI</span>
+            }
+        </div>
+        <div class="text-muted small">Kiểm tra chất lượng &amp; hoàn thiện phụ kiện xuất xưởng xe mới (Pre-Delivery Inspection).</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Pdi/Print/@Model.Id@(selectedItem != null ? $"?itemId={selectedItem.Id}" : "")" target="_blank" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-printer me-1"></i>In biên bản PDI
+        </a>
+        <a href="/Pdi" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Danh sách</a>
+    </div>
+</div>
+
+<!-- Header thông tin phiếu yêu cầu PDI -->
+<div class="card mb-3"><div class="card-body">
+    <div class="row g-3">
+        <div class="col-md-3">
+            <div class="text-muted small">Đại lý thực hiện</div>
+            <div class="fw-bold"><i class="bi bi-building text-primary me-1"></i>@Model.DealerCode</div>
+            <div class="text-muted" style="font-size:11px">Ngày tạo: @Model.CreatedDate.ToString("dd/MM/yyyy")</div>
+        </div>
+        <div class="col-md-3">
+            <div class="text-muted small">Đơn vị lập yêu cầu</div>
+            <div class="fw-semibold">@Model.CreatedBy</div>
+            @if (Model.ApprovedDate.HasValue)
+            {
+                <div class="text-muted" style="font-size:11px">Tiếp nhận: @Model.ApprovedDate.Value.ToString("dd/MM/yyyy HH:mm") (@Model.ApprovedBy)</div>
+            }
+        </div>
+        <div class="col-md-3">
+            <div class="text-muted small">Gói phụ kiện giao xe</div>
+            @if (Model.FlagAccessory)
+            {
+                <span class="badge bg-warning-subtle text-warning border border-warning"><i class="bi bi-tools me-1"></i>Có lắp phụ kiện bàn giao</span>
+            }
+            else
+            {
+                <span class="badge bg-light text-muted border">Xe xuất xưởng tiêu chuẩn</span>
+            }
+            @if (Model.FinishedAt.HasValue)
+            {
+                <div class="text-success" style="font-size:11px"><i class="bi bi-check-circle me-1"></i>Hoàn tất: @Model.FinishedAt.Value.ToString("dd/MM/yyyy HH:mm")</div>
+            }
+        </div>
+        <div class="col-md-3">
+            <div class="text-muted small">Tiến độ xuất xưởng xe</div>
+            <div class="d-flex justify-content-between small fw-bold mb-1">
+                <span>@Model.VinFTotal / @Model.VinTotal xe đạt</span>
+                <span class="text-primary">@Model.CompletionRate%</span>
+            </div>
+            <div class="progress" style="height:8px;">
+                <div class="progress-bar bg-success" role="progressbar" style="width: @Model.CompletionRate%"></div>
+            </div>
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Model.Remark))
+    {
+        <div class="alert alert-light border mt-3 mb-0 py-2 small">
+            <i class="bi bi-chat-quote text-primary me-1"></i><b>Ghi chú từ Sales:</b> @Model.Remark
+        </div>
+    }
+
+    <!-- Quản lý trạng thái phiếu PDI -->
+    @if (nextStatuses.Length > 0)
+    {
+        <div class="d-flex align-items-center gap-2 mt-3 pt-3 border-top">
+            <span class="small fw-semibold text-muted">Chuyển trạng thái yêu cầu PDI:</span>
+            @foreach (var n in nextStatuses)
+            {
+                var (nTxt, _, nCss) = Ui.PdiRequestStatus(n);
+                <form asp-action="Transition" method="post" class="d-inline">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <input type="hidden" name="to" value="@n" />
+                    <input type="hidden" name="approvedBy" value="Quản đốc xưởng" />
+                    <button type="submit" class="btn btn-sm btn-outline-@nCss" onclick="return confirm('Xác nhận chuyển trạng thái sang @nTxt?');">
+                        <i class="bi bi-arrow-right-circle me-1"></i>@nTxt
+                    </button>
+                </form>
+            }
+            @if (Model.Status != PdiRequestStatus.Completed)
+            {
+                <form asp-action="Delete" method="post" class="ms-auto d-inline" onsubmit="return confirm('Bạn có chắc muốn xóa phiếu yêu cầu PDI này?');">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa phiếu</button>
+                </form>
+            }
+        </div>
+    }
+</div></div>
+
+<!-- Danh sách xe & Bàn kiểm tra PDI -->
+<div class="row g-3">
+    <!-- Cột trái: Tab chọn xe nếu có nhiều xe trong phiếu -->
+    @if (Model.Items.Count > 1)
+    {
+        <div class="col-12">
+            <div class="card p-2">
+                <div class="nav nav-pills gap-2">
+                    @foreach (var item in Model.Items)
+                    {
+                        var (itTxt, _, itCss) = Ui.PdiItemStatus(item.Status);
+                        var isAct = selectedItem?.Id == item.Id;
+                        <a href="/Pdi/Detail/@Model.Id?selectedItemId=@item.Id" class="nav-link btn-sm py-1 px-3 d-flex align-items-center gap-2 @(isAct ? "active" : "btn-outline-secondary")">
+                            <span><b>@item.Model</b> (@item.VIN[^6..])</span>
+                            <span class="badge bg-@itCss" style="font-size:10px">@itTxt</span>
+                        </a>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (selectedItem != null)
+    {
+        var (carStatusText, _, carStatusCss) = Ui.PdiItemStatus(selectedItem.Status);
+        <div class="col-12">
+            <!-- Thông tin xe được chọn kiểm tra -->
+            <div class="card mb-3 border-primary">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <span class="badge bg-primary me-2">XE ĐANG KIỂM TRA</span>
+                            <span class="fs-5 fw-bold text-dark">@selectedItem.Model</span>
+                            @if (!string.IsNullOrWhiteSpace(selectedItem.Spec))
+                            {
+                                <span class="badge bg-secondary-subtle text-secondary border ms-1">@selectedItem.Spec</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(selectedItem.Color))
+                            {
+                                <span class="badge bg-info-subtle text-info border ms-1">Màu: @selectedItem.Color</span>
+                            }
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-@carStatusCss fs-6">@carStatusText</span>
+                            @if (selectedItem.IsReadyForDelivery)
+                            {
+                                <span class="badge bg-success"><i class="bi bi-award me-1"></i>Sẵn sàng giao xe</span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-3">
+                            <div class="text-muted small">Số khung xe (VIN):</div>
+                            <div class="fw-bold font-monospace text-primary">@selectedItem.VIN</div>
+                            <div class="text-muted" style="font-size:11px">Số máy: @(selectedItem.EngineNo ?? "—") · Ắc quy: @(selectedItem.BatteryNo ?? "—")</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-muted small">Khách hàng &amp; Hợp đồng:</div>
+                            <div class="fw-semibold">@selectedItem.CustomerName</div>
+                            <div class="text-muted small">SĐT: @(selectedItem.CustomerPhone ?? "—") · HĐ: <b>@selectedItem.ContractNo</b></div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-muted small">Ngày dự kiến giao xe:</div>
+                            <div class="fw-bold text-danger"><i class="bi bi-calendar-event me-1"></i>@selectedItem.ExpectedDeliveryDate.ToString("dd/MM/yyyy")</div>
+                            <div class="text-muted" style="font-size:11px">Địa chỉ KH: @(selectedItem.CustomerAddress ?? "Hà Nội")</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-muted small">Lệnh sửa chữa xưởng (RO):</div>
+                            @if (selectedItem.ROId.HasValue && selectedItem.RO != null)
+                            {
+                                <div>
+                                    <a href="/RO/Detail/@selectedItem.ROId" class="fw-bold text-primary text-decoration-none">
+                                        <i class="bi bi-clipboard2-pulse me-1"></i>@selectedItem.RONo
+                                    </a>
+                                    <span class="badge bg-info ms-1">@Ui.Status(selectedItem.RO.Status).text</span>
+                                </div>
+                                <div class="text-muted" style="font-size:11px">KTV phụ trách: @(selectedItem.RO.Technician ?? "KTV PDI")</div>
+                            }
+                            else
+                            {
+                                <form asp-action="CreateRO" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@Model.Id" />
+                                    <input type="hidden" name="itemId" value="@selectedItem.Id" />
+                                    <input type="hidden" name="technician" value="KTV PDI" />
+                                    <button type="submit" class="btn btn-sm btn-outline-primary py-0">
+                                        <i class="bi bi-plus-circle me-1"></i>Lập Lệnh RO PDI
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+
+                    @if (selectedItem.FlagAccessory)
+                    {
+                        <div class="alert alert-warning py-2 small mb-0">
+                            <i class="bi bi-tools text-warning me-1"></i><b>Gói phụ kiện bàn giao:</b> @(selectedItem.AccessoryNote ?? "Lắp đặt theo hợp đồng bán xe")
+                        </div>
+                    }
+
+                    <!-- Thanh nút hành động nhanh cho xe -->
+                    <div class="d-flex align-items-center justify-content-between pt-3 mt-3 border-top">
+                        <div class="small">
+                            <span class="text-muted me-2">Kết quả kiểm tra:</span>
+                            <span class="badge bg-success me-1">@selectedItem.PassedChecklistCount Đạt</span>
+                            @if (selectedItem.IssueChecklistCount > 0)
+                            {
+                                <span class="badge bg-danger me-1">@selectedItem.IssueChecklistCount Cần khắc phục</span>
+                            }
+                            <span class="text-muted">/ @selectedItem.TotalChecklistCount hạng mục tiêu chuẩn</span>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <a href="/Pdi/Print/@Model.Id?itemId=@selectedItem.Id" target="_blank" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-printer me-1"></i>In biên bản xe này
+                            </a>
+                            @if (selectedItem.Status != PdiItemStatus.Passed)
+                            {
+                                <form asp-action="PassItem" method="post" class="d-inline">
+                                    @Html.AntiForgeryToken()
+                                    <input type="hidden" name="id" value="@Model.Id" />
+                                    <input type="hidden" name="itemId" value="@selectedItem.Id" />
+                                    <input type="hidden" name="inspector" value="@(selectedItem.Inspector ?? "KTV PDI")" />
+                                    <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Xác nhận xe VIN @selectedItem.VIN đạt tiêu chuẩn PDI và sẵn sàng giao khách?');">
+                                        <i class="bi bi-check2-circle me-1"></i>Nghiệm thu ĐẠT chuẩn (Sẵn sàng giao xe)
+                                    </button>
+                                </form>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bảng kiểm tra 25 điểm tiêu chuẩn Hyundai Toàn cầu -->
+            <div class="card mb-3">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                    <span class="fw-bold text-primary"><i class="bi bi-card-checklist me-1"></i>Checklist 25 điểm kiểm tra xuất xưởng PDI tiêu chuẩn Hyundai</span>
+                    <button type="button" class="btn btn-xs btn-outline-success btn-sm" id="btnMarkAllGood">
+                        <i class="bi bi-check-all me-1"></i>Đánh dấu tất cả ĐẠT
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <form asp-action="UpdateChecklist" method="post">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <input type="hidden" name="itemId" value="@selectedItem.Id" />
+
+                        <div class="p-3 border-bottom bg-light">
+                            <div class="row g-2 align-items-center">
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-semibold mb-1">Kỹ thuật viên kiểm tra:</label>
+                                    <input type="text" name="inspector" class="form-control form-control-sm" value="@(selectedItem.Inspector ?? "KTV PDI")" required />
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label small fw-semibold mb-1">Đánh giá chung của KTV:</label>
+                                    <input type="text" name="notes" class="form-control form-control-sm" value="@selectedItem.InspectionNotes" placeholder="Nhận xét tổng thể chất lượng xe, độ kín khít, lớp sơn, hoàn thiện..." />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:220px">Nhóm hạng mục</th>
+                                        <th style="width:110px">Mã tiêu chí</th>
+                                        <th>Nội dung kiểm tra kỹ thuật</th>
+                                        <th style="width:180px">Kết quả kiểm tra</th>
+                                        <th style="width:250px">Ghi chú cụ thể</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{
+                                        string lastGroup = "";
+                                    }
+                                    @for (int i = 0; i < selectedItem.ChecklistItems.Count; i++)
+                                    {
+                                        var check = selectedItem.ChecklistItems[i];
+                                        var isNewGroup = check.Group != lastGroup;
+                                        if (isNewGroup)
+                                        {
+                                            lastGroup = check.Group;
+                                            <tr class="table-secondary">
+                                                <td colspan="5" class="fw-bold py-1 text-primary">
+                                                    <i class="bi bi-folder2-open me-1"></i>@check.Group
+                                                </td>
+                                            </tr>
+                                        }
+                                        <tr>
+                                            <td class="text-muted small ps-3">@check.Group</td>
+                                            <td class="font-monospace small">@check.Code</td>
+                                            <td>
+                                                <input type="hidden" name="checkIds" value="@check.Id" />
+                                                <div class="fw-semibold small">@check.Name</div>
+                                            </td>
+                                            <td>
+                                                <select name="statuses" class="form-select form-select-sm chk-status-select" data-check-id="@check.Id">
+                                                    <option value="0" selected="@(check.Status == AuditStatus.Good)">✅ Đạt / Tốt</option>
+                                                    <option value="1" selected="@(check.Status == AuditStatus.Attention)">⚠️ Cần theo dõi</option>
+                                                    <option value="2" selected="@(check.Status == AuditStatus.Replace)">❌ Cần sửa / Thay</option>
+                                                    <option value="3" selected="@(check.Status == AuditStatus.NA)">⚪ Không áp dụng</option>
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <input type="text" name="itemNotes" value="@check.Note" class="form-control form-control-sm" placeholder="Ghi chú chi tiết nếu có..." />
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="p-3 bg-light border-top d-flex justify-content-between align-items-center">
+                            <span class="text-muted small"><i class="bi bi-info-circle me-1"></i>Lưu kết quả kiểm tra để cập nhật trạng thái checklist cho xe VIN @selectedItem.VIN.</span>
+                            <button type="submit" class="btn btn-primary btn-sm px-4">
+                                <i class="bi bi-save me-1"></i>Lưu kết quả kiểm tra
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('btnMarkAllGood')?.addEventListener('click', function() {
+        var selects = document.querySelectorAll('.chk-status-select');
+        selects.forEach(function(s) {
+            s.value = "0"; // Good
+        });
+    });
+</script>
+}

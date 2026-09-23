@@ -370,4 +370,23 @@ public static class Ui
         Models.BulletinVinStatus.Completed => ("Đã hoàn thành", "FNS", "success"),
         _ => (s.ToString(), "", "secondary")
     };
+
+    public static (string text, string code, string css) PdiRequestStatus(PdiRequestStatus s) => s switch
+    {
+        Models.PdiRequestStatus.Draft => ("Dự thảo", "DRAFT", "secondary"),
+        Models.PdiRequestStatus.Pending => ("Chờ tiếp nhận", "PEND", "warning"),
+        Models.PdiRequestStatus.Approved => ("Đang thực hiện", "APPR", "info"),
+        Models.PdiRequestStatus.Completed => ("Đã hoàn tất PDI", "COMP", "success"),
+        Models.PdiRequestStatus.Cancelled => ("Đã hủy", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string code, string css) PdiItemStatus(PdiItemStatus s) => s switch
+    {
+        Models.PdiItemStatus.Pending => ("Chờ kiểm tra", "PEND", "warning"),
+        Models.PdiItemStatus.InProgress => ("Đang kiểm tra", "IN_PROG", "info"),
+        Models.PdiItemStatus.Passed => ("Đạt chuẩn (Sẵn sàng giao)", "PASSED", "success"),
+        Models.PdiItemStatus.Failed => ("Không đạt / Cần sửa", "FAIL", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
 }

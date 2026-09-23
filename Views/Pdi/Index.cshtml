@@ -1,0 +1,196 @@
+@model List<PdiRequest>
+@{
+    ViewData["Title"] = "Kiểm tra xuất xưởng PDI (Pre-Delivery Inspection)";
+    var currentStatus = (PdiRequestStatus?)ViewBag.Status;
+    var currentQ = (string?)ViewBag.Q;
+    var fromDate = (string?)ViewBag.FromDate;
+    var toDate = (string?)ViewBag.ToDate;
+
+    var totalRequests = Model.Count;
+    var pendingRequests = Model.Count(p => p.Status == PdiRequestStatus.Pending);
+    var approvedRequests = Model.Count(p => p.Status == PdiRequestStatus.Approved);
+    var completedRequests = Model.Count(p => p.Status == PdiRequestStatus.Completed);
+    var totalVins = Model.Sum(p => p.VinTotal);
+    var passedVins = Model.Sum(p => p.VinFTotal);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-0"><i class="bi bi-car-front-fill text-primary me-2"></i>Kiểm tra &amp; Nghiệm thu xuất xưởng PDI (Pre-Delivery Inspection)</h5>
+        <div class="text-muted small">Quy trình kiểm tra kỹ thuật 25 điểm tiêu chuẩn Hyundai trước khi bàn giao xe mới cho khách hàng (Dlr_PDIRequest).</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/Pdi/Create" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Tạo Yêu cầu PDI mới</a>
+    </div>
+</div>
+
+<!-- Thống kê Dashboard PDI -->
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card p-3">
+            <div class="text-muted small">Tổng yêu cầu PDI</div>
+            <div class="stat-num text-primary">@totalRequests</div>
+            <div class="text-muted" style="font-size:11px">@totalVins xe cần kiểm tra</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3">
+            <div class="text-muted small">Chờ xưởng tiếp nhận</div>
+            <div class="stat-num text-warning">@pendingRequests</div>
+            <div class="text-muted" style="font-size:11px">Yêu cầu mới từ Sales</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3">
+            <div class="text-muted small">Đang kiểm tra &amp; Lắp PK</div>
+            <div class="stat-num text-info">@approvedRequests</div>
+            <div class="text-muted" style="font-size:11px">Xe đang trong xưởng</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card p-3">
+            <div class="text-muted small">Hoàn tất PDI (Sẵn sàng giao)</div>
+            <div class="stat-num text-success">@passedVins <span class="fs-6 text-muted">/ @totalVins</span></div>
+            <div class="text-muted" style="font-size:11px">Đạt tiêu chuẩn xuất xưởng</div>
+        </div>
+    </div>
+</div>
+
+<!-- Bộ lọc tìm kiếm -->
+<div class="card mb-3"><div class="card-body py-2">
+    <form method="get" class="row g-2 align-items-center">
+        <div class="col-md-3">
+            <input type="text" name="q" value="@currentQ" class="form-control form-control-sm" placeholder="Tìm số phiếu, số khung VIN, model, khách hàng, HĐ..." />
+        </div>
+        <div class="col-md-2">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">-- Tất cả trạng thái --</option>
+                <option value="1" selected="@(currentStatus == PdiRequestStatus.Pending)">Chờ tiếp nhận (Pending)</option>
+                <option value="2" selected="@(currentStatus == PdiRequestStatus.Approved)">Đang thực hiện (Approved)</option>
+                <option value="3" selected="@(currentStatus == PdiRequestStatus.Completed)">Hoàn tất PDI (Completed)</option>
+                <option value="0" selected="@(currentStatus == PdiRequestStatus.Draft)">Dự thảo (Draft)</option>
+                <option value="4" selected="@(currentStatus == PdiRequestStatus.Cancelled)">Đã hủy (Cancelled)</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <input type="date" name="fromDate" value="@fromDate" class="form-control form-control-sm" title="Từ ngày tạo" />
+        </div>
+        <div class="col-md-2">
+            <input type="date" name="toDate" value="@toDate" class="form-control form-control-sm" title="Đến ngày tạo" />
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-funnel me-1"></i>Lọc</button>
+            <a href="/Pdi" class="btn btn-sm btn-outline-secondary">Đặt lại</a>
+        </div>
+    </form>
+</div></div>
+
+<!-- Bảng danh sách phiếu PDI -->
+<div class="card"><div class="card-body p-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:140px">Số phiếu PDI</th>
+                    <th style="width:130px">Ngày lập &amp; ĐV tạo</th>
+                    <th>Danh sách xe &amp; Hợp đồng giao xe</th>
+                    <th style="width:150px">Gói phụ kiện</th>
+                    <th style="width:180px">Tiến độ nghiệm thu</th>
+                    <th style="width:140px">Trạng thái</th>
+                    <th style="width:120px" class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Count == 0)
+                {
+                    <tr><td colspan="7" class="text-center py-4 text-muted">Không tìm thấy phiếu yêu cầu PDI phù hợp.</td></tr>
+                }
+                @foreach (var p in Model)
+                {
+                    var (stText, _, stCss) = Ui.PdiRequestStatus(p.Status);
+                    <tr>
+                        <td>
+                            <a href="/Pdi/Detail/@p.Id" class="fw-bold font-monospace text-decoration-none">@p.PdiReqNo</a>
+                            <div class="text-muted" style="font-size:11px"><i class="bi bi-building me-1"></i>@p.DealerCode</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@p.CreatedDate.ToString("dd/MM/yyyy")</div>
+                            <div class="text-muted small">@p.CreatedBy</div>
+                        </td>
+                        <td>
+                            @foreach (var item in p.Items)
+                            {
+                                var (itText, _, itCss) = Ui.PdiItemStatus(item.Status);
+                                <div class="mb-1 pb-1 border-bottom border-light">
+                                    <span class="fw-bold text-dark">@item.Model</span>
+                                    @if (!string.IsNullOrWhiteSpace(item.Color))
+                                    {
+                                        <span class="badge bg-light text-dark border ms-1">@item.Color</span>
+                                    }
+                                    <div class="small font-monospace text-muted">
+                                        VIN: <b>@item.VIN</b> · HĐ: @item.ContractNo · KH: @item.CustomerName
+                                        <span class="badge bg-@itCss ms-1" style="font-size:10px">@itText</span>
+                                    </div>
+                                    @if (item.ROId.HasValue)
+                                    {
+                                        <div style="font-size:11px">
+                                            <a href="/RO/Detail/@item.ROId" class="text-decoration-none text-primary"><i class="bi bi-link-45deg me-1"></i>RO: @item.RONo</a>
+                                            @if (item.Inspector != null) { <span class="text-muted ms-1">· KTV: @item.Inspector</span> }
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(p.Remark))
+                            {
+                                <div class="text-muted fst-italic small mt-1"><i class="bi bi-chat-left-dots me-1"></i>@p.Remark</div>
+                            }
+                        </td>
+                        <td>
+                            @if (p.FlagAccessory)
+                            {
+                                <span class="badge bg-warning-subtle text-warning border border-warning"><i class="bi bi-tools me-1"></i>Lắp phụ kiện</span>
+                                var firstAcc = p.Items.FirstOrDefault(i => !string.IsNullOrWhiteSpace(i.AccessoryNote));
+                                if (firstAcc != null)
+                                {
+                                    <div class="text-muted" style="font-size:11px; max-width: 140px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="@firstAcc.AccessoryNote">
+                                        @firstAcc.AccessoryNote
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-muted border">Xe nguyên bản</span>
+                            }
+                        </td>
+                        <td>
+                            <div class="d-flex justify-content-between small mb-1">
+                                <span>Đạt: <b>@p.VinFTotal / @p.VinTotal xe</b></span>
+                                <span class="fw-bold">@p.CompletionRate%</span>
+                            </div>
+                            <div class="progress" style="height:7px;">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: @p.CompletionRate%"></div>
+                            </div>
+                            @if (p.IsAllPassed)
+                            {
+                                <div class="text-success small mt-1"><i class="bi bi-check2-all me-1"></i>Sẵn sàng giao khách</div>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge bg-@stCss">@stText</span>
+                            @if (p.FinishedAt.HasValue)
+                            {
+                                <div class="text-muted" style="font-size:10.5px">@p.FinishedAt.Value.ToString("dd/MM/yyyy HH:mm")</div>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/Pdi/Detail/@p.Id" class="btn btn-outline-primary" title="Xem chi tiết &amp; Kiểm tra"><i class="bi bi-eye"></i></a>
+                                <a href="/Pdi/Print/@p.Id" class="btn btn-outline-secondary" target="_blank" title="In biên bản PDI"><i class="bi bi-printer"></i></a>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div></div>

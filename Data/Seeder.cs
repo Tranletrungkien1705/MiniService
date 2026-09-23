@@ -1859,13 +1859,212 @@ public static class Seeder
             db.Bulletins.AddRange(b1, b2, b3);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.PdiRequests.AnyAsync())
+        {
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "05100-00441");
+
+            // 1. Phiếu PDI đã hoàn tất (Completed) - Hyundai Santa Fe 2.5T HTRAC Cao cấp
+            var pdi1 = new PdiRequest
+            {
+                PdiReqNo = "PDI260425-001",
+                DealerCode = "HYUNDAI-MAIN",
+                CreatedDate = DateTime.Today.AddDays(-2),
+                ApprovedDate = DateTime.Today.AddDays(-2).AddHours(1),
+                FinishedAt = DateTime.Today.AddDays(-1).AddHours(16),
+                Remark = "Kiểm tra xuất xưởng PDI và lắp đặt trọn gói phụ kiện giao xe cho khách hàng VIP nhận xe cuối tuần.",
+                FlagAccessory = true,
+                CreatedBy = "Showroom KD 1",
+                ApprovedBy = "Quản đốc xưởng",
+                Status = PdiRequestStatus.Completed
+            };
+
+            var roPdi1 = new RepairOrder
+            {
+                Code = "RO-PDI260425-001",
+                CarId = (await db.Cars.FirstAsync()).Id,
+                CustomerId = (await db.Customers.FirstAsync()).Id,
+                Status = ROStatus.Finished,
+                Odometer = 12,
+                IntakeNote = "Kiểm tra kỹ thuật xuất xưởng PDI tiêu chuẩn Hyundai + Lắp phụ kiện theo HĐ HD-XE-2026/089",
+                Technician = "KTV Minh",
+                CreatedBy = "PDI Dispatch",
+                CreatedAt = DateTime.Today.AddDays(-2).AddHours(1),
+                IntakeAt = DateTime.Today.AddDays(-2).AddHours(1),
+                FinishedAt = DateTime.Today.AddDays(-1).AddHours(16),
+                PdiReqNo = pdi1.PdiReqNo
+            };
+            roPdi1.Lines.Add(new RepairLine { Type = LineType.Labor, Name = "Kiểm tra kỹ thuật xuất xưởng PDI tiêu chuẩn Hyundai (25 điểm)", Quantity = 1, UnitPrice = 350000, ExpenseType = ExpenseType.Internal });
+            roPdi1.Lines.Add(new RepairLine { Type = LineType.Labor, Name = "Vệ sinh làm sạch & Rửa xe hoàn thiện giao xe mới", Quantity = 1, UnitPrice = 150000, ExpenseType = ExpenseType.Internal });
+            roPdi1.Lines.Add(new RepairLine { Type = LineType.Labor, Name = "Lắp đặt gói phụ kiện giao xe: Dán phim cách nhiệt Lumax USA, Bọc sàn da 5D, Camera hành trình Vietmap SpeedMap M1", Quantity = 1, UnitPrice = 650000, ExpenseType = ExpenseType.Internal });
+            db.ROs.Add(roPdi1);
+            await db.SaveChangesAsync();
+
+            var item1 = new PdiRequestItem
+            {
+                VIN = "RLHXXSF20240089",
+                Model = "Hyundai Santa Fe 2024",
+                Spec = "2.5T HTRAC Cao cấp (Xăng Turbo)",
+                Color = "Trắng ngọc trai (Glacier White)",
+                EngineNo = "G4KP-RC88129",
+                BatteryNo = "AGM-80AH-9921",
+                ContractNo = "HD-XE-2026/089",
+                CustomerName = "Trần Đức Thịnh",
+                CustomerPhone = "0912.889.922",
+                CustomerAddress = "Vinhomes Riverside, Long Biên, Hà Nội",
+                ExpectedDeliveryDate = DateTime.Today.AddDays(1),
+                FlagAccessory = true,
+                AccessoryNote = "Dán phim cách nhiệt Lumax USA cao cấp, Bọc sàn da 5D, Camera hành trình Vietmap SpeedMap M1, Phủ ceramic bề mặt sơn",
+                Status = PdiItemStatus.Passed,
+                Inspector = "KTV Minh",
+                InspectionDate = DateTime.Today.AddDays(-2).AddHours(2),
+                PassedDate = DateTime.Today.AddDays(-1).AddHours(16),
+                InspectionNotes = "Toàn bộ 25 hạng mục kiểm tra đạt tiêu chuẩn xuất xưởng Hyundai Toàn cầu. Đã hoàn thiện dán phim và rửa xe sạch sẽ. Xe sẵn sàng bàn giao.",
+                ROId = roPdi1.Id,
+                RONo = roPdi1.Code,
+                ChecklistItems = CreateDefaultChecklist()
+            };
+            pdi1.Items.Add(item1);
+            db.PdiRequests.Add(pdi1);
+            await db.SaveChangesAsync();
+
+            // 2. Phiếu PDI đang kiểm tra & hoàn thiện (Approved / InProgress) - Hyundai Creta 1.5 AT Premium
+            var pdi2 = new PdiRequest
+            {
+                PdiReqNo = "PDI260427-002",
+                DealerCode = "HYUNDAI-MAIN",
+                CreatedDate = DateTime.Today,
+                ApprovedDate = DateTime.Today.AddHours(-3),
+                Remark = "Kiểm tra kỹ thuật PDI xe mới bàn giao từ nhà máy Hyundai Thành Công Ninh Bình và lắp gói phụ kiện.",
+                FlagAccessory = true,
+                CreatedBy = "Showroom KD 2",
+                ApprovedBy = "Quản đốc xưởng",
+                Status = PdiRequestStatus.Approved
+            };
+
+            var roPdi2 = new RepairOrder
+            {
+                Code = "RO-PDI260427-002",
+                CarId = (await db.Cars.OrderByDescending(c => c.Id).FirstAsync()).Id,
+                CustomerId = (await db.Customers.OrderByDescending(c => c.Id).FirstAsync()).Id,
+                Status = ROStatus.InGarage,
+                Odometer = 8,
+                IntakeNote = "Kiểm tra kỹ thuật xuất xưởng PDI tiêu chuẩn Hyundai + Lắp phụ kiện theo HĐ HD-XE-2026/102",
+                Technician = "KTV Tuấn",
+                CreatedBy = "PDI Dispatch",
+                CreatedAt = DateTime.Today.AddHours(-3),
+                IntakeAt = DateTime.Today.AddHours(-3),
+                PdiReqNo = pdi2.PdiReqNo
+            };
+            roPdi2.Lines.Add(new RepairLine { Type = LineType.Labor, Name = "Kiểm tra kỹ thuật xuất xưởng PDI tiêu chuẩn Hyundai (25 điểm)", Quantity = 1, UnitPrice = 350000, ExpenseType = ExpenseType.Internal });
+            roPdi2.Lines.Add(new RepairLine { Type = LineType.Labor, Name = "Lắp đặt gói phụ kiện giao xe: Cảm biến áp suất lốp Steelmate & Dán film cách nhiệt Lumax", Quantity = 1, UnitPrice = 450000, ExpenseType = ExpenseType.Internal });
+            db.ROs.Add(roPdi2);
+            await db.SaveChangesAsync();
+
+            var chkCreta = CreateDefaultChecklist();
+            var chkFilm = chkCreta.FirstOrDefault(c => c.Code == "PDI.ACC.ITEMS");
+            if (chkFilm != null) { chkFilm.Status = AuditStatus.Attention; chkFilm.Note = "Đang dán phim cách nhiệt sườn xe, chờ sấy nhiệt hoàn tất"; }
+
+            var item2 = new PdiRequestItem
+            {
+                VIN = "RLHXXCR20240102",
+                Model = "Hyundai Creta 2024",
+                Spec = "1.5 AT Premium (Bản Cao cấp 2 tông màu)",
+                Color = "Đỏ mận - Mui Đen thể thao",
+                EngineNo = "SmartStream-G1.5-8841",
+                BatteryNo = "CMF-60AH-1123",
+                ContractNo = "HD-XE-2026/102",
+                CustomerName = "Lê Thanh Hằng",
+                CustomerPhone = "0983.551.229",
+                CustomerAddress = "Cầu Giấy, Hà Nội",
+                ExpectedDeliveryDate = DateTime.Today.AddDays(2),
+                FlagAccessory = true,
+                AccessoryNote = "Dán phim cách nhiệt Lumax, Cảm biến áp suất lốp Steelmate hiển thị màn hình zin, Thảm lót sàn cao su đúc nguyên khối",
+                Status = PdiItemStatus.InProgress,
+                Inspector = "KTV Tuấn",
+                InspectionDate = DateTime.Today.AddHours(-2),
+                InspectionNotes = "Đã kiểm tra động cơ, ắc quy, hệ thống chiếu sáng và lái đạt chuẩn. Đang lắp đặt phụ kiện trong khoang đồng sơn.",
+                ROId = roPdi2.Id,
+                RONo = roPdi2.Code,
+                ChecklistItems = chkCreta
+            };
+            pdi2.Items.Add(item2);
+            db.PdiRequests.Add(pdi2);
+            await db.SaveChangesAsync();
+
+            // 3. Phiếu PDI mới lập (Pending) - Hyundai Accent 2024 1.5 AT Đặc biệt
+            var pdi3 = new PdiRequest
+            {
+                PdiReqNo = "PDI260427-003",
+                DealerCode = "HYUNDAI-MAIN",
+                CreatedDate = DateTime.Today,
+                Remark = "Xe Accent thế hệ mới vừa hạ xe lồng về kho đại lý sáng nay, yêu cầu xưởng tiếp nhận kiểm tra PDI chuẩn bị giao xe tuần tới.",
+                FlagAccessory = false,
+                CreatedBy = "Showroom KD 1",
+                Status = PdiRequestStatus.Pending
+            };
+
+            var item3 = new PdiRequestItem
+            {
+                VIN = "RLHXXAC20240115",
+                Model = "Hyundai Accent 2024",
+                Spec = "1.5 AT Đặc biệt (All New Accent)",
+                Color = "Bạc ánh kim (Sleek Silver)",
+                EngineNo = "SmartStream-G1.5-9952",
+                BatteryNo = "CMF-55AH-7721",
+                ContractNo = "HD-XE-2026/115",
+                CustomerName = "Nguyễn Văn Toàn",
+                CustomerPhone = "0904.332.188",
+                CustomerAddress = "Hà Đông, Hà Nội",
+                ExpectedDeliveryDate = DateTime.Today.AddDays(4),
+                FlagAccessory = false,
+                Status = PdiItemStatus.Pending,
+                ChecklistItems = CreateDefaultChecklist()
+            };
+            pdi3.Items.Add(item3);
+            db.PdiRequests.Add(pdi3);
+            await db.SaveChangesAsync();
+        }
     }
+
+    private static List<PdiChecklistItem> CreateDefaultChecklist() =>
+    [
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.OIL", Name = "Mức dầu động cơ & độ kín khít nắp châm, que thăm dầu", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.COOLANT", Name = "Mức nước làm mát trong két nước tản nhiệt & bình nước phụ", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.BRAKE", Name = "Mức dầu phanh / dầu ly hợp trong bình chứa", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.WIPER", Name = "Mức nước rửa kính chắn gió & kiểm tra hoạt động vòi phun", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.BATTERY", Name = "Điện áp bình ắc quy (>= 12.6V) & siết chặt cọc bình (+/-)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.LEAK", Name = "Kiểm tra rò rỉ dung dịch đường ống nhiên liệu, ống gió", Status = AuditStatus.Good },
+
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.PAINT", Name = "Bề mặt sơn toàn thân xe (không trầy xước, không ố, đồng màu sơn)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.PANEL", Name = "Khe hở và độ khít các tấm ốp nắp ca-pô, 4 cánh cửa, nắp cốp sau", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.GLASS", Name = "Kính chắn gió, kính sườn và kính hậu (không rạn nứt, ố mốc)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.TIRE", Name = "Áp suất 4 lốp xe & lốp dự phòng theo tem thông số cột B", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.WHEEL", Name = "Độ siết bu-lông bánh xe theo tiêu chuẩn lực 120Nm, mâm xe hoàn hảo", Status = AuditStatus.Good },
+
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.HEAD", Name = "Cụm đèn pha, cốt, đèn ban ngày DRL và đèn sương mù trước", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.SIGNAL", Name = "Đèn báo rẽ (xi-nhan trước/sau/gương) và đèn cảnh báo Hazard", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.TAIL", Name = "Cụm đèn hậu, đèn phanh trên cao và đèn soi biển số", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.HORN", Name = "Còi xe, âm lượng tín hiệu báo động chống trộm", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.WIPER", Name = "Cần gạt mưa trước & sau hoạt động êm ái, gạt sạch nước", Status = AuditStatus.Good },
+
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.AC", Name = "Hệ thống điều hòa AC (độ làm lạnh sâu, cửa gió, sấy kính)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.SCREEN", Name = "Màn hình giải trí AVN cảm ứng, Apple CarPlay / Android Auto, Bluetooth", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.DASH", Name = "Cụm đồng hồ taplo điện tử (không báo đèn check lỗi động cơ/túi khí)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.WINDOW", Name = "Kính cửa sổ chỉnh điện 4 cánh, chức năng 1 chạm chống kẹt an toàn", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.MIRROR", Name = "Gương chiếu hậu chỉnh & gập điện, sấy gương, gương trong xe", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.SEAT", Name = "Chỉnh ghế (điện/cơ), dây đai an toàn 3 điểm mọi vị trí ngồi", Status = AuditStatus.Good },
+
+        new PdiChecklistItem { Group = "Phụ kiện lắp thêm & Bàn giao", Code = "PDI.ACC.ITEMS", Name = "Lắp đặt hoàn thiện gói phụ kiện cam kết (Dán film, Trải sàn, Camera...)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Phụ kiện lắp thêm & Bàn giao", Code = "PDI.ACC.TOOLS", Name = "Bộ dụng cụ theo xe (kích nâng xe, tay quay bánh xe, móc kéo, tam giác phản quang)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Phụ kiện lắp thêm & Bàn giao", Code = "PDI.ACC.KEYS", Name = "Bàn giao đủ 2 chìa khóa Smartkey, sổ bảo hành HTC, sách hướng dẫn sử dụng", Status = AuditStatus.Good }
+    ];
 
     private static async Task MigratePostgresAsync(AppDbContext db)
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -1876,6 +2075,8 @@ public static class Seeder
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CampaignMarketingId\" integer NULL",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"CampaignDiscountAmount\" numeric(18,2) NOT NULL DEFAULT 0",
             "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"BulletinId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"PdiRequestId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"PdiReqNo\" text NULL",
             "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"ReceptionSheetId\" integer NULL",
             "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"CustomerCareMaceId\" integer NULL",
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
@@ -2568,7 +2769,64 @@ public static class Seeder
                 FOREIGN KEY (""BulletinId"") REFERENCES ""Bulletins"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
             );",
-            @"CREATE INDEX IF NOT EXISTS ""IX_BulletinVins_OrgId_BulletinId_VinNo"" ON ""BulletinVins"" (""OrgId"", ""BulletinId"", ""VinNo"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_BulletinVins_OrgId_BulletinId_VinNo"" ON ""BulletinVins"" (""OrgId"", ""BulletinId"", ""VinNo"");",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""PdiRequestId"" INTEGER NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""PdiReqNo"" TEXT NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""PdiRequests"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PdiReqNo"" TEXT NOT NULL,
+                ""DealerCode"" TEXT NOT NULL,
+                ""CreatedDate"" TEXT NOT NULL,
+                ""ApprovedDate"" TEXT NULL,
+                ""Remark"" TEXT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""FlagAccessory"" INTEGER NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""ApprovedBy"" TEXT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""FinishedAt"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PdiRequests_OrgId_PdiReqNo"" ON ""PdiRequests"" (""OrgId"", ""PdiReqNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""PdiRequestItems"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PdiRequestId"" INTEGER NOT NULL,
+                ""VIN"" TEXT NOT NULL,
+                ""Model"" TEXT NOT NULL,
+                ""Spec"" TEXT NULL,
+                ""Color"" TEXT NULL,
+                ""EngineNo"" TEXT NULL,
+                ""BatteryNo"" TEXT NULL,
+                ""ExpectedDeliveryDate"" TEXT NOT NULL,
+                ""ContractNo"" TEXT NOT NULL,
+                ""CustomerName"" TEXT NOT NULL,
+                ""CustomerPhone"" TEXT NULL,
+                ""CustomerAddress"" TEXT NULL,
+                ""FlagAccessory"" INTEGER NOT NULL,
+                ""AccessoryNote"" TEXT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""Inspector"" TEXT NULL,
+                ""InspectionDate"" TEXT NULL,
+                ""PassedDate"" TEXT NULL,
+                ""InspectionNotes"" TEXT NULL,
+                ""ROId"" INTEGER NULL,
+                ""RONo"" TEXT NULL,
+                FOREIGN KEY (""PdiRequestId"") REFERENCES ""PdiRequests"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE INDEX IF NOT EXISTS ""IX_PdiRequestItems_OrgId_PdiRequestId_VIN"" ON ""PdiRequestItems"" (""OrgId"", ""PdiRequestId"", ""VIN"");",
+            @"CREATE TABLE IF NOT EXISTS ""PdiChecklistItems"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PdiRequestItemId"" INTEGER NOT NULL,
+                ""Group"" TEXT NOT NULL,
+                ""Code"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""PdiRequestItemId"") REFERENCES ""PdiRequestItems"" (""Id"") ON DELETE CASCADE
+            );"
         };
 
         foreach (var sql in sqls)

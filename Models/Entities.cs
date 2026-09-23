@@ -288,6 +288,25 @@ public enum BulletinVinStatus
     Completed = 1  // F — Đã thực hiện xong theo Lệnh RO
 }
 
+/// <summary>Trạng thái Phiếu yêu cầu kiểm tra xuất xưởng xe PDI — theo Dlr_PDIRequest idn.CarService.</summary>
+public enum PdiRequestStatus
+{
+    Draft = 0,     // DRAFT     — Dự thảo / Lập yêu cầu
+    Pending = 1,   // PENDING   — Chờ xưởng dịch vụ tiếp nhận
+    Approved = 2,  // APPROVED  — Xưởng tiếp nhận & đang tiến hành kiểm tra
+    Completed = 3, // COMPLETED — Đã nghiệm thu hoàn tất / Sẵn sàng giao xe (Ready for Delivery)
+    Cancelled = 4  // CANCELLED — Đã hủy yêu cầu PDI
+}
+
+/// <summary>Trạng thái kiểm tra kỹ thuật từng xe trong phiếu PDI — theo Dlr_PDIRequestDtl idn.CarService.</summary>
+public enum PdiItemStatus
+{
+    Pending = 0,    // Chờ kiểm tra
+    InProgress = 1, // Đang kiểm tra & lắp đặt phụ kiện
+    Passed = 2,     // Đạt chuẩn PDI (Sẵn sàng bàn giao xe)
+    Failed = 3      // Không đạt / Cần khắc phục kỹ thuật
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -342,6 +361,9 @@ public class RepairOrder : IOrgOwned
     public decimal CampaignDiscountAmount { get; set; } = 0;
     public int? BulletinId { get; set; }
     public Bulletin? Bulletin { get; set; }
+    public int? PdiRequestId { get; set; }
+    public string? PdiReqNo { get; set; }
+    public PdiRequest? PdiRequest { get; set; }
     public List<RepairLine> Lines { get; set; } = [];
     public List<WarrantyReport> WarrantyReports { get; set; } = [];
     public List<StockOut> StockOuts { get; set; } = [];
@@ -353,6 +375,7 @@ public class RepairOrder : IOrgOwned
     public List<AssignmentWork> AssignmentWorks { get; set; } = [];
     public List<InsuranceClaim> InsuranceClaims { get; set; } = [];
     public List<CustomerCareMace> CustomerCareMaces { get; set; } = [];
+    public List<PdiRequestItem> PdiRequestItems { get; set; } = [];
 
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
@@ -1329,6 +1352,85 @@ public class BulletinVin : IOrgOwned
 
     public Bulletin Bulletin { get; set; } = null!;
     public RepairOrder? RO { get; set; }
+}
+
+/// <summary>Yêu cầu kiểm tra & nghiệm thu xe mới xuất xưởng PDI (Pre-Delivery Inspection) — Dlr_PDIRequest trong idn.CarService.</summary>
+public class PdiRequest : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PdiReqNo { get; set; } = "";             // Số phiếu PDI (VD: PDI260427-001)
+    public string DealerCode { get; set; } = "HYUNDAI-MAIN";// Mã đại lý
+    public DateTime CreatedDate { get; set; } = DateTime.Today; // Ngày lập yêu cầu
+    public DateTime? ApprovedDate { get; set; }            // Ngày xưởng tiếp nhận
+    public string? Remark { get; set; }                    // Diễn giải / Nội dung yêu cầu từ Sales
+    public PdiRequestStatus Status { get; set; } = PdiRequestStatus.Pending; // Trạng thái phiếu PDI
+    public bool FlagAccessory { get; set; } = false;       // Yêu cầu lắp thêm phụ kiện bàn giao
+    public string CreatedBy { get; set; } = "Phòng Bán hàng (DMS Sales)"; // Bộ phận / Người tạo yêu cầu
+    public string? ApprovedBy { get; set; }                // Cố vấn / Quản đốc xưởng tiếp nhận
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? FinishedAt { get; set; }              // Thời điểm hoàn tất nghiệm thu toàn bộ xe
+
+    public List<PdiRequestItem> Items { get; set; } = [];
+    public List<RepairOrder> RepairOrders { get; set; } = [];
+
+    public int VinTotal => Items.Count;
+    public int VinFTotal => Items.Count(i => i.Status == PdiItemStatus.Passed);
+    public int VinPendingTotal => Items.Count(i => i.Status == PdiItemStatus.Pending || i.Status == PdiItemStatus.InProgress);
+    public decimal CompletionRate => VinTotal == 0 ? 0 : Math.Round((decimal)VinFTotal * 100 / VinTotal, 1);
+    public bool IsAllPassed => VinTotal > 0 && VinFTotal == VinTotal;
+}
+
+/// <summary>Chi tiết xe trong phiếu yêu cầu PDI — Dlr_PDIRequestDtl trong idn.CarService.</summary>
+public class PdiRequestItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int PdiRequestId { get; set; }
+    public string VIN { get; set; } = "";                  // Số khung xe (17 ký tự, ví dụ: RLHXX...)
+    public string Model { get; set; } = "";                // Dòng xe (Santa Fe, Tucson, Creta, Accent...)
+    public string? Spec { get; set; }                      // Phiên bản xe (1.5 Cao cấp, 2.0 Turbo, Tiêu chuẩn...)
+    public string? Color { get; set; }                     // Màu sơn ngoại thất (Trắng ngọc trai, Đen, Đỏ, Bạc...)
+    public string? EngineNo { get; set; }                  // Số máy
+    public string? BatteryNo { get; set; }                 // Số sê-ri ắc quy
+    public DateTime ExpectedDeliveryDate { get; set; } = DateTime.Today.AddDays(2); // Ngày dự kiến giao xe cho khách hàng
+    public string ContractNo { get; set; } = "";           // Số hợp đồng mua bán xe
+    public string CustomerName { get; set; } = "";         // Tên khách hàng mua xe
+    public string? CustomerPhone { get; set; }             // Số điện thoại khách hàng
+    public string? CustomerAddress { get; set; }           // Địa chỉ khách hàng
+    public bool FlagAccessory { get; set; } = false;       // Lắp thêm gói phụ kiện giao xe
+    public string? AccessoryNote { get; set; }             // Danh mục phụ kiện (Dán film cách nhiệt, Trải sàn da 5D, Camera hành trình, Phủ ceramic...)
+    public PdiItemStatus Status { get; set; } = PdiItemStatus.Pending; // Trạng thái kiểm tra
+    public string? Inspector { get; set; }                 // Kỹ thuật viên phụ trách PDI
+    public DateTime? InspectionDate { get; set; }          // Thời điểm tiến hành kiểm tra
+    public DateTime? PassedDate { get; set; }              // Thời điểm nghiệm thu ĐẠT chuẩn giao xe
+    public string? InspectionNotes { get; set; }           // Ghi chú chi tiết của KTV kiểm tra
+    public int? ROId { get; set; }                         // Lệnh kiểm tra / sửa chữa hoàn thiện RO tạo ra cho xe này
+    public string? RONo { get; set; }                      // Số lệnh RO
+
+    public PdiRequest PdiRequest { get; set; } = null!;
+    public RepairOrder? RO { get; set; }
+    public List<PdiChecklistItem> ChecklistItems { get; set; } = [];
+
+    public int TotalChecklistCount => ChecklistItems.Count;
+    public int PassedChecklistCount => ChecklistItems.Count(c => c.Status == AuditStatus.Good);
+    public int IssueChecklistCount => ChecklistItems.Count(c => c.Status == AuditStatus.Attention || c.Status == AuditStatus.Replace);
+    public bool IsReadyForDelivery => Status == PdiItemStatus.Passed;
+}
+
+/// <summary>Hạng mục checklist kiểm tra kỹ thuật PDI — chuẩn 25 điểm kiểm tra xuất xưởng xe Hyundai.</summary>
+public class PdiChecklistItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int PdiRequestItemId { get; set; }
+    public string Group { get; set; } = "";                // Nhóm kiểm tra (Khoang động cơ, Ngoại thất & Thân vỏ, Hệ thống điện & Đèn, Nội thất & Tiện nghi, Bàn giao & Phụ kiện)
+    public string Code { get; set; } = "";                 // Mã hạng mục (PDI.DCO.DAU, PDI.VO.SON, PDI.DEN.PHA...)
+    public string Name { get; set; } = "";                 // Tên tiêu chí kiểm tra
+    public AuditStatus Status { get; set; } = AuditStatus.Good; // Kết quả kiểm tra (Tốt/Đạt, Cần chú ý, Cần khắc phục/thay, K/A)
+    public string? Note { get; set; }                      // Nhận xét chi tiết của kỹ thuật viên
+
+    public PdiRequestItem PdiRequestItem { get; set; } = null!;
 }
 
 

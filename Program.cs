@@ -2639,6 +2639,253 @@ app.MapDelete("/api/bulletins/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Kiểm tra & Nghiệm thu xuất xưởng xe PDI (Dlr_PDIRequest & Dlr_PDIRequestDtl)
+app.MapGet("/api/pdi-requests", async (PdiRequestStatus? status, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.PdiRequestsAsync(status, q, fromDate, toDate);
+    return Results.Ok(list.Select(p => new
+    {
+        p.Id,
+        p.PdiReqNo,
+        p.DealerCode,
+        p.CreatedDate,
+        p.ApprovedDate,
+        p.Remark,
+        p.FlagAccessory,
+        p.CreatedBy,
+        p.ApprovedBy,
+        status = Ui.PdiRequestStatus(p.Status).text,
+        statusCode = Ui.PdiRequestStatus(p.Status).code,
+        statusValue = (int)p.Status,
+        p.VinTotal,
+        p.VinFTotal,
+        p.VinPendingTotal,
+        p.CompletionRate,
+        p.IsAllPassed,
+        p.CreatedAt,
+        p.FinishedAt,
+        items = p.Items.Select(i => new
+        {
+            i.Id,
+            i.VIN,
+            i.Model,
+            i.Spec,
+            i.Color,
+            i.ContractNo,
+            i.CustomerName,
+            i.CustomerPhone,
+            i.ExpectedDeliveryDate,
+            i.FlagAccessory,
+            i.AccessoryNote,
+            status = Ui.PdiItemStatus(i.Status).text,
+            statusCode = Ui.PdiItemStatus(i.Status).code,
+            statusValue = (int)i.Status,
+            i.Inspector,
+            i.InspectionDate,
+            i.PassedDate,
+            i.ROId,
+            i.RONo,
+            roStatus = i.RO != null ? Ui.Status(i.RO.Status).text : null,
+            i.TotalChecklistCount,
+            i.PassedChecklistCount,
+            i.IssueChecklistCount,
+            i.IsReadyForDelivery
+        })
+    }));
+});
+
+app.MapGet("/api/pdi-requests/{id:int}", async (int id, IRoService svc) =>
+{
+    var p = await svc.GetPdiRequestAsync(id);
+    if (p == null) return Results.NotFound(new { error = "Không tìm thấy phiếu yêu cầu PDI." });
+    return Results.Ok(new
+    {
+        p.Id,
+        p.PdiReqNo,
+        p.DealerCode,
+        p.CreatedDate,
+        p.ApprovedDate,
+        p.Remark,
+        p.FlagAccessory,
+        p.CreatedBy,
+        p.ApprovedBy,
+        status = Ui.PdiRequestStatus(p.Status).text,
+        statusCode = Ui.PdiRequestStatus(p.Status).code,
+        statusValue = (int)p.Status,
+        p.VinTotal,
+        p.VinFTotal,
+        p.VinPendingTotal,
+        p.CompletionRate,
+        p.IsAllPassed,
+        p.CreatedAt,
+        p.FinishedAt,
+        items = p.Items.Select(i => new
+        {
+            i.Id,
+            i.VIN,
+            i.Model,
+            i.Spec,
+            i.Color,
+            i.EngineNo,
+            i.BatteryNo,
+            i.ContractNo,
+            i.CustomerName,
+            i.CustomerPhone,
+            i.CustomerAddress,
+            i.ExpectedDeliveryDate,
+            i.FlagAccessory,
+            i.AccessoryNote,
+            status = Ui.PdiItemStatus(i.Status).text,
+            statusCode = Ui.PdiItemStatus(i.Status).code,
+            statusValue = (int)i.Status,
+            i.Inspector,
+            i.InspectionDate,
+            i.PassedDate,
+            i.InspectionNotes,
+            i.ROId,
+            i.RONo,
+            ro = i.RO != null ? new { i.RO.Id, i.RO.Code, status = Ui.Status(i.RO.Status).text, i.RO.Technician } : null,
+            i.TotalChecklistCount,
+            i.PassedChecklistCount,
+            i.IssueChecklistCount,
+            i.IsReadyForDelivery,
+            checklist = i.ChecklistItems.Select(c => new
+            {
+                c.Id,
+                c.Group,
+                c.Code,
+                c.Name,
+                status = Ui.AuditStatus(c.Status).text,
+                statusCss = Ui.AuditStatus(c.Status).css,
+                statusValue = (int)c.Status,
+                c.Note
+            })
+        })
+    });
+});
+
+app.MapGet("/api/pdi-requests/items/{itemId:int}", async (int itemId, IRoService svc) =>
+{
+    var i = await svc.GetPdiRequestItemAsync(itemId);
+    if (i == null) return Results.NotFound(new { error = "Không tìm thấy xe PDI." });
+    return Results.Ok(new
+    {
+        i.Id,
+        pdiRequestId = i.PdiRequestId,
+        pdiReqNo = i.PdiRequest?.PdiReqNo,
+        i.VIN,
+        i.Model,
+        i.Spec,
+        i.Color,
+        i.EngineNo,
+        i.BatteryNo,
+        i.ContractNo,
+        i.CustomerName,
+        i.CustomerPhone,
+        i.CustomerAddress,
+        i.ExpectedDeliveryDate,
+        i.FlagAccessory,
+        i.AccessoryNote,
+        status = Ui.PdiItemStatus(i.Status).text,
+        statusCode = Ui.PdiItemStatus(i.Status).code,
+        statusValue = (int)i.Status,
+        i.Inspector,
+        i.InspectionDate,
+        i.PassedDate,
+        i.InspectionNotes,
+        i.ROId,
+        i.RONo,
+        i.TotalChecklistCount,
+        i.PassedChecklistCount,
+        i.IssueChecklistCount,
+        i.IsReadyForDelivery,
+        checklist = i.ChecklistItems.Select(c => new
+        {
+            c.Id,
+            c.Group,
+            c.Code,
+            c.Name,
+            status = Ui.AuditStatus(c.Status).text,
+            statusCss = Ui.AuditStatus(c.Status).css,
+            statusValue = (int)c.Status,
+            c.Note
+        })
+    });
+});
+
+app.MapPost("/api/pdi-requests", async (CreatePdiRequestDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.Items == null || dto.Items.Count == 0)
+            return Results.BadRequest(new { error = "Vui lòng nhập danh sách xe cần kiểm tra PDI." });
+
+        var req = new PdiRequest
+        {
+            PdiReqNo = dto.PdiReqNo?.Trim() ?? "",
+            DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? "HYUNDAI-MAIN" : dto.DealerCode.Trim(),
+            CreatedDate = dto.CreatedDate ?? DateTime.Today,
+            Remark = dto.Remark?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api",
+            FlagAccessory = dto.FlagAccessory ?? false,
+            Status = PdiRequestStatus.Pending
+        };
+
+        var items = dto.Items.Select(x => new PdiRequestItem
+        {
+            VIN = x.VIN.Trim().ToUpperInvariant(),
+            Model = string.IsNullOrWhiteSpace(x.Model) ? "Hyundai" : x.Model.Trim(),
+            Spec = x.Spec?.Trim(),
+            Color = x.Color?.Trim(),
+            ContractNo = x.ContractNo?.Trim() ?? "",
+            CustomerName = x.CustomerName?.Trim() ?? "",
+            CustomerPhone = x.CustomerPhone?.Trim(),
+            CustomerAddress = x.CustomerAddress?.Trim(),
+            ExpectedDeliveryDate = x.ExpectedDeliveryDate ?? DateTime.Today.AddDays(2),
+            FlagAccessory = x.FlagAccessory ?? req.FlagAccessory,
+            AccessoryNote = x.AccessoryNote?.Trim()
+        }).ToList();
+
+        var id = await svc.CreatePdiRequestAsync(req, items);
+        return Results.Ok(new { pdiRequestId = id, pdiReqNo = req.PdiReqNo, message = $"Đã tạo phiếu yêu cầu PDI thành công ({items.Count} xe)." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/pdi-requests/{id:int}/transition", async (int id, TransitionPdiDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.TransitionPdiRequestStatusAsync(id, dto.ToStatus, dto.ApprovedBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/pdi-requests/items/{itemId:int}/create-ro", async (int itemId, CreatePdiRoDto? dto, IRoService svc) =>
+{
+    var (ok, msg, roId) = await svc.CreateROFromPdiItemAsync(itemId, dto?.Technician);
+    return ok ? Results.Ok(new { message = msg, roId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/pdi-requests/items/{itemId:int}/checklist", async (int itemId, UpdatePdiChecklistDto dto, IRoService svc) =>
+{
+    var updates = dto.Items?.Select(i => (i.CheckId, i.Status, i.Note)).ToList() ?? [];
+    var (ok, msg) = await svc.UpdatePdiItemChecklistAsync(itemId, updates, dto.Inspector, dto.Notes);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/pdi-requests/items/{itemId:int}/pass", async (int itemId, PassPdiDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.PassPdiItemAsync(itemId, dto?.Inspector);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/pdi-requests/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeletePdiRequestAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -2720,3 +2967,10 @@ record AddVinsDto(List<string> VinList, string? Model, string? DealerCode);
 record UpdateBulletinVinStatusDto(BulletinVinStatus Status, string? DoneBy, int? ROId, string? RONo);
 record ApplyBulletinToRoDto(int RoId);
 record TransitionBulletinDto(BulletinStatus ToStatus);
+record CreatePdiRequestDto(string? PdiReqNo, string? DealerCode, DateTime? CreatedDate, string? Remark, string? CreatedBy, bool? FlagAccessory, List<CreatePdiItemDto> Items);
+record CreatePdiItemDto(string VIN, string Model, string? Spec, string? Color, string? ContractNo, string? CustomerName, string? CustomerPhone, string? CustomerAddress, DateTime? ExpectedDeliveryDate, bool? FlagAccessory, string? AccessoryNote);
+record TransitionPdiDto(PdiRequestStatus ToStatus, string? ApprovedBy);
+record CreatePdiRoDto(string? Technician);
+record UpdatePdiChecklistDto(string? Inspector, string? Notes, List<UpdatePdiChecklineDto>? Items);
+record UpdatePdiChecklineDto(int CheckId, AuditStatus Status, string? Note);
+record PassPdiDto(string? Inspector);

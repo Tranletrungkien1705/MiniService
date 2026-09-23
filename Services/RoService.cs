@@ -22,7 +22,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingCareMaces, int OverdueCareMaces, int BookedCareMaces,
     List<(ROStatus Status, int Count)> ByStatus,
     int PendingStockAdjs = 0, int DiscrepancyStockAdjs = 0,
-    int ActiveBulletins = 0, int PendingBulletinVins = 0);
+    int ActiveBulletins = 0, int PendingBulletinVins = 0,
+    int PendingPdiRequests = 0, int CompletedPdiVehicles = 0);
 
 public interface IRoService
 {
@@ -207,12 +208,32 @@ public interface IRoService
     Task<(bool ok, string msg)> UpdateBulletinVinStatusAsync(int vinId, BulletinVinStatus status, string? doneBy = null, int? roId = null, string? roNo = null);
     Task<(bool ok, string msg, int itemsAdded)> ApplyBulletinToROAsync(int bulletinId, int roId);
     Task<(bool ok, string msg)> AddVinsToBulletinAsync(int bulletinId, List<string> vinList, string? model = null, string? dealerCode = null);
+    // Pre-Delivery Inspection (PDI - Dlr_PDIRequest & Dlr_PDIRequestDtl)
+    Task<List<PdiRequest>> PdiRequestsAsync(PdiRequestStatus? status, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<PdiRequest?> GetPdiRequestAsync(int id);
+    Task<PdiRequestItem?> GetPdiRequestItemAsync(int itemId);
+    Task<int> CreatePdiRequestAsync(PdiRequest req, List<PdiRequestItem> items);
+    Task<(bool ok, string msg)> TransitionPdiRequestStatusAsync(int id, PdiRequestStatus to, string? approvedBy = null);
+    Task<(bool ok, string msg, int? roId)> CreateROFromPdiItemAsync(int itemId, string? technician = null);
+    Task<(bool ok, string msg)> UpdatePdiItemChecklistAsync(int itemId, List<(int checkId, AuditStatus status, string? note)> updates, string? inspector, string? notes);
+    Task<(bool ok, string msg)> PassPdiItemAsync(int itemId, string? inspector = null);
+    Task<(bool ok, string msg)> DeletePdiRequestAsync(int id);
+    List<PdiChecklistItem> GetDefaultPdiChecklist();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
 
 public class RoService(AppDbContext db) : IRoService
 {
+    /// <summary>Chuyển trạng thái Yêu cầu PDI theo Dlr_PDIRequest idn.CarService.</summary>
+    public static PdiRequestStatus[] AllowedNextPdiRequest(PdiRequestStatus s) => s switch
+    {
+        PdiRequestStatus.Draft => [PdiRequestStatus.Pending, PdiRequestStatus.Cancelled],
+        PdiRequestStatus.Pending => [PdiRequestStatus.Approved, PdiRequestStatus.Cancelled],
+        PdiRequestStatus.Approved => [PdiRequestStatus.Completed, PdiRequestStatus.Cancelled],
+        _ => []
+    };
+
     /// <summary>Chuyển trạng thái Kiểm kê kho theo Ser_Inv_StockAdj idn.CarService.</summary>
     public static StockAdjStatus[] AllowedNextStockAdj(StockAdjStatus s) => s switch
     {
@@ -636,6 +657,9 @@ public class RoService(AppDbContext db) : IRoService
         var activeBulletins = await db.Bulletins.CountAsync(b => b.IsActive && b.Status == BulletinStatus.Active);
         var pendingBulletinVins = await db.BulletinVins.CountAsync(v => v.Status == BulletinVinStatus.Pending && v.Bulletin.IsActive);
 
+        var pendingPdiRequests = await db.PdiRequests.CountAsync(p => p.Status == PdiRequestStatus.Pending || p.Status == PdiRequestStatus.Approved);
+        var completedPdiVehicles = await db.PdiRequestItems.CountAsync(i => i.Status == PdiItemStatus.Passed);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -680,7 +704,9 @@ public class RoService(AppDbContext db) : IRoService
             pendingStockAdjs,
             discrepancyStockAdjs,
             activeBulletins,
-            pendingBulletinVins);
+            pendingBulletinVins,
+            pendingPdiRequests,
+            completedPdiVehicles);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -4101,4 +4127,355 @@ public class RoService(AppDbContext db) : IRoService
         await db.SaveChangesAsync();
         return (true, $"Đã bổ sung {count} số khung VIN vào bản tin kỹ thuật {b.BulletinNo}.");
     }
+
+    // --- Pre-Delivery Inspection (PDI - Dlr_PDIRequest & Dlr_PDIRequestDtl) ---
+    public async Task<List<PdiRequest>> PdiRequestsAsync(PdiRequestStatus? status, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.PdiRequests
+            .Include(p => p.Items).ThenInclude(i => i.ChecklistItems)
+            .Include(p => p.Items).ThenInclude(i => i.RO)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(p => p.Status == status.Value);
+        if (fromDate.HasValue) query = query.Where(p => p.CreatedDate >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(p => p.CreatedDate <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(p => p.PdiReqNo.ToLower().Contains(term)
+                || (p.Remark != null && p.Remark.ToLower().Contains(term))
+                || p.Items.Any(i => i.VIN.ToLower().Contains(term)
+                    || i.Model.ToLower().Contains(term)
+                    || i.ContractNo.ToLower().Contains(term)
+                    || i.CustomerName.ToLower().Contains(term)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(p => p.CreatedDate).ThenByDescending(p => p.Id).ToList();
+    }
+
+    public Task<PdiRequest?> GetPdiRequestAsync(int id) =>
+        db.PdiRequests
+            .Include(p => p.Items).ThenInclude(i => i.ChecklistItems)
+            .Include(p => p.Items).ThenInclude(i => i.RO).ThenInclude(r => r!.Lines)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+    public Task<PdiRequestItem?> GetPdiRequestItemAsync(int itemId) =>
+        db.PdiRequestItems
+            .Include(i => i.PdiRequest)
+            .Include(i => i.ChecklistItems)
+            .Include(i => i.RO).ThenInclude(r => r!.Lines)
+            .FirstOrDefaultAsync(i => i.Id == itemId);
+
+    public async Task<int> CreatePdiRequestAsync(PdiRequest req, List<PdiRequestItem> items)
+    {
+        if (items == null || items.Count == 0)
+            throw new InvalidOperationException("Phiếu yêu cầu PDI cần ít nhất một xe để kiểm tra xuất xưởng.");
+
+        if (string.IsNullOrWhiteSpace(req.PdiReqNo))
+        {
+            var count = await db.PdiRequests.CountAsync() + 1;
+            req.PdiReqNo = $"PDI{DateTime.Today:yyMMdd}-{count:D3}";
+        }
+
+        req.CreatedAt = DateTime.Now;
+        req.CreatedDate = req.CreatedDate != default ? req.CreatedDate : DateTime.Today;
+
+        foreach (var item in items)
+        {
+            item.VIN = item.VIN.Trim().ToUpperInvariant();
+            item.Status = PdiItemStatus.Pending;
+            if (item.ChecklistItems == null || item.ChecklistItems.Count == 0)
+            {
+                item.ChecklistItems = GetDefaultPdiChecklist();
+            }
+        }
+        req.Items = items;
+
+        db.PdiRequests.Add(req);
+        await db.SaveChangesAsync();
+        return req.Id;
+    }
+
+    public async Task<(bool ok, string msg)> TransitionPdiRequestStatusAsync(int id, PdiRequestStatus to, string? approvedBy = null)
+    {
+        var req = await db.PdiRequests.Include(p => p.Items).FirstOrDefaultAsync(p => p.Id == id);
+        if (req == null) return (false, "Không tìm thấy phiếu yêu cầu PDI.");
+
+        var allowed = AllowedNextPdiRequest(req.Status);
+        if (!allowed.Contains(to))
+            return (false, $"Không thể chuyển từ '{Ui.PdiRequestStatus(req.Status).text}' sang '{Ui.PdiRequestStatus(to).text}'.");
+
+        req.Status = to;
+        if (to == PdiRequestStatus.Approved)
+        {
+            req.ApprovedDate = DateTime.Now;
+            req.ApprovedBy = !string.IsNullOrWhiteSpace(approvedBy) ? approvedBy.Trim() : "Quản đốc xưởng";
+            foreach (var item in req.Items.Where(i => i.Status == PdiItemStatus.Pending))
+            {
+                item.Status = PdiItemStatus.InProgress;
+            }
+        }
+        else if (to == PdiRequestStatus.Completed)
+        {
+            req.FinishedAt = DateTime.Now;
+            foreach (var item in req.Items)
+            {
+                item.Status = PdiItemStatus.Passed;
+                item.PassedDate ??= DateTime.Now;
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã chuyển trạng thái yêu cầu PDI sang '{Ui.PdiRequestStatus(to).text}'.");
+    }
+
+    public async Task<(bool ok, string msg, int? roId)> CreateROFromPdiItemAsync(int itemId, string? technician = null)
+    {
+        var item = await db.PdiRequestItems
+            .Include(i => i.PdiRequest)
+            .Include(i => i.RO)
+            .FirstOrDefaultAsync(i => i.Id == itemId);
+
+        if (item == null) return (false, "Không tìm thấy thông tin xe trong phiếu PDI.", null);
+        if (item.ROId.HasValue && item.RO != null)
+            return (false, $"Xe đã có Lệnh sửa chữa/kiểm tra PDI số {item.RO.Code}.", item.ROId);
+
+        // Quy trình đồng bộ xe SerCustomerCarSync_FromPDIDL trong 2023.H.CarServices
+        var cleanVin = item.VIN.Trim().ToUpperInvariant();
+        var car = await db.Cars.Include(c => c.Customer).FirstOrDefaultAsync(c => c.Vin != null && c.Vin.ToUpper() == cleanVin);
+
+        if (car == null)
+        {
+            Customer? customer = null;
+            if (!string.IsNullOrWhiteSpace(item.CustomerPhone))
+            {
+                customer = await db.Customers.FirstOrDefaultAsync(c => c.Phone == item.CustomerPhone.Trim());
+            }
+            if (customer == null && !string.IsNullOrWhiteSpace(item.CustomerName))
+            {
+                customer = await db.Customers.FirstOrDefaultAsync(c => c.Name.ToLower() == item.CustomerName.Trim().ToLower());
+            }
+
+            if (customer == null)
+            {
+                var custCount = await db.Customers.CountAsync() + 1;
+                customer = new Customer
+                {
+                    Code = $"KH-PDI-{custCount:D4}",
+                    Name = string.IsNullOrWhiteSpace(item.CustomerName) ? $"Khách hàng {item.Model}" : item.CustomerName.Trim(),
+                    Phone = item.CustomerPhone?.Trim(),
+                    Email = null
+                };
+                db.Customers.Add(customer);
+                await db.SaveChangesAsync();
+            }
+
+            var platePlaceholder = $"MOI-{cleanVin[^6..]}";
+            car = new Car
+            {
+                Plate = platePlaceholder,
+                Vin = cleanVin,
+                Model = item.Model.Trim(),
+                Year = DateTime.Today.Year,
+                CustomerId = customer.Id
+            };
+            db.Cars.Add(car);
+            await db.SaveChangesAsync();
+        }
+
+        var roCount = await db.ROs.CountAsync() + 1;
+        var roCode = $"RO-PDI{DateTime.Today:yyMMdd}-{roCount:D3}";
+
+        var techName = !string.IsNullOrWhiteSpace(technician) ? technician.Trim()
+            : (!string.IsNullOrWhiteSpace(item.Inspector) ? item.Inspector.Trim() : "KTV PDI");
+
+        var ro = new RepairOrder
+        {
+            Code = roCode,
+            CarId = car.Id,
+            CustomerId = car.CustomerId,
+            Status = ROStatus.InGarage,
+            Odometer = 10,
+            IntakeNote = $"Kiểm tra kỹ thuật xuất xưởng PDI tiêu chuẩn Hyundai + Lắp phụ kiện theo HĐ {item.ContractNo}",
+            Technician = techName,
+            CreatedBy = "PDI Dispatch",
+            CreatedAt = DateTime.Now,
+            IntakeAt = DateTime.Now,
+            PdiRequestId = item.PdiRequestId,
+            PdiReqNo = item.PdiRequest.PdiReqNo
+        };
+
+        ro.Lines.Add(new RepairLine
+        {
+            Type = LineType.Labor,
+            Name = "Kiểm tra kỹ thuật xuất xưởng PDI tiêu chuẩn Hyundai (25 điểm)",
+            Quantity = 1,
+            UnitPrice = 350000,
+            ExpenseType = ExpenseType.Internal
+        });
+
+        ro.Lines.Add(new RepairLine
+        {
+            Type = LineType.Labor,
+            Name = "Vệ sinh làm sạch & Rửa xe hoàn thiện giao xe mới",
+            Quantity = 1,
+            UnitPrice = 150000,
+            ExpenseType = ExpenseType.Internal
+        });
+
+        if (item.FlagAccessory)
+        {
+            ro.Lines.Add(new RepairLine
+            {
+                Type = LineType.Labor,
+                Name = $"Lắp đặt gói phụ kiện giao xe: {item.AccessoryNote ?? "Dán film & Thảm lót sàn"}",
+                Quantity = 1,
+                UnitPrice = 450000,
+                ExpenseType = ExpenseType.Internal
+            });
+        }
+
+        db.ROs.Add(ro);
+        await db.SaveChangesAsync();
+
+        item.ROId = ro.Id;
+        item.RONo = ro.Code;
+        item.Status = PdiItemStatus.InProgress;
+        item.Inspector = techName;
+        item.InspectionDate ??= DateTime.Now;
+
+        if (item.PdiRequest.Status == PdiRequestStatus.Pending)
+        {
+            item.PdiRequest.Status = PdiRequestStatus.Approved;
+            item.PdiRequest.ApprovedDate ??= DateTime.Now;
+            item.PdiRequest.ApprovedBy ??= techName;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo Lệnh kiểm tra PDI {ro.Code} cho xe VIN {item.VIN}.", ro.Id);
+    }
+
+    public async Task<(bool ok, string msg)> UpdatePdiItemChecklistAsync(int itemId, List<(int checkId, AuditStatus status, string? note)> updates, string? inspector, string? notes)
+    {
+        var item = await db.PdiRequestItems
+            .Include(i => i.ChecklistItems)
+            .Include(i => i.PdiRequest)
+            .FirstOrDefaultAsync(i => i.Id == itemId);
+
+        if (item == null) return (false, "Không tìm thấy thông tin xe trong phiếu PDI.");
+
+        if (!string.IsNullOrWhiteSpace(inspector)) item.Inspector = inspector.Trim();
+        if (notes != null) item.InspectionNotes = notes.Trim();
+        item.InspectionDate ??= DateTime.Now;
+
+        foreach (var (checkId, status, note) in updates)
+        {
+            var check = item.ChecklistItems.FirstOrDefault(c => c.Id == checkId);
+            if (check != null)
+            {
+                check.Status = status;
+                if (note != null) check.Note = note.Trim();
+            }
+        }
+
+        if (item.Status == PdiItemStatus.Pending)
+        {
+            item.Status = PdiItemStatus.InProgress;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, "Đã lưu cập nhật kết quả checklist kiểm tra PDI.");
+    }
+
+    public async Task<(bool ok, string msg)> PassPdiItemAsync(int itemId, string? inspector = null)
+    {
+        var item = await db.PdiRequestItems
+            .Include(i => i.ChecklistItems)
+            .Include(i => i.PdiRequest).ThenInclude(p => p.Items)
+            .Include(i => i.RO)
+            .FirstOrDefaultAsync(i => i.Id == itemId);
+
+        if (item == null) return (false, "Không tìm thấy thông tin xe trong phiếu PDI.");
+
+        var issueCount = item.ChecklistItems.Count(c => c.Status == AuditStatus.Replace);
+        if (issueCount > 0)
+        {
+            return (false, $"Còn {issueCount} hạng mục checklist chưa đạt (Cần sửa/thay). Vui lòng khắc phục trước khi nghiệm thu xuất xưởng.");
+        }
+
+        item.Status = PdiItemStatus.Passed;
+        item.PassedDate = DateTime.Now;
+        if (!string.IsNullOrWhiteSpace(inspector)) item.Inspector = inspector.Trim();
+
+        if (item.RO != null && item.RO.Status != ROStatus.Finished)
+        {
+            item.RO.Status = ROStatus.Finished;
+            item.RO.FinishedAt = DateTime.Now;
+        }
+
+        var allPassed = item.PdiRequest.Items.All(i => i.Id == item.Id ? true : (i.Status == PdiItemStatus.Passed));
+        if (allPassed)
+        {
+            item.PdiRequest.Status = PdiRequestStatus.Completed;
+            item.PdiRequest.FinishedAt = DateTime.Now;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Nghiệm thu ĐẠT xuất xưởng xe VIN {item.VIN} ({item.Model}). Xe đã sẵn sàng bàn giao cho khách hàng.");
+    }
+
+    public async Task<(bool ok, string msg)> DeletePdiRequestAsync(int id)
+    {
+        var req = await db.PdiRequests
+            .Include(p => p.Items).ThenInclude(i => i.ChecklistItems)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (req == null) return (false, "Không tìm thấy phiếu yêu cầu PDI.");
+        if (req.Status == PdiRequestStatus.Completed)
+            return (false, "Không thể xóa phiếu PDI đã hoàn tất nghiệm thu xuất xưởng.");
+
+        foreach (var item in req.Items)
+        {
+            db.PdiChecklistItems.RemoveRange(item.ChecklistItems);
+        }
+        db.PdiRequestItems.RemoveRange(req.Items);
+        db.PdiRequests.Remove(req);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu yêu cầu PDI {req.PdiReqNo}.");
+    }
+
+    public List<PdiChecklistItem> GetDefaultPdiChecklist() =>
+    [
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.OIL", Name = "Mức dầu động cơ & độ kín khít nắp châm, que thăm dầu", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.COOLANT", Name = "Mức nước làm mát trong két nước tản nhiệt & bình nước phụ", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.BRAKE", Name = "Mức dầu phanh / dầu ly hợp trong bình chứa", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.WIPER", Name = "Mức nước rửa kính chắn gió & kiểm tra hoạt động vòi phun", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.BATTERY", Name = "Điện áp bình ắc quy (>= 12.6V) & siết chặt cọc bình (+/-)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Khoang động cơ & Dung dịch", Code = "PDI.ENG.LEAK", Name = "Kiểm tra rò rỉ dung dịch đường ống nhiên liệu, ống gió", Status = AuditStatus.Good },
+
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.PAINT", Name = "Bề mặt sơn toàn thân xe (không trầy xước, không ố, đồng màu sơn)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.PANEL", Name = "Khe hở và độ khít các tấm ốp nắp ca-pô, 4 cánh cửa, nắp cốp sau", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.GLASS", Name = "Kính chắn gió, kính sườn và kính hậu (không rạn nứt, ố mốc)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.TIRE", Name = "Áp suất 4 lốp xe & lốp dự phòng theo tem thông số cột B", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Ngoại thất, Thân vỏ & Lốp xe", Code = "PDI.EXT.WHEEL", Name = "Độ siết bu-lông bánh xe theo tiêu chuẩn lực 120Nm, mâm xe hoàn hảo", Status = AuditStatus.Good },
+
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.HEAD", Name = "Cụm đèn pha, cốt, đèn ban ngày DRL và đèn sương mù trước", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.SIGNAL", Name = "Đèn báo rẽ (xi-nhan trước/sau/gương) và đèn cảnh báo Hazard", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.TAIL", Name = "Cụm đèn hậu, đèn phanh trên cao và đèn soi biển số", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.HORN", Name = "Còi xe, âm lượng tín hiệu báo động chống trộm", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Hệ thống chiếu sáng & Tín hiệu", Code = "PDI.LGT.WIPER", Name = "Cần gạt mưa trước & sau hoạt động êm ái, gạt sạch nước", Status = AuditStatus.Good },
+
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.AC", Name = "Hệ thống điều hòa AC (độ làm lạnh sâu, cửa gió, sấy kính)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.SCREEN", Name = "Màn hình giải trí AVN cảm ứng, Apple CarPlay / Android Auto, Bluetooth", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.DASH", Name = "Cụm đồng hồ taplo điện tử (không báo đèn check lỗi động cơ/túi khí)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.WINDOW", Name = "Kính cửa sổ chỉnh điện 4 cánh, chức năng 1 chạm chống kẹt an toàn", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.MIRROR", Name = "Gương chiếu hậu chỉnh & gập điện, sấy gương, gương trong xe", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Nội thất & Tiện nghi điện tử", Code = "PDI.INT.SEAT", Name = "Chỉnh ghế (điện/cơ), dây đai an toàn 3 điểm mọi vị trí ngồi", Status = AuditStatus.Good },
+
+        new PdiChecklistItem { Group = "Phụ kiện lắp thêm & Bàn giao", Code = "PDI.ACC.ITEMS", Name = "Lắp đặt hoàn thiện gói phụ kiện cam kết (Dán film, Trải sàn, Camera...)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Phụ kiện lắp thêm & Bàn giao", Code = "PDI.ACC.TOOLS", Name = "Bộ dụng cụ theo xe (kích nâng xe, tay quay bánh xe, móc kéo, tam giác phản quang)", Status = AuditStatus.Good },
+        new PdiChecklistItem { Group = "Phụ kiện lắp thêm & Bàn giao", Code = "PDI.ACC.KEYS", Name = "Bàn giao đủ 2 chìa khóa Smartkey, sổ bảo hành HTC, sách hướng dẫn sử dụng", Status = AuditStatus.Good }
+    ];
 }

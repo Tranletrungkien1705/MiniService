@@ -1,0 +1,234 @@
+@{
+    ViewData["Title"] = "Lập Yêu cầu kiểm tra xuất xưởng PDI";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-0"><i class="bi bi-file-earmark-plus text-primary me-2"></i>Lập Yêu cầu kiểm tra xuất xưởng PDI xe mới</h5>
+        <div class="text-muted small">Phòng Bán hàng (DMS Sales) gửi yêu cầu kiểm tra kỹ thuật 25 điểm và lắp đặt phụ kiện giao xe tới Xưởng dịch vụ.</div>
+    </div>
+    <a href="/Pdi" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Quay lại</a>
+</div>
+
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="card mb-3"><div class="card-body">
+                <h6 class="fw-bold mb-3 text-primary"><i class="bi bi-info-circle me-1"></i>Thông tin chung phiếu yêu cầu PDI</h6>
+                <div class="row g-2 mb-3">
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Số phiếu PDI:</label>
+                        <input type="text" name="pdiReqNo" class="form-control form-control-sm font-monospace text-uppercase" placeholder="VD: PDI260427-001 (để trống tự sinh)" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Mã đại lý:</label>
+                        <input type="text" name="dealerCode" class="form-control form-control-sm" value="HYUNDAI-MAIN" required />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold">Ngày tạo yêu cầu:</label>
+                        <input type="date" name="createdDate" class="form-control form-control-sm" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                    </div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold">Bộ phận / Người lập yêu cầu:</label>
+                        <input type="text" name="createdBy" class="form-control form-control-sm" value="Phòng Bán hàng (DMS Sales)" required />
+                    </div>
+                    <div class="col-md-6 d-flex align-items-center pt-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="flagAccessory" value="true" id="chkFlagAccessory" checked />
+                            <label class="form-check-label fw-semibold small text-primary" for="chkFlagAccessory">
+                                <i class="bi bi-tools me-1"></i>Có yêu cầu lắp đặt gói phụ kiện giao xe kèm theo
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mb-0">
+                    <label class="form-label small fw-semibold">Ghi chú / Yêu cầu đặc biệt từ Showroom:</label>
+                    <textarea name="remark" class="form-control form-control-sm" rows="2" placeholder="Ghi chú thời gian giao xe, yêu cầu rửa xe hoàn thiện, các lưu ý khác..."></textarea>
+                </div>
+            </div></div>
+
+            <!-- Danh sách xe cần kiểm tra PDI -->
+            <div class="card mb-3"><div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-car-front me-1"></i>Danh sách xe kiểm tra xuất xưởng PDI</h6>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="btnAddCar"><i class="bi bi-plus-circle me-1"></i>Thêm xe vào phiếu</button>
+                </div>
+
+                <div id="carsContainer">
+                    <div class="car-row border rounded p-3 mb-3 bg-light position-relative">
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Số khung (VIN) <span class="text-danger">*</span>:</label>
+                                <input type="text" name="vins" class="form-control form-control-sm font-monospace text-uppercase" required placeholder="17 ký tự (VD: RLHXXSF2024...)" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Dòng xe (Model) <span class="text-danger">*</span>:</label>
+                                <input type="text" name="models" class="form-control form-control-sm" required placeholder="VD: Hyundai Santa Fe 2024" list="modelOptions" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Phiên bản (Spec):</label>
+                                <input type="text" name="specs" class="form-control form-control-sm" placeholder="VD: 2.5T HTRAC Cao cấp / Đặc biệt" />
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mb-2">
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Màu sơn ngoại thất:</label>
+                                <input type="text" name="colors" class="form-control form-control-sm" placeholder="VD: Trắng ngọc trai / Đen" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Số hợp đồng bán xe <span class="text-danger">*</span>:</label>
+                                <input type="text" name="contractNos" class="form-control form-control-sm font-monospace" required placeholder="VD: HD-XE-2026/089" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Tên khách hàng mua xe <span class="text-danger">*</span>:</label>
+                                <input type="text" name="customerNames" class="form-control form-control-sm" required placeholder="VD: Nguyễn Văn A" />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small fw-semibold">Số điện thoại KH:</label>
+                                <input type="text" name="customerPhones" class="form-control form-control-sm" placeholder="VD: 0912.345.678" />
+                            </div>
+                        </div>
+
+                        <div class="row g-2">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-semibold">Ngày dự kiến giao xe:</label>
+                                <input type="date" name="expectedDates" class="form-control form-control-sm" value="@DateTime.Today.AddDays(2).ToString("yyyy-MM-dd")" required />
+                            </div>
+                            <div class="col-md-8">
+                                <label class="form-label small fw-semibold">Gói phụ kiện giao xe cam kết theo HĐ:</label>
+                                <input type="text" name="accessoryNotes" class="form-control form-control-sm" placeholder="VD: Dán film Lumax, Trải sàn 5D, Camera hành trình Vietmap, Phủ ceramic..." />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <datalist id="modelOptions">
+                    <option value="Hyundai Santa Fe 2024" />
+                    <option value="Hyundai Tucson 2024" />
+                    <option value="Hyundai Creta 2024" />
+                    <option value="Hyundai Accent 2024" />
+                    <option value="Hyundai Stargazer X" />
+                    <option value="Hyundai Custin 2024" />
+                    <option value="Hyundai Palisade" />
+                    <option value="Hyundai Ioniq 5" />
+                    <option value="Hyundai Elantra 2024" />
+                    <option value="Hyundai Grand i10" />
+                </datalist>
+            </div></div>
+        </div>
+
+        <!-- Cột phải: Hướng dẫn tiêu chuẩn kiểm tra PDI -->
+        <div class="col-lg-4">
+            <div class="card mb-3 border-primary">
+                <div class="card-body">
+                    <h6 class="fw-bold text-primary mb-2"><i class="bi bi-shield-check me-1"></i>Tiêu chuẩn PDI Hyundai Toàn cầu</h6>
+                    <div class="small text-muted mb-3">Mỗi xe mới trước khi xuất xưởng giao cho khách hàng bắt buộc phải kiểm tra và nghiệm thu ĐẠT 25 hạng mục thuộc 5 nhóm:</div>
+
+                    <ul class="list-unstyled small mb-3">
+                        <li class="mb-2 d-flex align-items-start gap-2">
+                            <i class="bi bi-1-circle-fill text-primary mt-1"></i>
+                            <div><b>Khoang động cơ &amp; Dung dịch:</b> Mức dầu máy, nước làm mát, dầu phanh, nước rửa kính, điện áp ắc quy &gt;= 12.6V, rò rỉ dung dịch.</div>
+                        </li>
+                        <li class="mb-2 d-flex align-items-start gap-2">
+                            <i class="bi bi-2-circle-fill text-primary mt-1"></i>
+                            <div><b>Ngoại thất, Thân vỏ &amp; Lốp:</b> Bề mặt sơn bóng đồng đều, khe hở nắp ca-pô/cửa, kính chắn gió, áp suất 4 lốp + lốp dự phòng, siết lực ốc bánh 120Nm.</div>
+                        </li>
+                        <li class="mb-2 d-flex align-items-start gap-2">
+                            <i class="bi bi-3-circle-fill text-primary mt-1"></i>
+                            <div><b>Hệ thống chiếu sáng &amp; Tín hiệu:</b> Đèn pha, cos, DRL daylight, xi-nhan, đèn hậu, đèn phanh, còi xe và cần gạt mưa.</div>
+                        </li>
+                        <li class="mb-2 d-flex align-items-start gap-2">
+                            <i class="bi bi-4-circle-fill text-primary mt-1"></i>
+                            <div><b>Nội thất &amp; Điện tiện nghi:</b> Độ lạnh điều hòa AC, màn hình cảm ứng AVN/Apple CarPlay, bảng đồng hồ taplo không báo lỗi, cửa sổ điện, gương gập điện.</div>
+                        </li>
+                        <li class="mb-2 d-flex align-items-start gap-2">
+                            <i class="bi bi-5-circle-fill text-primary mt-1"></i>
+                            <div><b>Phụ kiện &amp; Dụng cụ bàn giao:</b> Lắp đặt hoàn thiện phụ kiện cam kết, đủ 2 chìa khóa Smartkey, sổ bảo hành HTC, bộ kích nâng + tay quay + tam giác phản quang.</div>
+                        </li>
+                    </ul>
+
+                    <div class="alert alert-info py-2 small mb-3">
+                        <i class="bi bi-info-circle me-1"></i>Khi Xưởng dịch vụ tiếp nhận, hệ thống sẽ tự động đồng bộ xe vào hệ thống và tạo Lệnh kiểm tra RO PDI cho từng xe.
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold">
+                        <i class="bi bi-check-circle me-1"></i>Gửi Yêu cầu PDI tới Xưởng
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+@section Scripts {
+<script>
+    document.getElementById('btnAddCar').addEventListener('click', function() {
+        var container = document.getElementById('carsContainer');
+        var carCount = container.querySelectorAll('.car-row').length + 1;
+        var html = `
+        <div class="car-row border rounded p-3 mb-3 bg-light position-relative">
+            <button type="button" class="btn btn-sm btn-outline-danger position-absolute top-0 end-0 m-2 btn-remove-car" title="Xóa xe này"><i class="bi bi-trash"></i></button>
+            <div class="row g-2 mb-2 pe-4">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Số khung (VIN) <span class="text-danger">*</span>:</label>
+                    <input type="text" name="vins" class="form-control form-control-sm font-monospace text-uppercase" required placeholder="17 ký tự (VD: RLHXX...)" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Dòng xe (Model) <span class="text-danger">*</span>:</label>
+                    <input type="text" name="models" class="form-control form-control-sm" required placeholder="VD: Hyundai Accent 2024" list="modelOptions" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Phiên bản (Spec):</label>
+                    <input type="text" name="specs" class="form-control form-control-sm" placeholder="VD: 1.5 AT Đặc biệt" />
+                </div>
+            </div>
+            <div class="row g-2 mb-2">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Màu sơn ngoại thất:</label>
+                    <input type="text" name="colors" class="form-control form-control-sm" placeholder="VD: Trắng / Đỏ / Đen" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Số hợp đồng bán xe <span class="text-danger">*</span>:</label>
+                    <input type="text" name="contractNos" class="form-control form-control-sm font-monospace" required placeholder="VD: HD-XE-2026/..." />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Tên khách hàng mua xe <span class="text-danger">*</span>:</label>
+                    <input type="text" name="customerNames" class="form-control form-control-sm" required placeholder="Tên chủ xe" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold">Số điện thoại KH:</label>
+                    <input type="text" name="customerPhones" class="form-control form-control-sm" placeholder="09xx..." />
+                </div>
+            </div>
+            <div class="row g-2">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Ngày dự kiến giao xe:</label>
+                    <input type="date" name="expectedDates" class="form-control form-control-sm" value="@DateTime.Today.AddDays(2).ToString("yyyy-MM-dd")" required />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small fw-semibold">Gói phụ kiện giao xe cam kết theo HĐ:</label>
+                    <input type="text" name="accessoryNotes" class="form-control form-control-sm" placeholder="Dán film, Thảm sàn, Camera..." />
+                </div>
+            </div>
+        </div>`;
+        container.insertAdjacentHTML('beforeend', html);
+    });
+
+    document.getElementById('carsContainer').addEventListener('click', function(e) {
+        if (e.target.closest('.btn-remove-car')) {
+            var rows = document.querySelectorAll('.car-row');
+            if (rows.length > 1) {
+                e.target.closest('.car-row').remove();
+            } else {
+                alert('Phiếu yêu cầu PDI cần ít nhất một xe để kiểm tra xuất xưởng.');
+            }
+        }
+    });
+</script>
+}
