@@ -1,0 +1,369 @@
+@model List<ServiceItem>
+@{
+    ViewData["Title"] = "Danh mục công việc & Giờ công tiêu chuẩn (Flat Rate)";
+    var totalServices = Model.Count;
+    var avgHours = totalServices > 0 ? Model.Average(s => s.StdManHour) : 0;
+    var warrantyCount = Model.Count(s => s.FlagWarranty);
+    var avgPrice = totalServices > 0 ? Model.Average(s => s.Price) : 0;
+    var models = ViewBag.Models as List<string> ?? [];
+    var editableROs = ViewBag.EditableROs as List<RepairOrder> ?? [];
+    ServiceROType? curROType = ViewBag.ROType;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng mã công việc</div>
+                <div class="stat-num text-primary">@totalServices</div>
+                <div class="text-muted" style="font-size:11.5px">Danh mục định mức Flat Rate hãng</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Giờ công định mức TB</div>
+                <div class="stat-num text-info">@avgHours.ToString("0.1") <span class="fs-6 fw-normal text-muted">giờ / CV</span></div>
+                <div class="text-muted" style="font-size:11.5px">Tiêu chuẩn định ngạch kỹ thuật viên</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Hạng mục bảo hành hãng HTC</div>
+                <div class="stat-num text-success">@warrantyCount <span class="fs-6 fw-normal text-muted">(@(totalServices > 0 ? (warrantyCount * 100 / totalServices) : 0)%)</span></div>
+                <div class="text-muted" style="font-size:11.5px">Áp dụng chế độ bảo hành miễn phí</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đơn giá tiền công TB</div>
+                <div class="stat-num" style="color:#0f766e">@avgPrice.ToString("N0") <span class="fs-6 fw-normal text-muted">đ</span></div>
+                <div class="text-muted" style="font-size:11.5px">Đơn giá niêm yết bán trước thuế</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:280px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Mã CV, tên dịch vụ, ghi chú..." />
+                </div>
+                <select name="roType" class="form-select form-select-sm" style="width:160px" onchange="this.form.submit()">
+                    <option value="">-- Phân loại --</option>
+                    @foreach (ServiceROType t in Enum.GetValues<ServiceROType>())
+                    {
+                        var info = Ui.ServiceROType(t);
+                        <option value="@t" selected="@(curROType == t)">[@info.code] @info.text</option>
+                    }
+                </select>
+                <select name="model" class="form-select form-select-sm" style="width:170px" onchange="this.form.submit()">
+                    <option value="">-- Dòng xe --</option>
+                    @foreach (var m in models)
+                    {
+                        <option value="@m" selected="@(ViewBag.Model == m)">@m</option>
+                    }
+                </select>
+                <select name="isActive" class="form-select form-select-sm" style="width:140px" onchange="this.form.submit()">
+                    <option value="">-- Trạng thái --</option>
+                    <option value="true" selected="@(ViewBag.IsActive == true)">Đang áp dụng</option>
+                    <option value="false" selected="@(ViewBag.IsActive == false)">Tạm dừng</option>
+                </select>
+                <div class="form-check form-check-inline small mb-0 ms-2">
+                    <input class="form-check-input" type="checkbox" name="flagWarranty" value="true" id="chkWarranty" @(ViewBag.FlagWarranty == true ? "checked" : "") onchange="this.form.submit()" />
+                    <label class="form-check-label text-success fw-semibold" for="chkWarranty">
+                        <i class="bi bi-shield-check me-1"></i>Bảo hành hãng
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || curROType.HasValue || !string.IsNullOrEmpty(ViewBag.Model as string) || ViewBag.IsActive != null || ViewBag.FlagWarranty != null)
+                {
+                    <a href="/ServiceItem" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/ServicePackage" class="btn btn-sm btn-outline-secondary"><i class="bi bi-collection me-1"></i>Gói bảo dưỡng</a>
+                <a href="/RO" class="btn btn-sm btn-outline-primary"><i class="bi bi-clipboard2-pulse me-1"></i>Lệnh sửa chữa</a>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createServiceModal">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm công việc mới
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:120px">Mã CV</th>
+                        <th>Tên công việc &amp; dịch vụ</th>
+                        <th style="width:150px">Phân loại</th>
+                        <th class="text-end" style="width:100px">Định mức</th>
+                        <th class="text-end" style="width:130px">Đơn giá bán</th>
+                        <th class="text-end" style="width:120px">Giá vốn KTV</th>
+                        <th class="text-end" style="width:90px">LN Gộp</th>
+                        <th style="width:160px">Dòng xe áp dụng</th>
+                        <th class="text-center" style="width:90px">Bảo hành</th>
+                        <th class="text-center" style="width:110px">Trạng thái</th>
+                        <th class="text-end" style="width:140px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="11" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy công việc dịch vụ nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var s in Model)
+                    {
+                        var typeInfo = Ui.ServiceROType(s.ROType);
+                        var activeInfo = Ui.ServiceItemActive(s.IsActive);
+                        <tr>
+                            <td>
+                                <a asp-action="Detail" asp-route-id="@s.Id" class="fw-bold font-monospace text-decoration-none">
+                                    @s.Code
+                                </a>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">
+                                    <a asp-action="Detail" asp-route-id="@s.Id" class="text-dark text-decoration-none">
+                                        @s.Name
+                                    </a>
+                                </div>
+                                @if (!string.IsNullOrEmpty(s.Note))
+                                {
+                                    <div class="text-muted small text-truncate" style="max-width:350px">@s.Note</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge @typeInfo.css">@typeInfo.code - @typeInfo.text</span>
+                            </td>
+                            <td class="text-end">
+                                <span class="badge bg-light text-dark border font-monospace">@s.StdManHour.ToString("0.##") h</span>
+                            </td>
+                            <td class="text-end fw-bold text-primary font-monospace">
+                                @s.Price.ToString("N0") <span class="small fw-normal text-muted">đ</span>
+                            </td>
+                            <td class="text-end text-muted font-monospace">
+                                @s.Cost.ToString("N0") <span class="small fw-normal text-muted">đ</span>
+                            </td>
+                            <td class="text-end font-monospace">
+                                <span class="@(s.GrossMargin >= 50 ? "text-success fw-bold" : (s.GrossMargin >= 30 ? "text-primary" : "text-muted"))">
+                                    @s.GrossMargin.ToString("0.0")%
+                                </span>
+                            </td>
+                            <td>
+                                <span class="small text-secondary">@(string.IsNullOrEmpty(s.Model) ? "Tất cả" : s.Model)</span>
+                            </td>
+                            <td class="text-center">
+                                @if (s.FlagWarranty)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle" title="Được bảo hành chính hãng HTC"><i class="bi bi-shield-check"></i> Có</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">-</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-@activeInfo.css">@activeInfo.text</span>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@s.Id" class="btn btn-outline-secondary" title="Xem chi tiết & lịch sử">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    @if (s.IsActive && editableROs.Any())
+                                    {
+                                        <button class="btn btn-outline-primary" title="Nạp vào Lệnh sửa chữa RO" onclick="openApplyModal(@s.Id, '@s.Code', '@Html.Raw(Html.Encode(s.Name))', @s.StdManHour, @s.Price, @(s.FlagWarranty ? "1" : "0"))">
+                                            <i class="bi bi-plus-circle"></i>
+                                        </button>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm công việc mới -->
+<div class="modal fade" id="createServiceModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-wrench-adjustable me-2 text-primary"></i>Thêm Công việc &amp; Giờ công Định mức Mới (Ser_MST_Service)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã công việc (SerCode) <span class="text-danger">*</span></label>
+                            <input name="code" class="form-control font-monospace" placeholder="VD: SCC-ENG-05, BDD-050..." required style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold">Tên công việc dịch vụ (SerName) <span class="text-danger">*</span></label>
+                            <input name="name" class="form-control" placeholder="VD: Cân chỉnh góc đặt bánh xe laser 3D..." required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Phân loại nghiệp vụ (ROType)</label>
+                            <select name="roType" class="form-select">
+                                @foreach (ServiceROType t in Enum.GetValues<ServiceROType>())
+                                {
+                                    var info = Ui.ServiceROType(t);
+                                    <option value="@t">[@info.code] @info.text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Giờ công tiêu chuẩn (StdManHour)</label>
+                            <div class="input-group">
+                                <input name="stdManHour" type="number" step="0.1" value="1.0" min="0.1" class="form-control font-monospace" required />
+                                <span class="input-group-text">giờ</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Thuế suất VAT (%)</label>
+                            <div class="input-group">
+                                <input name="vatPercent" type="number" step="1" value="8" min="0" max="20" class="form-control font-monospace" required />
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Đơn giá bán niêm yết (Price)</label>
+                            <div class="input-group">
+                                <input name="price" type="number" step="1000" value="300000" min="0" class="form-control font-monospace text-primary fw-bold" required />
+                                <span class="input-group-text">VNĐ</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Chi phí giá vốn định mức KTV (Cost)</label>
+                            <div class="input-group">
+                                <input name="cost" type="number" step="1000" value="120000" min="0" class="form-control font-monospace" required />
+                                <span class="input-group-text">VNĐ</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Dòng xe áp dụng (Model)</label>
+                            <input name="model" class="form-control" placeholder="VD: Tất cả các dòng xe, Accent / Elantra..." />
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center mt-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="flagWarranty" value="true" id="chkNewWarranty" />
+                                <label class="form-check-label fw-semibold text-success" for="chkNewWarranty">
+                                    <i class="bi bi-shield-check me-1"></i>Hạng mục được Bảo hành hãng HTC
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Ghi chú quy trình kỹ thuật &amp; tiêu chuẩn thi công</label>
+                            <textarea name="note" class="form-control" rows="2" placeholder="Dụng cụ đặc chủng, mã lỗi liên quan, quy trình thao tác theo tài liệu HTC..."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu công việc</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nạp công việc vào RO -->
+<div class="modal fade" id="applyToRoModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="AddToRO" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="serviceItemId" id="applyServiceItemId" />
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-plus-circle me-2 text-primary"></i>Nạp Công việc vào Lệnh sửa chữa (RO)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info py-2 small mb-3">
+                        <strong id="applyServiceCode"></strong> - <span id="applyServiceName"></span>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Chọn Lệnh sửa chữa (RO) tiếp nhận xe <span class="text-danger">*</span></label>
+                        <select name="roId" class="form-select" required>
+                            <option value="">-- Chọn lệnh sửa chữa đang mở --</option>
+                            @foreach (var r in editableROs)
+                            {
+                                <option value="@r.Id">[@r.Code] Xe: @(r.Car?.Plate ?? "N/A") - @(r.Car?.Model ?? "") (@Ui.Status(r.Status).text)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Đối tượng thanh toán (ExpenseType)</label>
+                        <select name="expenseType" id="applyExpenseType" class="form-select">
+                            <option value="0">Khách trả (ROREPAIR)</option>
+                            <option value="1">Bảo hành hãng HTC (ROWARRANTY)</option>
+                            <option value="2">Bảo hiểm bồi thường (ROINSURANCE)</option>
+                            <option value="3">Nội bộ hỗ trợ (LOCAL)</option>
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Giờ định mức áp dụng</label>
+                            <div class="input-group input-group-sm">
+                                <input name="customHours" id="applyHours" type="number" step="0.1" min="0.1" class="form-control font-monospace" />
+                                <span class="input-group-text">giờ</span>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Đơn giá công việc</label>
+                            <div class="input-group input-group-sm">
+                                <input name="customPrice" id="applyPrice" type="number" step="1000" min="0" class="form-control font-monospace" />
+                                <span class="input-group-text">VNĐ</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Ghi chú bổ sung trên RO (tùy chọn)</label>
+                        <input name="note" class="form-control form-control-sm" placeholder="VD: Thay thế theo yêu cầu khách, phát sinh..." />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-box-arrow-in-down-right me-1"></i>Xác nhận nạp vào RO</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function openApplyModal(id, code, name, hours, price, isWarranty) {
+        document.getElementById('applyServiceItemId').value = id;
+        document.getElementById('applyServiceCode').innerText = code;
+        document.getElementById('applyServiceName').innerText = name;
+        document.getElementById('applyHours').value = hours;
+        document.getElementById('applyPrice').value = price;
+        if (isWarranty == 1) {
+            document.getElementById('applyExpenseType').value = "1";
+        } else {
+            document.getElementById('applyExpenseType').value = "0";
+        }
+        var modal = new bootstrap.Modal(document.getElementById('applyToRoModal'));
+        modal.show();
+    }
+</script>
+}

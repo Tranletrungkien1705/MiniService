@@ -2277,6 +2277,243 @@ public static class Seeder
             db.TechnicalLibraries.AddRange(t1, t2, t3, t4);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.ServiceItems.AnyAsync())
+        {
+            var services = new List<ServiceItem>
+            {
+                // BDD: Bảo dưỡng định kỳ
+                new() {
+                    Code = "BDD-010",
+                    Name = "Bảo dưỡng định kỳ Cấp 1 (5.000 km)",
+                    ROType = ServiceROType.BDD,
+                    StdManHour = 0.8m,
+                    Price = 250000,
+                    Cost = 100000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe Hyundai",
+                    FlagWarranty = false,
+                    Note = "Kiểm tra gầm, siết ốc, áp suất lốp, nước làm mát, nước rửa kính"
+                },
+                new() {
+                    Code = "BDD-020",
+                    Name = "Bảo dưỡng định kỳ Cấp 2 (10.000 km)",
+                    ROType = ServiceROType.BDD,
+                    StdManHour = 1.2m,
+                    Price = 380000,
+                    Cost = 150000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe Hyundai",
+                    FlagWarranty = false,
+                    Note = "Bảo dưỡng hệ thống phanh 4 bánh, đảo lốp, vệ sinh lọc gió động cơ & điều hòa"
+                },
+                new() {
+                    Code = "BDD-030",
+                    Name = "Bảo dưỡng định kỳ Cấp 3 (20.000 km)",
+                    ROType = ServiceROType.BDD,
+                    StdManHour = 1.8m,
+                    Price = 520000,
+                    Cost = 220000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe Hyundai",
+                    FlagWarranty = false,
+                    Note = "Bảo dưỡng phanh, kiểm tra góc đặt bánh xe, vệ sinh họng hút ga, thay lọc điều hòa"
+                },
+                new() {
+                    Code = "BDD-040",
+                    Name = "Bảo dưỡng định kỳ Cấp 4 (40.000 km) - Đại tu định kỳ",
+                    ROType = ServiceROType.BDD,
+                    StdManHour = 3.0m,
+                    Price = 900000,
+                    Cost = 400000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe Hyundai",
+                    FlagWarranty = false,
+                    Note = "Đại dưỡng toàn diện khoang máy, siết gầm, thay bugi, thay dầu phanh, xúc xả két nước"
+                },
+
+                // SCC: Sửa chữa chung máy - gầm - điện
+                new() {
+                    Code = "SCC-ENG-01",
+                    Name = "Cân chỉnh góc đặt bánh xe 3D laser Hunter & Cân bằng động 4 bánh",
+                    ROType = ServiceROType.SCC,
+                    StdManHour = 1.0m,
+                    Price = 450000,
+                    Cost = 180000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe",
+                    FlagWarranty = false,
+                    Note = "Cân chỉnh góc Camber, Caster, Toe-in bằng hệ thống camera cảm biến Hunter HawkEye Elite"
+                },
+                new() {
+                    Code = "SCC-ENG-02",
+                    Name = "Thay cụm bi may-ơ & bạc đạn bánh trước",
+                    ROType = ServiceROType.SCC,
+                    StdManHour = 1.5m,
+                    Price = 550000,
+                    Cost = 250000,
+                    VatPercent = 8,
+                    Model = "Accent / Elantra / Creta",
+                    FlagWarranty = false,
+                    Note = "Ép tháo lắp bạc đạn moay-ơ bằng máy ép thủy lực chuyên dụng 20 tấn"
+                },
+                new() {
+                    Code = "SCC-BRK-01",
+                    Name = "Thay bộ má phanh đĩa trước & Láng bề mặt đĩa phanh",
+                    ROType = ServiceROType.SCC,
+                    StdManHour = 1.2m,
+                    Price = 420000,
+                    Cost = 160000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe",
+                    FlagWarranty = false,
+                    Note = "Láng phẳng bề mặt đĩa phanh triệt tiêu hiện tượng rung giật và tiếng kêu rít khi đạp phanh"
+                },
+                new() {
+                    Code = "SCC-WAR-01",
+                    Name = "Thay thế cụm thước lái trợ lực điện MDPS & Khớp nối hoa thị (Bảo hành hãng)",
+                    ROType = ServiceROType.SCC,
+                    StdManHour = 2.2m,
+                    Price = 750000,
+                    Cost = 350000,
+                    VatPercent = 8,
+                    Model = "Accent / Creta / Tucson",
+                    FlagWarranty = true,
+                    Note = "Theo quy trình bảo hành HTC: Triệt tiêu tiếng kêu lộc cộc trục lái, cân chỉnh cảm biến góc lái SAS"
+                },
+                new() {
+                    Code = "SCC-WAR-02",
+                    Name = "Thay thế lốc nén điều hòa không khí Compressor (Bảo hành HTC)",
+                    ROType = ServiceROType.SCC,
+                    StdManHour = 2.5m,
+                    Price = 850000,
+                    Cost = 400000,
+                    VatPercent = 8,
+                    Model = "Santa Fe / Tucson",
+                    FlagWarranty = true,
+                    Note = "Bảo hành thay mới lốc lạnh chính hãng, xúc rửa đường ống ga, nạp dầu bôi trơn PAG và hút chân không"
+                },
+
+                // SCD: Sơn sấy & Đồng sơn thân vỏ
+                new() {
+                    Code = "SCD-PNT-01",
+                    Name = "Sơn sấy cản trước hoàn thiện (Sơn 3 lớp tiêu chuẩn phòng hấp)",
+                    ROType = ServiceROType.SCD,
+                    StdManHour = 2.5m,
+                    Price = 1100000,
+                    Cost = 450000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe",
+                    FlagWarranty = false,
+                    Note = "Quy trình sơn sấy phòng nhiệt PPG/Dupont, bao gồm pha màu vi tính và đánh bóng hoàn thiện"
+                },
+                new() {
+                    Code = "SCD-BOD-02",
+                    Name = "Gò nắn phục hồi biến dạng ba-đờ-sốc & Tai xe trước",
+                    ROType = ServiceROType.SCD,
+                    StdManHour = 2.0m,
+                    Price = 700000,
+                    Cost = 300000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe",
+                    FlagWarranty = false,
+                    Note = "Kéo nắn khung tai xe trên giàn cân chỉnh thân vỏ Car-O-Liner chính xác từng milimet"
+                },
+                new() {
+                    Code = "SCD-PNT-03",
+                    Name = "Sơn sấy cánh cửa bên phụ (Gồm phủ bóng chống xước cao cấp)",
+                    ROType = ServiceROType.SCD,
+                    StdManHour = 3.0m,
+                    Price = 1350000,
+                    Cost = 550000,
+                    VatPercent = 8,
+                    Model = "Santa Fe / Custin / Tucson",
+                    FlagWarranty = false,
+                    Note = "Sơn dặm vá hoặc cả cánh cửa, bảo hành độ đồng màu 99% theo code màu gốc nhà sản xuất"
+                },
+
+                // SCS: Dịch vụ sửa chữa nhanh Quick Service
+                new() {
+                    Code = "SCS-QCK-01",
+                    Name = "Dịch vụ Sửa chữa nhanh Express Service 60 phút (2 KTV song hành)",
+                    ROType = ServiceROType.SCS,
+                    StdManHour = 1.0m,
+                    Price = 300000,
+                    Cost = 120000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe",
+                    FlagWarranty = false,
+                    Note = "Quy trình Quick Service khép kín: thay dầu nhớt, kiểm tra 20 điểm an toàn trong 60 phút"
+                },
+                new() {
+                    Code = "SCS-CLN-02",
+                    Name = "Vệ sinh diệt khuẩn giàn lạnh điều hòa bằng công nghệ nội soi Nano Bạc",
+                    ROType = ServiceROType.SCS,
+                    StdManHour = 0.8m,
+                    Price = 450000,
+                    Cost = 150000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe",
+                    FlagWarranty = false,
+                    Note = "Đưa camera nội soi vào dàn lạnh, xịt dung dịch tẩy ố mốc và phủ nano kháng khuẩn ion bạc"
+                },
+
+                // PDI: Kiểm tra xuất xưởng xe mới
+                new() {
+                    Code = "PDI-STD-01",
+                    Name = "Kiểm tra nghiệm thu 25 hạng mục xe mới xuất xưởng (PDI tiêu chuẩn HTC)",
+                    ROType = ServiceROType.PDI,
+                    StdManHour = 1.5m,
+                    Price = 350000,
+                    Cost = 150000,
+                    VatPercent = 8,
+                    Model = "Tất cả xe mới",
+                    FlagWarranty = true,
+                    Note = "Checklist 5 nhóm: Khoang máy & dung dịch, thân vỏ sơn lốp, hệ thống đèn còi, tiện nghi điện tử, lái thử"
+                },
+                new() {
+                    Code = "PDI-BLU-02",
+                    Name = "Cài đặt & Kích hoạt viễn thông Hyundai Bluelink / Hộp điều khiển BCM",
+                    ROType = ServiceROType.PDI,
+                    StdManHour = 0.5m,
+                    Price = 180000,
+                    Cost = 60000,
+                    VatPercent = 8,
+                    Model = "Creta / Tucson / Santa Fe / Custin",
+                    FlagWarranty = true,
+                    Note = "Kết nối mạng di động kích hoạt SIM viễn thông và tài khoản ứng dụng Hyundai Bluelink"
+                },
+
+                // SPK: Phụ kiện & Chăm sóc xe Detailing
+                new() {
+                    Code = "SPK-ACC-01",
+                    Name = "Lắp đặt bộ camera hành trình 2 mắt trước/sau tích hợp GPS và hiển thị tốc độ",
+                    ROType = ServiceROType.SPK,
+                    StdManHour = 1.0m,
+                    Price = 300000,
+                    Cost = 100000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe",
+                    FlagWarranty = false,
+                    Note = "Đi dây thẩm mỹ giấu kín cột A, đấu nguồn an toàn qua cầu chì ACC dự phòng không cắt trích dây"
+                },
+                new() {
+                    Code = "SPK-CER-02",
+                    Name = "Phủ Ceramic 9H siêu bóng bảo vệ bề mặt sơn toàn thân xe",
+                    ROType = ServiceROType.SPK,
+                    StdManHour = 4.5m,
+                    Price = 3500000,
+                    Cost = 1200000,
+                    VatPercent = 8,
+                    Model = "Tất cả các dòng xe",
+                    FlagWarranty = false,
+                    Note = "Hiệu chỉnh bề mặt sơn 3 bước đánh bóng xóa xước xoáy, phủ 2 lớp Ceramic 9H và sấy đèn sấy hồng ngoại"
+                }
+            };
+
+            db.ServiceItems.AddRange(services);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static List<PdiChecklistItem> CreateDefaultChecklist() =>
@@ -2316,7 +2553,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -2334,8 +2571,12 @@ public static class Seeder
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartNo\" text NULL",
+            "ALTER TABLE miniservice.\"Lines\" ADD COLUMN IF NOT EXISTS \"ServiceItemId\" integer NULL",
+            "ALTER TABLE miniservice.\"Lines\" ADD COLUMN IF NOT EXISTS \"StdManHour\" numeric(5,2) NULL",
             "CREATE TABLE IF NOT EXISTS miniservice.\"TechnicalLibraries\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"TechnicalLibraryCode\" text NOT NULL, \"DealerCode\" text NOT NULL, \"DealerName\" text NOT NULL, \"PlateNo\" text NULL, \"Model\" text NOT NULL, \"Engine\" text NULL, \"Gear\" text NULL, \"Version\" text NULL, \"ReRepairType\" integer NOT NULL, \"ReRepairRemark\" text NOT NULL, \"ReRepairFeedback\" text NULL, \"ExclusionTest\" text NULL, \"ReRepairReason\" text NOT NULL, \"ReRepairSolution\" text NOT NULL, \"Type\" integer NOT NULL, \"IsActive\" boolean NOT NULL DEFAULT false, \"ROId\" integer NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ApprovedAt\" timestamp NULL, \"ApprovedBy\" text NULL)",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TechnicalLibraries_OrgId_TechnicalLibraryCode\" ON miniservice.\"TechnicalLibraries\" (\"OrgId\", \"TechnicalLibraryCode\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"ServiceItems\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"ROType\" integer NOT NULL, \"StdManHour\" numeric(5,2) NOT NULL, \"Price\" numeric(18,2) NOT NULL, \"Cost\" numeric(18,2) NOT NULL, \"VatPercent\" numeric(5,2) NOT NULL, \"Model\" text NULL, \"FlagWarranty\" boolean NOT NULL DEFAULT false, \"Note\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ServiceItems_OrgId_Code\" ON miniservice.\"ServiceItems\" (\"OrgId\", \"Code\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -3157,7 +3398,27 @@ public static class Seeder
                 FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
             );",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_TechnicalLibraries_OrgId_TechnicalLibraryCode"" ON ""TechnicalLibraries"" (""OrgId"", ""TechnicalLibraryCode"");",
-            @"CREATE INDEX IF NOT EXISTS ""IX_TechnicalLibraries_OrgId_Model"" ON ""TechnicalLibraries"" (""OrgId"", ""Model"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_TechnicalLibraries_OrgId_Model"" ON ""TechnicalLibraries"" (""OrgId"", ""Model"");",
+            @"ALTER TABLE ""Lines"" ADD COLUMN ""ServiceItemId"" INTEGER NULL;",
+            @"ALTER TABLE ""Lines"" ADD COLUMN ""StdManHour"" TEXT NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""ServiceItems"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""Code"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""ROType"" INTEGER NOT NULL,
+                ""StdManHour"" TEXT NOT NULL,
+                ""Price"" TEXT NOT NULL,
+                ""Cost"" TEXT NOT NULL,
+                ""VatPercent"" TEXT NOT NULL,
+                ""Model"" TEXT NULL,
+                ""FlagWarranty"" INTEGER NOT NULL,
+                ""Note"" TEXT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ServiceItems_OrgId_Code"" ON ""ServiceItems"" (""OrgId"", ""Code"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_ServiceItems_OrgId_ROType"" ON ""ServiceItems"" (""OrgId"", ""ROType"");"
         };
 
         foreach (var sql in sqls)

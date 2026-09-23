@@ -448,4 +448,18 @@ public static class Ui
 
     public static (string text, string code, string css) TechnicalLibraryStatus(bool isActive) =>
         isActive ? ("Đã duyệt ban hành", "ACTIVE", "success") : ("Chờ thẩm định HQ", "PEND", "warning");
+
+    public static (string text, string code, string css) ServiceROType(ServiceROType t) => t switch
+    {
+        Models.ServiceROType.BDD => ("Bảo dưỡng định kỳ", "BDD", "primary"),
+        Models.ServiceROType.SCC => ("Sửa chữa chung", "SCC", "info"),
+        Models.ServiceROType.SCD => ("Đồng sơn sấy", "SCD", "warning"),
+        Models.ServiceROType.SCS => ("Dịch vụ nhanh", "SCS", "success"),
+        Models.ServiceROType.PDI => ("Kiểm tra PDI", "PDI", "secondary"),
+        Models.ServiceROType.SPK => ("Phụ kiện & Chăm sóc", "SPK", "danger"),
+        _ => (t.ToString(), "", "secondary")
+    };
+
+    public static (string text, string css) ServiceItemActive(bool isActive) =>
+        isActive ? ("Đang áp dụng", "success") : ("Tạm dừng", "secondary");
 }

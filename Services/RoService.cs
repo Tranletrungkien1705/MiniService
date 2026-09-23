@@ -43,7 +43,7 @@ public interface IRoService
     Task<List<RepairOrder>> ROsAsync(ROStatus? status, string? q);
     Task<RepairOrder?> GetROAsync(int id);
     Task<int> CreateROAsync(RepairOrder ro);
-    Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null, ExpenseType expenseType = ExpenseType.Customer);
+    Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null, ExpenseType expenseType = ExpenseType.Customer, int? serviceItemId = null, decimal? stdManHour = null);
     Task RemoveLineAsync(int lineId);
     Task<(bool ok, string msg)> TransitionAsync(int roId, ROStatus to);
     Task<(bool ok, string msg)> DeleteROAsync(int roId);
@@ -237,6 +237,16 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteTechnicalLibraryAsync(int id);
     Task<List<TechnicalLibrary>> SearchSolutionsForRoAsync(int roId);
     Task<List<string>> GetDistinctModelsAsync();
+    // Master Services & Flat Rate Labor Operations (Ser_MST_Service)
+    Task<List<ServiceItem>> ServiceItemsAsync(ServiceROType? roType, string? model, bool? isActive, bool? flagWarranty, string? q);
+    Task<ServiceItem?> GetServiceItemAsync(int id);
+    Task<ServiceItem?> GetServiceItemByCodeAsync(string code);
+    Task<int> CreateServiceItemAsync(ServiceItem item);
+    Task<(bool ok, string msg)> UpdateServiceItemAsync(ServiceItem item);
+    Task<(bool ok, string msg)> DeleteServiceItemAsync(int id);
+    Task<List<ServiceItem>> ServiceItemsForSelectAsync();
+    Task<(bool ok, string msg)> AddServiceItemToROAsync(int roId, int serviceItemId, ExpenseType expenseType, decimal? customHours = null, decimal? customPrice = null, string? note = null);
+    Task<List<string>> GetDistinctServiceModelsAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -449,7 +459,10 @@ public class RoService(AppDbContext db) : IRoService
     }
 
     public Task<RepairOrder?> GetROAsync(int id) =>
-        db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer).Include(r => r.Lines).Include(r => r.Appointment)
+        db.ROs.Include(r => r.Car).ThenInclude(c => c.Customer).Include(r => r.Customer)
+          .Include(r => r.Lines).ThenInclude(l => l.Part)
+          .Include(r => r.Lines).ThenInclude(l => l.ServiceItem)
+          .Include(r => r.Appointment)
           .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet)
           .Include(r => r.AssignmentWorks).ThenInclude(a => a.Engineers).ThenInclude(e => e.Engineer)
           .Include(r => r.InsuranceClaims).ThenInclude(c => c.InsuranceCompany)
@@ -468,7 +481,7 @@ public class RoService(AppDbContext db) : IRoService
         return ro.Id;
     }
 
-    public async Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null, ExpenseType expenseType = ExpenseType.Customer)
+    public async Task AddLineAsync(int roId, LineType type, string name, decimal qty, decimal price, int? partId = null, ExpenseType expenseType = ExpenseType.Customer, int? serviceItemId = null, decimal? stdManHour = null)
     {
         var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == roId) ?? throw new KeyNotFoundException();
         if (ro.Status is ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding)
@@ -484,6 +497,17 @@ public class RoService(AppDbContext db) : IRoService
                 if (part.InStock >= qty) part.InStock -= qty;
             }
         }
+        else if (type == LineType.Labor && serviceItemId.HasValue && serviceItemId.Value > 0)
+        {
+            var svcItem = await db.ServiceItems.FirstOrDefaultAsync(s => s.Id == serviceItemId.Value);
+            if (svcItem != null)
+            {
+                if (string.IsNullOrWhiteSpace(name)) name = svcItem.Name;
+                if (price <= 0) price = svcItem.Price;
+                stdManHour ??= svcItem.StdManHour;
+                if (qty <= 0) qty = svcItem.StdManHour > 0 ? svcItem.StdManHour : 1;
+            }
+        }
 
         db.Lines.Add(new RepairLine
         {
@@ -491,6 +515,8 @@ public class RoService(AppDbContext db) : IRoService
             Type = type,
             ExpenseType = expenseType,
             PartId = (type == LineType.Part && partId > 0) ? partId : null,
+            ServiceItemId = (type == LineType.Labor && serviceItemId > 0) ? serviceItemId : null,
+            StdManHour = stdManHour,
             Name = name.Trim(),
             Quantity = qty <= 0 ? 1 : qty,
             UnitPrice = price
@@ -4796,6 +4822,134 @@ public class RoService(AppDbContext db) : IRoService
     public async Task<List<string>> GetDistinctModelsAsync() =>
         await db.TechnicalLibraries
             .Select(t => t.Model)
+            .Distinct()
+            .OrderBy(m => m)
+            .ToListAsync();
+
+    // --- Master Services & Flat Rate Labor Operations (Ser_MST_Service) ---
+    public async Task<List<ServiceItem>> ServiceItemsAsync(ServiceROType? roType, string? model, bool? isActive, bool? flagWarranty, string? q)
+    {
+        var query = db.ServiceItems.Include(s => s.RepairLines).AsQueryable();
+        if (roType.HasValue) query = query.Where(s => s.ROType == roType.Value);
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            var m = model.Trim().ToLower();
+            query = query.Where(s => s.Model != null && s.Model.ToLower().Contains(m));
+        }
+        if (isActive.HasValue) query = query.Where(s => s.IsActive == isActive.Value);
+        if (flagWarranty.HasValue) query = query.Where(s => s.FlagWarranty == flagWarranty.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(x => x.Code.ToLower().Contains(s) || x.Name.ToLower().Contains(s) || (x.Note != null && x.Note.ToLower().Contains(s)));
+        }
+        return await query.OrderBy(s => s.ROType).ThenBy(s => s.Code).ToListAsync();
+    }
+
+    public Task<ServiceItem?> GetServiceItemAsync(int id) =>
+        db.ServiceItems.Include(s => s.RepairLines).ThenInclude(l => l.RO).ThenInclude(r => r.Car)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+    public Task<ServiceItem?> GetServiceItemByCodeAsync(string code)
+    {
+        var clean = code.Trim().ToUpperInvariant();
+        return db.ServiceItems.FirstOrDefaultAsync(s => s.Code == clean);
+    }
+
+    public async Task<int> CreateServiceItemAsync(ServiceItem item)
+    {
+        if (string.IsNullOrWhiteSpace(item.Code))
+            throw new InvalidOperationException("Vui lòng nhập mã công việc dịch vụ (SerCode).");
+        if (string.IsNullOrWhiteSpace(item.Name))
+            throw new InvalidOperationException("Vui lòng nhập tên công việc dịch vụ (SerName).");
+
+        item.Code = item.Code.Trim().ToUpperInvariant();
+        var exists = await db.ServiceItems.AnyAsync(s => s.Code == item.Code);
+        if (exists)
+            throw new InvalidOperationException($"Mã công việc {item.Code} đã tồn tại trong danh mục.");
+
+        if (item.StdManHour <= 0) item.StdManHour = 1.0m;
+        if (item.Price < 0) item.Price = 0;
+        if (item.Cost < 0) item.Cost = 0;
+        if (item.VatPercent < 0) item.VatPercent = 8;
+
+        db.ServiceItems.Add(item);
+        await db.SaveChangesAsync();
+        return item.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateServiceItemAsync(ServiceItem item)
+    {
+        var existing = await db.ServiceItems.FirstOrDefaultAsync(s => s.Id == item.Id);
+        if (existing == null) return (false, "Không tìm thấy công việc dịch vụ.");
+
+        existing.Name = item.Name.Trim();
+        existing.ROType = item.ROType;
+        existing.StdManHour = item.StdManHour > 0 ? item.StdManHour : 1.0m;
+        existing.Price = item.Price >= 0 ? item.Price : 0;
+        existing.Cost = item.Cost >= 0 ? item.Cost : 0;
+        existing.VatPercent = item.VatPercent >= 0 ? item.VatPercent : 8;
+        existing.Model = item.Model?.Trim();
+        existing.FlagWarranty = item.FlagWarranty;
+        existing.Note = item.Note?.Trim();
+        existing.IsActive = item.IsActive;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật công việc {existing.Code} - {existing.Name}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteServiceItemAsync(int id)
+    {
+        var existing = await db.ServiceItems.Include(s => s.RepairLines).FirstOrDefaultAsync(s => s.Id == id);
+        if (existing == null) return (false, "Không tìm thấy công việc dịch vụ.");
+        if (existing.RepairLines.Count > 0)
+        {
+            existing.IsActive = false;
+            await db.SaveChangesAsync();
+            return (true, $"Công việc {existing.Code} đã phát sinh {existing.RepairLines.Count} dòng sửa chữa trên RO nên đã chuyển sang trạng thái Tạm dừng.");
+        }
+
+        db.ServiceItems.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa công việc {existing.Code}.");
+    }
+
+    public Task<List<ServiceItem>> ServiceItemsForSelectAsync() =>
+        db.ServiceItems.Where(s => s.IsActive).OrderBy(s => s.ROType).ThenBy(s => s.Code).ToListAsync();
+
+    public async Task<(bool ok, string msg)> AddServiceItemToROAsync(int roId, int serviceItemId, ExpenseType expenseType, decimal? customHours = null, decimal? customPrice = null, string? note = null)
+    {
+        var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy lệnh sửa chữa RO.");
+        if (ro.Status is ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding)
+            return (false, "Lệnh sửa chữa RO đã kết thúc — không thể thêm công việc.");
+
+        var svcItem = await db.ServiceItems.FirstOrDefaultAsync(s => s.Id == serviceItemId);
+        if (svcItem == null) return (false, "Không tìm thấy công việc dịch vụ chuẩn.");
+
+        var hours = (customHours.HasValue && customHours.Value > 0) ? customHours.Value : (svcItem.StdManHour > 0 ? svcItem.StdManHour : 1.0m);
+        var unitPrice = (customPrice.HasValue && customPrice.Value >= 0) ? customPrice.Value : svcItem.Price;
+
+        var line = new RepairLine
+        {
+            ROId = roId,
+            Type = LineType.Labor,
+            ExpenseType = expenseType,
+            ServiceItemId = svcItem.Id,
+            StdManHour = hours,
+            Name = !string.IsNullOrWhiteSpace(note) ? $"{svcItem.Name} ({note.Trim()})" : svcItem.Name,
+            Quantity = hours,
+            UnitPrice = unitPrice
+        };
+
+        db.Lines.Add(line);
+        await db.SaveChangesAsync();
+        return (true, $"Đã nạp công việc [{svcItem.Code}] {svcItem.Name} ({hours} giờ định mức) vào Lệnh sửa chữa {ro.Code}.");
+    }
+
+    public Task<List<string>> GetDistinctServiceModelsAsync() =>
+        db.ServiceItems.Where(s => !string.IsNullOrEmpty(s.Model))
+            .Select(s => s.Model!)
             .Distinct()
             .OrderBy(m => m)
             .ToListAsync();

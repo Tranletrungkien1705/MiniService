@@ -4,6 +4,7 @@
     var (stTxt, stCode, stCss) = Ui.Status(Model.Status);
     var next = (ROStatus[])ViewBag.Next;
     var parts = (List<Part>?)ViewBag.Parts ?? [];
+    var serviceItems = (List<ServiceItem>?)ViewBag.ServiceItems ?? [];
     var servicePackages = (List<ServicePackage>?)ViewBag.ServicePackages ?? [];
     var eligibleCampaigns = (List<CampaignMarketing>?)ViewBag.EligibleCampaigns ?? [];
     var pendingBulletins = (List<BulletinVin>?)ViewBag.PendingBulletins ?? [];
@@ -145,7 +146,11 @@
                         <td><span class="badge bg-@expCss" style="font-size:11px">@expTxt</span></td>
                         <td>
                             @l.Name
-                            @if (l.Part != null)
+                            @if (l.ServiceItem != null)
+                            {
+                                <a href="/ServiceItem/Detail/@l.ServiceItemId" class="badge bg-primary-subtle text-primary border text-decoration-none ms-1" style="font-size:11px"><i class="bi bi-wrench-adjustable me-1"></i>@l.ServiceItem.Code (@(l.StdManHour?.ToString("0.##") ?? l.ServiceItem.StdManHour.ToString("0.##"))h)</a>
+                            }
+                            else if (l.Part != null)
                             {
                                 <span class="badge bg-light text-secondary border ms-1" style="font-size:11px"><i class="bi bi-tag me-1"></i>@l.Part.Code</span>
                             }
@@ -181,8 +186,21 @@
             {
                 <form asp-action="AddLine" method="post" class="mt-3 p-2 bg-light rounded border">
                     @Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+                    <input type="hidden" name="serviceItemId" id="lineServiceItemId" />
+                    <input type="hidden" name="stdManHour" id="lineStdManHour" />
                     <div class="row g-2 mb-2">
-                        <div class="col-md-7">
+                        <div class="col-md-6">
+                            <select id="servicePicker" class="form-select form-select-sm" onchange="onServiceChange(this)">
+                                <option value="">-- Chọn công việc chuẩn Flat Rate (Ser_MST_Service) --</option>
+                                @foreach (var s in serviceItems)
+                                {
+                                    <option value="@s.Id" data-name="@s.Name" data-price="@s.Price" data-hours="@s.StdManHour" data-warranty="@(s.FlagWarranty ? "1" : "0")">
+                                        [@s.Code] @s.Name (@s.StdManHour.ToString("0.##")h · @s.Price.ToString("N0")đ@(s.FlagWarranty ? " · BH Hãng" : ""))
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
                             <select id="partPicker" name="partId" class="form-select form-select-sm" onchange="onPartChange(this)">
                                 <option value="">-- Chọn phụ tùng từ kho (tùy chọn) --</option>
                                 @foreach (var p in parts)
@@ -193,7 +211,7 @@
                                 }
                             </select>
                         </div>
-                        <div class="col-md-5 small text-muted d-flex align-items-center">
+                        <div class="col-12 small text-muted d-flex align-items-center">
                             <span id="partStockInfo">Hoặc nhập tay công việc / phụ tùng bên dưới:</span>
                         </div>
                     </div>
@@ -205,7 +223,7 @@
                             </select>
                         </div>
                         <div class="col-md-2">
-                            <select name="expenseType" class="form-select form-select-sm" title="Đối tượng thanh toán">
+                            <select id="lineExpenseSelect" name="expenseType" class="form-select form-select-sm" title="Đối tượng thanh toán">
                                 <option value="0">Khách trả</option>
                                 <option value="1">Bảo hành</option>
                                 <option value="2">Bảo hiểm</option>
@@ -591,9 +609,54 @@
 
 @section Scripts {
 <script>
+function onServiceChange(sel) {
+    var opt = sel.options[sel.selectedIndex];
+    if (sel.value) {
+        var partPicker = document.getElementById('partPicker');
+        if (partPicker) partPicker.value = "";
+        var lineTypeSelect = document.getElementById('lineTypeSelect');
+        if (lineTypeSelect) lineTypeSelect.value = "0";
+        var nameInput = document.getElementById('lineNameInput');
+        if (nameInput) nameInput.value = opt.getAttribute('data-name') || '';
+        var priceInput = document.getElementById('linePriceInput');
+        if (priceInput) priceInput.value = opt.getAttribute('data-price') || 0;
+        var hours = opt.getAttribute('data-hours') || '1';
+        var qtyInput = document.getElementById('lineQtyInput');
+        if (qtyInput) qtyInput.value = hours;
+        var serviceItemIdInput = document.getElementById('lineServiceItemId');
+        if (serviceItemIdInput) serviceItemIdInput.value = sel.value;
+        var stdManHourInput = document.getElementById('lineStdManHour');
+        if (stdManHourInput) stdManHourInput.value = hours;
+        var isWarranty = opt.getAttribute('data-warranty');
+        var expenseSelect = document.getElementById('lineExpenseSelect');
+        if (expenseSelect) {
+            expenseSelect.value = (isWarranty == "1") ? "1" : "0";
+        }
+        var stockInfo = document.getElementById('partStockInfo');
+        if (stockInfo) {
+            stockInfo.innerHTML = '<span class="badge bg-primary-subtle text-primary"><i class="bi bi-wrench-adjustable me-1"></i>Công việc chuẩn: ' + hours + ' giờ định mức' + (isWarranty == "1" ? ' · Bảo hành HTC' : '') + '</span>';
+        }
+    } else {
+        var serviceItemIdInput = document.getElementById('lineServiceItemId');
+        if (serviceItemIdInput) serviceItemIdInput.value = "";
+        var stdManHourInput = document.getElementById('lineStdManHour');
+        if (stdManHourInput) stdManHourInput.value = "";
+        var stockInfo = document.getElementById('partStockInfo');
+        if (stockInfo) {
+            stockInfo.innerText = 'Hoặc nhập tay công việc / phụ tùng bên dưới:';
+        }
+    }
+}
+
 function onPartChange(sel) {
     var opt = sel.options[sel.selectedIndex];
     if (sel.value) {
+        var servicePicker = document.getElementById('servicePicker');
+        if (servicePicker) servicePicker.value = "";
+        var serviceItemIdInput = document.getElementById('lineServiceItemId');
+        if (serviceItemIdInput) serviceItemIdInput.value = "";
+        var stdManHourInput = document.getElementById('lineStdManHour');
+        if (stdManHourInput) stdManHourInput.value = "";
         var lineTypeSelect = document.getElementById('lineTypeSelect');
         if (lineTypeSelect) lineTypeSelect.value = "1";
         var nameInput = document.getElementById('lineNameInput');

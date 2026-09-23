@@ -113,6 +113,7 @@ public class ROController(IRoService svc) : Controller
         if (ro == null) return NotFound();
         ViewBag.Next = RoService.AllowedNext(ro.Status);
         ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.ServiceItems = await svc.ServiceItemsForSelectAsync();
         ViewBag.ServicePackages = await svc.ServicePackagesForSelectAsync();
         ViewBag.EligibleCampaigns = await svc.GetEligibleCampaignsForCarAsync(ro.CarId);
         ViewBag.PendingBulletins = (!string.IsNullOrWhiteSpace(ro.Car?.Vin))
@@ -154,20 +155,28 @@ public class ROController(IRoService svc) : Controller
     }
 
     [HttpPost, ValidateAntiForgeryToken]
-    public async Task<IActionResult> AddLine(int id, LineType type, string name, decimal quantity, decimal unitPrice, int? partId = null, ExpenseType expenseType = ExpenseType.Customer)
+    public async Task<IActionResult> AddLine(int id, LineType type, string name, decimal quantity, decimal unitPrice, int? partId = null, ExpenseType expenseType = ExpenseType.Customer, int? serviceItemId = null, decimal? stdManHour = null)
     {
-        if (string.IsNullOrWhiteSpace(name) && (!partId.HasValue || partId.Value <= 0))
+        if (string.IsNullOrWhiteSpace(name) && (!partId.HasValue || partId.Value <= 0) && (!serviceItemId.HasValue || serviceItemId.Value <= 0))
         {
-            TempData["Error"] = "Cần tên dòng hoặc chọn phụ tùng.";
+            TempData["Error"] = "Cần tên dòng, chọn phụ tùng hoặc chọn công việc dịch vụ chuẩn.";
             return RedirectToAction(nameof(Detail), new { id });
         }
         try
         {
-            await svc.AddLineAsync(id, type, name, quantity, unitPrice, partId, expenseType);
+            await svc.AddLineAsync(id, type, name, quantity, unitPrice, partId, expenseType, serviceItemId, stdManHour);
             TempData["Success"] = "Đã thêm dòng.";
         }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddServiceItem(int roId, int serviceItemId, ExpenseType expenseType, decimal? customHours, decimal? customPrice, string? note)
+    {
+        var (ok, msg) = await svc.AddServiceItemToROAsync(roId, serviceItemId, expenseType, customHours, customPrice, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id = roId });
     }
 
     [HttpPost, ValidateAntiForgeryToken]
@@ -2984,6 +2993,120 @@ public class TechnicalLibraryController(IRoService svc) : Controller
         var item = await svc.GetTechnicalLibraryAsync(id);
         if (item == null) return NotFound();
         return View(item);
+    }
+}
+
+public class ServiceItemController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(ServiceROType? roType, string? model, bool? isActive, bool? flagWarranty, string? q)
+    {
+        ViewBag.ROType = roType;
+        ViewBag.Model = model;
+        ViewBag.IsActive = isActive;
+        ViewBag.FlagWarranty = flagWarranty;
+        ViewBag.Q = q;
+        ViewBag.Models = await svc.GetDistinctServiceModelsAsync();
+        var allROs = await svc.ROsAsync(null, null);
+        ViewBag.EditableROs = allROs.Where(r => r.Status is not (ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding)).ToList();
+
+        var list = await svc.ServiceItemsAsync(roType, model, isActive, flagWarranty, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var item = await svc.GetServiceItemAsync(id);
+        if (item == null) return NotFound();
+        var allROs = await svc.ROsAsync(null, null);
+        ViewBag.EditableROs = allROs.Where(r => r.Status is not (ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding)).ToList();
+        return View(item);
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.Models = await svc.GetDistinctServiceModelsAsync();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string code, string name, ServiceROType roType, decimal stdManHour, decimal price, decimal cost, decimal vatPercent, string? model, bool flagWarranty, string? note)
+    {
+        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
+        {
+            TempData["Error"] = "Vui lòng nhập đầy đủ Mã công việc (SerCode) và Tên công việc (SerName).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            var item = new ServiceItem
+            {
+                Code = code.Trim().ToUpperInvariant(),
+                Name = name.Trim(),
+                ROType = roType,
+                StdManHour = stdManHour > 0 ? stdManHour : 1.0m,
+                Price = price >= 0 ? price : 0,
+                Cost = cost >= 0 ? cost : 0,
+                VatPercent = vatPercent >= 0 ? vatPercent : 8,
+                Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim(),
+                FlagWarranty = flagWarranty,
+                Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim(),
+                IsActive = true
+            };
+            var id = await svc.CreateServiceItemAsync(item);
+            TempData["Success"] = $"Đã thêm công việc [{item.Code}] {item.Name} vào danh mục tiêu chuẩn Flat Rate.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string name, ServiceROType roType, decimal stdManHour, decimal price, decimal cost, decimal vatPercent, string? model, bool flagWarranty, bool isActive, string? note)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            TempData["Error"] = "Tên công việc không được để trống.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var item = new ServiceItem
+        {
+            Id = id,
+            Name = name.Trim(),
+            ROType = roType,
+            StdManHour = stdManHour > 0 ? stdManHour : 1.0m,
+            Price = price >= 0 ? price : 0,
+            Cost = cost >= 0 ? cost : 0,
+            VatPercent = vatPercent >= 0 ? vatPercent : 8,
+            Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim(),
+            FlagWarranty = flagWarranty,
+            IsActive = isActive,
+            Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim()
+        };
+
+        var (ok, msg) = await svc.UpdateServiceItemAsync(item);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteServiceItemAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> AddToRO(int roId, int serviceItemId, ExpenseType expenseType, decimal? customHours, decimal? customPrice, string? note)
+    {
+        var (ok, msg) = await svc.AddServiceItemToROAsync(roId, serviceItemId, expenseType, customHours, customPrice, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction("Detail", "RO", new { id = roId });
     }
 }
 

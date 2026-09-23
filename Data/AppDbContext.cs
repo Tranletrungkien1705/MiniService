@@ -54,6 +54,7 @@ public class AppDbContext : DbContext
     public DbSet<OrderComplain> OrderComplains => Set<OrderComplain>();
     public DbSet<OrderComplainAttachFile> OrderComplainAttachFiles => Set<OrderComplainAttachFile>();
     public DbSet<TechnicalLibrary> TechnicalLibraries => Set<TechnicalLibrary>();
+    public DbSet<ServiceItem> ServiceItems => Set<ServiceItem>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -105,8 +106,10 @@ public class AppDbContext : DbContext
             e.Ignore(x => x.Amount);
             e.Property(x => x.Quantity).HasPrecision(18, 2);
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.Property(x => x.StdManHour).HasPrecision(5, 2);
             e.HasOne(x => x.RO).WithMany(x => x.Lines).HasForeignKey(x => x.ROId);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.ServiceItem).WithMany(x => x.RepairLines).HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<WarrantyReport>(e =>
@@ -491,6 +494,19 @@ public class AppDbContext : DbContext
             e.Ignore(x => x.IsApproved);
             e.Ignore(x => x.StatusText);
             e.HasOne(x => x.RO).WithMany(x => x.TechnicalLibraries).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ServiceItem>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
+            e.Ignore(x => x.TotalWithVat);
+            e.Ignore(x => x.GrossProfit);
+            e.Ignore(x => x.GrossMargin);
+            e.Property(x => x.StdManHour).HasPrecision(5, 2);
+            e.Property(x => x.Price).HasPrecision(18, 2);
+            e.Property(x => x.Cost).HasPrecision(18, 2);
+            e.Property(x => x.VatPercent).HasPrecision(5, 2);
+            e.HasMany(x => x.RepairLines).WithOne(x => x.ServiceItem).HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

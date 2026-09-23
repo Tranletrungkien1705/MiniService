@@ -1,0 +1,110 @@
+@{
+    ViewData["Title"] = "Thêm công việc & giờ công định mức mới";
+    var models = ViewBag.Models as List<string> ?? [];
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center gap-2">
+        <a asp-action="Index" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+        <h4 class="mb-0 fw-bold">Thêm Công việc &amp; Giờ công Định mức (Ser_MST_Service)</h4>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-9">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3">
+                <div class="fw-bold fs-5 text-primary"><i class="bi bi-wrench-adjustable me-2"></i>Quy chuẩn công việc &amp; Bảng giá giờ công Flat Rate</div>
+                <div class="text-muted small">Thiết lập thông số định mức giờ thợ và đơn giá dịch vụ chuẩn đại lý Hyundai</div>
+            </div>
+            <div class="card-body">
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã công việc (SerCode) <span class="text-danger">*</span></label>
+                            <input name="code" class="form-control font-monospace" placeholder="VD: SCC-ENG-05, BDD-050..." required style="text-transform:uppercase" />
+                            <div class="form-text">Mã định danh duy nhất của công việc</div>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold">Tên công việc dịch vụ (SerName) <span class="text-danger">*</span></label>
+                            <input name="name" class="form-control" placeholder="VD: Cân chỉnh góc đặt bánh xe laser 3D Hunter..." required />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Phân loại nghiệp vụ (ROType)</label>
+                            <select name="roType" class="form-select">
+                                @foreach (ServiceROType t in Enum.GetValues<ServiceROType>())
+                                {
+                                    var info = Ui.ServiceROType(t);
+                                    <option value="@t">[@info.code] @info.text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Giờ công tiêu chuẩn (StdManHour)</label>
+                            <div class="input-group">
+                                <input name="stdManHour" type="number" step="0.1" value="1.0" min="0.1" class="form-control font-monospace" required />
+                                <span class="input-group-text">giờ</span>
+                            </div>
+                            <div class="form-text">Định mức thời gian thao tác chuẩn (Flat Rate)</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Thuế suất VAT (%)</label>
+                            <div class="input-group">
+                                <input name="vatPercent" type="number" step="1" value="8" min="0" max="20" class="form-control font-monospace" required />
+                                <span class="input-group-text">%</span>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Đơn giá bán niêm yết (Price)</label>
+                            <div class="input-group">
+                                <input name="price" type="number" step="1000" value="300000" min="0" class="form-control font-monospace text-primary fw-bold" required />
+                                <span class="input-group-text">VNĐ</span>
+                            </div>
+                            <div class="form-text">Đơn giá bán trước thuế VAT cho khách hàng</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Chi phí giá vốn KTV khoán (Cost)</label>
+                            <div class="input-group">
+                                <input name="cost" type="number" step="1000" value="120000" min="0" class="form-control font-monospace" required />
+                                <span class="input-group-text">VNĐ</span>
+                            </div>
+                            <div class="form-text">Chi phí lương khoán KTV thực hiện công việc</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Dòng xe áp dụng (Model)</label>
+                            <input name="model" class="form-control" placeholder="VD: Tất cả các dòng xe Hyundai, Accent / Elantra..." list="modelList" />
+                            <datalist id="modelList">
+                                @foreach (var m in models)
+                                {
+                                    <option value="@m" />
+                                }
+                            </datalist>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center mt-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="flagWarranty" value="true" id="chkNewWarrantyPage" />
+                                <label class="form-check-label fw-semibold text-success" for="chkNewWarrantyPage">
+                                    <i class="bi bi-shield-check me-1"></i>Hạng mục được Bảo hành hãng HTC
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Ghi chú quy trình kỹ thuật &amp; tiêu chuẩn thi công</label>
+                            <textarea name="note" class="form-control" rows="3" placeholder="Thiết bị máy móc đặc chủng, mã lỗi liên quan, quy trình thao tác theo tài liệu kỹ thuật Hyundai..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                        <a asp-action="Index" class="btn btn-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Tạo công việc dịch vụ</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

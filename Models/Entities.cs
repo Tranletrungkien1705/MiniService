@@ -363,6 +363,17 @@ public enum TechnicalLibraryReRepairType
     BodyPaint = 6        // Thân vỏ & Sơn (Body & Paint)
 }
 
+/// <summary>Phân loại nghiệp vụ công việc dịch vụ — theo ROTYPE trong Ser_MST_Service idn.CarService.</summary>
+public enum ServiceROType
+{
+    BDD = 0, // Bảo dưỡng định kỳ (Periodic Maintenance)
+    SCC = 1, // Sửa chữa chung máy - gầm - điện (General Repair)
+    SCD = 2, // Đồng sơn & Sơn sấy thân vỏ (Body & Paint)
+    SCS = 3, // Dịch vụ sửa chữa nhanh (Quick Service / Express Service)
+    PDI = 4, // Kiểm tra nghiệm thu xe mới xuất xưởng (Pre-Delivery Inspection)
+    SPK = 5  // Chăm sóc & Phụ kiện xe (Detailing & Accessories)
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -472,12 +483,15 @@ public class RepairLine : IOrgOwned
     public LineType Type { get; set; }
     public ExpenseType ExpenseType { get; set; } = ExpenseType.Customer;
     public int? PartId { get; set; }                // Liên kết danh mục phụ tùng nếu có
+    public int? ServiceItemId { get; set; }         // Liên kết danh mục công việc chuẩn nếu có (Ser_MST_Service)
+    public decimal? StdManHour { get; set; }        // Giờ công tiêu chuẩn định mức (StdManHour)
     public string Name { get; set; } = "";
     public decimal Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }
     public decimal Amount => Quantity * UnitPrice;
     public RepairOrder RO { get; set; } = null!;
     public Part? Part { get; set; }
+    public ServiceItem? ServiceItem { get; set; }
 }
 
 /// <summary>Báo cáo bảo hành (Warranty Report) — Ser_ROWarrantyReport trong idn.CarService.</summary>
@@ -1586,6 +1600,31 @@ public class TechnicalLibrary : IOrgOwned
 
     public bool IsApproved => IsActive;
     public string StatusText => IsActive ? "Đã duyệt ban hành" : "Chờ thẩm định HQ";
+}
+
+/// <summary>Danh mục Công việc Dịch vụ & Giờ công Tiêu chuẩn Flat Rate — Ser_MST_Service trong idn.CarService.</summary>
+public class ServiceItem : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                    // Mã công việc dịch vụ (SerCode, VD: BDD-01, SCC-ENG-02, SCD-PNT-01)
+    public string Name { get; set; } = "";                    // Tên công việc dịch vụ (SerName)
+    public ServiceROType ROType { get; set; } = ServiceROType.SCC; // Loại dịch vụ (BDD, SCC, SCD, SCS, PDI, SPK)
+    public decimal StdManHour { get; set; } = 1.0m;           // Giờ công định mức Flat Rate Hour (StdManHour)
+    public decimal Price { get; set; }                        // Đơn giá giờ công / Tiền công niêm yết trước thuế (Price)
+    public decimal Cost { get; set; }                         // Chi phí giá vốn giờ công thợ định mức (Cost)
+    public decimal VatPercent { get; set; } = 8;              // Thuế suất VAT (%)
+    public string? Model { get; set; }                        // Dòng xe áp dụng (VD: Tất cả dòng xe, Accent, Tucson, Santa Fe...)
+    public bool FlagWarranty { get; set; } = false;           // Cờ công việc áp dụng chế độ Bảo hành hãng HTC (FlagWarranty)
+    public string? Note { get; set; }                         // Hướng dẫn kỹ thuật / Quy trình thao tác
+    public bool IsActive { get; set; } = true;                // Cờ hiệu lực hoạt động (IsActive)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo
+
+    public List<RepairLine> RepairLines { get; set; } = [];
+
+    public decimal TotalWithVat => Math.Round(Price * (1 + VatPercent / 100m), 2);
+    public decimal GrossProfit => Price - Cost;
+    public decimal GrossMargin => Price > 0 ? Math.Round((Price - Cost) / Price * 100m, 1) : 0;
 }
 
 

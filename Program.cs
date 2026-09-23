@@ -3236,6 +3236,156 @@ app.MapGet("/api/technicallibraries/suggest-for-ro/{roId:int}", async (int roId,
     }));
 });
 
+// Master Services & Flat Rate Labor Operations (Ser_MST_Service)
+app.MapGet("/api/services", async (ServiceROType? roType, string? model, bool? isActive, bool? flagWarranty, string? q, IRoService svc) =>
+{
+    var list = await svc.ServiceItemsAsync(roType, model, isActive, flagWarranty, q);
+    return Results.Ok(list.Select(s => new
+    {
+        s.Id,
+        s.Code,
+        s.Name,
+        roType = Ui.ServiceROType(s.ROType).text,
+        roTypeCode = Ui.ServiceROType(s.ROType).code,
+        s.StdManHour,
+        s.Price,
+        s.Cost,
+        s.VatPercent,
+        s.TotalWithVat,
+        s.GrossProfit,
+        s.GrossMargin,
+        s.Model,
+        s.FlagWarranty,
+        s.Note,
+        s.IsActive,
+        repairLineCount = s.RepairLines.Count
+    }));
+});
+
+app.MapGet("/api/services/{id:int}", async (int id, IRoService svc) =>
+{
+    var s = await svc.GetServiceItemAsync(id);
+    if (s == null) return Results.NotFound(new { error = "Không tìm thấy công việc dịch vụ." });
+    return Results.Ok(new
+    {
+        s.Id,
+        s.Code,
+        s.Name,
+        roType = Ui.ServiceROType(s.ROType).text,
+        roTypeCode = Ui.ServiceROType(s.ROType).code,
+        s.StdManHour,
+        s.Price,
+        s.Cost,
+        s.VatPercent,
+        s.TotalWithVat,
+        s.GrossProfit,
+        s.GrossMargin,
+        s.Model,
+        s.FlagWarranty,
+        s.Note,
+        s.IsActive,
+        s.CreatedAt,
+        repairLines = s.RepairLines.Select(l => new
+        {
+            l.Id,
+            roId = l.ROId,
+            roCode = l.RO?.Code,
+            plate = l.RO?.Car?.Plate,
+            model = l.RO?.Car?.Model,
+            expenseType = Ui.Expense(l.ExpenseType).text,
+            l.Quantity,
+            l.UnitPrice,
+            l.Amount
+        })
+    });
+});
+
+app.MapGet("/api/services/by-code/{code}", async (string code, IRoService svc) =>
+{
+    var s = await svc.GetServiceItemByCodeAsync(code);
+    if (s == null) return Results.NotFound(new { error = "Không tìm thấy mã công việc dịch vụ." });
+    return Results.Ok(new
+    {
+        s.Id,
+        s.Code,
+        s.Name,
+        roType = Ui.ServiceROType(s.ROType).text,
+        s.StdManHour,
+        s.Price,
+        s.Cost,
+        s.TotalWithVat,
+        s.Model,
+        s.FlagWarranty
+    });
+});
+
+app.MapPost("/api/services", async (CreateServiceItemDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.Code) || string.IsNullOrWhiteSpace(dto.Name))
+        return Results.BadRequest(new { error = "Vui lòng nhập đầy đủ Code và Name." });
+
+    var item = new ServiceItem
+    {
+        Code = dto.Code.Trim().ToUpperInvariant(),
+        Name = dto.Name.Trim(),
+        ROType = dto.ROType,
+        StdManHour = dto.StdManHour > 0 ? dto.StdManHour : 1.0m,
+        Price = dto.Price >= 0 ? dto.Price : 0,
+        Cost = dto.Cost >= 0 ? dto.Cost : 0,
+        VatPercent = dto.VatPercent >= 0 ? dto.VatPercent : 8,
+        Model = string.IsNullOrWhiteSpace(dto.Model) ? null : dto.Model.Trim(),
+        FlagWarranty = dto.FlagWarranty ?? false,
+        Note = string.IsNullOrWhiteSpace(dto.Note) ? null : dto.Note.Trim(),
+        IsActive = dto.IsActive ?? true
+    };
+
+    try
+    {
+        var id = await svc.CreateServiceItemAsync(item);
+        return Results.Created($"/api/services/{id}", new { id, item.Code, item.Name, message = "Đã tạo công việc dịch vụ chuẩn." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/services/{id:int}", async (int id, UpdateServiceItemDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.Name))
+        return Results.BadRequest(new { error = "Tên công việc không được để trống." });
+
+    var item = new ServiceItem
+    {
+        Id = id,
+        Name = dto.Name.Trim(),
+        ROType = dto.ROType,
+        StdManHour = dto.StdManHour > 0 ? dto.StdManHour : 1.0m,
+        Price = dto.Price >= 0 ? dto.Price : 0,
+        Cost = dto.Cost >= 0 ? dto.Cost : 0,
+        VatPercent = dto.VatPercent >= 0 ? dto.VatPercent : 8,
+        Model = string.IsNullOrWhiteSpace(dto.Model) ? null : dto.Model.Trim(),
+        FlagWarranty = dto.FlagWarranty,
+        IsActive = dto.IsActive,
+        Note = string.IsNullOrWhiteSpace(dto.Note) ? null : dto.Note.Trim()
+    };
+
+    var (ok, msg) = await svc.UpdateServiceItemAsync(item);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/services/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteServiceItemAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/services/{id:int}/apply-to-ro", async (int id, ApplyServiceToRoDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.AddServiceItemToROAsync(dto.RoId, id, dto.ExpenseType ?? ExpenseType.Customer, dto.CustomHours, dto.CustomPrice, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -3329,3 +3479,6 @@ record CreateOrderComplainAttachDto(string ImageType, string FileName, string? F
 record ReviewOrderComplainDto(TSTOrderComplainStatus TSTStatus, ComplainSolution Solution, string? SolutionNote);
 record CreateTechnicalLibraryDto(string? TechnicalLibraryCode, string? DealerCode, string? DealerName, string? PlateNo, string Model, string? Engine, string? Gear, string? Version, TechnicalLibraryReRepairType ReRepairType, TechnicalLibraryType? Type, string ReRepairRemark, string? ReRepairFeedback, string? ExclusionTest, string ReRepairReason, string ReRepairSolution, int? RoId, string? CreatedBy);
 record ApproveTechnicalLibraryDto(string? ApprovedBy);
+record CreateServiceItemDto(string Code, string Name, ServiceROType ROType, decimal StdManHour, decimal Price, decimal Cost, decimal VatPercent, string? Model, bool? FlagWarranty, string? Note, bool? IsActive);
+record UpdateServiceItemDto(string Name, ServiceROType ROType, decimal StdManHour, decimal Price, decimal Cost, decimal VatPercent, string? Model, bool FlagWarranty, bool IsActive, string? Note);
+record ApplyServiceToRoDto(int RoId, ExpenseType? ExpenseType, decimal? CustomHours, decimal? CustomPrice, string? Note);
