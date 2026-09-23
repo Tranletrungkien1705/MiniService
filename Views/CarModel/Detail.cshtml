@@ -1,0 +1,143 @@
+@model CarModel
+@{
+    ViewData["Title"] = $"Chi tiết dòng xe [{Model.ModelCode}] {Model.ModelName}";
+    var segInfo = Ui.CarModelSegment(Model.Segment);
+    var activeInfo = Ui.CarModelActive(Model.IsActive);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/CarModel" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Danh mục dòng xe</a>
+        <h5 class="mb-0 fw-bold mt-1">
+            <span class="font-monospace text-primary">@Model.ModelCode</span> - @Model.ModelName
+            <span class="badge bg-@activeInfo.css ms-2">@activeInfo.text</span>
+        </h5>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editModelModal">
+            <i class="bi bi-pencil me-1"></i>Chỉnh sửa
+        </button>
+        <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Bạn có chắc muốn xóa dòng xe này?');">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin dòng xe</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Mã dòng xe (ModelCode)</dt>
+                    <dd class="col-sm-7 font-monospace fw-bold">@Model.ModelCode</dd>
+
+                    <dt class="col-sm-5 text-muted small">Tên dòng xe (ModelName)</dt>
+                    <dd class="col-sm-7">@Model.ModelName</dd>
+
+                    <dt class="col-sm-5 text-muted small">Thương hiệu (TradeMarkCode)</dt>
+                    <dd class="col-sm-7"><span class="badge bg-light text-dark border font-monospace">@Model.TradeMarkCode</span></dd>
+
+                    <dt class="col-sm-5 text-muted small">Phân khúc (Segment)</dt>
+                    <dd class="col-sm-7"><span class="badge bg-@segInfo.css">@segInfo.code - @segInfo.text</span></dd>
+
+                    <dt class="col-sm-5 text-muted small">Mã sản xuất (ProductionCode)</dt>
+                    <dd class="col-sm-7 font-monospace">@(string.IsNullOrEmpty(Model.ProductionCode) ? "-" : Model.ProductionCode)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Mã đại lý (DealerCode)</dt>
+                    <dd class="col-sm-7 font-monospace">@(string.IsNullOrEmpty(Model.DealerCode) ? "-" : Model.DealerCode)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Năm sản xuất (ProductYear)</dt>
+                    <dd class="col-sm-7">@(Model.ProductYear?.ToString() ?? "-")</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-clock-history me-1 text-secondary"></i>Lịch sử &amp; Trạng thái</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Trạng thái</dt>
+                    <dd class="col-sm-7"><span class="badge bg-@activeInfo.css">@activeInfo.text</span></dd>
+
+                    <dt class="col-sm-5 text-muted small">Người tạo (CreatedBy)</dt>
+                    <dd class="col-sm-7">@Model.CreatedBy</dd>
+
+                    <dt class="col-sm-5 text-muted small">Ngày tạo (CreatedDate)</dt>
+                    <dd class="col-sm-7">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</dd>
+
+                    <dt class="col-sm-5 text-muted small">Người cập nhật cuối (LogLUBy)</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(Model.LogLUBy) ? "-" : Model.LogLUBy)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Cập nhật cuối (LogLUDateTime)</dt>
+                    <dd class="col-sm-7">@(Model.LogLUDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "-")</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Chỉnh sửa dòng xe -->
+<div class="modal fade" id="editModelModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form asp-action="Update" asp-route-id="@Model.Id" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2 text-primary"></i>Chỉnh sửa dòng xe @Model.ModelCode</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã dòng xe (ModelCode)</label>
+                            <input class="form-control font-monospace" value="@Model.ModelCode" disabled />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold">Tên dòng xe (ModelName) <span class="text-danger">*</span></label>
+                            <input name="modelName" class="form-control" value="@Model.ModelName" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã thương hiệu (TradeMarkCode)</label>
+                            <input name="tradeMarkCode" class="form-control font-monospace" value="@Model.TradeMarkCode" style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã sản xuất (ProductionCode)</label>
+                            <input name="productionCode" class="form-control font-monospace" value="@Model.ProductionCode" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                            <input name="dealerCode" class="form-control font-monospace" value="@Model.DealerCode" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Phân khúc dòng xe (Segment)</label>
+                            <select name="segment" class="form-select">
+                                @foreach (CarModelSegment s in Enum.GetValues<CarModelSegment>())
+                                {
+                                    var info = Ui.CarModelSegment(s);
+                                    <option value="@s" selected="@(Model.Segment == s)">[@info.code] @info.text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Năm sản xuất / Đời xe (ProductYear)</label>
+                            <input name="productYear" type="number" min="1990" max="2100" class="form-control font-monospace" value="@Model.ProductYear" />
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="isActive" value="true" id="chkActive" @(Model.IsActive ? "checked" : "") />
+                                <label class="form-check-label fw-semibold" for="chkActive">Đang áp dụng (IsActive)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu thay đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

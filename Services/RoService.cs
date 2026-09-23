@@ -277,6 +277,15 @@ public interface IRoService
     Task<List<ServiceItem>> ServiceItemsForSelectAsync();
     Task<(bool ok, string msg)> AddServiceItemToROAsync(int roId, int serviceItemId, ExpenseType expenseType, decimal? customHours = null, decimal? customPrice = null, string? note = null);
     Task<List<string>> GetDistinctServiceModelsAsync();
+    // Car Model Master (Ser_Mst_Model / Mst_CarModelStd)
+    Task<List<CarModel>> CarModelsAsync(string? tradeMarkCode, CarModelSegment? segment, bool? isActive, string? q);
+    Task<CarModel?> GetCarModelAsync(int id);
+    Task<CarModel?> GetCarModelByCodeAsync(string modelCode);
+    Task<int> CreateCarModelAsync(CarModel model);
+    Task<(bool ok, string msg)> UpdateCarModelAsync(CarModel model);
+    Task<(bool ok, string msg)> DeleteCarModelAsync(int id);
+    Task<CarModelSummaryDto> GetCarModelSummaryAsync();
+    Task<List<string>> GetDistinctTradeMarksAsync();
     // Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment, Ser_SupplierPaymentDtl / MNU_QT_DL_QUANLYPHIEUXUATTRANHACUNGCAP)
     Task<List<Supplier>> SuppliersAsync(string? q);
     Task<Supplier?> GetSupplierAsync(int id);
@@ -5590,6 +5599,124 @@ public class RoService(AppDbContext db) : IRoService
             .Select(s => s.Model!)
             .Distinct()
             .OrderBy(m => m)
+            .ToListAsync();
+
+    // --- Car Model Master (Ser_Mst_Model / Mst_CarModelStd) ---
+    public async Task<List<CarModel>> CarModelsAsync(string? tradeMarkCode, CarModelSegment? segment, bool? isActive, string? q)
+    {
+        var query = db.CarModels.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(tradeMarkCode))
+        {
+            var tm = tradeMarkCode.Trim().ToUpperInvariant();
+            query = query.Where(m => m.TradeMarkCode == tm);
+        }
+        if (segment.HasValue) query = query.Where(m => m.Segment == segment.Value);
+        if (isActive.HasValue) query = query.Where(m => m.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(m => m.ModelCode.ToLower().Contains(s)
+                || m.ModelName.ToLower().Contains(s)
+                || m.TradeMarkCode.ToLower().Contains(s)
+                || (m.ProductionCode != null && m.ProductionCode.ToLower().Contains(s)));
+        }
+        return await query.OrderBy(m => m.TradeMarkCode).ThenBy(m => m.ModelCode).ToListAsync();
+    }
+
+    public Task<CarModel?> GetCarModelAsync(int id) =>
+        db.CarModels.FirstOrDefaultAsync(m => m.Id == id);
+
+    public Task<CarModel?> GetCarModelByCodeAsync(string modelCode)
+    {
+        var clean = modelCode.Trim().ToUpperInvariant();
+        return db.CarModels.FirstOrDefaultAsync(m => m.ModelCode == clean);
+    }
+
+    public async Task<int> CreateCarModelAsync(CarModel model)
+    {
+        if (string.IsNullOrWhiteSpace(model.ModelCode))
+            throw new InvalidOperationException("Vui lòng nhập mã dòng xe (ModelCode).");
+        if (string.IsNullOrWhiteSpace(model.ModelName))
+            throw new InvalidOperationException("Vui lòng nhập tên dòng xe (ModelName).");
+        if (string.IsNullOrWhiteSpace(model.TradeMarkCode))
+            throw new InvalidOperationException("Vui lòng nhập mã thương hiệu (TradeMarkCode).");
+
+        model.ModelCode = model.ModelCode.Trim().ToUpperInvariant();
+        model.TradeMarkCode = model.TradeMarkCode.Trim().ToUpperInvariant();
+        model.ModelName = model.ModelName.Trim();
+
+        var exists = await db.CarModels.AnyAsync(m => m.ModelCode == model.ModelCode);
+        if (exists)
+            throw new InvalidOperationException($"Mã dòng xe {model.ModelCode} đã tồn tại trong danh mục.");
+
+        model.CreatedAt = DateTime.Now;
+        model.LogLUDateTime = DateTime.Now;
+        model.LogLUBy = model.CreatedBy;
+        db.CarModels.Add(model);
+        await db.SaveChangesAsync();
+        return model.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateCarModelAsync(CarModel model)
+    {
+        var existing = await db.CarModels.FirstOrDefaultAsync(m => m.Id == model.Id);
+        if (existing == null) return (false, "Không tìm thấy dòng xe.");
+
+        if (string.IsNullOrWhiteSpace(model.ModelName))
+            return (false, "Tên dòng xe không được để trống.");
+
+        existing.ModelName = model.ModelName.Trim();
+        existing.TradeMarkCode = string.IsNullOrWhiteSpace(model.TradeMarkCode) ? existing.TradeMarkCode : model.TradeMarkCode.Trim().ToUpperInvariant();
+        existing.ProductionCode = model.ProductionCode?.Trim();
+        existing.DealerCode = model.DealerCode?.Trim();
+        existing.Segment = model.Segment;
+        existing.ProductYear = model.ProductYear;
+        existing.IsActive = model.IsActive;
+        existing.LogLUBy = model.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật dòng xe {existing.ModelCode} - {existing.ModelName}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCarModelAsync(int id)
+    {
+        var existing = await db.CarModels.FirstOrDefaultAsync(m => m.Id == id);
+        if (existing == null) return (false, "Không tìm thấy dòng xe.");
+
+        // Kiểm tra dòng xe đã được dùng bởi xe trong hệ thống (Ser_Car.Model) chưa.
+        var modelName = existing.ModelName;
+        var inUse = await db.Cars.AnyAsync(c => c.Model == modelName);
+        if (inUse)
+        {
+            existing.IsActive = false;
+            existing.LogLUDateTime = DateTime.Now;
+            await db.SaveChangesAsync();
+            return (true, $"Dòng xe {existing.ModelCode} đã được gán cho xe trong hệ thống nên đã chuyển sang trạng thái Tạm dừng.");
+        }
+
+        db.CarModels.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa dòng xe {existing.ModelCode}.");
+    }
+
+    public async Task<CarModelSummaryDto> GetCarModelSummaryAsync()
+    {
+        var all = await db.CarModels.ToListAsync();
+        return new CarModelSummaryDto
+        {
+            TotalModels = all.Count,
+            ActiveModels = all.Count(m => m.IsActive),
+            InactiveModels = all.Count(m => !m.IsActive),
+            TradeMarkCount = all.Select(m => m.TradeMarkCode).Distinct().Count(),
+            SegmentCount = all.Select(m => m.Segment).Distinct().Count()
+        };
+    }
+
+    public Task<List<string>> GetDistinctTradeMarksAsync() =>
+        db.CarModels.Select(m => m.TradeMarkCode)
+            .Distinct()
+            .OrderBy(t => t)
             .ToListAsync();
 
     // --- Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment) ---

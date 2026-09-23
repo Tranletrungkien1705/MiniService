@@ -1,0 +1,220 @@
+@model List<CarModel>
+@{
+    ViewData["Title"] = "Danh mục Dòng xe (Car Model Master)";
+    var summary = ViewBag.Summary as CarModelSummaryDto ?? new CarModelSummaryDto();
+    var tradeMarks = ViewBag.TradeMarks as List<string> ?? [];
+    CarModelSegment? curSegment = ViewBag.Segment;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số dòng xe</div>
+                <div class="stat-num text-primary">@summary.TotalModels</div>
+                <div class="text-muted" style="font-size:11.5px">Danh mục dòng xe chuẩn hãng</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đang áp dụng</div>
+                <div class="stat-num text-success">@summary.ActiveModels</div>
+                <div class="text-muted" style="font-size:11.5px">Dòng xe có hiệu lực hoạt động</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Thương hiệu</div>
+                <div class="stat-num text-info">@summary.TradeMarkCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số thương hiệu (TradeMarkCode)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Phân khúc</div>
+                <div class="stat-num" style="color:#0f766e">@summary.SegmentCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số phân khúc dòng xe</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:280px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Mã, tên dòng xe, thương hiệu..." />
+                </div>
+                <select name="tradeMarkCode" class="form-select form-select-sm" style="width:170px" onchange="this.form.submit()">
+                    <option value="">-- Thương hiệu --</option>
+                    @foreach (var tm in tradeMarks)
+                    {
+                        <option value="@tm" selected="@(ViewBag.TradeMarkCode == tm)">@tm</option>
+                    }
+                </select>
+                <select name="segment" class="form-select form-select-sm" style="width:180px" onchange="this.form.submit()">
+                    <option value="">-- Phân khúc --</option>
+                    @foreach (CarModelSegment s in Enum.GetValues<CarModelSegment>())
+                    {
+                        var info = Ui.CarModelSegment(s);
+                        <option value="@s" selected="@(curSegment == s)">[@info.code] @info.text</option>
+                    }
+                </select>
+                <select name="isActive" class="form-select form-select-sm" style="width:140px" onchange="this.form.submit()">
+                    <option value="">-- Trạng thái --</option>
+                    <option value="true" selected="@(ViewBag.IsActive == true)">Đang áp dụng</option>
+                    <option value="false" selected="@(ViewBag.IsActive == false)">Tạm dừng</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || !string.IsNullOrEmpty(ViewBag.TradeMarkCode as string) || curSegment.HasValue || ViewBag.IsActive != null)
+                {
+                    <a href="/CarModel" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/Car" class="btn btn-sm btn-outline-secondary"><i class="bi bi-car-front me-1"></i>Danh sách xe</a>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createModelModal">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm dòng xe mới
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:120px">Mã dòng xe</th>
+                        <th>Tên dòng xe</th>
+                        <th style="width:130px">Thương hiệu</th>
+                        <th style="width:160px">Phân khúc</th>
+                        <th style="width:120px">Mã SX</th>
+                        <th class="text-center" style="width:90px">Đời xe</th>
+                        <th class="text-center" style="width:110px">Trạng thái</th>
+                        <th class="text-end" style="width:120px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy dòng xe nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var m in Model)
+                    {
+                        var segInfo = Ui.CarModelSegment(m.Segment);
+                        var activeInfo = Ui.CarModelActive(m.IsActive);
+                        <tr>
+                            <td>
+                                <a asp-action="Detail" asp-route-id="@m.Id" class="fw-bold font-monospace text-decoration-none">
+                                    @m.ModelCode
+                                </a>
+                            </td>
+                            <td>
+                                <div class="fw-semibold">
+                                    <a asp-action="Detail" asp-route-id="@m.Id" class="text-dark text-decoration-none">
+                                        @m.ModelName
+                                    </a>
+                                </div>
+                                @if (!string.IsNullOrEmpty(m.DealerCode))
+                                {
+                                    <div class="text-muted small">Đại lý: @m.DealerCode</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border font-monospace">@m.TradeMarkCode</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-@segInfo.css">@segInfo.code - @segInfo.text</span>
+                            </td>
+                            <td>
+                                <span class="small text-secondary font-monospace">@(string.IsNullOrEmpty(m.ProductionCode) ? "-" : m.ProductionCode)</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="small text-secondary">@(m.ProductYear?.ToString() ?? "-")</span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-@activeInfo.css">@activeInfo.text</span>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@m.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm dòng xe mới -->
+<div class="modal fade" id="createModelModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-car-front-fill me-2 text-primary"></i>Thêm Dòng xe Mới (Ser_Mst_Model)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã dòng xe (ModelCode) <span class="text-danger">*</span></label>
+                            <input name="modelCode" class="form-control font-monospace" placeholder="VD: ACC, TUC, SAN..." required style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label small fw-semibold">Tên dòng xe (ModelName) <span class="text-danger">*</span></label>
+                            <input name="modelName" class="form-control" placeholder="VD: Hyundai Accent, Hyundai Tucson..." required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã thương hiệu (TradeMarkCode) <span class="text-danger">*</span></label>
+                            <input name="tradeMarkCode" class="form-control font-monospace" placeholder="VD: HMC, HTC..." required style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã sản xuất (ProductionCode)</label>
+                            <input name="productionCode" class="form-control font-monospace" placeholder="VD: RB, NX4..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                            <input name="dealerCode" class="form-control font-monospace" placeholder="VD: VS058..." />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Phân khúc dòng xe (Segment)</label>
+                            <select name="segment" class="form-select">
+                                @foreach (CarModelSegment s in Enum.GetValues<CarModelSegment>())
+                                {
+                                    var info = Ui.CarModelSegment(s);
+                                    <option value="@s">[@info.code] @info.text</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Năm sản xuất / Đời xe (ProductYear)</label>
+                            <input name="productYear" type="number" min="1990" max="2100" class="form-control font-monospace" placeholder="VD: 2023" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu dòng xe</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

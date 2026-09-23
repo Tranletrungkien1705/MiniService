@@ -463,6 +463,19 @@ public static class Ui
     public static (string text, string css) ServiceItemActive(bool isActive) =>
         isActive ? ("Đang áp dụng", "success") : ("Tạm dừng", "secondary");
 
+    public static (string text, string code, string css) CarModelSegment(CarModelSegment s) => s switch
+    {
+        Models.CarModelSegment.Sedan => ("Sedan", "SED", "primary"),
+        Models.CarModelSegment.SUV => ("SUV / CUV", "SUV", "info"),
+        Models.CarModelSegment.MPV => ("MPV / 7 chỗ", "MPV", "warning"),
+        Models.CarModelSegment.Commercial => ("Thương mại / Bán tải", "COM", "secondary"),
+        Models.CarModelSegment.EV => ("Xe điện / Hybrid", "EV", "success"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string css) CarModelActive(bool isActive) =>
+        isActive ? ("Đang áp dụng", "success") : ("Tạm dừng", "secondary");
+
     public static (string text, string code, string css) SupplierPaymentStatus(SupplierPaymentStatus s) => s switch
     {
         Models.SupplierPaymentStatus.Pending => ("Chờ duyệt xuất", "PEND", "warning"),

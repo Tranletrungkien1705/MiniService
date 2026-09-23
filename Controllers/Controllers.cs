@@ -3119,6 +3119,99 @@ public class ServiceItemController(IRoService svc) : Controller
     }
 }
 
+public class CarModelController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? tradeMarkCode, CarModelSegment? segment, bool? isActive, string? q)
+    {
+        ViewBag.TradeMarkCode = tradeMarkCode;
+        ViewBag.Segment = segment;
+        ViewBag.IsActive = isActive;
+        ViewBag.Q = q;
+        ViewBag.TradeMarks = await svc.GetDistinctTradeMarksAsync();
+        ViewBag.Summary = await svc.GetCarModelSummaryAsync();
+        var list = await svc.CarModelsAsync(tradeMarkCode, segment, isActive, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var model = await svc.GetCarModelAsync(id);
+        if (model == null) return NotFound();
+        return View(model);
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string modelCode, string modelName, string tradeMarkCode, string? productionCode, string? dealerCode, CarModelSegment segment, int? productYear)
+    {
+        if (string.IsNullOrWhiteSpace(modelCode) || string.IsNullOrWhiteSpace(modelName) || string.IsNullOrWhiteSpace(tradeMarkCode))
+        {
+            TempData["Error"] = "Vui lòng nhập đầy đủ Mã dòng xe (ModelCode), Tên dòng xe (ModelName) và Mã thương hiệu (TradeMarkCode).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            var model = new CarModel
+            {
+                ModelCode = modelCode.Trim().ToUpperInvariant(),
+                ModelName = modelName.Trim(),
+                TradeMarkCode = tradeMarkCode.Trim().ToUpperInvariant(),
+                ProductionCode = string.IsNullOrWhiteSpace(productionCode) ? null : productionCode.Trim(),
+                DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim(),
+                Segment = segment,
+                ProductYear = productYear,
+                IsActive = true,
+                CreatedBy = "web"
+            };
+            var id = await svc.CreateCarModelAsync(model);
+            TempData["Success"] = $"Đã thêm dòng xe [{model.ModelCode}] {model.ModelName} vào danh mục.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string modelName, string tradeMarkCode, string? productionCode, string? dealerCode, CarModelSegment segment, int? productYear, bool isActive)
+    {
+        if (string.IsNullOrWhiteSpace(modelName))
+        {
+            TempData["Error"] = "Tên dòng xe không được để trống.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var model = new CarModel
+        {
+            Id = id,
+            ModelName = modelName.Trim(),
+            TradeMarkCode = tradeMarkCode?.Trim() ?? "",
+            ProductionCode = string.IsNullOrWhiteSpace(productionCode) ? null : productionCode.Trim(),
+            DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim(),
+            Segment = segment,
+            ProductYear = productYear,
+            IsActive = isActive,
+            LogLUBy = "web"
+        };
+
+        var (ok, msg) = await svc.UpdateCarModelAsync(model);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCarModelAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class SupplierPaymentController(IRoService svc) : Controller
 {
     public async Task<IActionResult> Index(SupplierPaymentStatus? status, SupplierPaymentType? type, string? q, DateTime? fromDate, DateTime? toDate)

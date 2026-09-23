@@ -3135,3 +3135,46 @@ public class RoHistorySummaryDto
     public DateTime? FirstEntryAt { get; set; }
     public DateTime? LastEntryAt { get; set; }
 }
+
+/// <summary>Phân loại dòng xe theo cấp độ thương mại — theo Ser_Mst_Model / Mst_CarModelStd idn.CarService.
+/// Dùng để phân nhóm danh mục dòng xe phục vụ tra cứu, báo giá và định mức giờ công.</summary>
+public enum CarModelSegment
+{
+    Sedan = 0,      // Sedan — Xe du lịch 4 cửa (Accent, Elantra, Grand i10...)
+    SUV = 1,        // SUV / CUV — Xe thể thao đa dụng (Tucson, Santa Fe, Creta...)
+    MPV = 2,        // MPV / Xe 7 chỗ — Đa dụng gia đình (Custin, Stargazer...)
+    Commercial = 3, // Xe thương mại / Bán tải — (Porter, Mighty, Solati...)
+    EV = 4          // Xe điện / Hybrid — (Ioniq, Kona Electric...)
+}
+
+/// <summary>Danh mục Dòng xe (Car Model Master) — Ser_Mst_Model trong idn.CarService.
+/// Quản lý danh mục dòng xe theo thương hiệu (TradeMarkCode) và đại lý (DealerCode),
+/// liên kết với danh mục chuẩn hãng Mst_CarModelStd qua ModelCode.
+/// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH).</summary>
+public class CarModel : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ModelCode { get; set; } = "";               // Mã dòng xe chuẩn hãng (ModelCode, VD: ACC, TUC, SAN)
+    public string ModelName { get; set; } = "";               // Tên dòng xe (ModelName, VD: Hyundai Accent)
+    public string TradeMarkCode { get; set; } = "";           // Mã thương hiệu (TradeMarkCode, VD: HMC, HTC)
+    public string? ProductionCode { get; set; }               // Mã sản xuất / mã nội bộ nhà máy (ProductionCode)
+    public string? DealerCode { get; set; }                   // Mã đại lý áp dụng (DealerCode)
+    public CarModelSegment Segment { get; set; } = CarModelSegment.Sedan; // Phân khúc dòng xe
+    public int? ProductYear { get; set; }                     // Năm sản xuất / đời xe áp dụng
+    public bool IsActive { get; set; } = true;                // Cờ hiệu lực hoạt động (IsActive / FlagActive)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo (CreatedDate)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục dòng xe — phục vụ màn hình quản lý Model.</summary>
+public class CarModelSummaryDto
+{
+    public int TotalModels { get; set; }
+    public int ActiveModels { get; set; }
+    public int InactiveModels { get; set; }
+    public int TradeMarkCount { get; set; }                   // Số thương hiệu khác nhau
+    public int SegmentCount { get; set; }                     // Số phân khúc khác nhau
+}

@@ -87,6 +87,7 @@ public class AppDbContext : DbContext
     public DbSet<CustomerType> CustomerTypes => Set<CustomerType>();
     public DbSet<CusServiceFactor> CusServiceFactors => Set<CusServiceFactor>();
     public DbSet<RoHistory> RoHistories => Set<RoHistory>();
+    public DbSet<CarModel> CarModels => Set<CarModel>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -888,6 +889,13 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.OrgId, x.ROId });
             e.HasIndex(x => new { x.OrgId, x.Status });
             e.HasOne(x => x.RO).WithMany(r => r.Histories).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CarModel>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ModelCode }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.TradeMarkCode });
+            e.HasIndex(x => new { x.OrgId, x.Segment });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

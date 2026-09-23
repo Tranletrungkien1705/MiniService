@@ -2515,6 +2515,25 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        if (!await db.CarModels.AnyAsync())
+        {
+            var models = new List<CarModel>
+            {
+                new() { ModelCode = "ACC", ModelName = "Hyundai Accent", TradeMarkCode = "HMC", ProductionCode = "RB", Segment = CarModelSegment.Sedan, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { ModelCode = "ELA", ModelName = "Hyundai Elantra", TradeMarkCode = "HMC", ProductionCode = "CN7", Segment = CarModelSegment.Sedan, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { ModelCode = "GRI", ModelName = "Hyundai Grand i10", TradeMarkCode = "HMC", ProductionCode = "AI3", Segment = CarModelSegment.Sedan, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { ModelCode = "TUC", ModelName = "Hyundai Tucson", TradeMarkCode = "HMC", ProductionCode = "NX4", Segment = CarModelSegment.SUV, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { ModelCode = "SAN", ModelName = "Hyundai Santa Fe", TradeMarkCode = "HMC", ProductionCode = "MX5", Segment = CarModelSegment.SUV, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { ModelCode = "CRE", ModelName = "Hyundai Creta", TradeMarkCode = "HMC", ProductionCode = "SU2", Segment = CarModelSegment.SUV, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { ModelCode = "CUS", ModelName = "Hyundai Custin", TradeMarkCode = "HMC", ProductionCode = "KA4", Segment = CarModelSegment.MPV, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { ModelCode = "STA", ModelName = "Hyundai Stargazer", TradeMarkCode = "HMC", ProductionCode = "KS", Segment = CarModelSegment.MPV, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { ModelCode = "POR", ModelName = "Hyundai Porter II", TradeMarkCode = "HTC", ProductionCode = "HR", Segment = CarModelSegment.Commercial, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" },
+                new() { ModelCode = "ION", ModelName = "Hyundai Ioniq 5", TradeMarkCode = "HMC", ProductionCode = "NE", Segment = CarModelSegment.EV, ProductYear = 2023, IsActive = true, CreatedBy = "Hệ thống HTC" }
+            };
+            db.CarModels.AddRange(models);
+            await db.SaveChangesAsync();
+        }
+
         if (!await db.Suppliers.AnyAsync())
         {
             var s1 = new Supplier { Code = "HTC", Name = "Công ty Cổ phần Liên doanh Ô tô Hyundai Thành Công Việt Nam", Address = "Tòa nhà Epic Tower, Nam Từ Liêm, Hà Nội", Phone = "024.3826.2614", Email = "parts@hyundai-thanhcong.vn", ContactName = "Nguyễn Hoàng Minh", ContactPhone = "0912.345.678", TaxCode = "0102872391", BankAccount = "0011004568899", BankName = "Vietcombank - CN Sở Giao Dịch Hà Nội", IsActive = true };
@@ -5018,7 +5037,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -5139,6 +5158,10 @@ public static class Seeder
             "CREATE TABLE IF NOT EXISTS miniservice.\"RoHistories\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ROId\" integer NOT NULL, \"Status\" integer NOT NULL, \"HistoryDate\" timestamp NOT NULL DEFAULT now(), \"UserCode\" text NULL, \"Note\" text NULL)",
             "CREATE INDEX IF NOT EXISTS \"IX_RoHistories_OrgId_ROId\" ON miniservice.\"RoHistories\" (\"OrgId\", \"ROId\")",
             "CREATE INDEX IF NOT EXISTS \"IX_RoHistories_OrgId_Status\" ON miniservice.\"RoHistories\" (\"OrgId\", \"Status\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"CarModels\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ModelCode\" text NOT NULL, \"ModelName\" text NOT NULL, \"TradeMarkCode\" text NOT NULL, \"ProductionCode\" text NULL, \"DealerCode\" text NULL, \"Segment\" integer NOT NULL DEFAULT 0, \"ProductYear\" integer NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CarModels_OrgId_ModelCode\" ON miniservice.\"CarModels\" (\"OrgId\", \"ModelCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CarModels_OrgId_TradeMarkCode\" ON miniservice.\"CarModels\" (\"OrgId\", \"TradeMarkCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CarModels_OrgId_Segment\" ON miniservice.\"CarModels\" (\"OrgId\", \"Segment\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -6636,7 +6659,26 @@ public static class Seeder
                 FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE CASCADE
             );",
             @"CREATE INDEX IF NOT EXISTS ""IX_RoHistories_OrgId_ROId"" ON ""RoHistories"" (""OrgId"", ""ROId"");",
-            @"CREATE INDEX IF NOT EXISTS ""IX_RoHistories_OrgId_Status"" ON ""RoHistories"" (""OrgId"", ""Status"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_RoHistories_OrgId_Status"" ON ""RoHistories"" (""OrgId"", ""Status"");",
+            @"CREATE TABLE IF NOT EXISTS ""CarModels"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ModelCode"" TEXT NOT NULL,
+                ""ModelName"" TEXT NOT NULL,
+                ""TradeMarkCode"" TEXT NOT NULL,
+                ""ProductionCode"" TEXT NULL,
+                ""DealerCode"" TEXT NULL,
+                ""Segment"" INTEGER NOT NULL DEFAULT 0,
+                ""ProductYear"" INTEGER NULL,
+                ""IsActive"" INTEGER NOT NULL DEFAULT 1,
+                ""CreatedBy"" TEXT NOT NULL DEFAULT 'web',
+                ""CreatedAt"" TEXT NOT NULL,
+                ""LogLUBy"" TEXT NULL,
+                ""LogLUDateTime"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CarModels_OrgId_ModelCode"" ON ""CarModels"" (""OrgId"", ""ModelCode"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CarModels_OrgId_TradeMarkCode"" ON ""CarModels"" (""OrgId"", ""TradeMarkCode"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CarModels_OrgId_Segment"" ON ""CarModels"" (""OrgId"", ""Segment"");"
         };
 
         foreach (var sql in sqls)

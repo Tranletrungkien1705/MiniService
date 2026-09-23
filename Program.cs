@@ -3463,6 +3463,139 @@ app.MapPost("/api/services/{id:int}/apply-to-ro", async (int id, ApplyServiceToR
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Car Model Master (Ser_Mst_Model / Mst_CarModelStd)
+app.MapGet("/api/car-models", async (string? tradeMarkCode, CarModelSegment? segment, bool? isActive, string? q, IRoService svc) =>
+{
+    var list = await svc.CarModelsAsync(tradeMarkCode, segment, isActive, q);
+    return Results.Ok(list.Select(m => new
+    {
+        m.Id,
+        m.ModelCode,
+        m.ModelName,
+        m.TradeMarkCode,
+        m.ProductionCode,
+        m.DealerCode,
+        segment = Ui.CarModelSegment(m.Segment).text,
+        segmentCode = Ui.CarModelSegment(m.Segment).code,
+        segmentValue = (int)m.Segment,
+        m.ProductYear,
+        m.IsActive,
+        m.CreatedBy,
+        m.CreatedAt,
+        m.LogLUBy,
+        m.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/car-models/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetCarModelSummaryAsync();
+    return Results.Ok(new
+    {
+        s.TotalModels,
+        s.ActiveModels,
+        s.InactiveModels,
+        s.TradeMarkCount,
+        s.SegmentCount
+    });
+});
+
+app.MapGet("/api/car-models/{id:int}", async (int id, IRoService svc) =>
+{
+    var m = await svc.GetCarModelAsync(id);
+    if (m == null) return Results.NotFound(new { error = "Không tìm thấy dòng xe." });
+    return Results.Ok(new
+    {
+        m.Id,
+        m.ModelCode,
+        m.ModelName,
+        m.TradeMarkCode,
+        m.ProductionCode,
+        m.DealerCode,
+        segment = Ui.CarModelSegment(m.Segment).text,
+        segmentCode = Ui.CarModelSegment(m.Segment).code,
+        segmentValue = (int)m.Segment,
+        m.ProductYear,
+        m.IsActive,
+        m.CreatedBy,
+        m.CreatedAt,
+        m.LogLUBy,
+        m.LogLUDateTime
+    });
+});
+
+app.MapGet("/api/car-models/by-code/{code}", async (string code, IRoService svc) =>
+{
+    var m = await svc.GetCarModelByCodeAsync(code);
+    if (m == null) return Results.NotFound(new { error = "Không tìm thấy mã dòng xe." });
+    return Results.Ok(new
+    {
+        m.Id,
+        m.ModelCode,
+        m.ModelName,
+        m.TradeMarkCode,
+        segment = Ui.CarModelSegment(m.Segment).text,
+        m.IsActive
+    });
+});
+
+app.MapPost("/api/car-models", async (CreateCarModelDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.ModelCode) || string.IsNullOrWhiteSpace(dto.ModelName) || string.IsNullOrWhiteSpace(dto.TradeMarkCode))
+        return Results.BadRequest(new { error = "Vui lòng nhập đầy đủ ModelCode, ModelName và TradeMarkCode." });
+
+    var model = new CarModel
+    {
+        ModelCode = dto.ModelCode.Trim().ToUpperInvariant(),
+        ModelName = dto.ModelName.Trim(),
+        TradeMarkCode = dto.TradeMarkCode.Trim().ToUpperInvariant(),
+        ProductionCode = string.IsNullOrWhiteSpace(dto.ProductionCode) ? null : dto.ProductionCode.Trim(),
+        DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? null : dto.DealerCode.Trim(),
+        Segment = dto.Segment ?? CarModelSegment.Sedan,
+        ProductYear = dto.ProductYear,
+        IsActive = dto.IsActive ?? true,
+        CreatedBy = dto.CreatedBy ?? "api"
+    };
+
+    try
+    {
+        var id = await svc.CreateCarModelAsync(model);
+        return Results.Created($"/api/car-models/{id}", new { id, model.ModelCode, model.ModelName, message = "Đã tạo dòng xe." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/car-models/{id:int}", async (int id, UpdateCarModelDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.ModelName))
+        return Results.BadRequest(new { error = "Tên dòng xe không được để trống." });
+
+    var model = new CarModel
+    {
+        Id = id,
+        ModelName = dto.ModelName.Trim(),
+        TradeMarkCode = dto.TradeMarkCode?.Trim() ?? "",
+        ProductionCode = string.IsNullOrWhiteSpace(dto.ProductionCode) ? null : dto.ProductionCode.Trim(),
+        DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? null : dto.DealerCode.Trim(),
+        Segment = dto.Segment ?? CarModelSegment.Sedan,
+        ProductYear = dto.ProductYear,
+        IsActive = dto.IsActive ?? true,
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+
+    var (ok, msg) = await svc.UpdateCarModelAsync(model);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/car-models/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCarModelAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 // --- Suppliers & Return to Supplier Minimal APIs (Ser_Mst_Supplier, Ser_SupplierPayment) ---
 app.MapGet("/api/suppliers", async (string? q, IRoService svc) =>
 {
@@ -6138,6 +6271,8 @@ record ApproveTechnicalLibraryDto(string? ApprovedBy);
 record CreateServiceItemDto(string Code, string Name, ServiceROType ROType, decimal StdManHour, decimal Price, decimal Cost, decimal VatPercent, string? Model, bool? FlagWarranty, string? Note, bool? IsActive);
 record UpdateServiceItemDto(string Name, ServiceROType ROType, decimal StdManHour, decimal Price, decimal Cost, decimal VatPercent, string? Model, bool FlagWarranty, bool IsActive, string? Note);
 record ApplyServiceToRoDto(int RoId, ExpenseType? ExpenseType, decimal? CustomHours, decimal? CustomPrice, string? Note);
+record CreateCarModelDto(string ModelCode, string ModelName, string TradeMarkCode, string? ProductionCode, string? DealerCode, CarModelSegment? Segment, int? ProductYear, bool? IsActive, string? CreatedBy);
+record UpdateCarModelDto(string ModelName, string? TradeMarkCode, string? ProductionCode, string? DealerCode, CarModelSegment? Segment, int? ProductYear, bool? IsActive, string? UpdatedBy);
 record CreateSupplierDto(string Code, string Name, string? Address, string? Phone, string? Email, string? ContactName, string? ContactPhone, string? TaxCode);
 record CreateSupplierPaymentDto(string? SupplierPaymentNo, int? SupplierId, string? SupplierName, string? Address, DateTime? PaymentDate, SupplierPaymentType PaymentType, int? OrderPartId, string? OrderPartNo, string? TSTRequestNo, string? Description, string? CreatedBy, List<CreateSupplierPaymentItemDto> Items);
 record CreateSupplierPaymentItemDto(int PartId, decimal QtyPay, decimal? Price, decimal? VatPercent, string? StockInNo, string? LocationCode, string? Reason);
