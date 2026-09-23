@@ -1,0 +1,117 @@
+@model SharePart
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>In Phiếu Chia Sẻ Phụ Tùng - @Model.SharePartNo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <style>
+        body { font-family: "Segoe UI", Arial, sans-serif; font-size: 13.5px; color: #111; background: #f8f9fa; }
+        .print-container { max-width: 820px; margin: 20px auto; background: #fff; padding: 35px 40px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .voucher-title { font-size: 20px; font-weight: 800; letter-spacing: 0.5px; }
+        .meta-box { background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 6px; padding: 12px 16px; }
+        .table-bordered th, .table-bordered td { border-color: #333 !important; }
+        .sig-block { min-height: 80px; }
+        @@media print {
+            body { background: #fff; margin: 0; }
+            .print-container { box-shadow: none; padding: 0; margin: 0; max-width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print text-center py-3 bg-dark text-white d-flex justify-content-center gap-3">
+        <button onclick="window.print()" class="btn btn-primary btn-sm px-4 fw-bold">
+            <i class="bi bi-printer"></i> In phiếu ngay
+        </button>
+        <button onclick="window.close()" class="btn btn-secondary btn-sm px-3">
+            Đóng cửa sổ
+        </button>
+    </div>
+
+    <div class="print-container">
+        <div class="row align-items-center mb-3 pb-3 border-bottom border-2 border-dark">
+            <div class="col-7">
+                <div class="fw-bold text-uppercase" style="font-size:15px">@(string.IsNullOrEmpty(Model.DealerName) ? "Đại lý dịch vụ Hyundai" : Model.DealerName)</div>
+                <div class="text-muted small">Mã đại lý: <span class="font-monospace">@Model.DealerCode</span></div>
+            </div>
+            <div class="col-5 text-end">
+                <div class="text-muted small">Số phiếu: <span class="font-monospace fw-bold">@Model.SharePartNo</span></div>
+                <div class="text-muted small">Ngày lập: @Model.CreatedDate.ToString("dd/MM/yyyy HH:mm")</div>
+            </div>
+        </div>
+
+        <div class="text-center mb-3">
+            <div class="voucher-title text-uppercase">Phiếu Chia Sẻ Phụ Tùng</div>
+            <div class="text-muted small">Chia sẻ phụ tùng tồn dư giữa các đại lý trong mạng lưới</div>
+        </div>
+
+        <div class="meta-box mb-3">
+            <div class="row">
+                <div class="col-6"><span class="text-muted">Đại lý chia sẻ:</span> <strong>@Model.DealerCode</strong></div>
+                <div class="col-6"><span class="text-muted">Người lập:</span> <strong>@Model.CreatedBy</strong></div>
+                <div class="col-12 mt-1"><span class="text-muted">Ghi chú:</span> @(string.IsNullOrEmpty(Model.Remark) ? "-" : Model.Remark)</div>
+            </div>
+        </div>
+
+        <table class="table table-bordered table-sm align-middle">
+            <thead class="table-light">
+                <tr class="text-center">
+                    <th style="width:40px">STT</th>
+                    <th>Mã phụ tùng</th>
+                    <th>Tên phụ tùng</th>
+                    <th style="width:60px">ĐVT</th>
+                    <th style="width:90px">Tồn kho</th>
+                    <th style="width:90px">Tồn tối thiểu</th>
+                    <th style="width:90px">SL chia sẻ</th>
+                    <th>Ghi chú</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ var idx = 0; }
+                @foreach (var l in Model.Lines)
+                {
+                    idx++;
+                    <tr>
+                        <td class="text-center">@idx</td>
+                        <td class="font-monospace">@l.Part?.Code</td>
+                        <td>@l.Part?.Name</td>
+                        <td class="text-center">@l.Part?.Unit</td>
+                        <td class="text-end font-monospace">@((l.Part?.InStock ?? 0).ToString("N0"))</td>
+                        <td class="text-end font-monospace">@((l.Part?.MinStock ?? 0).ToString("N0"))</td>
+                        <td class="text-end font-monospace fw-bold">@l.QuantityShare.ToString("N0")</td>
+                        <td>@l.Remark</td>
+                    </tr>
+                }
+                <tr class="table-light fw-bold">
+                    <td colspan="6" class="text-end">Tổng số lượng chia sẻ</td>
+                    <td class="text-end font-monospace">@Model.TotalQuantityShare.ToString("N0")</td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="row mt-4 text-center">
+            <div class="col-4">
+                <div class="fw-semibold">Người lập phiếu</div>
+                <div class="text-muted small fst-italic">(Ký, ghi rõ họ tên)</div>
+                <div class="sig-block"></div>
+                <div>@Model.CreatedBy</div>
+            </div>
+            <div class="col-4">
+                <div class="fw-semibold">Thủ kho</div>
+                <div class="text-muted small fst-italic">(Ký, ghi rõ họ tên)</div>
+                <div class="sig-block"></div>
+            </div>
+            <div class="col-4">
+                <div class="fw-semibold">Giám đốc đại lý</div>
+                <div class="text-muted small fst-italic">(Ký, ghi rõ họ tên)</div>
+                <div class="sig-block"></div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

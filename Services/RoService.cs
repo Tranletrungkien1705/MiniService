@@ -509,6 +509,13 @@ public interface IRoService
     Task<RoHistorySummaryDto> GetRoHistorySummaryAsync(int? roId);
     Task<int> AddRoHistoryAsync(int roId, ROStatus status, string? note, string? userCode);
     Task<(bool ok, string msg)> DeleteRoHistoryAsync(int id);
+    // Share Part — Chia sẻ phụ tùng giữa các đại lý trong mạng lưới (SP_SharePart / SP_SharePart_Detail)
+    Task<List<SharePart>> SharePartsAsync(string? dealerCode, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<SharePart?> GetSharePartAsync(int id);
+    Task<SharePartSummaryDto> GetSharePartSummaryAsync();
+    Task<int> CreateSharePartAsync(SharePart sheet, List<SharePartLine> lines);
+    Task<(bool ok, string msg)> DeleteSharePartAsync(int id);
+    Task<List<Part>> PartsForSharePartAsync(string? dealerCode);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -10915,6 +10922,96 @@ public class RoService(AppDbContext db) : IRoService
         db.RoHistories.Remove(entry);
         await db.SaveChangesAsync();
         return (true, "Đã xóa dòng nhật ký thao tác.");
+    }
+
+    // --- Share Part — Chia sẻ phụ tùng giữa các đại lý trong mạng lưới (SP_SharePart / SP_SharePart_Detail) ---
+    // Nguồn: SP_SharePart_Create / SP_SharePart_Get / SP_SharePart_Detail_Get (BizCarSv.PartOrder.cs).
+    // Nghiệp vụ: đại lý có phụ tùng tồn dư (tồn kho > tồn tối thiểu) lập phiếu chia sẻ để các đại lý khác
+    // trong mạng lưới biết và điều chuyển/đặt mua. Mỗi phiếu gồm nhiều dòng phụ tùng (PartID + QuantityShare).
+    public async Task<List<SharePart>> SharePartsAsync(string? dealerCode, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.ShareParts.Include(s => s.Lines).ThenInclude(l => l.Part).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim();
+            query = query.Where(s => s.DealerCode == dc);
+        }
+        if (fromDate.HasValue) query = query.Where(s => s.CreatedDate >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(s => s.CreatedDate < toDate.Value.Date.AddDays(1));
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(x => x.SharePartNo.ToLower().Contains(s)
+                || x.DealerCode.ToLower().Contains(s)
+                || x.DealerName.ToLower().Contains(s)
+                || (x.Remark != null && x.Remark.ToLower().Contains(s))
+                || x.Lines.Any(l => l.Part != null && (l.Part.Code.ToLower().Contains(s) || l.Part.Name.ToLower().Contains(s))));
+        }
+        return await query.OrderByDescending(s => s.CreatedDate).ThenByDescending(s => s.Id).ToListAsync();
+    }
+
+    public Task<SharePart?> GetSharePartAsync(int id) =>
+        db.ShareParts
+            .Include(s => s.Lines).ThenInclude(l => l.Part)
+            .FirstOrDefaultAsync(s => s.Id == id);
+
+    public async Task<SharePartSummaryDto> GetSharePartSummaryAsync()
+    {
+        var all = await db.ShareParts.Include(s => s.Lines).ToListAsync();
+        var lines = all.SelectMany(s => s.Lines).ToList();
+        return new SharePartSummaryDto
+        {
+            TotalSheets = all.Count,
+            TotalLines = lines.Count,
+            TotalQuantityShare = lines.Sum(l => l.QuantityShare),
+            DealerCount = all.Where(s => !string.IsNullOrWhiteSpace(s.DealerCode)).Select(s => s.DealerCode).Distinct().Count(),
+            PartCount = lines.Select(l => l.PartId).Distinct().Count()
+        };
+    }
+
+    public async Task<int> CreateSharePartAsync(SharePart sheet, List<SharePartLine> lines)
+    {
+        // Nguồn: SP_SharePart_CreateX — kiểm tra danh sách chi tiết không được rỗng và không trùng PartID.
+        if (lines == null || lines.Count == 0)
+            throw new InvalidOperationException("Cần danh sách phụ tùng chia sẻ (SP_SharePart_Detail).");
+        var dup = lines.GroupBy(l => l.PartId).FirstOrDefault(g => g.Count() > 1);
+        if (dup != null)
+            throw new InvalidOperationException($"Phụ tùng bị trùng trong phiếu chia sẻ (PartID = {dup.Key}).");
+
+        sheet.SharePartNo = $"SP{DateTime.Today:yyMMdd}-{await db.ShareParts.CountAsync() + 1:D3}";
+        sheet.CreatedDate = sheet.CreatedDate == default ? DateTime.Now : sheet.CreatedDate;
+        sheet.FlagLatest = true;
+        sheet.LogLUBy = sheet.CreatedBy;
+        sheet.LogLUDateTime = DateTime.Now;
+
+        foreach (var l in lines)
+        {
+            l.SharePart = sheet;
+            l.DealerCode = string.IsNullOrWhiteSpace(l.DealerCode) ? sheet.DealerCode : l.DealerCode;
+            l.LogLUBy = sheet.CreatedBy;
+            l.LogLUDateTime = DateTime.Now;
+        }
+        sheet.Lines = lines;
+
+        db.ShareParts.Add(sheet);
+        await db.SaveChangesAsync();
+        return sheet.Id;
+    }
+
+    public async Task<(bool ok, string msg)> DeleteSharePartAsync(int id)
+    {
+        var sheet = await db.ShareParts.Include(s => s.Lines).FirstOrDefaultAsync(s => s.Id == id);
+        if (sheet == null) return (false, "Không tìm thấy phiếu chia sẻ phụ tùng.");
+        db.ShareParts.Remove(sheet);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu chia sẻ {sheet.SharePartNo}.");
+    }
+
+    public async Task<List<Part>> PartsForSharePartAsync(string? dealerCode)
+    {
+        // Nguồn: Ser_Mst_Part_SP_Get — chỉ lấy phụ tùng đang hoạt động, ưu tiên phụ tùng tồn dư (InStock > MinStock).
+        // Lưu ý: danh mục Part trong MiniService không phân tách theo đại lý nên bỏ qua tham số dealerCode.
+        return await db.Parts.Where(p => p.IsActive).OrderBy(p => p.Code).ToListAsync();
     }
 }
 

@@ -6237,3 +6237,92 @@ public class RoAttachmentController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index), new { roId });
     }
 }
+
+/// <summary>Quản lý Chia sẻ phụ tùng giữa các đại lý trong mạng lưới (SP_SharePart / SP_SharePart_Detail).
+/// Nguồn: SP_SharePart_Create / SP_SharePart_Get / SP_SharePart_Detail_Get (BizCarSv.PartOrder.cs).</summary>
+public class SharePartController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? dealerCode, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.DealerCode = dealerCode;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate;
+        ViewBag.ToDate = toDate;
+        ViewBag.Summary = await svc.GetSharePartSummaryAsync();
+        var list = await svc.SharePartsAsync(dealerCode, q, fromDate, toDate);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var sheet = await svc.GetSharePartAsync(id);
+        if (sheet == null) return NotFound();
+        return View(sheet);
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var sheet = await svc.GetSharePartAsync(id);
+        if (sheet == null) return NotFound();
+        return View(sheet);
+    }
+
+    public async Task<IActionResult> Create(string? dealerCode)
+    {
+        ViewBag.Parts = await svc.PartsForSharePartAsync(dealerCode);
+        ViewBag.DealerCode = dealerCode;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string dealerCode, string? dealerName, string? remark, int[] partId, decimal[] quantityShare, string[]? lineRemark)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dealerCode))
+                throw new InvalidOperationException("Vui lòng nhập mã đại lý chia sẻ (DealerCode).");
+
+            var lines = new List<SharePartLine>();
+            for (var i = 0; i < partId.Length; i++)
+            {
+                if (partId[i] <= 0) continue;
+                var qty = i < quantityShare.Length ? quantityShare[i] : 0;
+                if (qty <= 0) continue;
+                lines.Add(new SharePartLine
+                {
+                    PartId = partId[i],
+                    QuantityShare = qty,
+                    DealerCode = dealerCode.Trim(),
+                    Remark = (lineRemark != null && i < lineRemark.Length) ? lineRemark[i]?.Trim() : null
+                });
+            }
+
+            var sheet = new SharePart
+            {
+                DealerCode = dealerCode.Trim(),
+                DealerName = dealerName?.Trim() ?? "",
+                Remark = remark?.Trim(),
+                CreatedBy = "web"
+            };
+
+            var id = await svc.CreateSharePartAsync(sheet, lines);
+            TempData["Success"] = $"Đã lập phiếu chia sẻ phụ tùng {sheet.SharePartNo}.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Parts = await svc.PartsForSharePartAsync(dealerCode);
+            ViewBag.DealerCode = dealerCode;
+            return View();
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSharePartAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

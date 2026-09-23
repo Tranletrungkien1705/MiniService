@@ -94,6 +94,8 @@ public class AppDbContext : DbContext
     public DbSet<WarehouseLocation> WarehouseLocations => Set<WarehouseLocation>();
     public DbSet<WorkingCalendar> WorkingCalendars => Set<WorkingCalendar>();
     public DbSet<RoAttachment> RoAttachments => Set<RoAttachment>();
+    public DbSet<SharePart> ShareParts => Set<SharePart>();
+    public DbSet<SharePartLine> SharePartLines => Set<SharePartLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -942,6 +944,22 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.OrgId, x.ROId });
             e.Ignore(x => x.FileExtension);
             e.HasOne(x => x.RO).WithMany(x => x.Attachments).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SharePart>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.SharePartNo }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.DealerCode });
+            e.Ignore(x => x.ItemCount);
+            e.Ignore(x => x.TotalQuantityShare);
+            e.HasMany(x => x.Lines).WithOne(l => l.SharePart).HasForeignKey(l => l.SharePartId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SharePartLine>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.SharePartId });
+            e.Property(x => x.QuantityShare).HasPrecision(18, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

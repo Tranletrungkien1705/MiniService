@@ -765,5 +765,11 @@ public static class Ui
         Models.RoAttachmentType.Other => ("Khác", "OTH", "secondary", "bi-paperclip"),
         _ => (t.ToString(), "", "secondary", "bi-paperclip")
     };
+
+    /// <summary>Nhãn trạng thái tồn kho phụ tùng chia sẻ — tồn dư (InStock > MinStock) hay dưới mức tối thiểu.</summary>
+    public static (string text, string css, string icon) ShareStockBadge(decimal inStock, decimal minStock) =>
+        inStock > minStock
+            ? ("Tồn dư — có thể chia sẻ", "success", "bi-box-seam")
+            : ("Dưới mức tối thiểu", "warning", "bi-exclamation-triangle");
 }
 

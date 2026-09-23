@@ -3383,3 +3383,54 @@ public class RoAttachmentSummaryDto
     public long TotalSizeKb { get; set; }                     // Tổng dung lượng (KB)
     public int RoCount { get; set; }                          // Số lệnh sửa chữa có đính kèm
 }
+
+/// <summary>Phiếu chia sẻ phụ tùng giữa các đại lý trong mạng lưới (SP_SharePart) — idn.CarService.
+/// Một đại lý có phụ tùng tồn dư (tồn kho > tồn tối thiểu) lập phiếu chia sẻ để các đại lý khác
+/// trong mạng lưới biết và điều chuyển/đặt mua. Mỗi phiếu gồm nhiều dòng phụ tùng (SP_SharePart_Detail).
+/// Nguồn: SP_SharePart_Create / SP_SharePart_Get / SP_SharePart_Detail_Get (BizCarSv.PartOrder.cs).</summary>
+public class SharePart : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SharePartNo { get; set; } = "";             // Số phiếu chia sẻ (SharePartID hiển thị) — sinh tự động
+    public string DealerCode { get; set; } = "";              // Mã đại lý chia sẻ (DealerCode)
+    public string DealerName { get; set; } = "";              // Tên đại lý chia sẻ (Mst_Dealer.DealerName)
+    public DateTime CreatedDate { get; set; } = DateTime.Now; // Ngày lập phiếu (CreatedDate)
+    public string CreatedBy { get; set; } = "web";            // Người lập phiếu (CreatedBy)
+    public bool FlagLatest { get; set; } = true;              // Cờ phiên bản mới nhất (FlagLatest) — 1 = Active
+    public string? Remark { get; set; }                       // Ghi chú chung của phiếu
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+
+    public List<SharePartLine> Lines { get; set; } = new();
+
+    public int ItemCount => Lines.Count;                      // Số dòng phụ tùng chia sẻ
+    public decimal TotalQuantityShare => Lines.Sum(l => l.QuantityShare); // Tổng số lượng chia sẻ
+}
+
+/// <summary>Dòng chi tiết phụ tùng chia sẻ (SP_SharePart_Detail) — idn.CarService.
+/// Mỗi dòng là một phụ tùng (PartID) với số lượng chia sẻ (QuantityShare) và ghi chú riêng.</summary>
+public class SharePartLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int SharePartId { get; set; }                      // Phiếu chia sẻ (SharePartID)
+    public SharePart? SharePart { get; set; }
+    public int PartId { get; set; }                           // Phụ tùng (PartID)
+    public Part? Part { get; set; }
+    public string DealerCode { get; set; } = "";              // Mã đại lý sở hữu phụ tùng (DealerCode)
+    public decimal QuantityShare { get; set; } = 0;           // Số lượng chia sẻ (QuantityShare)
+    public string? Remark { get; set; }                       // Ghi chú dòng (Remark)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số phiếu chia sẻ phụ tùng — phục vụ màn hình quản lý chia sẻ.</summary>
+public class SharePartSummaryDto
+{
+    public int TotalSheets { get; set; }                      // Tổng số phiếu chia sẻ
+    public int TotalLines { get; set; }                       // Tổng số dòng phụ tùng chia sẻ
+    public decimal TotalQuantityShare { get; set; }           // Tổng số lượng chia sẻ
+    public int DealerCount { get; set; }                      // Số đại lý đang chia sẻ
+    public int PartCount { get; set; }                        // Số phụ tùng khác nhau được chia sẻ
+}

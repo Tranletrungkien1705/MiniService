@@ -6523,6 +6523,109 @@ app.MapDelete("/api/warranty-types/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Chia sẻ phụ tùng giữa các đại lý trong mạng lưới (SP_SharePart / SP_SharePart_Detail)
+app.MapGet("/api/share-parts", async (string? dealerCode, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.SharePartsAsync(dealerCode, q, fromDate, toDate);
+    return Results.Ok(list.Select(s => new
+    {
+        s.Id,
+        s.SharePartNo,
+        s.DealerCode,
+        s.DealerName,
+        s.CreatedDate,
+        s.CreatedBy,
+        s.FlagLatest,
+        s.Remark,
+        s.ItemCount,
+        s.TotalQuantityShare
+    }));
+});
+
+app.MapGet("/api/share-parts/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetSharePartSummaryAsync();
+    return Results.Ok(new
+    {
+        s.TotalSheets,
+        s.TotalLines,
+        s.TotalQuantityShare,
+        s.DealerCount,
+        s.PartCount
+    });
+});
+
+app.MapGet("/api/share-parts/{id:int}", async (int id, IRoService svc) =>
+{
+    var s = await svc.GetSharePartAsync(id);
+    if (s == null) return Results.NotFound(new { error = "Không tìm thấy phiếu chia sẻ phụ tùng." });
+    return Results.Ok(new
+    {
+        s.Id,
+        s.SharePartNo,
+        s.DealerCode,
+        s.DealerName,
+        s.CreatedDate,
+        s.CreatedBy,
+        s.FlagLatest,
+        s.Remark,
+        s.ItemCount,
+        s.TotalQuantityShare,
+        lines = s.Lines.Select(l => new
+        {
+            l.Id,
+            l.PartId,
+            partCode = l.Part?.Code,
+            partName = l.Part?.Name,
+            unit = l.Part?.Unit,
+            inStock = l.Part?.InStock,
+            minStock = l.Part?.MinStock,
+            l.QuantityShare,
+            l.DealerCode,
+            l.Remark
+        })
+    });
+});
+
+app.MapPost("/api/share-parts", async (CreateSharePartDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (string.IsNullOrWhiteSpace(dto.DealerCode))
+            return Results.BadRequest(new { error = "Cần mã đại lý chia sẻ (DealerCode)." });
+        if (dto.Lines == null || dto.Lines.Count == 0)
+            return Results.BadRequest(new { error = "Cần danh sách phụ tùng chia sẻ (Lines)." });
+
+        var sheet = new SharePart
+        {
+            DealerCode = dto.DealerCode.Trim(),
+            DealerName = dto.DealerName?.Trim() ?? "",
+            Remark = dto.Remark?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var lines = dto.Lines.Select(l => new SharePartLine
+        {
+            PartId = l.PartId,
+            QuantityShare = l.QuantityShare,
+            DealerCode = string.IsNullOrWhiteSpace(l.DealerCode) ? dto.DealerCode.Trim() : l.DealerCode.Trim(),
+            Remark = l.Remark?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateSharePartAsync(sheet, lines);
+        return Results.Ok(new { sharePartId = id, sharePartNo = sheet.SharePartNo, message = "Đã lập phiếu chia sẻ phụ tùng." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapDelete("/api/share-parts/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSharePartAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -6694,6 +6797,10 @@ record ApplyMaintenanceToRoDto(int RoId, bool? AddPackageCombo);
 
 record CreateWarrantyTypeDto(string? ROWTID, WarrantyTypeCode TypeCode, string? TypeName, WarrantyTypeDetailCode DetailCode, string? DetailName, bool? FlagActive, List<string>? PhotoCodes);
 record UpdateWarrantyTypeDto(WarrantyTypeCode TypeCode, string? TypeName, WarrantyTypeDetailCode DetailCode, string? DetailName, bool FlagActive, List<string>? PhotoCodes, string? UpdatedBy);
+
+// Chia sẻ phụ tùng giữa các đại lý (SP_SharePart / SP_SharePart_Detail)
+record CreateSharePartDto(string DealerCode, string? DealerName, string? Remark, string? CreatedBy, List<CreateSharePartLineDto> Lines);
+record CreateSharePartLineDto(int PartId, decimal QuantityShare, string? DealerCode, string? Remark);
 
 
 

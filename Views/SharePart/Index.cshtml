@@ -1,0 +1,111 @@
+@model List<SharePart>
+@{
+    ViewData["Title"] = "Chia sẻ phụ tùng giữa các đại lý";
+    var summary = ViewBag.Summary as SharePartSummaryDto ?? new SharePartSummaryDto();
+}
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số phiếu chia sẻ</div>
+                <div class="stat-num text-primary">@summary.TotalSheets</div>
+                <div class="text-muted" style="font-size:11.5px">Phiếu đã lập</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Dòng phụ tùng chia sẻ</div>
+                <div class="stat-num text-success">@summary.TotalLines</div>
+                <div class="text-muted" style="font-size:11.5px">Lượt phụ tùng được chia sẻ</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số lượng chia sẻ</div>
+                <div class="stat-num text-info">@summary.TotalQuantityShare.ToString("N0")</div>
+                <div class="text-muted" style="font-size:11.5px">Đơn vị phụ tùng</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đại lý / Phụ tùng</div>
+                <div class="stat-num text-warning">@summary.DealerCount / @summary.PartCount</div>
+                <div class="text-muted" style="font-size:11.5px">Đại lý chia sẻ · Mã phụ tùng</div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" style="width:220px" placeholder="Số phiếu / mã phụ tùng / tên..." />
+                <input name="dealerCode" value="@ViewBag.DealerCode" class="form-control form-control-sm" style="width:150px" placeholder="Mã đại lý" />
+                <input name="fromDate" type="date" value="@(ViewBag.FromDate is DateTime fd ? fd.ToString("yyyy-MM-dd") : "")" class="form-control form-control-sm" style="width:150px" />
+                <input name="toDate" type="date" value="@(ViewBag.ToDate is DateTime td ? td.ToString("yyyy-MM-dd") : "")" class="form-control form-control-sm" style="width:150px" />
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || !string.IsNullOrEmpty(ViewBag.DealerCode as string) || ViewBag.FromDate != null || ViewBag.ToDate != null)
+                {
+                    <a href="/SharePart" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/SharePart/Create" class="btn btn-sm btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Lập phiếu chia sẻ
+                </a>
+            </div>
+        </div>
+        @if (!Model.Any())
+        {
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-share fs-3 d-block mb-1 text-secondary"></i>
+                Chưa có phiếu chia sẻ phụ tùng nào. Hãy bấm "Lập phiếu chia sẻ" để tạo.
+            </div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Số phiếu</th>
+                            <th>Đại lý chia sẻ</th>
+                            <th>Ngày lập</th>
+                            <th class="text-center">Số dòng</th>
+                            <th class="text-end">Tổng SL chia sẻ</th>
+                            <th>Người lập</th>
+                            <th>Ghi chú</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in Model)
+                        {
+                            <tr>
+                                <td class="font-monospace fw-semibold">@s.SharePartNo</td>
+                                <td>
+                                    <span class="badge bg-light text-dark border font-monospace">@s.DealerCode</span>
+                                    <div class="small text-muted">@s.DealerName</div>
+                                </td>
+                                <td>@s.CreatedDate.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td class="text-center">@s.ItemCount</td>
+                                <td class="text-end font-monospace">@s.TotalQuantityShare.ToString("N0")</td>
+                                <td>@s.CreatedBy</td>
+                                <td class="text-muted small">@s.Remark</td>
+                                <td class="text-end">
+                                    <a asp-action="Detail" asp-route-id="@s.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>

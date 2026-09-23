@@ -1,0 +1,130 @@
+@model SharePart
+@{
+    ViewData["Title"] = $"Phiếu chia sẻ phụ tùng {Model.SharePartNo}";
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/SharePart" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Chia sẻ phụ tùng</a>
+        <h5 class="mb-0 fw-bold mt-1">
+            <i class="bi bi-share me-2 text-primary"></i>Phiếu chia sẻ <span class="font-monospace">@Model.SharePartNo</span>
+            @if (Model.FlagLatest)
+            {
+                <span class="badge bg-success ms-2">Phiên bản mới nhất</span>
+            }
+        </h5>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Print" asp-route-id="@Model.Id" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer me-1"></i>In phiếu</a>
+        <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Xóa phiếu chia sẻ này?');">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin phiếu</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Số phiếu (SharePartNo)</dt>
+                    <dd class="col-sm-7 font-monospace fw-bold">@Model.SharePartNo</dd>
+                    <dt class="col-sm-5 text-muted small">Đại lý chia sẻ (DealerCode)</dt>
+                    <dd class="col-sm-7"><span class="badge bg-light text-dark border font-monospace">@Model.DealerCode</span></dd>
+                    <dt class="col-sm-5 text-muted small">Tên đại lý (DealerName)</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(Model.DealerName) ? "-" : Model.DealerName)</dd>
+                    <dt class="col-sm-5 text-muted small">Ngày lập (CreatedDate)</dt>
+                    <dd class="col-sm-7">@Model.CreatedDate.ToString("dd/MM/yyyy HH:mm")</dd>
+                    <dt class="col-sm-5 text-muted small">Người lập (CreatedBy)</dt>
+                    <dd class="col-sm-7">@Model.CreatedBy</dd>
+                    <dt class="col-sm-5 text-muted small">Ghi chú (Remark)</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(Model.Remark) ? "-" : Model.Remark)</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-bar-chart me-1 text-success"></i>Tổng hợp chia sẻ</div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6 mb-3">
+                        <div class="text-muted small fw-semibold">Số dòng phụ tùng</div>
+                        <div class="stat-num text-primary">@Model.ItemCount</div>
+                    </div>
+                    <div class="col-6 mb-3">
+                        <div class="text-muted small fw-semibold">Tổng SL chia sẻ</div>
+                        <div class="stat-num text-success">@Model.TotalQuantityShare.ToString("N0")</div>
+                    </div>
+                </div>
+                <dl class="row mb-0">
+                    <dt class="col-sm-6 text-muted small">Cập nhật cuối (LogLUBy)</dt>
+                    <dd class="col-sm-6">@(string.IsNullOrEmpty(Model.LogLUBy) ? "-" : Model.LogLUBy)</dd>
+                    <dt class="col-sm-6 text-muted small">Thời gian cập nhật (LogLUDateTime)</dt>
+                    <dd class="col-sm-6">@(Model.LogLUDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "-")</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white fw-semibold"><i class="bi bi-box-seam me-1 text-primary"></i>Danh sách phụ tùng chia sẻ</div>
+    <div class="card-body">
+        @if (!Model.Lines.Any())
+        {
+            <div class="text-center text-muted py-4">Phiếu chưa có dòng phụ tùng nào.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Mã phụ tùng</th>
+                            <th>Tên phụ tùng</th>
+                            <th>ĐVT</th>
+                            <th class="text-end">Tồn kho</th>
+                            <th class="text-end">Tồn tối thiểu</th>
+                            <th class="text-end">SL chia sẻ</th>
+                            <th>Trạng thái tồn</th>
+                            <th>Ghi chú</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{ var idx = 0; }
+                        @foreach (var l in Model.Lines)
+                        {
+                            idx++;
+                            var badge = Ui.ShareStockBadge(l.Part?.InStock ?? 0, l.Part?.MinStock ?? 0);
+                            <tr>
+                                <td>@idx</td>
+                                <td class="font-monospace fw-semibold">@l.Part?.Code</td>
+                                <td>@l.Part?.Name</td>
+                                <td>@l.Part?.Unit</td>
+                                <td class="text-end font-monospace">@((l.Part?.InStock ?? 0).ToString("N0"))</td>
+                                <td class="text-end font-monospace">@((l.Part?.MinStock ?? 0).ToString("N0"))</td>
+                                <td class="text-end font-monospace fw-bold text-primary">@l.QuantityShare.ToString("N0")</td>
+                                <td><span class="badge bg-@badge.css"><i class="bi @badge.icon me-1"></i>@badge.text</span></td>
+                                <td class="text-muted small">@l.Remark</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Quy tắc nghiệp vụ chia sẻ phụ tùng</div>
+    <div class="card-body">
+        <ul class="mb-0 small text-muted">
+            <li>Đại lý có phụ tùng <strong>tồn dư</strong> (tồn kho &gt; tồn tối thiểu) lập phiếu chia sẻ để các đại lý khác trong mạng lưới biết và điều chuyển/đặt mua.</li>
+            <li>Mỗi phiếu gồm nhiều dòng phụ tùng; <strong>không được trùng mã phụ tùng</strong> trong cùng một phiếu.</li>
+            <li>Số lượng chia sẻ phải lớn hơn 0; phiếu chỉ có hiệu lực khi có ít nhất một dòng phụ tùng.</li>
+        </ul>
+    </div>
+</div>
