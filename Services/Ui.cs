@@ -756,5 +756,14 @@ public static class Ui
         ROStatus.NotResponding => ("bi-telephone-x", "dark"),
         _ => ("bi-dot", "secondary")
     };
+
+    public static (string text, string code, string css, string icon) RoAttachmentType(RoAttachmentType t) => t switch
+    {
+        Models.RoAttachmentType.BeforeRepair => ("Ảnh hiện trạng trước sửa", "BEF", "warning", "bi-camera"),
+        Models.RoAttachmentType.AfterRepair => ("Ảnh nghiệm thu sau sửa", "AFT", "success", "bi-camera-fill"),
+        Models.RoAttachmentType.Document => ("Biên bản / chứng từ", "DOC", "primary", "bi-file-earmark-text"),
+        Models.RoAttachmentType.Other => ("Khác", "OTH", "secondary", "bi-paperclip"),
+        _ => (t.ToString(), "", "secondary", "bi-paperclip")
+    };
 }
 

@@ -93,6 +93,7 @@ public class AppDbContext : DbContext
     public DbSet<DealerBankAccount> DealerBankAccounts => Set<DealerBankAccount>();
     public DbSet<WarehouseLocation> WarehouseLocations => Set<WarehouseLocation>();
     public DbSet<WorkingCalendar> WorkingCalendars => Set<WorkingCalendar>();
+    public DbSet<RoAttachment> RoAttachments => Set<RoAttachment>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -933,6 +934,14 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.OrgId, x.CalendarType, x.Date, x.DealerCode }).IsUnique();
             e.HasIndex(x => new { x.OrgId, x.CalendarType, x.Date });
             e.Ignore(x => x.IsWorkingDay);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<RoAttachment>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ROId, x.ImageName }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.ROId });
+            e.Ignore(x => x.FileExtension);
+            e.HasOne(x => x.RO).WithMany(x => x.Attachments).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Cascade);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

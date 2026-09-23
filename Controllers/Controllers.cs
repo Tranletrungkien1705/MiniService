@@ -6169,3 +6169,71 @@ public class RoHistoryController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index), new { roId });
     }
 }
+/// <summary>Quản lý Ảnh / tài liệu đính kèm Lệnh sửa chữa (RO Attachment) — Ser_ROAttachment (BizCarSv.Service01.cs).
+/// Tải lên tối đa 5 tệp/lần, tổng dung lượng ≤ 1000 KB, tên tệp không dấu/không khoảng trắng/không ký tự đặc biệt, không trùng trong cùng RO.</summary>
+public class RoAttachmentController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? roId, RoAttachmentType? type, string? q)
+    {
+        ViewBag.RoId = roId;
+        ViewBag.Type = type;
+        ViewBag.Q = q;
+        ViewBag.Summary = await svc.GetRoAttachmentSummaryAsync(roId);
+        ViewBag.ROs = await svc.ROsAsync(null, null);
+        var list = await svc.RoAttachmentsAsync(roId, type, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var att = await svc.GetRoAttachmentAsync(id);
+        if (att == null) return NotFound();
+        return View(att);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.ROs = await svc.ROsAsync(null, null);
+        ViewBag.RoId = roId;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int roId, string imageName, string? imagePath, RoAttachmentType type, long fileSizeKb, bool flagHmc, string? note)
+    {
+        var file = new RoAttachment
+        {
+            ImageName = imageName ?? "",
+            ImagePath = imagePath ?? "",
+            Type = type,
+            FileSizeKb = fileSizeKb,
+            FlagHMC = flagHmc,
+            Note = note
+        };
+        var (ok, msg, _) = await svc.UploadRoAttachmentsAsync(roId, [file], "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (!ok)
+        {
+            ViewBag.ROs = await svc.ROsAsync(null, null);
+            ViewBag.RoId = roId;
+            return View();
+        }
+        return RedirectToAction(nameof(Index), new { roId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, RoAttachmentType type, string? note, bool flagHmc, int? roId)
+    {
+        var (ok, msg) = await svc.UpdateRoAttachmentAsync(id, type, note, flagHmc, "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id, int? roId)
+    {
+        var (ok, msg) = await svc.DeleteRoAttachmentAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { roId });
+    }
+}

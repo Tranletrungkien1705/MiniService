@@ -589,6 +589,7 @@ public class RepairOrder : IOrgOwned
     public string? DeliveryDateRemark { get; set; }       // Lý do điều chỉnh ngày hẹn giao xe (Remark)
     public List<RoDeliveryDateHistory> DeliveryDateHistories { get; set; } = [];
     public List<RoHistory> Histories { get; set; } = [];
+    public List<RoAttachment> Attachments { get; set; } = [];
 
     // Nhắc bảo dưỡng định kỳ (Ser_RO.ReminderMaintanceDate / ReminderMaintanceKm / WorkDoneSoon / MemberNo)
     // Cập nhật qua nghiệp vụ Ser_RO_Update_Maintance_DL — chỉ cho phép khi RO chưa Paid/Finished.
@@ -3331,4 +3332,54 @@ public class WorkingCalendarSummaryDto
     public int DayOffs { get; set; }                          // Số ngày nghỉ
     public int YearCount { get; set; }                        // Số năm khác nhau có khai báo
     public int DealerCount { get; set; }                      // Số đại lý khác nhau có khai báo
+}
+
+/// <summary>Ảnh / tài liệu đính kèm Lệnh sửa chữa (RO Attachment) — Ser_ROAttachment trong idn.CarService.
+/// Mỗi dòng là một tệp (ảnh chụp hiện trường, biên bản, chứng từ) gắn với một Lệnh sửa chữa (ROID).
+/// Nguồn: SerROAttachmentGet / SerROAttachmentUpload / SerROAttachmentRemove (BizCarSv.Service01.cs).
+/// Ràng buộc nghiệp vụ: tối đa 5 tệp/lần tải (Constants.Ser_ROAttachment.NumberAttachment),
+/// tổng dung lượng tối đa 1000 KB (Constants.Ser_ROAttachment.AttchmentSize),
+/// tên tệp không dấu, không khoảng trắng, không ký tự đặc biệt, không trùng trong cùng RO.</summary>
+public class RoAttachment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ROId { get; set; }                             // Lệnh sửa chữa (ROID)
+    public RepairOrder? RO { get; set; }
+    public string ImageName { get; set; } = "";               // Tên tệp (ImageName) — không dấu, không khoảng trắng
+    public string ImagePath { get; set; } = "";               // Đường dẫn tệp trên máy chủ tệp (ImagePath)
+    public RoAttachmentType Type { get; set; } = RoAttachmentType.Other; // Loại đính kèm (AttachmentType)
+    public long FileSizeKb { get; set; } = 0;                 // Dung lượng tệp (KB) — dùng để kiểm tra tổng dung lượng
+    public bool FlagHMC { get; set; } = true;                 // Cờ gửi kèm hãng HMC (FlagHMC)
+    public string? Note { get; set; }                         // Ghi chú / diễn giải (Note)
+    public string CreatedBy { get; set; } = "web";            // Người tải lên (LogLUBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Thời điểm tải lên (LogLUDateTime)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+
+    public string FileExtension => string.IsNullOrWhiteSpace(ImageName)
+        ? ""
+        : System.IO.Path.GetExtension(ImageName).TrimStart('.').ToUpperInvariant();
+}
+
+/// <summary>Loại tệp đính kèm Lệnh sửa chữa — theo Ser_ROAttachment.AttachmentType idn.CarService.
+/// Phân loại ảnh/tài liệu để lọc và in hồ sơ nghiệm thu (ảnh hiện trường, biên bản, chứng từ).</summary>
+public enum RoAttachmentType
+{
+    BeforeRepair = 0,   // 0: Ảnh hiện trạng xe trước khi sửa (Before)
+    AfterRepair = 1,    // 1: Ảnh nghiệm thu sau khi sửa (After)
+    Document = 2,       // 2: Biên bản / chứng từ giấy tờ (Document)
+    Other = 3           // 3: Khác (Other)
+}
+
+/// <summary>DTO tổng hợp hồ sơ đính kèm của một Lệnh sửa chữa — phục vụ màn hình quản lý đính kèm.</summary>
+public class RoAttachmentSummaryDto
+{
+    public int TotalFiles { get; set; }                       // Tổng số tệp đính kèm
+    public int BeforeCount { get; set; }                      // Số ảnh hiện trạng trước sửa
+    public int AfterCount { get; set; }                       // Số ảnh nghiệm thu sau sửa
+    public int DocumentCount { get; set; }                    // Số biên bản / chứng từ
+    public int OtherCount { get; set; }                       // Số tệp khác
+    public long TotalSizeKb { get; set; }                     // Tổng dung lượng (KB)
+    public int RoCount { get; set; }                          // Số lệnh sửa chữa có đính kèm
 }

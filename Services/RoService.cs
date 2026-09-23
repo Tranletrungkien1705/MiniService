@@ -318,6 +318,13 @@ public interface IRoService
     Task<(bool ok, string msg)> UpdateWorkingCalendarStatusAsync(int id, CalendarDayStatus status, string? updatedBy);
     Task<(bool ok, string msg, int count)> ResetWorkingCalendarYearAsync(string calendarType, int year, CalendarDayStatus monday, CalendarDayStatus tuesday, CalendarDayStatus wednesday, CalendarDayStatus thursday, CalendarDayStatus friday, CalendarDayStatus saturday, CalendarDayStatus sunday, string? dealerCode, string? updatedBy);
     Task<(bool ok, string msg, DateTime? resultDate)> GetWorkingDateToCheckAsync(DateTime fromDate, int workingDaysAhead, string? dealerCode);
+    // RO Attachment — Ảnh / tài liệu đính kèm Lệnh sửa chữa (Ser_ROAttachment)
+    Task<List<RoAttachment>> RoAttachmentsAsync(int? roId, RoAttachmentType? type, string? q);
+    Task<RoAttachment?> GetRoAttachmentAsync(int id);
+    Task<RoAttachmentSummaryDto> GetRoAttachmentSummaryAsync(int? roId);
+    Task<(bool ok, string msg, int count)> UploadRoAttachmentsAsync(int roId, List<RoAttachment> files, string? uploadedBy);
+    Task<(bool ok, string msg)> UpdateRoAttachmentAsync(int id, RoAttachmentType type, string? note, bool flagHmc, string? updatedBy);
+    Task<(bool ok, string msg)> DeleteRoAttachmentAsync(int id);
     // Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment, Ser_SupplierPaymentDtl / MNU_QT_DL_QUANLYPHIEUXUATTRANHACUNGCAP)
     Task<List<Supplier>> SuppliersAsync(string? q);
     Task<Supplier?> GetSupplierAsync(int id);
@@ -6237,6 +6244,137 @@ public class RoService(AppDbContext db) : IRoService
 
         return (true, $"Ngày làm việc thứ {workingDaysAhead + 1} kể từ {fromDate:dd/MM/yyyy}.", workingDays[workingDaysAhead]);
     }
+
+    // --- RO Attachment — Ảnh / tài liệu đính kèm Lệnh sửa chữa (Ser_ROAttachment) ---
+    // Nguồn: SerROAttachmentGet / SerROAttachmentUploadDL / SerROAttachmentRemoveDL (BizCarSv.Service01.cs).
+    // Ràng buộc: tối đa 5 tệp/lần tải, tổng dung lượng tối đa 1000 KB, tên tệp không dấu/không khoảng trắng/không ký tự đặc biệt, không trùng trong cùng RO.
+    private const int RoAttachmentMaxFiles = 5;          // Constants.Ser_ROAttachment.NumberAttachment
+    private const long RoAttachmentMaxSizeKb = 1000;     // Constants.Ser_ROAttachment.AttchmentSize (KB)
+
+    public async Task<List<RoAttachment>> RoAttachmentsAsync(int? roId, RoAttachmentType? type, string? q)
+    {
+        var query = db.RoAttachments.Include(a => a.RO).ThenInclude(r => r!.Car).AsQueryable();
+        if (roId.HasValue) query = query.Where(a => a.ROId == roId.Value);
+        if (type.HasValue) query = query.Where(a => a.Type == type.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(a => a.ImageName.ToLower().Contains(s)
+                || a.ImagePath.ToLower().Contains(s)
+                || (a.Note != null && a.Note.ToLower().Contains(s))
+                || (a.RO != null && a.RO.Code.ToLower().Contains(s)));
+        }
+        return await query.OrderByDescending(a => a.CreatedAt).ThenByDescending(a => a.Id).ToListAsync();
+    }
+
+    public Task<RoAttachment?> GetRoAttachmentAsync(int id) =>
+        db.RoAttachments.Include(a => a.RO).ThenInclude(r => r!.Car)
+            .Include(a => a.RO).ThenInclude(r => r!.Customer)
+            .FirstOrDefaultAsync(a => a.Id == id);
+
+    public async Task<RoAttachmentSummaryDto> GetRoAttachmentSummaryAsync(int? roId)
+    {
+        var query = db.RoAttachments.AsQueryable();
+        if (roId.HasValue) query = query.Where(a => a.ROId == roId.Value);
+        var all = await query.ToListAsync();
+        return new RoAttachmentSummaryDto
+        {
+            TotalFiles = all.Count,
+            BeforeCount = all.Count(a => a.Type == RoAttachmentType.BeforeRepair),
+            AfterCount = all.Count(a => a.Type == RoAttachmentType.AfterRepair),
+            DocumentCount = all.Count(a => a.Type == RoAttachmentType.Document),
+            OtherCount = all.Count(a => a.Type == RoAttachmentType.Other),
+            TotalSizeKb = all.Sum(a => a.FileSizeKb),
+            RoCount = all.Select(a => a.ROId).Distinct().Count()
+        };
+    }
+
+    public async Task<(bool ok, string msg, int count)> UploadRoAttachmentsAsync(int roId, List<RoAttachment> files, string? uploadedBy)
+    {
+        // Nguồn: SerROAttachmentUploadDL — kiểm tra RO tồn tại, số lượng tệp, dung lượng, tên tệp hợp lệ và không trùng.
+        if (roId <= 0) return (false, "Cần chọn lệnh sửa chữa (ROID).", 0);
+        var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy lệnh sửa chữa.", 0);
+        if (files == null || files.Count == 0) return (false, "Cần chọn ít nhất một tệp đính kèm.", 0);
+
+        // Nguồn: ValidateROAttachment — tối đa NumberAttachment tệp/lần tải.
+        if (files.Count > RoAttachmentMaxFiles)
+            return (false, $"Vượt quá số tệp cho phép ({RoAttachmentMaxFiles} tệp/lần tải).", 0);
+
+        // Nguồn: ValidateROAttachment — tổng dung lượng tối đa AttchmentSize (KB).
+        var totalKb = files.Sum(f => f.FileSizeKb);
+        if (totalKb > RoAttachmentMaxSizeKb)
+            return (false, $"Tổng dung lượng tệp vượt quá {RoAttachmentMaxSizeKb} KB.", 0);
+
+        var existingNames = await db.RoAttachments.Where(a => a.ROId == roId)
+            .Select(a => a.ImageName).ToListAsync();
+        var now = DateTime.Now;
+        var added = 0;
+        foreach (var f in files)
+        {
+            var name = (f.ImageName ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(name))
+                return (false, "Tên tệp (ImageName) không được để trống.", 0);
+
+            // Nguồn: kiểm tra tên tệp không dấu, không khoảng trắng, không ký tự đặc biệt, độ dài tối đa.
+            var nameNoExt = System.IO.Path.GetFileNameWithoutExtension(name);
+            if (IsUnicode(nameNoExt))
+                return (false, $"Tên tệp '{name}' không được chứa ký tự có dấu.", 0);
+            if (nameNoExt.Contains(' '))
+                return (false, $"Tên tệp '{name}' không được chứa khoảng trắng.", 0);
+            if (System.Text.RegularExpressions.Regex.IsMatch(nameNoExt, @"[^A-Za-z0-9_\-]") )
+                return (false, $"Tên tệp '{name}' chứa ký tự đặc biệt không hợp lệ.", 0);
+            if (nameNoExt.Length > 45 + 19)
+                return (false, $"Tên tệp '{name}' vượt quá độ dài cho phép.", 0);
+
+            // Nguồn: kiểm tra tệp đã được thêm trong cùng RO (không trùng tên).
+            if (existingNames.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase)))
+                return (false, $"Tệp '{name}' đã tồn tại trong lệnh sửa chữa này.", 0);
+
+            db.RoAttachments.Add(new RoAttachment
+            {
+                ROId = roId,
+                ImageName = name,
+                ImagePath = (f.ImagePath ?? "").Trim(),
+                Type = f.Type,
+                FileSizeKb = f.FileSizeKb,
+                FlagHMC = f.FlagHMC,
+                Note = f.Note?.Trim(),
+                CreatedBy = uploadedBy ?? "web",
+                CreatedAt = now,
+                LogLUBy = uploadedBy ?? "web",
+                LogLUDateTime = now
+            });
+            existingNames.Add(name);
+            added++;
+        }
+        await db.SaveChangesAsync();
+        return (true, $"Đã tải lên {added} tệp đính kèm cho lệnh {ro.Code}.", added);
+    }
+
+    public async Task<(bool ok, string msg)> UpdateRoAttachmentAsync(int id, RoAttachmentType type, string? note, bool flagHmc, string? updatedBy)
+    {
+        var att = await db.RoAttachments.FirstOrDefaultAsync(a => a.Id == id);
+        if (att == null) return (false, "Không tìm thấy tệp đính kèm.");
+        att.Type = type;
+        att.Note = note?.Trim();
+        att.FlagHMC = flagHmc;
+        att.LogLUBy = updatedBy ?? "web";
+        att.LogLUDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật tệp '{att.ImageName}'.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteRoAttachmentAsync(int id)
+    {
+        var att = await db.RoAttachments.FirstOrDefaultAsync(a => a.Id == id);
+        if (att == null) return (false, "Không tìm thấy tệp đính kèm.");
+        db.RoAttachments.Remove(att);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa tệp '{att.ImageName}'.");
+    }
+
+    private static bool IsUnicode(string s) => s.Any(c => c > 127);
 
     // --- Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment) ---
     public async Task<List<Supplier>> SuppliersAsync(string? q)
