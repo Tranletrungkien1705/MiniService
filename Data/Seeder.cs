@@ -3334,6 +3334,175 @@ public static class Seeder
             db.DealerHistoryRecords.AddRange(records);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.InsuranceDebits.AnyAsync())
+        {
+            var bv = await db.InsuranceCompanies.FirstOrDefaultAsync(c => c.InsNo == "BH-BV");
+            var pvi = await db.InsuranceCompanies.FirstOrDefaultAsync(c => c.InsNo == "BH-PVI");
+            var pti = await db.InsuranceCompanies.FirstOrDefaultAsync(c => c.InsNo == "BH-PTI");
+            var mic = await db.InsuranceCompanies.FirstOrDefaultAsync(c => c.InsNo == "BH-MIC");
+
+            var clm1 = await db.InsuranceClaims.FirstOrDefaultAsync(c => c.ClaimNo == "BH260427-001");
+            var clm2 = await db.InsuranceClaims.FirstOrDefaultAsync(c => c.ClaimNo == "BH260427-002");
+            var ro1 = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync();
+            var ro2 = await db.ROs.Include(r => r.Car).Include(r => r.Customer).Skip(1).FirstOrDefaultAsync();
+
+            var debits = new List<InsuranceDebit>();
+
+            // 1. Bảo Việt - Đã tất toán (Hồ sơ BH260427-001)
+            var deb1 = new InsuranceDebit
+            {
+                DebitNo = $"IDB{DateTime.Today.AddDays(-15):yyMMdd}-001",
+                InsuranceCompanyId = bv?.Id ?? 1,
+                InsNo = bv?.InsNo ?? "BH-BV",
+                InsName = bv?.InsName ?? "Bảo hiểm Bảo Việt",
+                InsuranceClaimId = clm1?.Id,
+                ClaimNo = clm1?.ClaimNo ?? "BH260427-001",
+                PolicyNo = clm1?.PolicyNo ?? "BV-VC-2026-88192",
+                ROId = clm1?.ROId ?? ro1?.Id,
+                RONo = ro1?.Code ?? "ROSEED-001",
+                PlateNo = ro1?.Car?.Plate ?? "30A-123.45",
+                CarModel = ro1?.Car?.Model ?? "Hyundai Accent 1.4 AT",
+                CustomerName = ro1?.Customer?.Name ?? "Nguyễn Văn An",
+                DebitType = InsuranceDebitType.Claim,
+                Status = InsuranceDebitStatus.Cleared,
+                DebitDate = DateTime.Today.AddDays(-15),
+                DueDate = DateTime.Today.AddDays(15),
+                DebitAmount = 7200000,
+                PaidAmount = 7200000,
+                ClearedAt = DateTime.Now.AddDays(-5),
+                Description = "Bảo lãnh bồi thường thay cản trước và sơn sấy hấp xe theo hồ sơ giám định BH260427-001",
+                CreatedBy = "CVDV Hoàng",
+                CreatedAt = DateTime.Now.AddDays(-15)
+            };
+            debits.Add(deb1);
+
+            // 2. Bảo Việt - Còn nợ (Lệnh RO sửa chữa xe 30E-888.99)
+            var deb2 = new InsuranceDebit
+            {
+                DebitNo = $"IDB{DateTime.Today.AddDays(-5):yyMMdd}-002",
+                InsuranceCompanyId = bv?.Id ?? 1,
+                InsNo = bv?.InsNo ?? "BH-BV",
+                InsName = bv?.InsName ?? "Bảo hiểm Bảo Việt",
+                ROId = ro1?.Id,
+                RONo = "RO-PDV-231005",
+                PlateNo = "30E-888.99",
+                CarModel = "Hyundai Santa Fe 2.2D HTRAC",
+                CustomerName = "Hoàng Văn Cường",
+                PolicyNo = "BV-VC-2026-99231",
+                DebitType = InsuranceDebitType.RO,
+                Status = InsuranceDebitStatus.Active,
+                DebitDate = DateTime.Today.AddDays(-5),
+                DueDate = DateTime.Today.AddDays(25),
+                DebitAmount = 14500000,
+                PaidAmount = 0,
+                Description = "Bảo lãnh chi phí phục hồi sườn xe bên lái và thay cụm gương chiếu hậu có camera 360",
+                CreatedBy = "CVDV Tuấn Hùng",
+                CreatedAt = DateTime.Now.AddDays(-5)
+            };
+            debits.Add(deb2);
+
+            // 3. PVI - Đã thu 1 phần (Hồ sơ BH260427-002)
+            var deb3 = new InsuranceDebit
+            {
+                DebitNo = $"IDB{DateTime.Today.AddDays(-10):yyMMdd}-003",
+                InsuranceCompanyId = pvi?.Id ?? 2,
+                InsNo = pvi?.InsNo ?? "BH-PVI",
+                InsName = pvi?.InsName ?? "Bảo hiểm PVI",
+                InsuranceClaimId = clm2?.Id,
+                ClaimNo = clm2?.ClaimNo ?? "BH260427-002",
+                PolicyNo = clm2?.PolicyNo ?? "PVI-VC-2026-44319",
+                ROId = clm2?.ROId ?? ro2?.Id,
+                RONo = ro2?.Code ?? "ROSEED-002",
+                PlateNo = ro2?.Car?.Plate ?? "51G-678.90",
+                CarModel = ro2?.Car?.Model ?? "Hyundai Tucson 2.0 AT",
+                CustomerName = ro2?.Customer?.Name ?? "Trần Thị Bình",
+                DebitType = InsuranceDebitType.Claim,
+                Status = InsuranceDebitStatus.Active,
+                DebitDate = DateTime.Today.AddDays(-10),
+                DueDate = DateTime.Today.AddDays(20),
+                DebitAmount = 6000000,
+                PaidAmount = 2000000,
+                Description = "Bồi thường tổn thất tai nạn lùi xe nắp cốp sau và cụm đèn hậu xe 51G-678.90",
+                CreatedBy = "CVDV Thắng",
+                CreatedAt = DateTime.Now.AddDays(-10)
+            };
+            debits.Add(deb3);
+
+            // 4. PTI - Quá hạn thanh toán (Kính chắn gió và nắp ca-pô)
+            var deb4 = new InsuranceDebit
+            {
+                DebitNo = $"IDB{DateTime.Today.AddDays(-40):yyMMdd}-004",
+                InsuranceCompanyId = pti?.Id ?? 3,
+                InsNo = pti?.InsNo ?? "BH-PTI",
+                InsName = pti?.InsName ?? "Bảo hiểm PTI",
+                PlateNo = "30F-999.88",
+                CarModel = "Hyundai Creta 1.5 AT",
+                CustomerName = "Vũ Hải Đăng",
+                PolicyNo = "PTI-AUTO-2026-1189",
+                DebitType = InsuranceDebitType.DirectAdjustment,
+                Status = InsuranceDebitStatus.Active,
+                DebitDate = DateTime.Today.AddDays(-40),
+                DueDate = DateTime.Today.AddDays(-10), // Quá hạn 10 ngày!
+                DebitAmount = 9800000,
+                PaidAmount = 0,
+                Description = "Bồi thường rạn nứt kính chắn gió chính hãng do đá văng và sơn nắp ca-pô (Quá hạn 10 ngày)",
+                CreatedBy = "CVDV Tuấn",
+                CreatedAt = DateTime.Now.AddDays(-40)
+            };
+            debits.Add(deb4);
+
+            db.InsuranceDebits.AddRange(debits);
+            await db.SaveChangesAsync();
+
+            // Phiếu thu tiền bảo hiểm bồi thường (InsuranceDebitPayment)
+            var payments = new List<InsuranceDebitPayment>
+            {
+                new InsuranceDebitPayment
+                {
+                    PaymentNo = $"IPM{DateTime.Today.AddDays(-5):yyMMdd}-001",
+                    InsuranceCompanyId = bv?.Id ?? 1,
+                    InsNo = bv?.InsNo ?? "BH-BV",
+                    InsName = bv?.InsName ?? "Bảo hiểm Bảo Việt",
+                    InsuranceDebitId = deb1.Id,
+                    PaymentDate = DateTime.Today.AddDays(-5),
+                    PaymentAmount = 7200000,
+                    Method = PaymentMethod.BankTransfer,
+                    PayPersonName = "Nguyễn Văn Tuấn (Giám định Bảo Việt)",
+                    PayPersonPhone = "0988.555.666",
+                    BankAccount = "118002678999",
+                    BankName = "VietinBank - CN Đống Đa",
+                    TransactionRef = "GBC-VCB-2026-88912",
+                    Note = "Bảo Việt chuyển khoản thanh toán 100% chi phí bồi thường hồ sơ BH260427-001 theo UNC số 88912.",
+                    Cashier = "Thu ngân Lan",
+                    Status = InsuranceDebitPaymentStatus.Confirmed,
+                    CreatedAt = DateTime.Now.AddDays(-5)
+                },
+                new InsuranceDebitPayment
+                {
+                    PaymentNo = $"IPM{DateTime.Today.AddDays(-2):yyMMdd}-002",
+                    InsuranceCompanyId = pvi?.Id ?? 2,
+                    InsNo = pvi?.InsNo ?? "BH-PVI",
+                    InsName = pvi?.InsName ?? "Bảo hiểm PVI",
+                    InsuranceDebitId = deb3.Id,
+                    PaymentDate = DateTime.Today.AddDays(-2),
+                    PaymentAmount = 2000000,
+                    Method = PaymentMethod.BankTransfer,
+                    PayPersonName = "Lê Hoàng Long (Giám định PVI)",
+                    PayPersonPhone = "0988.112.233",
+                    BankAccount = "118002678999",
+                    BankName = "VietinBank - CN Đống Đa",
+                    TransactionRef = "GBC-BIDV-2026-4421",
+                    Note = "PVI tạm ứng đợt 1 chi phí sơn nắp cốp sau và mua phụ tùng đèn hậu xe 51G-678.90.",
+                    Cashier = "Thu ngân Lan",
+                    Status = InsuranceDebitPaymentStatus.Confirmed,
+                    CreatedAt = DateTime.Now.AddDays(-2)
+                }
+            };
+
+            db.InsuranceDebitPayments.AddRange(payments);
+            await db.SaveChangesAsync();
+        }
     }
 
 
@@ -3374,7 +3543,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -3417,6 +3586,10 @@ public static class Seeder
             "CREATE INDEX IF NOT EXISTS \"IX_DealerHistoryRecords_OrgId_FrameNo\" ON miniservice.\"DealerHistoryRecords\" (\"OrgId\", \"FrameNo\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"DealerHistoryItems\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"DealerHistoryRecordId\" integer NOT NULL, \"ItemType\" integer NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Unit\" text NOT NULL, \"Quantity\" numeric(18,2) NOT NULL, \"UnitPrice\" numeric(18,2) NOT NULL, \"Amount\" numeric(18,2) NOT NULL, \"ExpenseType\" integer NOT NULL, \"Technician\" text NULL, \"Result\" text NULL, \"Remark\" text NULL)",
             "CREATE INDEX IF NOT EXISTS \"IX_DealerHistoryItems_OrgId_DealerHistoryRecordId\" ON miniservice.\"DealerHistoryItems\" (\"OrgId\", \"DealerHistoryRecordId\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"InsuranceDebits\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"DebitNo\" text NOT NULL, \"InsuranceCompanyId\" integer NOT NULL, \"InsNo\" text NOT NULL, \"InsName\" text NOT NULL, \"InsuranceContractId\" integer NULL, \"ROId\" integer NULL, \"RONo\" text NULL, \"PlateNo\" text NULL, \"CarModel\" text NULL, \"CustomerName\" text NULL, \"InsuranceClaimId\" integer NULL, \"ClaimNo\" text NULL, \"PolicyNo\" text NULL, \"DebitType\" integer NOT NULL, \"Status\" integer NOT NULL, \"DebitDate\" timestamp NOT NULL, \"DueDate\" timestamp NULL, \"DebitAmount\" numeric(18,2) NOT NULL, \"PaidAmount\" numeric(18,2) NOT NULL DEFAULT 0, \"Description\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ClearedAt\" timestamp NULL, \"CancelledReason\" text NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_InsuranceDebits_OrgId_DebitNo\" ON miniservice.\"InsuranceDebits\" (\"OrgId\", \"DebitNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"InsuranceDebitPayments\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"PaymentNo\" text NOT NULL, \"InsuranceCompanyId\" integer NOT NULL, \"InsNo\" text NOT NULL, \"InsName\" text NOT NULL, \"InsuranceDebitId\" integer NULL, \"PaymentDate\" timestamp NOT NULL, \"PaymentAmount\" numeric(18,2) NOT NULL, \"Method\" integer NOT NULL, \"PayPersonName\" text NOT NULL, \"PayPersonIdCard\" text NULL, \"PayPersonPhone\" text NULL, \"BankAccount\" text NULL, \"BankName\" text NULL, \"TransactionRef\" text NULL, \"Note\" text NULL, \"Cashier\" text NOT NULL, \"Status\" integer NOT NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_InsuranceDebitPayments_OrgId_PaymentNo\" ON miniservice.\"InsuranceDebitPayments\" (\"OrgId\", \"PaymentNo\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -4444,7 +4617,62 @@ public static class Seeder
                 ""Remark"" TEXT NULL,
                 FOREIGN KEY (""DealerHistoryRecordId"") REFERENCES ""DealerHistoryRecords"" (""Id"") ON DELETE CASCADE
             );",
-            @"CREATE INDEX IF NOT EXISTS ""IX_DealerHistoryItems_OrgId_DealerHistoryRecordId"" ON ""DealerHistoryItems"" (""OrgId"", ""DealerHistoryRecordId"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_DealerHistoryItems_OrgId_DealerHistoryRecordId"" ON ""DealerHistoryItems"" (""OrgId"", ""DealerHistoryRecordId"");",
+            @"CREATE TABLE IF NOT EXISTS ""InsuranceDebits"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""DebitNo"" TEXT NOT NULL,
+                ""InsuranceCompanyId"" INTEGER NOT NULL,
+                ""InsNo"" TEXT NOT NULL,
+                ""InsName"" TEXT NOT NULL,
+                ""InsuranceContractId"" INTEGER NULL,
+                ""ROId"" INTEGER NULL,
+                ""RONo"" TEXT NULL,
+                ""PlateNo"" TEXT NULL,
+                ""CarModel"" TEXT NULL,
+                ""CustomerName"" TEXT NULL,
+                ""InsuranceClaimId"" INTEGER NULL,
+                ""ClaimNo"" TEXT NULL,
+                ""PolicyNo"" TEXT NULL,
+                ""DebitType"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""DebitDate"" TEXT NOT NULL,
+                ""DueDate"" TEXT NULL,
+                ""DebitAmount"" TEXT NOT NULL,
+                ""PaidAmount"" TEXT NOT NULL DEFAULT '0',
+                ""Description"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ClearedAt"" TEXT NULL,
+                ""CancelledReason"" TEXT NULL,
+                FOREIGN KEY (""InsuranceCompanyId"") REFERENCES ""InsuranceCompanies"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_InsuranceDebits_OrgId_DebitNo"" ON ""InsuranceDebits"" (""OrgId"", ""DebitNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""InsuranceDebitPayments"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PaymentNo"" TEXT NOT NULL,
+                ""InsuranceCompanyId"" INTEGER NOT NULL,
+                ""InsNo"" TEXT NOT NULL,
+                ""InsName"" TEXT NOT NULL,
+                ""InsuranceDebitId"" INTEGER NULL,
+                ""PaymentDate"" TEXT NOT NULL,
+                ""PaymentAmount"" TEXT NOT NULL,
+                ""Method"" INTEGER NOT NULL,
+                ""PayPersonName"" TEXT NOT NULL,
+                ""PayPersonIdCard"" TEXT NULL,
+                ""PayPersonPhone"" TEXT NULL,
+                ""BankAccount"" TEXT NULL,
+                ""BankName"" TEXT NULL,
+                ""TransactionRef"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                ""Cashier"" TEXT NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""InsuranceCompanyId"") REFERENCES ""InsuranceCompanies"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_InsuranceDebitPayments_OrgId_PaymentNo"" ON ""InsuranceDebitPayments"" (""OrgId"", ""PaymentNo"");"
         };
 
         foreach (var sql in sqls)

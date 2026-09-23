@@ -450,6 +450,29 @@ public enum SupplierDebitStatus
     Cancelled = 3  // 3: Đã hủy phiếu nợ (Cancelled)
 }
 
+/// <summary>Phân loại công nợ Hãng bảo hiểm — theo Ser_InsuranceDebit DebitType trong idn.CarService (DebitType = '2').</summary>
+public enum InsuranceDebitType
+{
+    RO = 1,                 // 1: Nợ bồi thường theo Lệnh sửa chữa xe (Repair Order)
+    Claim = 2,              // 2: Nợ bồi thường theo Hồ sơ duyệt bảo hiểm (InsuranceClaim)
+    DirectAdjustment = 3    // 3: Ghi nợ điều chỉnh bổ sung / Giám định phát sinh
+}
+
+/// <summary>Trạng thái công nợ Hãng bảo hiểm — theo Ser_InsuranceDebit trong idn.CarService.</summary>
+public enum InsuranceDebitStatus
+{
+    Active = 1,    // 1: Còn nợ (Active / Unpaid / Partially Paid)
+    Cleared = 2,   // 2: Đã tất toán đủ (Cleared / Fully Paid)
+    Cancelled = 3  // 3: Đã hủy khoản nợ (Cancelled)
+}
+
+/// <summary>Trạng thái Phiếu thu tiền bảo hiểm bồi thường — theo Ser_Payment / Ser_InsuranceDebitPayment.</summary>
+public enum InsuranceDebitPaymentStatus
+{
+    Confirmed = 1,  // 1: Đã xác nhận thu tiền / Giấy báo có
+    Cancelled = 2   // 2: Đã hủy phiếu thu
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -525,6 +548,7 @@ public class RepairOrder : IOrgOwned
     public List<StockOutOrder> StockOutOrders { get; set; } = [];
     public List<PartOO> PartOOs { get; set; } = [];
     public List<CusDebit> CusDebits { get; set; } = [];
+    public List<InsuranceDebit> InsuranceDebits { get; set; } = [];
 
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
@@ -1226,6 +1250,8 @@ public class InsuranceCompany : IOrgOwned
 
     public List<InsuranceContract> Contracts { get; set; } = [];
     public List<InsuranceClaim> Claims { get; set; } = [];
+    public List<InsuranceDebit> Debits { get; set; } = [];
+    public List<InsuranceDebitPayment> Payments { get; set; } = [];
 }
 
 /// <summary>Hợp đồng liên kết bảo hiểm với xưởng dịch vụ — Ser_InsuranceContract trong idn.CarService.</summary>
@@ -1285,6 +1311,7 @@ public class InsuranceClaim : IOrgOwned
     public InsuranceCompany InsuranceCompany { get; set; } = null!;
     public InsuranceContract? InsuranceContract { get; set; }
     public List<InsuranceClaimItem> Items { get; set; } = [];
+    public List<InsuranceDebit> Debits { get; set; } = [];
 
     public int ItemCount => Items.Count;
 }
@@ -2138,6 +2165,97 @@ public class VehicleHistorySummaryDto
     public string? LastDealerName { get; set; }
     public string? LastServiceAdvisor { get; set; }
     public List<DealerHistoryRecord> Records { get; set; } = [];
+}
+
+/// <summary>Phiếu ghi nhận công nợ Hãng Bảo Hiểm — Ser_InsuranceDebit trong idn.CarService (DebitType = '2').</summary>
+public class InsuranceDebit : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string DebitNo { get; set; } = "";                                 // Mã ghi nợ (VD: IDB260427-001)
+    public int InsuranceCompanyId { get; set; }                               // Hãng bảo hiểm ghi nợ (InsNo/InsuranceCompanyId)
+    public string InsNo { get; set; } = "";                                   // Mã hãng bảo hiểm (InsNo)
+    public string InsName { get; set; } = "";                                 // Tên hãng bảo hiểm (InsName)
+    public int? InsuranceContractId { get; set; }                             // Hợp đồng bảo hiểm áp dụng nếu có
+    public int? ROId { get; set; }                                            // Lệnh sửa chữa phát sinh công nợ (ROID)
+    public string? RONo { get; set; }                                         // Số Lệnh sửa chữa (RONo)
+    public string? PlateNo { get; set; }                                      // Biển số xe được bảo hiểm (PlateNo)
+    public string? CarModel { get; set; }                                     // Model xe
+    public string? CustomerName { get; set; }                                 // Tên chủ xe / Người thụ hưởng (CusName)
+    public int? InsuranceClaimId { get; set; }                                // Hồ sơ bồi thường bảo hiểm liên kết nếu có
+    public string? ClaimNo { get; set; }                                      // Số hồ sơ bồi thường (ClaimNo)
+    public string? PolicyNo { get; set; }                                     // Số đơn bảo hiểm / Số GCNBH (PolicyNo)
+    public InsuranceDebitType DebitType { get; set; } = InsuranceDebitType.RO; // Phân loại nợ (1: RO, 2: Claim, 3: DirectAdjustment)
+    public InsuranceDebitStatus Status { get; set; } = InsuranceDebitStatus.Active; // Trạng thái nợ
+    public DateTime DebitDate { get; set; } = DateTime.Today;                 // Ngày phát sinh công nợ (DebitDate)
+    public DateTime? DueDate { get; set; }                                    // Hạn thanh toán bồi thường
+    public decimal DebitAmount { get; set; }                                  // Số tiền nợ bồi thường gốc (DebitAmount)
+    public decimal PaidAmount { get; set; } = 0;                              // Số tiền đã thanh toán (PaymentAmount)
+    public string? Description { get; set; }                                  // Lý do ghi nợ / Nội dung sự vụ (Note)
+    public string CreatedBy { get; set; } = "CVDV";                           // Người lập phiếu ghi nợ
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ClearedAt { get; set; }                                  // Thời điểm tất toán nợ
+    public string? CancelledReason { get; set; }                              // Lý do hủy / Từ chối bồi thường
+
+    public InsuranceCompany InsuranceCompany { get; set; } = null!;
+    public InsuranceContract? InsuranceContract { get; set; }
+    public RepairOrder? RO { get; set; }
+    public InsuranceClaim? InsuranceClaim { get; set; }
+    public List<InsuranceDebitPayment> Payments { get; set; } = [];
+
+    public decimal RemainAmount => Math.Max(0, DebitAmount - PaidAmount);     // Dư nợ còn lại phải thu từ bảo hiểm (Deb)
+    public bool IsOverdue => Status == InsuranceDebitStatus.Active && DueDate.HasValue && DueDate.Value.Date < DateTime.Today;
+    public bool CanPay => Status == InsuranceDebitStatus.Active && RemainAmount > 0;
+}
+
+/// <summary>Phiếu thu tiền thanh toán bồi thường Bảo Hiểm — Ser_Payment / Ser_InsuranceDebitPayment trong idn.CarService (PaymentType = '2').</summary>
+public class InsuranceDebitPayment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PaymentNo { get; set; } = "";                                 // Số phiếu thu (VD: IPM260427-001 hoặc PT-BH-001)
+    public int InsuranceCompanyId { get; set; }                                 // Hãng bảo hiểm thanh toán (InsuranceCompanyId)
+    public string InsNo { get; set; } = "";                                     // Mã hãng (InsNo)
+    public string InsName { get; set; } = "";                                   // Tên hãng bảo hiểm
+    public int? InsuranceDebitId { get; set; }                                  // Khoản nợ bảo hiểm cụ thể được cấn trừ (nếu có)
+    public DateTime PaymentDate { get; set; } = DateTime.Today;                 // Ngày thu tiền bồi thường (PayDate)
+    public decimal PaymentAmount { get; set; }                                  // Số tiền thu bồi thường (PaymentAmount)
+    public PaymentMethod Method { get; set; } = PaymentMethod.BankTransfer;    // Hình thức thanh toán (chủ yếu là Chuyển khoản ngân hàng)
+    public string PayPersonName { get; set; } = "";                             // Đại diện nộp tiền / Giám định viên / Kế toán hãng (PayPersonName)
+    public string? PayPersonIdCard { get; set; }                                // CMND/CCCD người nộp (PayPersonIDCardNo)
+    public string? PayPersonPhone { get; set; }                                 // SĐT liên hệ
+    public string? BankAccount { get; set; }                                    // Tài khoản ngân hàng nhận tiền
+    public string? BankName { get; set; }                                       // Ngân hàng nhận tiền
+    public string? TransactionRef { get; set; }                                 // Mã giao dịch ngân hàng / Giấy báo có
+    public string? Note { get; set; }                                           // Lý do nộp tiền bồi thường (Note)
+    public string Cashier { get; set; } = "Thu ngân";                           // Nhân viên thu tiền
+    public InsuranceDebitPaymentStatus Status { get; set; } = InsuranceDebitPaymentStatus.Confirmed; // Trạng thái phiếu thu
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public InsuranceCompany InsuranceCompany { get; set; } = null!;
+    public InsuranceDebit? InsuranceDebit { get; set; }
+}
+
+/// <summary>DTO Tổng hợp công nợ theo Hãng Bảo Hiểm — Ser_InsuranceDebitPayment / SerInvReportInsuranceDebitRpt.</summary>
+public class InsuranceCompanyDebitSummaryDto
+{
+    public int InsuranceCompanyId { get; set; }
+    public string InsNo { get; set; } = "";
+    public string InsName { get; set; } = "";
+    public string? Address { get; set; }
+    public string? Phone { get; set; }
+    public string? Email { get; set; }
+    public string? TaxCode { get; set; }
+    public string? Hotline { get; set; }
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalPaidAmount { get; set; }
+    public decimal RemainingDebit => Math.Max(0, TotalDebitAmount - TotalPaidAmount);
+    public int ActiveDebitCount { get; set; }
+    public int OverdueDebitCount { get; set; }
+    public bool HasDebit => RemainingDebit > 0;
+    public DateTime? LastDebitDate { get; set; }
+    public DateTime? LastPaymentDate { get; set; }
 }
 
 

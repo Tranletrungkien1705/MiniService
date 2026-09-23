@@ -4513,6 +4513,204 @@ app.MapDelete("/api/dealer-history/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// =========================================================================
+// MINIMAL APIS — QUẢN LÝ CÔNG NỢ BẢO HIỂM XE & BỒI THƯỜNG (MH 55 / Ser_InsuranceDebit)
+// =========================================================================
+
+app.MapGet("/api/insurancedebits/summaries", async (string? q, bool? onlyHasDebit, IRoService svc) =>
+{
+    var list = await svc.InsuranceCompanyDebitSummariesAsync(q, onlyHasDebit);
+    return Results.Ok(list);
+});
+
+app.MapGet("/api/insurancedebits/company/{companyId:int}", async (int companyId, IRoService svc) =>
+{
+    try
+    {
+        var (company, summary, debits, payments) = await svc.GetInsuranceCompanyDebitProfileAsync(companyId);
+        return Results.Ok(new
+        {
+            company = new { company.Id, company.InsNo, company.InsName, company.Phone, company.Hotline, company.Email, company.Address, company.TaxCode },
+            summary,
+            debits = debits.Select(d => new
+            {
+                d.Id, d.DebitNo, d.RONo, d.ROId, d.PlateNo, d.CarModel, d.CustomerName, d.ClaimNo, d.PolicyNo,
+                type = d.DebitType.ToString(),
+                status = d.Status.ToString(),
+                d.DebitDate, d.DueDate, d.DebitAmount, d.PaidAmount, d.RemainAmount, d.IsOverdue, d.CanPay,
+                d.Description, d.CreatedAt
+            }),
+            payments = payments.Select(p => new
+            {
+                p.Id, p.PaymentNo, p.InsuranceDebitId, p.PaymentDate, p.PaymentAmount,
+                method = p.Method.ToString(),
+                status = p.Status.ToString(),
+                p.PayPersonName, p.BankAccount, p.BankName, p.TransactionRef, p.Note, p.Cashier
+            })
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/insurancedebits", async (int? companyId, InsuranceDebitStatus? status, InsuranceDebitType? type, string? q, bool? isOverdue, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.InsuranceDebitsAsync(companyId, status, type, q, isOverdue, fromDate, toDate);
+    return Results.Ok(list.Select(d => new
+    {
+        d.Id, d.DebitNo, d.InsuranceCompanyId, d.InsNo, d.InsName,
+        d.ROId, d.RONo, d.PlateNo, d.CarModel, d.CustomerName, d.InsuranceClaimId, d.ClaimNo, d.PolicyNo,
+        type = d.DebitType.ToString(),
+        status = d.Status.ToString(),
+        d.DebitDate, d.DueDate, d.DebitAmount, d.PaidAmount, d.RemainAmount, d.IsOverdue, d.CanPay,
+        d.Description, d.CreatedBy, d.CreatedAt
+    }));
+});
+
+app.MapGet("/api/insurancedebits/{id:int}", async (int id, IRoService svc) =>
+{
+    var d = await svc.GetInsuranceDebitAsync(id);
+    if (d == null) return Results.NotFound(new { error = "Không tìm thấy khoản nợ bảo hiểm." });
+    return Results.Ok(new
+    {
+        d.Id, d.DebitNo, d.InsuranceCompanyId, d.InsNo, d.InsName,
+        d.ROId, d.RONo, d.PlateNo, d.CarModel, d.CustomerName, d.InsuranceClaimId, d.ClaimNo, d.PolicyNo,
+        type = d.DebitType.ToString(),
+        status = d.Status.ToString(),
+        d.DebitDate, d.DueDate, d.DebitAmount, d.PaidAmount, d.RemainAmount, d.IsOverdue, d.CanPay,
+        d.Description, d.CreatedBy, d.CreatedAt, d.ClearedAt, d.CancelledReason,
+        payments = d.Payments.Select(p => new
+        {
+            p.Id, p.PaymentNo, p.PaymentDate, p.PaymentAmount,
+            method = p.Method.ToString(),
+            status = p.Status.ToString(),
+            p.PayPersonName, p.TransactionRef, p.Note
+        })
+    });
+});
+
+app.MapPost("/api/insurancedebits", async (CreateInsuranceDebitDto dto, IRoService svc) =>
+{
+    try
+    {
+        var debit = new InsuranceDebit
+        {
+            InsuranceCompanyId = dto.InsuranceCompanyId,
+            ROId = dto.RoId,
+            InsuranceClaimId = dto.InsuranceClaimId,
+            DebitType = dto.DebitType ?? InsuranceDebitType.RO,
+            DebitAmount = dto.DebitAmount,
+            DebitDate = dto.DebitDate ?? DateTime.Today,
+            DueDate = dto.DueDate ?? DateTime.Today.AddDays(30),
+            Description = dto.Description,
+            CreatedBy = string.IsNullOrWhiteSpace(dto.CreatedBy) ? "API" : dto.CreatedBy
+        };
+        var id = await svc.CreateInsuranceDebitAsync(debit);
+        return Results.Created($"/api/insurancedebits/{id}", new { id, debit.DebitNo, message = "Đã ghi nhận công nợ bồi thường bảo hiểm thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/insurancedebits/from-ro", async (CreateInsuranceDebitFromRoDto dto, IRoService svc) =>
+{
+    var (ok, msg, debitId) = await svc.CreateInsuranceDebitFromRoAsync(dto.RoId, dto.CompanyId, dto.DebitAmount, dto.DueDate, dto.Note);
+    return ok
+        ? Results.Created($"/api/insurancedebits/{debitId}", new { debitId, message = msg })
+        : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/insurancedebits/from-claim", async (CreateInsuranceDebitFromClaimDto dto, IRoService svc) =>
+{
+    var (ok, msg, debitId) = await svc.CreateInsuranceDebitFromClaimAsync(dto.ClaimId, dto.DueDate, dto.Note);
+    return ok
+        ? Results.Created($"/api/insurancedebits/{debitId}", new { debitId, message = msg })
+        : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/insurancedebits/{id:int}/cancel", async (int id, CancelInsuranceDebitDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.CancelInsuranceDebitAsync(id, dto.Reason);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapGet("/api/insurancedebits/payments", async (int? companyId, int? debitId, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.InsuranceDebitPaymentsAsync(companyId, debitId, fromDate, toDate);
+    return Results.Ok(list.Select(p => new
+    {
+        p.Id, p.PaymentNo, p.InsuranceCompanyId, p.InsNo, p.InsName, p.InsuranceDebitId,
+        p.PaymentDate, p.PaymentAmount,
+        method = p.Method.ToString(),
+        status = p.Status.ToString(),
+        p.PayPersonName, p.PayPersonIdCard, p.PayPersonPhone, p.BankAccount, p.BankName, p.TransactionRef, p.Note, p.Cashier, p.CreatedAt
+    }));
+});
+
+app.MapGet("/api/insurancedebits/payments/{paymentId:int}", async (int paymentId, IRoService svc) =>
+{
+    var p = await svc.GetInsuranceDebitPaymentAsync(paymentId);
+    if (p == null) return Results.NotFound(new { error = "Không tìm thấy phiếu thu tiền bảo hiểm." });
+    return Results.Ok(new
+    {
+        p.Id, p.PaymentNo, p.InsuranceCompanyId, p.InsNo, p.InsName, p.InsuranceDebitId,
+        p.PaymentDate, p.PaymentAmount,
+        method = p.Method.ToString(),
+        status = p.Status.ToString(),
+        p.PayPersonName, p.PayPersonIdCard, p.PayPersonPhone, p.BankAccount, p.BankName, p.TransactionRef, p.Note, p.Cashier, p.CreatedAt,
+        debit = p.InsuranceDebit == null ? null : new
+        {
+            p.InsuranceDebit.DebitNo,
+            p.InsuranceDebit.RONo,
+            p.InsuranceDebit.PlateNo,
+            p.InsuranceDebit.CustomerName,
+            p.InsuranceDebit.DebitAmount,
+            p.InsuranceDebit.PaidAmount,
+            p.InsuranceDebit.RemainAmount
+        }
+    });
+});
+
+app.MapPost("/api/insurancedebits/payments", async (CreateInsuranceDebitPaymentDto dto, IRoService svc) =>
+{
+    try
+    {
+        var payment = new InsuranceDebitPayment
+        {
+            InsuranceCompanyId = dto.InsuranceCompanyId,
+            InsuranceDebitId = dto.InsuranceDebitId,
+            PaymentAmount = dto.PaymentAmount,
+            PaymentDate = dto.PaymentDate ?? DateTime.Today,
+            Method = dto.Method ?? PaymentMethod.BankTransfer,
+            PayPersonName = dto.PayPersonName ?? "",
+            PayPersonIdCard = dto.PayPersonIdCard,
+            PayPersonPhone = dto.PayPersonPhone,
+            BankAccount = dto.BankAccount,
+            BankName = dto.BankName,
+            TransactionRef = dto.TransactionRef,
+            Note = dto.Note,
+            Cashier = string.IsNullOrWhiteSpace(dto.Cashier) ? "Thu ngân" : dto.Cashier,
+            CreatedBy = "API"
+        };
+        var id = await svc.CreateInsuranceDebitPaymentAsync(payment, allocateFifoIfNoDebit: true);
+        return Results.Created($"/api/insurancedebits/payments/{id}", new { id, payment.PaymentNo, message = "Đã lập phiếu thu tiền bảo hiểm bồi thường thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapDelete("/api/insurancedebits/payments/{paymentId:int}", async (int paymentId, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteInsuranceDebitPaymentAsync(paymentId);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
@@ -4633,4 +4831,10 @@ record CancelSupplierDebitDto(string? Reason);
 record CreateSupplierDebitPaymentDto(int SupplierId, int? SupplierDebitId, decimal PaymentAmount, DateTime? PaymentDate, PaymentMethod? Method, string? PayPersonName, string? PayPersonIdCard, string? PayPersonPhone, string? BankAccount, string? BankName, string? TransactionRef, string? Note, string? Cashier);
 record CreateDealerHistoryRecordDto(string? DealerCode, string? DealerName, string PlateNo, string? FrameNo, string? EngineNo, string? TradeMarkName, string ModelName, string? ColorCode, int ProductYear, string CusName, string? CusPhone, string? CusAddress, string RONo, DateTime? CheckInDate, DateTime? ActualDeliveryDate, int Odometer, string? ServiceAdvisor, string? Technician, string? CustomerRequest, string? CarStatus, string? RepairResult, bool? FlagClaim, string? ClaimNo, string? ClaimStatus, List<CreateDealerHistoryItemDto>? Items);
 record CreateDealerHistoryItemDto(LineType ItemType, string Code, string Name, string? Unit, decimal Quantity, decimal UnitPrice, ExpenseType? ExpenseType, string? Technician, string? Result, string? Remark);
+
+record CreateInsuranceDebitDto(int InsuranceCompanyId, int? RoId, int? InsuranceClaimId, InsuranceDebitType? DebitType, decimal DebitAmount, DateTime? DebitDate, DateTime? DueDate, string? Description, string? CreatedBy);
+record CreateInsuranceDebitFromRoDto(int RoId, int? CompanyId, decimal? DebitAmount, DateTime? DueDate, string? Note);
+record CreateInsuranceDebitFromClaimDto(int ClaimId, DateTime? DueDate, string? Note);
+record CancelInsuranceDebitDto(string? Reason);
+record CreateInsuranceDebitPaymentDto(int InsuranceCompanyId, int? InsuranceDebitId, decimal PaymentAmount, DateTime? PaymentDate, PaymentMethod? Method, string? PayPersonName, string? PayPersonIdCard, string? PayPersonPhone, string? BankAccount, string? BankName, string? TransactionRef, string? Note, string? Cashier);
 

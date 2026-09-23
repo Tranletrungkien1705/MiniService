@@ -4269,3 +4269,257 @@ public class DealerHistoryController(IRoService svc) : Controller
     }
 }
 
+public class InsuranceDebitController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? onlyHasDebit, InsuranceDebitStatus? status, InsuranceDebitType? type, string? tab)
+    {
+        ViewBag.Q = q;
+        ViewBag.OnlyHasDebit = onlyHasDebit;
+        ViewBag.Status = status;
+        ViewBag.Type = type;
+        ViewBag.ActiveTab = string.IsNullOrWhiteSpace(tab) ? "summaries" : tab.Trim();
+
+        var summaries = await svc.InsuranceCompanyDebitSummariesAsync(q, onlyHasDebit);
+        var debits = await svc.InsuranceDebitsAsync(null, status, type, q, null, null, null);
+        var payments = await svc.InsuranceDebitPaymentsAsync(null, null, null, null);
+
+        var allSummaries = (q == null && onlyHasDebit == null) ? summaries : await svc.InsuranceCompanyDebitSummariesAsync(null, null);
+        ViewBag.TotalDebitAmount = allSummaries.Sum(s => s.TotalDebitAmount);
+        ViewBag.TotalPaidAmount = allSummaries.Sum(s => s.TotalPaidAmount);
+        ViewBag.TotalRemainingDebit = allSummaries.Sum(s => s.RemainingDebit);
+        ViewBag.CompaniesWithDebitCount = allSummaries.Count(s => s.HasDebit);
+        ViewBag.OverdueDebitCount = allSummaries.Sum(s => s.OverdueDebitCount);
+
+        ViewBag.Summaries = summaries;
+        ViewBag.Debits = debits;
+        ViewBag.Payments = payments;
+
+        return View();
+    }
+
+    public async Task<IActionResult> CompanyDetail(int id)
+    {
+        try
+        {
+            var profile = await svc.GetInsuranceCompanyDebitProfileAsync(id);
+            return View(profile);
+        }
+        catch
+        {
+            return NotFound();
+        }
+    }
+
+    public async Task<IActionResult> DebitDetail(int id)
+    {
+        var debit = await svc.GetInsuranceDebitAsync(id);
+        if (debit == null) return NotFound();
+        return View(debit);
+    }
+
+    public async Task<IActionResult> Create(int? companyId, int? roId, int? claimId)
+    {
+        ViewBag.Companies = await svc.InsuranceCompaniesForDebitSelectAsync();
+        ViewBag.ROs = await svc.ROsForInsuranceDebitSelectAsync();
+        ViewBag.Claims = await svc.ClaimsForInsuranceDebitSelectAsync();
+        ViewBag.CompanyId = companyId;
+        ViewBag.ROId = roId;
+        ViewBag.ClaimId = claimId;
+
+        if (roId.HasValue && roId.Value > 0)
+        {
+            var ro = await svc.GetROAsync(roId.Value);
+            if (ro != null)
+            {
+                ViewBag.RO = ro;
+                ViewBag.SuggestedAmount = ro.InsuranceTotal > 0 ? ro.InsuranceTotal : ro.Total;
+            }
+        }
+        else if (claimId.HasValue && claimId.Value > 0)
+        {
+            var claim = await svc.GetInsuranceClaimAsync(claimId.Value);
+            if (claim != null)
+            {
+                ViewBag.Claim = claim;
+                ViewBag.SuggestedAmount = claim.InsuranceAmount > 0 ? claim.InsuranceAmount : claim.ApprovedAmount;
+                ViewBag.CompanyId = claim.InsuranceCompanyId;
+            }
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int insuranceCompanyId, int? roId, int? insuranceClaimId, InsuranceDebitType debitType, decimal debitAmount, DateTime? debitDate, DateTime? dueDate, string? description, string? createdBy)
+    {
+        if (insuranceCompanyId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn Hãng bảo hiểm.";
+            return RedirectToAction(nameof(Create), new { companyId = insuranceCompanyId, roId, claimId = insuranceClaimId });
+        }
+
+        if (debitAmount <= 0)
+        {
+            TempData["Error"] = "Số tiền công nợ bồi thường phải lớn hơn 0.";
+            return RedirectToAction(nameof(Create), new { companyId = insuranceCompanyId, roId, claimId = insuranceClaimId });
+        }
+
+        try
+        {
+            var debit = new InsuranceDebit
+            {
+                InsuranceCompanyId = insuranceCompanyId,
+                ROId = (roId.HasValue && roId.Value > 0) ? roId : null,
+                InsuranceClaimId = (insuranceClaimId.HasValue && insuranceClaimId.Value > 0) ? insuranceClaimId : null,
+                DebitType = debitType,
+                DebitAmount = debitAmount,
+                DebitDate = debitDate ?? DateTime.Today,
+                DueDate = dueDate ?? DateTime.Today.AddDays(30),
+                Description = description?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "CVDV" : createdBy.Trim()
+            };
+
+            var id = await svc.CreateInsuranceDebitAsync(debit);
+            TempData["Success"] = $"Đã ghi nhận công nợ bồi thường bảo hiểm {debit.DebitNo} số tiền {debit.DebitAmount:N0} đ thành công.";
+            return RedirectToAction(nameof(CompanyDetail), new { id = insuranceCompanyId });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { companyId = insuranceCompanyId, roId, claimId = insuranceClaimId });
+        }
+    }
+
+    public async Task<IActionResult> CreatePayment(int? companyId, int? debitId)
+    {
+        ViewBag.Companies = await svc.InsuranceCompaniesForDebitSelectAsync();
+        ViewBag.CompanyId = companyId;
+        ViewBag.DebitId = debitId;
+
+        if (debitId.HasValue && debitId.Value > 0)
+        {
+            var debit = await svc.GetInsuranceDebitAsync(debitId.Value);
+            if (debit != null)
+            {
+                ViewBag.CompanyId = debit.InsuranceCompanyId;
+                ViewBag.SuggestedAmount = debit.RemainAmount;
+                ViewBag.Debit = debit;
+            }
+        }
+        else if (companyId.HasValue && companyId.Value > 0)
+        {
+            var summaries = await svc.InsuranceCompanyDebitSummariesAsync(null, null);
+            var s = summaries.FirstOrDefault(x => x.InsuranceCompanyId == companyId.Value);
+            if (s != null)
+            {
+                ViewBag.SuggestedAmount = s.RemainingDebit;
+            }
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreatePayment(int insuranceCompanyId, int? insuranceDebitId, decimal paymentAmount, DateTime? paymentDate, PaymentMethod method, string? payPersonName, string? payPersonIdCard, string? payPersonPhone, string? bankAccount, string? bankName, string? transactionRef, string? note, string? cashier)
+    {
+        if (insuranceCompanyId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn Hãng bảo hiểm.";
+            return RedirectToAction(nameof(CreatePayment), new { companyId = insuranceCompanyId, debitId = insuranceDebitId });
+        }
+
+        if (paymentAmount <= 0)
+        {
+            TempData["Error"] = "Số tiền thu bồi thường bảo hiểm phải lớn hơn 0.";
+            return RedirectToAction(nameof(CreatePayment), new { companyId = insuranceCompanyId, debitId = insuranceDebitId });
+        }
+
+        try
+        {
+            var payment = new InsuranceDebitPayment
+            {
+                InsuranceCompanyId = insuranceCompanyId,
+                InsuranceDebitId = (insuranceDebitId.HasValue && insuranceDebitId.Value > 0) ? insuranceDebitId : null,
+                PaymentAmount = paymentAmount,
+                PaymentDate = paymentDate ?? DateTime.Today,
+                Method = method,
+                PayPersonName = payPersonName?.Trim() ?? "",
+                PayPersonIdCard = payPersonIdCard?.Trim(),
+                PayPersonPhone = payPersonPhone?.Trim(),
+                BankAccount = bankAccount?.Trim(),
+                BankName = bankName?.Trim(),
+                TransactionRef = transactionRef?.Trim(),
+                Note = note?.Trim(),
+                Cashier = string.IsNullOrWhiteSpace(cashier) ? "Thu ngân" : cashier.Trim(),
+                CreatedBy = "web"
+            };
+
+            var id = await svc.CreateInsuranceDebitPaymentAsync(payment, allocateFifoIfNoDebit: true);
+            TempData["Success"] = $"Đã lập phiếu thu tiền bảo hiểm bồi thường {payment.PaymentNo} số tiền {payment.PaymentAmount:N0} đ thành công.";
+            return RedirectToAction(nameof(Print), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(CreatePayment), new { companyId = insuranceCompanyId, debitId = insuranceDebitId });
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? reason)
+    {
+        var (ok, msg) = await svc.CancelInsuranceDebitAsync(id, reason);
+        if (ok) TempData["Success"] = msg;
+        else TempData["Error"] = msg;
+        return RedirectToAction(nameof(Index), new { tab = "debits" });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeletePayment(int id)
+    {
+        var (ok, msg) = await svc.DeleteInsuranceDebitPaymentAsync(id);
+        if (ok) TempData["Success"] = msg;
+        else TempData["Error"] = msg;
+        return RedirectToAction(nameof(Index), new { tab = "payments" });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateFromRo(int roId, int? companyId, decimal? debitAmount, DateTime? dueDate, string? note)
+    {
+        var (ok, msg, debitId) = await svc.CreateInsuranceDebitFromRoAsync(roId, companyId, debitAmount, dueDate, note);
+        if (ok)
+        {
+            TempData["Success"] = msg;
+            if (debitId.HasValue) return RedirectToAction(nameof(DebitDetail), new { id = debitId.Value });
+        }
+        else
+        {
+            TempData["Error"] = msg;
+        }
+        return RedirectToAction("Detail", "RO", new { id = roId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateFromClaim(int claimId, DateTime? dueDate, string? note)
+    {
+        var (ok, msg, debitId) = await svc.CreateInsuranceDebitFromClaimAsync(claimId, dueDate, note);
+        if (ok)
+        {
+            TempData["Success"] = msg;
+            if (debitId.HasValue) return RedirectToAction(nameof(DebitDetail), new { id = debitId.Value });
+        }
+        else
+        {
+            TempData["Error"] = msg;
+        }
+        return RedirectToAction("Detail", "Insurance", new { id = claimId });
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var payment = await svc.GetInsuranceDebitPaymentAsync(id);
+        if (payment == null) return NotFound();
+        return View(payment);
+    }
+}
+

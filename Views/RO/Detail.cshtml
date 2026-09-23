@@ -318,6 +318,34 @@
                     </div>
                 </div>
             }
+            @if (Model.InsuranceTotal > 0 && !Model.InsuranceDebits.Any(d => d.Status != InsuranceDebitStatus.Cancelled))
+            {
+                <form asp-controller="InsuranceDebit" asp-action="CreateFromRo" method="post" class="mb-3">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="roId" value="@Model.Id" />
+                    <input type="hidden" name="debitAmount" value="@Model.InsuranceTotal" />
+                    <button type="submit" class="btn btn-sm btn-outline-primary w-100" title="Ghi nhận số tiền bảo hiểm chi trả vào công nợ Hãng bảo hiểm"><i class="bi bi-shield-shaded me-1"></i>Ghi nhận nợ bảo hiểm (@Model.InsuranceTotal.ToString("N0")đ)</button>
+                </form>
+            }
+            @if (Model.InsuranceDebits.Count > 0)
+            {
+                <div class="mb-2">
+                    <div class="text-muted fw-bold small mb-1"><i class="bi bi-shield-shaded text-primary me-1"></i>Công nợ Bảo hiểm:</div>
+                    <div class="list-group list-group-flush small mb-2">
+                        @foreach (var idb in Model.InsuranceDebits)
+                        {
+                            var (istxt, iscode, iscss) = Ui.InsuranceDebitStatus(idb.Status);
+                            <a href="/InsuranceDebit/DebitDetail/@idb.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <div class="fw-semibold">@idb.DebitNo <span class="badge bg-@iscss font-monospace ms-1" style="font-size:10px">@iscode</span></div>
+                                    <div class="text-muted" style="font-size:11px">@idb.InsName · Nợ: @idb.DebitAmount.ToString("N0")đ · Còn: <span class="text-danger fw-semibold">@idb.RemainAmount.ToString("N0")đ</span></div>
+                                </div>
+                                <span class="badge bg-light text-dark border">Xem nợ</span>
+                            </a>
+                        }
+                    </div>
+                </div>
+            }
             @if (Model.Payments.Count > 0)
             {
                 <div class="list-group list-group-flush small">

@@ -539,6 +539,29 @@ public static class Ui
         _ => (t.ToString(), "bi-tag", "secondary")
     };
 
+    public static (string text, string code, string css) InsuranceDebitStatus(InsuranceDebitStatus s) => s switch
+    {
+        Models.InsuranceDebitStatus.Active => ("Còn nợ bảo hiểm", "ACTIVE", "warning"),
+        Models.InsuranceDebitStatus.Cleared => ("Đã tất toán", "CLEARED", "success"),
+        Models.InsuranceDebitStatus.Cancelled => ("Đã hủy nợ", "CANCELLED", "secondary"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) InsuranceDebitType(InsuranceDebitType t) => t switch
+    {
+        Models.InsuranceDebitType.RO => ("Bồi thường theo RO", "bi-wrench-adjustable-circle", "primary"),
+        Models.InsuranceDebitType.Claim => ("Hồ sơ bồi thường BH", "bi-shield-check", "info"),
+        Models.InsuranceDebitType.DirectAdjustment => ("Điều chỉnh bổ sung", "bi-sliders", "secondary"),
+        _ => (t.ToString(), "bi-tag", "secondary")
+    };
+
+    public static (string text, string code, string css) InsuranceDebitPaymentStatus(InsuranceDebitPaymentStatus s) => s switch
+    {
+        Models.InsuranceDebitPaymentStatus.Confirmed => ("Đã xác nhận", "CONFIRMED", "success"),
+        Models.InsuranceDebitPaymentStatus.Cancelled => ("Đã hủy", "CANCELLED", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
     public static (string text, string css) DealerBadge(string dealerCode) => dealerCode switch
     {
         "HTC-CG" => ("Hyundai Cầu Giấy", "primary"),

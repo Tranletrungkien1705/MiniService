@@ -1,0 +1,312 @@
+@model (InsuranceCompany company, InsuranceCompanyDebitSummaryDto summary, List<InsuranceDebit> debits, List<InsuranceDebitPayment> payments)
+@{
+    var (company, summary, debits, payments) = Model;
+    ViewData["Title"] = $"Hồ sơ công nợ Hãng BH: {company.InsName}";
+    var overdueDebits = debits.Where(d => d.IsOverdue).ToList();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/InsuranceDebit">Công nợ Bảo hiểm</a></li>
+                <li class="breadcrumb-item active">@company.InsName</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0"><i class="bi bi-shield-shaded text-primary me-2"></i>Hồ sơ công nợ Hãng bảo hiểm: @company.InsName</h5>
+    </div>
+    <div class="d-flex gap-2">
+        @if (summary.RemainingDebit > 0)
+        {
+            <a href="/InsuranceDebit/CreatePayment?companyId=@company.Id" class="btn btn-success"><i class="bi bi-cash-coin me-1"></i>Lập phiếu thu tiền BH</a>
+        }
+        <a href="/InsuranceDebit/Create?companyId=@company.Id" class="btn btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>Ghi nhận nợ mới</a>
+        <a href="/InsuranceDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-info-circle me-1"></i>Thông tin Hãng Bảo Hiểm</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Mã Hãng BH:</span>
+                    <span class="font-monospace fw-semibold">@company.InsNo</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Tên Hãng BH:</span>
+                    <span class="fw-bold">@company.InsName</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Mã số thuế:</span>
+                    <span class="font-monospace">@(company.TaxCode ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Tổng đài cứu hộ / Hotline:</span>
+                    <span class="fw-semibold text-danger">@(company.Hotline ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Số điện thoại:</span>
+                    <span>@(company.Phone ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Email nhận hồ sơ:</span>
+                    <span>@(company.Email ?? "—")</span>
+                </div>
+                <div>
+                    <span class="text-muted small">Địa chỉ trụ sở / chi nhánh:</span>
+                    <div class="mt-1 small">@(company.Address ?? "—")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-graph-up me-1"></i>Tổng quan tình hình công nợ bồi thường</div>
+            <div class="card-body">
+                <div class="row g-3 mb-3">
+                    <div class="col-sm-4">
+                        <div class="p-3 bg-light rounded text-center">
+                            <div class="text-muted small">Tổng nợ bồi thường phát sinh</div>
+                            <div class="fs-5 fw-bold text-primary font-monospace mt-1">@summary.TotalDebitAmount.ToString("N0")đ</div>
+                            <div class="small text-muted">@debits.Count(d => d.Status != InsuranceDebitStatus.Cancelled) khoản nợ</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="p-3 bg-light rounded text-center">
+                            <div class="text-muted small">Đã thu hồi bồi thường</div>
+                            <div class="fs-5 fw-bold text-success font-monospace mt-1">@summary.TotalPaidAmount.ToString("N0")đ</div>
+                            <div class="small text-muted">@payments.Count phiếu thu</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-4">
+                        <div class="p-3 bg-light rounded text-center border @(summary.RemainingDebit > 0 ? "border-danger" : "border-success")">
+                            <div class="text-muted small">Dư nợ còn phải thu</div>
+                            <div class="fs-5 fw-bold @(summary.RemainingDebit > 0 ? "text-danger" : "text-success") font-monospace mt-1">@summary.RemainingDebit.ToString("N0")đ</div>
+                            <div class="small text-muted">@summary.ActiveDebitCount khoản chưa tất toán</div>
+                        </div>
+                    </div>
+                </div>
+
+                @{
+                    decimal pct = summary.TotalDebitAmount > 0 ? Math.Round(summary.TotalPaidAmount / summary.TotalDebitAmount * 100, 1) : 100;
+                }
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between small text-muted mb-1">
+                        <span>Tiến độ thu hồi công nợ từ Hãng bảo hiểm:</span>
+                        <span class="fw-bold">@pct%</span>
+                    </div>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: @pct%"></div>
+                    </div>
+                </div>
+
+                @if (overdueDebits.Count > 0)
+                {
+                    <div class="alert alert-warning py-2 mb-0 small">
+                        <i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i>
+                        <strong>Cảnh báo quá hạn:</strong> Có <strong>@overdueDebits.Count</strong> khoản nợ bồi thường của Hãng bảo hiểm đã quá hạn thanh toán với tổng số tiền <strong>@overdueDebits.Sum(d => d.RemainAmount).ToString("N0") đ</strong>. Cần liên hệ giám định viên hoặc phòng kế toán bảo hiểm để hoàn tất giải ngân bồi thường.
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0"><i class="bi bi-list-task me-2 text-primary"></i>Danh sách các khoản nợ bồi thường (@debits.Count)</h6>
+        @if (summary.RemainingDebit > 0)
+        {
+            <a href="/InsuranceDebit/CreatePayment?companyId=@company.Id" class="btn btn-sm btn-success"><i class="bi bi-cash-coin me-1"></i>Thu tiền bồi thường</a>
+        }
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Mã nợ</th>
+                    <th>Lệnh sửa chữa RO</th>
+                    <th>Xe / Khách hàng</th>
+                    <th>Hồ sơ bồi thường</th>
+                    <th>Ngày ghi nhận / Hạn TT</th>
+                    <th class="text-end">Nợ gốc</th>
+                    <th class="text-end">Đã thu</th>
+                    <th class="text-end">Còn lại</th>
+                    <th class="text-center">Trạng thái</th>
+                    <th class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (debits.Count == 0)
+                {
+                    <tr><td colspan="10" class="text-center py-3 text-muted">Chưa có khoản nợ bảo hiểm nào được ghi nhận.</td></tr>
+                }
+                @foreach (var d in debits)
+                {
+                    var (stxt, scode, scss) = Ui.InsuranceDebitStatus(d.Status);
+                    var (ttxt, ticon, tcss) = Ui.InsuranceDebitType(d.DebitType);
+                    <tr class="@(d.Status == InsuranceDebitStatus.Cancelled ? "text-muted text-decoration-line-through opacity-75" : "")">
+                        <td>
+                            <a href="/InsuranceDebit/DebitDetail/@d.Id" class="font-monospace fw-bold text-decoration-none">@d.DebitNo</a>
+                            <div><span class="badge bg-@tcss" style="font-size:10px"><i class="bi @ticon me-1"></i>@ttxt</span></div>
+                        </td>
+                        <td>
+                            @if (d.ROId.HasValue)
+                            {
+                                <a href="/RO/Detail/@d.ROId" class="font-monospace fw-bold text-decoration-none">@(d.RONo ?? $"RO-{d.ROId}")</a>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">—</span>
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(d.PlateNo))
+                            {
+                                <div><span class="badge bg-light text-dark border">@d.PlateNo</span> <span class="small text-muted">@d.CarModel</span></div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(d.CustomerName))
+                            {
+                                <div class="small text-muted">@d.CustomerName</div>
+                            }
+                        </td>
+                        <td>
+                            @if (d.InsuranceClaimId.HasValue)
+                            {
+                                <a href="/Insurance/Detail/@d.InsuranceClaimId" class="font-monospace text-decoration-none">@(d.ClaimNo ?? $"CLM-{d.InsuranceClaimId}")</a>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(d.ClaimNo))
+                            {
+                                <span class="font-monospace">@d.ClaimNo</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(d.PolicyNo))
+                            {
+                                <div class="small text-muted">HĐ: @d.PolicyNo</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="small">@d.DebitDate.ToString("dd/MM/yyyy")</div>
+                            @if (d.DueDate.HasValue)
+                            {
+                                <div class="small @(d.IsOverdue ? "text-danger fw-bold" : "text-muted")">
+                                    Hạn: @d.DueDate.Value.ToString("dd/MM/yyyy")
+                                    @if (d.IsOverdue)
+                                    {
+                                        <i class="bi bi-exclamation-triangle ms-1" title="Quá hạn thanh toán"></i>
+                                    }
+                                </div>
+                            }
+                        </td>
+                        <td class="text-end font-monospace">@d.DebitAmount.ToString("N0")đ</td>
+                        <td class="text-end font-monospace text-success">@d.PaidAmount.ToString("N0")đ</td>
+                        <td class="text-end font-monospace fw-bold @(d.RemainAmount > 0 ? "text-danger" : "text-muted")">
+                            @d.RemainAmount.ToString("N0")đ
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-@scss">@stxt</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/InsuranceDebit/DebitDetail/@d.Id" class="btn btn-outline-primary" title="Xem chi tiết"><i class="bi bi-eye"></i></a>
+                                @if (d.CanPay)
+                                {
+                                    <a href="/InsuranceDebit/CreatePayment?debitId=@d.Id" class="btn btn-outline-success" title="Thu tiền bồi thường"><i class="bi bi-cash-coin"></i></a>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0"><i class="bi bi-receipt me-2 text-success"></i>Lịch sử các phiếu thu tiền bồi thường (@payments.Count)</h6>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Số phiếu thu</th>
+                    <th>Ngày thu</th>
+                    <th>Khoản nợ cấn trừ</th>
+                    <th>Hình thức</th>
+                    <th class="text-end">Số tiền thu</th>
+                    <th>Đại diện người nộp</th>
+                    <th>Mã giao dịch / UNC</th>
+                    <th>Ghi chú</th>
+                    <th class="text-center">Trạng thái</th>
+                    <th class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (payments.Count == 0)
+                {
+                    <tr><td colspan="10" class="text-center py-3 text-muted">Chưa có giao dịch thu tiền bồi thường nào từ Hãng bảo hiểm này.</td></tr>
+                }
+                @foreach (var p in payments)
+                {
+                    var (pmtxt, _, _) = Ui.PaymentMethod(p.Method);
+                    var (pstxt, _, pscss) = Ui.InsuranceDebitPaymentStatus(p.Status);
+                    <tr>
+                        <td>
+                            <a href="/InsuranceDebit/Print/@p.Id" class="font-monospace fw-bold text-decoration-none">@p.PaymentNo</a>
+                            <div class="small text-muted">@p.Cashier</div>
+                        </td>
+                        <td>@p.PaymentDate.ToString("dd/MM/yyyy")</td>
+                        <td>
+                            @if (p.InsuranceDebit != null)
+                            {
+                                <a href="/InsuranceDebit/DebitDetail/@p.InsuranceDebit.Id" class="font-monospace text-decoration-none">@p.InsuranceDebit.DebitNo</a>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-dark border">Phân bổ FIFO</span>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">@pmtxt</span>
+                        </td>
+                        <td class="text-end font-monospace fw-bold text-success">
+                            @p.PaymentAmount.ToString("N0")đ
+                        </td>
+                        <td>
+                            <div class="small fw-semibold">@p.PayPersonName</div>
+                            @if (!string.IsNullOrWhiteSpace(p.PayPersonPhone))
+                            {
+                                <div class="small text-muted">@p.PayPersonPhone</div>
+                            }
+                        </td>
+                        <td>
+                            <span class="font-monospace small">@(p.TransactionRef ?? "—")</span>
+                            @if (!string.IsNullOrWhiteSpace(p.BankName))
+                            {
+                                <div class="small text-muted">@p.BankName</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="small text-muted text-truncate" style="max-width:200px" title="@p.Note">@(p.Note ?? "—")</div>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-@pscss">@pstxt</span>
+                        </td>
+                        <td class="text-end">
+                            <div class="btn-group btn-group-sm">
+                                <a href="/InsuranceDebit/Print/@p.Id" class="btn btn-outline-secondary" title="In phiếu thu"><i class="bi bi-printer"></i></a>
+                                <form method="post" action="/InsuranceDebit/DeletePayment/@p.Id" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn hủy phiếu thu tiền @p.PaymentNo và hoàn trả lại dư nợ cho Hãng bảo hiểm?')">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-outline-danger" title="Hủy phiếu thu"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

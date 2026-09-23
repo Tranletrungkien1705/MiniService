@@ -1,0 +1,126 @@
+@{
+    ViewData["Title"] = "Ghi nhận công nợ Bảo hiểm mới";
+    var companies = (List<InsuranceCompany>)ViewBag.Companies;
+    var ros = (List<RepairOrder>)ViewBag.ROs;
+    var claims = (List<InsuranceClaim>)ViewBag.Claims;
+    int? selectedCompId = ViewBag.CompanyId;
+    int? selectedRoId = ViewBag.ROId;
+    int? selectedClaimId = ViewBag.ClaimId;
+    decimal suggestedAmount = ViewBag.SuggestedAmount ?? 0;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/InsuranceDebit">Công nợ Bảo hiểm</a></li>
+                <li class="breadcrumb-item active">Ghi nhận nợ mới</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0"><i class="bi bi-plus-circle text-primary me-2"></i>Ghi nhận công nợ Hãng Bảo Hiểm mới</h5>
+        <div class="text-muted small">Tạo chứng từ công nợ bồi thường theo Lệnh sửa chữa RO hoặc Hồ sơ bảo hiểm giám định</div>
+    </div>
+    <a href="/InsuranceDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-light fw-bold py-2">
+                <i class="bi bi-file-earmark-plus me-1"></i>Thông tin chứng từ công nợ bảo hiểm
+            </div>
+            <div class="card-body">
+                <form method="post" action="/InsuranceDebit/Create">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Hãng bảo hiểm bồi thường <span class="text-danger">*</span></label>
+                            <select name="insuranceCompanyId" class="form-select" required>
+                                <option value="">-- Chọn Hãng bảo hiểm --</option>
+                                @foreach (var c in companies)
+                                {
+                                    <option value="@c.Id" selected="@(selectedCompId == c.Id)">
+                                        @c.InsName (@c.InsNo)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Phân loại phát sinh nợ <span class="text-danger">*</span></label>
+                            <select name="debitType" class="form-select" required>
+                                <option value="RO" selected="@(selectedRoId.HasValue)">Bồi thường theo Lệnh sửa chữa xe (RO)</option>
+                                <option value="Claim" selected="@(selectedClaimId.HasValue)">Hồ sơ duyệt bồi thường (Claim)</option>
+                                <option value="DirectAdjustment">Điều chỉnh phát sinh / Giám định bổ sung</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Lệnh sửa chữa RO liên kết</label>
+                            <select name="roId" class="form-select">
+                                <option value="">-- Không liên kết RO cụ thể --</option>
+                                @foreach (var r in ros)
+                                {
+                                    <option value="@r.Id" selected="@(selectedRoId == r.Id)">
+                                        @r.Code — Xe: @(r.Car?.Plate ?? "N/A") — KH: @(r.Customer?.Name ?? "N/A") (BH: @r.InsuranceTotal.ToString("N0")đ)
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text small">Tự động điền biển số xe, dòng xe và tên chủ xe</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Hồ sơ bồi thường liên kết (nếu có)</label>
+                            <select name="insuranceClaimId" class="form-select">
+                                <option value="">-- Không liên kết Claim --</option>
+                                @foreach (var clm in claims)
+                                {
+                                    <option value="@clm.Id" selected="@(selectedClaimId == clm.Id)">
+                                        @clm.ClaimNo — @clm.InsuranceCompany.InsName — Duyệt: @clm.ApprovedAmount.ToString("N0")đ
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Số tiền bồi thường (VNĐ) <span class="text-danger">*</span></label>
+                            <input type="number" name="debitAmount" class="form-control font-monospace fw-bold" step="1000" min="1000" required
+                                   value="@(suggestedAmount > 0 ? suggestedAmount.ToString("F0") : "")" placeholder="Nhập số tiền..." />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Ngày ghi nhận nợ</label>
+                            <input type="date" name="debitDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Hạn thanh toán</label>
+                            <input type="date" name="dueDate" class="form-control" value="@DateTime.Today.AddDays(30).ToString("yyyy-MM-dd")" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Cố vấn dịch vụ / Người lập</label>
+                            <input type="text" name="createdBy" class="form-control" value="Cố vấn dịch vụ" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Ghi chú / Diễn giải sự vụ</label>
+                            <input type="text" name="description" class="form-control" placeholder="Ghi chú sơn gò, phụ tùng bảo hiểm hoặc số vụ tổn thất..." />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4 pt-2 border-top">
+                        <a href="/InsuranceDebit" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle me-1"></i>Xác nhận ghi nhận công nợ</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

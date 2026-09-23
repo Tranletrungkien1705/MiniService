@@ -67,6 +67,8 @@ public class AppDbContext : DbContext
     public DbSet<SupplierDebitPayment> SupplierDebitPayments => Set<SupplierDebitPayment>();
     public DbSet<DealerHistoryRecord> DealerHistoryRecords => Set<DealerHistoryRecord>();
     public DbSet<DealerHistoryItem> DealerHistoryItems => Set<DealerHistoryItem>();
+    public DbSet<InsuranceDebit> InsuranceDebits => Set<InsuranceDebit>();
+    public DbSet<InsuranceDebitPayment> InsuranceDebitPayments => Set<InsuranceDebitPayment>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -667,6 +669,29 @@ public class AppDbContext : DbContext
             e.Property(x => x.Quantity).HasPrecision(18, 2);
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.Property(x => x.Amount).HasPrecision(18, 2);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InsuranceDebit>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.DebitNo }).IsUnique();
+            e.Property(x => x.DebitAmount).HasPrecision(18, 2);
+            e.Property(x => x.PaidAmount).HasPrecision(18, 2);
+            e.Ignore(x => x.RemainAmount);
+            e.Ignore(x => x.IsOverdue);
+            e.Ignore(x => x.CanPay);
+            e.HasOne(x => x.InsuranceCompany).WithMany(x => x.Debits).HasForeignKey(x => x.InsuranceCompanyId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.InsuranceContract).WithMany().HasForeignKey(x => x.InsuranceContractId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.RO).WithMany(x => x.InsuranceDebits).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.InsuranceClaim).WithMany(x => x.Debits).HasForeignKey(x => x.InsuranceClaimId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Payments).WithOne(x => x.InsuranceDebit).HasForeignKey(x => x.InsuranceDebitId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<InsuranceDebitPayment>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PaymentNo }).IsUnique();
+            e.Property(x => x.PaymentAmount).HasPrecision(18, 2);
+            e.HasOne(x => x.InsuranceCompany).WithMany(x => x.Payments).HasForeignKey(x => x.InsuranceCompanyId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.InsuranceDebit).WithMany(x => x.Payments).HasForeignKey(x => x.InsuranceDebitId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

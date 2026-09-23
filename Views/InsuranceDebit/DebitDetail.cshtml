@@ -1,0 +1,270 @@
+@model InsuranceDebit
+@{
+    ViewData["Title"] = $"Chi tiết công nợ Bảo hiểm: {Model.DebitNo}";
+    var (stxt, scode, scss) = Ui.InsuranceDebitStatus(Model.Status);
+    var (ttxt, ticon, tcss) = Ui.InsuranceDebitType(Model.DebitType);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/InsuranceDebit">Công nợ Bảo hiểm</a></li>
+                <li class="breadcrumb-item"><a href="/InsuranceDebit/CompanyDetail/@Model.InsuranceCompanyId">@Model.InsName</a></li>
+                <li class="breadcrumb-item active">@Model.DebitNo</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0">
+            <i class="bi bi-shield-shaded text-primary me-2"></i>Khoản nợ bảo hiểm: @Model.DebitNo
+            <span class="badge bg-@scss ms-2">@stxt</span>
+            <span class="badge bg-@tcss ms-1"><i class="bi @ticon me-1"></i>@ttxt</span>
+        </h5>
+    </div>
+    <div class="d-flex gap-2">
+        @if (Model.CanPay)
+        {
+            <a href="/InsuranceDebit/CreatePayment?debitId=@Model.Id" class="btn btn-success"><i class="bi bi-cash-coin me-1"></i>Thu tiền bồi thường</a>
+        }
+        <a href="/InsuranceDebit/CompanyDetail/@Model.InsuranceCompanyId" class="btn btn-outline-primary"><i class="bi bi-building me-1"></i>Hồ sơ Hãng BH</a>
+        <a href="/InsuranceDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card h-100"><div class="card-body">
+            <div class="text-muted small">Số tiền bồi thường gốc</div>
+            <div class="stat-num text-primary" style="font-size:22px">@Model.DebitAmount.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">Ngày ghi nhận: @Model.DebitDate.ToString("dd/MM/yyyy")</div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100"><div class="card-body">
+            <div class="text-muted small">Đã thu từ Hãng BH</div>
+            <div class="stat-num text-success" style="font-size:22px">@Model.PaidAmount.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">@Model.Payments.Count phiếu thu liên kết</div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card @(Model.RemainAmount > 0 ? "border-danger" : "border-success") h-100"><div class="card-body">
+            <div class="text-muted small">Dư nợ còn phải thu</div>
+            <div class="stat-num @(Model.RemainAmount > 0 ? "text-danger" : "text-success")" style="font-size:22px">@Model.RemainAmount.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">
+                @if (Model.IsOverdue)
+                {
+                    <span class="text-danger fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>Đã quá hạn thanh toán!</span>
+                }
+                else if (Model.RemainAmount == 0)
+                {
+                    <span class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Đã tất toán toàn bộ</span>
+                }
+                else
+                {
+                    <span>Hạn: @(Model.DueDate?.ToString("dd/MM/yyyy") ?? "—")</span>
+                }
+            </div>
+        </div></div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-building me-1"></i>Hãng bảo hiểm bồi thường</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Mã Hãng BH:</span>
+                    <span class="font-monospace fw-semibold">@Model.InsNo</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Tên Hãng BH:</span>
+                    <a href="/InsuranceDebit/CompanyDetail/@Model.InsuranceCompanyId" class="fw-bold text-decoration-none">@Model.InsName</a>
+                </div>
+                @if (Model.InsuranceCompany != null)
+                {
+                    <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                        <span class="text-muted">Mã số thuế:</span>
+                        <span class="font-monospace">@(Model.InsuranceCompany.TaxCode ?? "—")</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                        <span class="text-muted">Hotline cứu hộ:</span>
+                        <span class="text-danger fw-semibold">@(Model.InsuranceCompany.Hotline ?? "—")</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                        <span class="text-muted">Email liên hệ:</span>
+                        <span>@(Model.InsuranceCompany.Email ?? "—")</span>
+                    </div>
+                }
+                @if (Model.InsuranceContract != null)
+                {
+                    <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                        <span class="text-muted">Hợp đồng liên kết:</span>
+                        <span class="font-monospace fw-semibold">@Model.InsuranceContract.ContractNo</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-car-front me-1"></i>Thông tin Lệnh sửa chữa &amp; Xe bồi thường</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Lệnh sửa chữa (RO):</span>
+                    @if (Model.ROId.HasValue)
+                    {
+                        <a href="/RO/Detail/@Model.ROId" class="font-monospace fw-bold text-decoration-none">@(Model.RONo ?? $"RO-{Model.ROId}")</a>
+                    }
+                    else
+                    {
+                        <span class="text-muted">—</span>
+                    }
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Biển số xe:</span>
+                    <span class="badge bg-light text-dark border font-monospace fs-6">@(Model.PlateNo ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Dòng xe:</span>
+                    <span class="fw-semibold">@(Model.CarModel ?? Model.RO?.Car?.Model ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Chủ xe / Người thụ hưởng:</span>
+                    <span>@(Model.CustomerName ?? Model.RO?.Customer?.Name ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Hồ sơ bồi thường (Claim):</span>
+                    @if (Model.InsuranceClaimId.HasValue)
+                    {
+                        <a href="/Insurance/Detail/@Model.InsuranceClaimId" class="font-monospace fw-bold text-decoration-none">@(Model.ClaimNo ?? $"CLM-{Model.InsuranceClaimId}")</a>
+                    }
+                    else if (!string.IsNullOrWhiteSpace(Model.ClaimNo))
+                    {
+                        <span class="font-monospace">@Model.ClaimNo</span>
+                    }
+                    else
+                    {
+                        <span class="text-muted">—</span>
+                    }
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">Số đơn / GCN bảo hiểm:</span>
+                    <span class="font-monospace">@(Model.PolicyNo ?? "—")</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card mb-4">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-file-text me-1"></i>Chi tiết chứng từ ghi nợ</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Mã chứng từ:</span>
+                    <span class="font-monospace fw-bold">@Model.DebitNo</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Phân loại phát sinh nợ:</span>
+                    <span class="badge bg-@tcss"><i class="bi @ticon me-1"></i>@ttxt</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Trạng thái công nợ:</span>
+                    <span class="badge bg-@scss">@stxt</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Ngày ghi nợ:</span>
+                    <span>@Model.DebitDate.ToString("dd/MM/yyyy")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Hạn thanh toán:</span>
+                    <span class="@(Model.IsOverdue ? "text-danger fw-bold" : "")">
+                        @(Model.DueDate?.ToString("dd/MM/yyyy") ?? "—")
+                        @if (Model.IsOverdue)
+                        {
+                            <span class="badge bg-danger ms-1">Quá hạn</span>
+                        }
+                    </span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Người lập chứng từ:</span>
+                    <span>@Model.CreatedBy</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Thời điểm tạo:</span>
+                    <span>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</span>
+                </div>
+                @if (Model.ClearedAt.HasValue)
+                {
+                    <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                        <span class="text-muted">Thời điểm tất toán:</span>
+                        <span class="text-success fw-semibold">@Model.ClearedAt.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                    </div>
+                }
+                @if (!string.IsNullOrWhiteSpace(Model.CancelledReason))
+                {
+                    <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                        <span class="text-muted">Lý do hủy nợ:</span>
+                        <span class="text-danger fw-semibold">@Model.CancelledReason</span>
+                    </div>
+                }
+                <div>
+                    <span class="text-muted small">Nội dung sự vụ / Diễn giải:</span>
+                    <div class="mt-1 p-2 bg-light rounded small" style="white-space: pre-wrap;">@(Model.Description ?? "Không có ghi chú diễn giải.")</div>
+                </div>
+            </div>
+            @if (Model.Status == InsuranceDebitStatus.Active && Model.PaidAmount == 0)
+            {
+                <div class="card-footer bg-white text-end">
+                    <form method="post" action="/InsuranceDebit/Cancel/@Model.Id" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn hủy khoản nợ bảo hiểm này? Thao tác này sẽ đánh dấu Hãng bảo hiểm từ chối bồi thường.')">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="reason" value="Hãng bảo hiểm từ chối bồi thường hoặc điều chỉnh lệnh" />
+                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Hủy khoản nợ này</button>
+                    </form>
+                </div>
+            }
+        </div>
+
+        <div class="card">
+            <div class="card-header bg-white border-bottom py-2 d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0"><i class="bi bi-cash-stack me-2 text-success"></i>Lịch sử thu tiền bồi thường cho khoản nợ này (@Model.Payments.Count)</h6>
+                @if (Model.CanPay)
+                {
+                    <a href="/InsuranceDebit/CreatePayment?debitId=@Model.Id" class="btn btn-sm btn-success"><i class="bi bi-cash-coin me-1"></i>Thu tiền</a>
+                }
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Phiếu thu</th>
+                            <th>Ngày thu</th>
+                            <th>Hình thức</th>
+                            <th class="text-end">Số tiền</th>
+                            <th class="text-end">Bản in</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Payments.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-center py-3 text-muted">Chưa có phiếu thu nào cấn trừ cho khoản nợ này.</td></tr>
+                        }
+                        @foreach (var p in Model.Payments)
+                        {
+                            var (pmtxt, _, _) = Ui.PaymentMethod(p.Method);
+                            <tr>
+                                <td>
+                                    <a href="/InsuranceDebit/Print/@p.Id" class="font-monospace fw-bold text-decoration-none">@p.PaymentNo</a>
+                                </td>
+                                <td>@p.PaymentDate.ToString("dd/MM/yyyy")</td>
+                                <td><span class="badge bg-secondary">@pmtxt</span></td>
+                                <td class="text-end font-monospace fw-bold text-success">@p.PaymentAmount.ToString("N0")đ</td>
+                                <td class="text-end">
+                                    <a href="/InsuranceDebit/Print/@p.Id" class="btn btn-sm btn-outline-secondary py-0" title="In phiếu thu"><i class="bi bi-printer"></i></a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

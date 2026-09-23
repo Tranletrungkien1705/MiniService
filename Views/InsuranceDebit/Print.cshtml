@@ -1,0 +1,158 @@
+@model InsuranceDebitPayment
+@{
+    Layout = null;
+    var (pmtxt, _, _) = Ui.PaymentMethod(Model.Method);
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>In phiếu thu tiền bồi thường bảo hiểm - @Model.PaymentNo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { font-family: "Times New Roman", Times, serif; color: #111; background: #f8fafc; font-size: 14px; }
+        .print-page { max-width: 800px; margin: 20px auto; background: #fff; padding: 40px; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        .dotted-line { border-bottom: 1px dotted #999; flex-grow: 1; margin-left: 8px; margin-right: 4px; }
+        .sign-title { font-weight: bold; margin-bottom: 60px; font-size: 13px; }
+        @@media print {
+            body { background: #fff; margin: 0; }
+            .print-page { box-shadow: none; margin: 0; padding: 15px; max-width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print bg-dark text-white p-2 mb-3">
+    <div class="container d-flex justify-content-between align-items-center" style="max-width:800px">
+        <div>
+            <i class="bi bi-printer me-1"></i> Xem trước bản in: <strong>Phiếu thu tiền bồi thường bảo hiểm (@Model.PaymentNo)</strong>
+        </div>
+        <div class="d-flex gap-2">
+            <button onclick="window.print()" class="btn btn-sm btn-success"><i class="bi bi-printer-fill me-1"></i>In phiếu thu</button>
+            <a href="/InsuranceDebit/CompanyDetail/@Model.InsuranceCompanyId" class="btn btn-sm btn-outline-light"><i class="bi bi-arrow-left me-1"></i>Quay lại hồ sơ</a>
+        </div>
+    </div>
+</div>
+
+<div class="print-page">
+    <div class="row align-items-center mb-3 pb-2 border-bottom">
+        <div class="col-8">
+            <div class="fw-bold" style="font-size:15px;text-transform:uppercase">ĐẠI LÝ Ô TÔ HYUNDAI 3S CHÍNH HÃNG</div>
+            <div>Địa chỉ: Số 68 Lê Văn Lương, Thanh Xuân, TP. Hà Nội</div>
+            <div>Điện thoại: (024) 3984 6868 · Bộ phận Kế toán bồi thường: Máy lẻ 105</div>
+        </div>
+        <div class="col-4 text-end">
+            <div class="fw-bold">Mẫu số 01 - TT</div>
+            <div class="text-muted small" style="font-size:11px">(Ban hành theo TT số 200/2014/TT-BTC)</div>
+            <div class="small mt-1">Số: <strong class="font-monospace">@Model.PaymentNo</strong></div>
+        </div>
+    </div>
+
+    <div class="text-center my-4">
+        <h4 class="fw-bold mb-1" style="letter-spacing:1px;text-transform:uppercase">PHIẾU THU TIỀN BỒI THƯỜNG BẢO HIỂM</h4>
+        <div class="text-muted fst-italic">Ngày @Model.PaymentDate.Day tháng @Model.PaymentDate.Month năm @Model.PaymentDate.Year</div>
+    </div>
+
+    <div class="mb-3">
+        <div class="d-flex mb-2">
+            <span style="min-width:190px">Đơn vị thanh toán bồi thường:</span>
+            <strong class="text-uppercase">@Model.InsName</strong>
+            <span class="ms-3 font-monospace">(@Model.InsNo)</span>
+            <div class="dotted-line"></div>
+        </div>
+        <div class="d-flex mb-2">
+            <span style="min-width:190px">Người nộp / Đại diện giám định:</span>
+            <strong class="text-uppercase">@Model.PayPersonName</strong>
+            <div class="dotted-line"></div>
+        </div>
+        <div class="d-flex mb-2">
+            <span style="min-width:190px">Số CMND / CCCD:</span>
+            <span>@(Model.PayPersonIdCard ?? "—")</span>
+            <span class="ms-4 me-2">Số điện thoại:</span>
+            <span>@(Model.PayPersonPhone ?? Model.InsuranceCompany?.Phone ?? "—")</span>
+            <div class="dotted-line"></div>
+        </div>
+        <div class="d-flex mb-2">
+            <span style="min-width:190px">Địa chỉ trụ sở / Chi nhánh BH:</span>
+            <span>@(Model.InsuranceCompany?.Address ?? "—")</span>
+            <div class="dotted-line"></div>
+        </div>
+        <div class="d-flex mb-2">
+            <span style="min-width:190px">Lý do nộp tiền:</span>
+            <span>
+                @(string.IsNullOrWhiteSpace(Model.Note) ? "Thanh toán tiền bồi thường sửa chữa xe ô tô theo thư bảo lãnh bồi hoàn bảo hiểm" : Model.Note)
+                @if (Model.InsuranceDebit != null)
+                {
+                    <span>(Theo chứng từ nợ: <strong>@Model.InsuranceDebit.DebitNo</strong>@(Model.InsuranceDebit.RO != null ? $" - Lệnh RO: {Model.InsuranceDebit.RO.Code}" : "")@(Model.InsuranceDebit.PlateNo != null ? $" - Xe: {Model.InsuranceDebit.PlateNo}" : ""))</span>
+                }
+            </span>
+            <div class="dotted-line"></div>
+        </div>
+        <div class="d-flex mb-2">
+            <span style="min-width:190px">Số tiền thu:</span>
+            <strong style="font-size:16px" class="text-success">@Model.PaymentAmount.ToString("N0") VNĐ</strong>
+            <span class="ms-4 me-2">Hình thức:</span>
+            <span><strong>@pmtxt</strong>@(string.IsNullOrWhiteSpace(Model.TransactionRef) ? "" : $" (Mã GD/UNC: {Model.TransactionRef})")</span>
+            <div class="dotted-line"></div>
+        </div>
+        <div class="d-flex mb-2">
+            <span style="min-width:190px">Viết bằng chữ:</span>
+            <strong class="fst-italic">@Ui.MoneyToWords(Model.PaymentAmount)</strong>
+            <div class="dotted-line"></div>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Model.BankAccount))
+        {
+            <div class="d-flex mb-2">
+                <span style="min-width:190px">Tài khoản thụ hưởng:</span>
+                <span class="font-monospace fw-bold">@Model.BankAccount</span>
+                <span class="ms-3">tại Ngân hàng:</span>
+                <span class="ms-2">@Model.BankName</span>
+                <div class="dotted-line"></div>
+            </div>
+        }
+        @if (Model.InsuranceDebit != null)
+        {
+            <div class="d-flex mb-2">
+                <span style="min-width:190px">Dư nợ còn lại của vụ việc:</span>
+                <span class="fw-bold @(Model.InsuranceDebit.RemainAmount > 0 ? "text-danger" : "text-success")">
+                    @Model.InsuranceDebit.RemainAmount.ToString("N0") VNĐ
+                    @(Model.InsuranceDebit.RemainAmount <= 0 ? "(Đã tất toán toàn bộ khoản nợ này)" : "")
+                </span>
+                <div class="dotted-line"></div>
+            </div>
+        }
+        <div class="d-flex mb-2">
+            <span style="min-width:190px">Chứng từ gốc kèm theo:</span>
+            <span>Thư bảo lãnh bồi thường, Bảng kê chi phí sửa chữa quyết toán, Giấy báo có ngân hàng</span>
+            <div class="dotted-line"></div>
+        </div>
+    </div>
+
+    <div class="row text-center mt-4 pt-3">
+        <div class="col-3">
+            <div class="sign-title">Đại diện nộp tiền<br><span class="fw-normal fst-italic" style="font-size:12px">(Ký, họ tên)</span></div>
+            <div class="fw-bold">@Model.PayPersonName</div>
+        </div>
+        <div class="col-3">
+            <div class="sign-title">Người lập phiếu<br><span class="fw-normal fst-italic" style="font-size:12px">(Ký, họ tên)</span></div>
+            <div class="fw-bold">@Model.Cashier</div>
+        </div>
+        <div class="col-3">
+            <div class="sign-title">Thủ quỹ<br><span class="fw-normal fst-italic" style="font-size:12px">(Ký, họ tên)</span></div>
+            <div class="fw-bold">Nguyễn Thị Hà</div>
+        </div>
+        <div class="col-3">
+            <div class="sign-title">Kế toán trưởng<br><span class="fw-normal fst-italic" style="font-size:12px">(Ký, họ tên)</span></div>
+            <div class="fw-bold">Lê Hồng Minh</div>
+        </div>
+    </div>
+
+    <div class="text-center text-muted small mt-5 pt-4 border-top" style="font-size:11px">
+        Hệ thống Quản lý Dịch vụ Hyundai CarServices · MiniService Enterprise · In lúc @DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")
+    </div>
+</div>
+
+</body>
+</html>

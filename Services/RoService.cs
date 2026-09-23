@@ -311,6 +311,22 @@ public interface IRoService
     Task<(bool ok, string msg, int? debitId)> CreateSupplierDebitFromStockInAsync(int stockInId, int? supplierId, DateTime? dueDate, string? note);
     Task<List<Supplier>> SuppliersForDebitSelectAsync();
     Task<List<StockIn>> StockInsForDebitSelectAsync();
+    // Insurance Debit Management (Ser_InsuranceDebit, Ser_InsuranceDebitPayment / MH 55)
+    Task<List<InsuranceCompanyDebitSummaryDto>> InsuranceCompanyDebitSummariesAsync(string? q, bool? onlyHasDebit);
+    Task<(InsuranceCompany company, InsuranceCompanyDebitSummaryDto summary, List<InsuranceDebit> debits, List<InsuranceDebitPayment> payments)> GetInsuranceCompanyDebitProfileAsync(int companyId);
+    Task<List<InsuranceDebit>> InsuranceDebitsAsync(int? companyId, InsuranceDebitStatus? status, InsuranceDebitType? type, string? q, bool? isOverdue, DateTime? fromDate, DateTime? toDate);
+    Task<InsuranceDebit?> GetInsuranceDebitAsync(int id);
+    Task<InsuranceDebitPayment?> GetInsuranceDebitPaymentAsync(int paymentId);
+    Task<List<InsuranceDebitPayment>> InsuranceDebitPaymentsAsync(int? companyId, int? debitId, DateTime? fromDate, DateTime? toDate);
+    Task<int> CreateInsuranceDebitAsync(InsuranceDebit debit);
+    Task<int> CreateInsuranceDebitPaymentAsync(InsuranceDebitPayment payment, bool allocateFifoIfNoDebit = true);
+    Task<(bool ok, string msg)> CancelInsuranceDebitAsync(int id, string? reason);
+    Task<(bool ok, string msg)> DeleteInsuranceDebitPaymentAsync(int paymentId);
+    Task<(bool ok, string msg, int? debitId)> CreateInsuranceDebitFromRoAsync(int roId, int? companyId, decimal? debitAmount, DateTime? dueDate, string? note);
+    Task<(bool ok, string msg, int? debitId)> CreateInsuranceDebitFromClaimAsync(int claimId, DateTime? dueDate, string? note);
+    Task<List<InsuranceCompany>> InsuranceCompaniesForDebitSelectAsync();
+    Task<List<RepairOrder>> ROsForInsuranceDebitSelectAsync();
+    Task<List<InsuranceClaim>> ClaimsForInsuranceDebitSelectAsync();
     // Dealer Repair History Share (DealerHistoryShareMng - Quản lý tra cứu & chia sẻ lịch sử sửa chữa toàn hệ thống đại lý)
     Task<List<DealerHistoryRecord>> SearchDealerHistoryAsync(string? q, string? dealer, DateTime? fromDate, DateTime? toDate);
     Task<VehicleHistorySummaryDto?> GetVehicleServiceSummaryAsync(string plateOrVin);
@@ -554,6 +570,7 @@ public class RoService(AppDbContext db) : IRoService
           .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.StockOutOrders).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet).Include(r => r.PartOOs).Include(r => r.CusDebits).ThenInclude(d => d.Payments)
           .Include(r => r.AssignmentWorks).ThenInclude(a => a.Engineers).ThenInclude(e => e.Engineer)
           .Include(r => r.InsuranceClaims).ThenInclude(c => c.InsuranceCompany)
+          .Include(r => r.InsuranceDebits).ThenInclude(d => d.Payments)
           .Include(r => r.Bulletin).ThenInclude(b => b!.Items)
           .Include(r => r.TechnicalLibraries)
           .FirstOrDefaultAsync(r => r.Id == id);
@@ -6932,5 +6949,511 @@ public class RoService(AppDbContext db) : IRoService
         }
         return await query.OrderBy(c => c.Plate).Take(20).ToListAsync();
     }
+
+    // =========================================================================
+    // QUẢN LÝ CÔNG NỢ BẢO HIỂM XE & BỒI THƯỜNG (Ser_InsuranceDebit, Ser_InsuranceDebitPayment / MH 55)
+    // =========================================================================
+
+    public async Task<List<InsuranceCompanyDebitSummaryDto>> InsuranceCompanyDebitSummariesAsync(string? q, bool? onlyHasDebit)
+    {
+        var companies = await db.InsuranceCompanies
+            .Include(c => c.Debits)
+            .Include(c => c.Payments)
+            .Where(c => c.IsActive)
+            .ToListAsync();
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            companies = companies.Where(c => c.InsName.ToLower().Contains(term)
+                || c.InsNo.ToLower().Contains(term)
+                || (c.Phone != null && c.Phone.Contains(term))
+                || (c.Hotline != null && c.Hotline.Contains(term))
+                || (c.Email != null && c.Email.ToLower().Contains(term))).ToList();
+        }
+
+        var summaries = companies.Select(c =>
+        {
+            var validDebits = c.Debits.Where(d => d.Status != InsuranceDebitStatus.Cancelled).ToList();
+            var totalDebit = validDebits.Sum(d => d.DebitAmount);
+            var totalPaid = validDebits.Sum(d => d.PaidAmount);
+            var activeCount = validDebits.Count(d => d.Status == InsuranceDebitStatus.Active && d.RemainAmount > 0);
+            var overdueCount = validDebits.Count(d => d.IsOverdue);
+            var lastDebit = validDebits.OrderByDescending(d => d.DebitDate).FirstOrDefault()?.DebitDate;
+            var lastPayment = c.Payments.Where(p => p.Status == InsuranceDebitPaymentStatus.Confirmed).OrderByDescending(p => p.PaymentDate).FirstOrDefault()?.PaymentDate;
+
+            return new InsuranceCompanyDebitSummaryDto
+            {
+                InsuranceCompanyId = c.Id,
+                InsNo = c.InsNo,
+                InsName = c.InsName,
+                Address = c.Address,
+                Phone = c.Phone,
+                Email = c.Email,
+                TaxCode = c.TaxCode,
+                Hotline = c.Hotline,
+                TotalDebitAmount = totalDebit,
+                TotalPaidAmount = totalPaid,
+                ActiveDebitCount = activeCount,
+                OverdueDebitCount = overdueCount,
+                LastDebitDate = lastDebit,
+                LastPaymentDate = lastPayment
+            };
+        });
+
+        if (onlyHasDebit == true)
+            summaries = summaries.Where(s => s.HasDebit);
+
+        return summaries.OrderByDescending(s => s.RemainingDebit).ThenBy(s => s.InsName).ToList();
+    }
+
+    public async Task<(InsuranceCompany company, InsuranceCompanyDebitSummaryDto summary, List<InsuranceDebit> debits, List<InsuranceDebitPayment> payments)> GetInsuranceCompanyDebitProfileAsync(int companyId)
+    {
+        var company = await db.InsuranceCompanies
+            .Include(c => c.Debits).ThenInclude(d => d.RO)
+            .Include(c => c.Debits).ThenInclude(d => d.InsuranceClaim)
+            .Include(c => c.Debits).ThenInclude(d => d.Payments)
+            .Include(c => c.Payments).ThenInclude(p => p.InsuranceDebit)
+            .FirstOrDefaultAsync(c => c.Id == companyId);
+
+        if (company == null)
+            throw new InvalidOperationException("Không tìm thấy Hãng bảo hiểm.");
+
+        var debits = company.Debits.OrderByDescending(d => d.DebitDate).ThenByDescending(d => d.CreatedAt).ToList();
+        var payments = company.Payments.OrderByDescending(p => p.PaymentDate).ThenByDescending(p => p.CreatedAt).ToList();
+
+        var validDebits = debits.Where(d => d.Status != InsuranceDebitStatus.Cancelled).ToList();
+        var totalDebit = validDebits.Sum(d => d.DebitAmount);
+        var totalPaid = validDebits.Sum(d => d.PaidAmount);
+
+        var summary = new InsuranceCompanyDebitSummaryDto
+        {
+            InsuranceCompanyId = company.Id,
+            InsNo = company.InsNo,
+            InsName = company.InsName,
+            Address = company.Address,
+            Phone = company.Phone,
+            Email = company.Email,
+            TaxCode = company.TaxCode,
+            Hotline = company.Hotline,
+            TotalDebitAmount = totalDebit,
+            TotalPaidAmount = totalPaid,
+            ActiveDebitCount = validDebits.Count(d => d.Status == InsuranceDebitStatus.Active && d.RemainAmount > 0),
+            OverdueDebitCount = validDebits.Count(d => d.IsOverdue),
+            LastDebitDate = validDebits.OrderByDescending(d => d.DebitDate).FirstOrDefault()?.DebitDate,
+            LastPaymentDate = payments.Where(p => p.Status == InsuranceDebitPaymentStatus.Confirmed).OrderByDescending(p => p.PaymentDate).FirstOrDefault()?.PaymentDate
+        };
+
+        return (company, summary, debits, payments);
+    }
+
+    public async Task<List<InsuranceDebit>> InsuranceDebitsAsync(int? companyId, InsuranceDebitStatus? status, InsuranceDebitType? type, string? q, bool? isOverdue, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.InsuranceDebits
+            .Include(d => d.InsuranceCompany)
+            .Include(d => d.RO)
+            .Include(d => d.InsuranceClaim)
+            .Include(d => d.Payments)
+            .AsQueryable();
+
+        if (companyId.HasValue && companyId.Value > 0)
+            query = query.Where(d => d.InsuranceCompanyId == companyId.Value);
+
+        if (status.HasValue)
+            query = query.Where(d => d.Status == status.Value);
+
+        if (type.HasValue)
+            query = query.Where(d => d.DebitType == type.Value);
+
+        if (fromDate.HasValue)
+            query = query.Where(d => d.DebitDate >= fromDate.Value.Date);
+
+        if (toDate.HasValue)
+            query = query.Where(d => d.DebitDate <= toDate.Value.Date.AddDays(1).AddTicks(-1));
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(d => d.DebitNo.ToLower().Contains(term)
+                || (d.RONo != null && d.RONo.ToLower().Contains(term))
+                || (d.PlateNo != null && d.PlateNo.ToLower().Contains(term))
+                || (d.CustomerName != null && d.CustomerName.ToLower().Contains(term))
+                || (d.ClaimNo != null && d.ClaimNo.ToLower().Contains(term))
+                || (d.PolicyNo != null && d.PolicyNo.ToLower().Contains(term))
+                || d.InsName.ToLower().Contains(term)
+                || (d.Description != null && d.Description.ToLower().Contains(term)));
+        }
+
+        var list = await query.OrderByDescending(d => d.DebitDate).ThenByDescending(d => d.Id).ToListAsync();
+
+        if (isOverdue == true)
+            list = list.Where(d => d.IsOverdue).ToList();
+
+        return list;
+    }
+
+    public Task<InsuranceDebit?> GetInsuranceDebitAsync(int id) =>
+        db.InsuranceDebits
+            .Include(d => d.InsuranceCompany)
+            .Include(d => d.InsuranceContract)
+            .Include(d => d.RO).ThenInclude(r => r!.Car)
+            .Include(d => d.RO).ThenInclude(r => r!.Customer)
+            .Include(d => d.InsuranceClaim)
+            .Include(d => d.Payments)
+            .FirstOrDefaultAsync(d => d.Id == id);
+
+    public Task<InsuranceDebitPayment?> GetInsuranceDebitPaymentAsync(int paymentId) =>
+        db.InsuranceDebitPayments
+            .Include(p => p.InsuranceCompany)
+            .Include(p => p.InsuranceDebit).ThenInclude(d => d!.RO)
+            .Include(p => p.InsuranceDebit).ThenInclude(d => d!.InsuranceClaim)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+    public async Task<List<InsuranceDebitPayment>> InsuranceDebitPaymentsAsync(int? companyId, int? debitId, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.InsuranceDebitPayments
+            .Include(p => p.InsuranceCompany)
+            .Include(p => p.InsuranceDebit)
+            .AsQueryable();
+
+        if (companyId.HasValue && companyId.Value > 0)
+            query = query.Where(p => p.InsuranceCompanyId == companyId.Value);
+
+        if (debitId.HasValue && debitId.Value > 0)
+            query = query.Where(p => p.InsuranceDebitId == debitId.Value);
+
+        if (fromDate.HasValue)
+            query = query.Where(p => p.PaymentDate >= fromDate.Value.Date);
+
+        if (toDate.HasValue)
+            query = query.Where(p => p.PaymentDate <= toDate.Value.Date.AddDays(1).AddTicks(-1));
+
+        return await query.OrderByDescending(p => p.PaymentDate).ThenByDescending(p => p.Id).ToListAsync();
+    }
+
+    public async Task<int> CreateInsuranceDebitAsync(InsuranceDebit debit)
+    {
+        if (debit.DebitAmount <= 0)
+            throw new InvalidOperationException("Số tiền công nợ bồi thường bảo hiểm phải lớn hơn 0.");
+
+        if (debit.InsuranceCompanyId <= 0)
+            throw new InvalidOperationException("Vui lòng chọn Hãng bảo hiểm.");
+
+        var company = await db.InsuranceCompanies.FirstOrDefaultAsync(c => c.Id == debit.InsuranceCompanyId);
+        if (company == null)
+            throw new InvalidOperationException("Không tìm thấy Hãng bảo hiểm được chọn.");
+
+        debit.InsNo = company.InsNo;
+        debit.InsName = company.InsName;
+
+        if (string.IsNullOrWhiteSpace(debit.DebitNo))
+        {
+            var today = DateTime.Today;
+            var prefix = $"IDB{today:yyMMdd}-";
+            var count = await db.InsuranceDebits.CountAsync(d => d.DebitNo.StartsWith(prefix)) + 1;
+            debit.DebitNo = $"{prefix}{count:D3}";
+        }
+
+        // Auto populate from RO if linked
+        if (debit.ROId.HasValue && debit.ROId.Value > 0)
+        {
+            var ro = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync(r => r.Id == debit.ROId.Value);
+            if (ro != null)
+            {
+                if (string.IsNullOrWhiteSpace(debit.RONo)) debit.RONo = ro.Code;
+                if (string.IsNullOrWhiteSpace(debit.PlateNo)) debit.PlateNo = ro.Car?.Plate;
+                if (string.IsNullOrWhiteSpace(debit.CarModel)) debit.CarModel = ro.Car?.Model;
+                if (string.IsNullOrWhiteSpace(debit.CustomerName)) debit.CustomerName = ro.Customer?.Name;
+            }
+        }
+
+        // Auto populate from Claim if linked
+        if (debit.InsuranceClaimId.HasValue && debit.InsuranceClaimId.Value > 0)
+        {
+            var claim = await db.InsuranceClaims.Include(c => c.RO).ThenInclude(r => r.Car).FirstOrDefaultAsync(c => c.Id == debit.InsuranceClaimId.Value);
+            if (claim != null)
+            {
+                if (string.IsNullOrWhiteSpace(debit.ClaimNo)) debit.ClaimNo = claim.ClaimNo;
+                if (string.IsNullOrWhiteSpace(debit.PolicyNo)) debit.PolicyNo = claim.PolicyNo;
+                if (string.IsNullOrWhiteSpace(debit.PlateNo)) debit.PlateNo = claim.RO?.Car?.Plate;
+            }
+        }
+
+        debit.DebitDate = debit.DebitDate == default ? DateTime.Today : debit.DebitDate;
+        debit.DueDate = debit.DueDate ?? debit.DebitDate.AddDays(30);
+        debit.Status = InsuranceDebitStatus.Active;
+        debit.PaidAmount = 0;
+        debit.CreatedAt = DateTime.Now;
+
+        db.InsuranceDebits.Add(debit);
+        await db.SaveChangesAsync();
+        return debit.Id;
+    }
+
+    public async Task<int> CreateInsuranceDebitPaymentAsync(InsuranceDebitPayment payment, bool allocateFifoIfNoDebit = true)
+    {
+        if (payment.PaymentAmount <= 0)
+            throw new InvalidOperationException("Số tiền thu bồi thường bảo hiểm phải lớn hơn 0.");
+
+        if (payment.InsuranceCompanyId <= 0)
+            throw new InvalidOperationException("Vui lòng chọn Hãng bảo hiểm.");
+
+        var company = await db.InsuranceCompanies.FirstOrDefaultAsync(c => c.Id == payment.InsuranceCompanyId);
+        if (company == null)
+            throw new InvalidOperationException("Không tìm thấy Hãng bảo hiểm.");
+
+        payment.InsNo = company.InsNo;
+        payment.InsName = company.InsName;
+
+        if (string.IsNullOrWhiteSpace(payment.PayPersonName))
+            payment.PayPersonName = "Đại diện giám định viên / Kế toán " + company.InsName;
+
+        if (string.IsNullOrWhiteSpace(payment.PaymentNo))
+        {
+            var today = DateTime.Today;
+            var prefix = $"IPM{today:yyMMdd}-";
+            var count = await db.InsuranceDebitPayments.CountAsync(p => p.PaymentNo.StartsWith(prefix)) + 1;
+            payment.PaymentNo = $"{prefix}{count:D3}";
+        }
+
+        payment.PaymentDate = payment.PaymentDate == default ? DateTime.Today : payment.PaymentDate;
+        payment.Status = InsuranceDebitPaymentStatus.Confirmed;
+        payment.CreatedAt = DateTime.Now;
+
+        // Allocation logic
+        if (payment.InsuranceDebitId.HasValue && payment.InsuranceDebitId.Value > 0)
+        {
+            var debit = await db.InsuranceDebits.FirstOrDefaultAsync(d => d.Id == payment.InsuranceDebitId.Value);
+            if (debit == null)
+                throw new InvalidOperationException("Không tìm thấy khoản nợ bảo hiểm được chỉ định.");
+
+            if (debit.Status == InsuranceDebitStatus.Cancelled)
+                throw new InvalidOperationException("Khoản nợ bảo hiểm này đã bị hủy.");
+
+            debit.PaidAmount += payment.PaymentAmount;
+            if (debit.PaidAmount >= debit.DebitAmount)
+            {
+                debit.Status = InsuranceDebitStatus.Cleared;
+                debit.ClearedAt = DateTime.Now;
+            }
+        }
+        else if (allocateFifoIfNoDebit)
+        {
+            // Tự động phân bổ vào các khoản nợ của Hãng bảo hiểm theo thứ tự hạn thanh toán (FIFO)
+            var activeDebits = await db.InsuranceDebits
+                .Where(d => d.InsuranceCompanyId == payment.InsuranceCompanyId && d.Status == InsuranceDebitStatus.Active && d.DebitAmount > d.PaidAmount)
+                .OrderBy(d => d.DueDate ?? d.DebitDate)
+                .ThenBy(d => d.Id)
+                .ToListAsync();
+
+            var moneyLeft = payment.PaymentAmount;
+            foreach (var d in activeDebits)
+            {
+                if (moneyLeft <= 0) break;
+                var needed = d.DebitAmount - d.PaidAmount;
+                var alloc = Math.Min(moneyLeft, needed);
+                d.PaidAmount += alloc;
+                moneyLeft -= alloc;
+
+                if (d.PaidAmount >= d.DebitAmount)
+                {
+                    d.Status = InsuranceDebitStatus.Cleared;
+                    d.ClearedAt = DateTime.Now;
+                }
+            }
+        }
+
+        db.InsuranceDebitPayments.Add(payment);
+        await db.SaveChangesAsync();
+        return payment.Id;
+    }
+
+    public async Task<(bool ok, string msg)> CancelInsuranceDebitAsync(int id, string? reason)
+    {
+        var debit = await db.InsuranceDebits.FirstOrDefaultAsync(d => d.Id == id);
+        if (debit == null) return (false, "Không tìm thấy khoản nợ bảo hiểm.");
+
+        if (debit.PaidAmount > 0)
+            return (false, $"Khoản nợ bảo hiểm đã thu tiền ({debit.PaidAmount:N0} đ), không thể hủy trực tiếp. Vui lòng hủy phiếu thu trước.");
+
+        debit.Status = InsuranceDebitStatus.Cancelled;
+        debit.CancelledReason = reason?.Trim() ?? "Hãng bảo hiểm từ chối bồi thường hoặc điều chỉnh lệnh";
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            debit.Description = string.IsNullOrWhiteSpace(debit.Description)
+                ? $"[Hủy: {reason.Trim()}]"
+                : $"{debit.Description}\n[Hủy: {reason.Trim()}]";
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy khoản nợ bồi thường bảo hiểm {debit.DebitNo}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteInsuranceDebitPaymentAsync(int paymentId)
+    {
+        var payment = await db.InsuranceDebitPayments
+            .Include(p => p.InsuranceDebit)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null) return (false, "Không tìm thấy phiếu thu tiền bảo hiểm.");
+
+        if (payment.InsuranceDebit != null)
+        {
+            payment.InsuranceDebit.PaidAmount = Math.Max(0, payment.InsuranceDebit.PaidAmount - payment.PaymentAmount);
+            if (payment.InsuranceDebit.Status == InsuranceDebitStatus.Cleared && payment.InsuranceDebit.PaidAmount < payment.InsuranceDebit.DebitAmount)
+            {
+                payment.InsuranceDebit.Status = InsuranceDebitStatus.Active;
+                payment.InsuranceDebit.ClearedAt = null;
+            }
+        }
+
+        payment.Status = InsuranceDebitPaymentStatus.Cancelled;
+        db.InsuranceDebitPayments.Remove(payment);
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy phiếu thu {payment.PaymentNo} và hoàn trả dư nợ bồi thường của Hãng bảo hiểm.");
+    }
+
+    public async Task<(bool ok, string msg, int? debitId)> CreateInsuranceDebitFromRoAsync(int roId, int? companyId, decimal? debitAmount, DateTime? dueDate, string? note)
+    {
+        var ro = await db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines)
+            .Include(r => r.InsuranceClaims).ThenInclude(c => c.InsuranceCompany)
+            .FirstOrDefaultAsync(r => r.Id == roId);
+
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa.", null);
+
+        var existing = await db.InsuranceDebits.FirstOrDefaultAsync(d => d.ROId == roId && d.Status != InsuranceDebitStatus.Cancelled);
+        if (existing != null)
+            return (false, $"Lệnh sửa chữa này đã được ghi nhận nợ bảo hiểm ({existing.DebitNo}).", existing.Id);
+
+        var compId = companyId;
+        if (!compId.HasValue || compId.Value <= 0)
+        {
+            var firstClaimComp = ro.InsuranceClaims.FirstOrDefault()?.InsuranceCompanyId;
+            if (firstClaimComp.HasValue && firstClaimComp.Value > 0) compId = firstClaimComp;
+            else
+            {
+                var firstComp = await db.InsuranceCompanies.FirstOrDefaultAsync(c => c.IsActive);
+                compId = firstComp?.Id;
+            }
+        }
+
+        if (!compId.HasValue || compId.Value <= 0)
+            return (false, "Vui lòng chọn Hãng bảo hiểm bảo lãnh bồi thường.", null);
+
+        var amount = debitAmount ?? ro.InsuranceTotal;
+        if (amount <= 0) amount = ro.Total;
+        if (amount <= 0)
+            return (false, "Lệnh sửa chữa không có chi phí bảo lãnh bảo hiểm phát sinh (> 0 đ).", null);
+
+        var today = DateTime.Today;
+        var prefix = $"IDB{today:yyMMdd}-";
+        var count = await db.InsuranceDebits.CountAsync(d => d.DebitNo.StartsWith(prefix)) + 1;
+
+        var comp = await db.InsuranceCompanies.FirstOrDefaultAsync(c => c.Id == compId.Value);
+
+        var debit = new InsuranceDebit
+        {
+            DebitNo = $"{prefix}{count:D3}",
+            InsuranceCompanyId = compId.Value,
+            InsNo = comp?.InsNo ?? "INS",
+            InsName = comp?.InsName ?? "Hãng bảo hiểm",
+            ROId = ro.Id,
+            RONo = ro.Code,
+            PlateNo = ro.Car?.Plate,
+            CarModel = ro.Car?.Model,
+            CustomerName = ro.Customer?.Name,
+            ClaimNo = ro.InsuranceClaims.FirstOrDefault()?.ClaimNo,
+            PolicyNo = ro.InsuranceClaims.FirstOrDefault()?.PolicyNo,
+            DebitType = InsuranceDebitType.RO,
+            Status = InsuranceDebitStatus.Active,
+            DebitDate = today,
+            DueDate = dueDate ?? today.AddDays(30),
+            DebitAmount = amount,
+            PaidAmount = 0,
+            Description = string.IsNullOrWhiteSpace(note) ? $"Công nợ bồi thường thân vỏ & phụ tùng theo Lệnh sửa chữa {ro.Code} (Biển số: {ro.Car?.Plate})" : note.Trim(),
+            CreatedBy = "CVDV",
+            CreatedAt = DateTime.Now
+        };
+
+        db.InsuranceDebits.Add(debit);
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo khoản nợ bảo hiểm {debit.DebitNo} cho RO {ro.Code} thành công.", debit.Id);
+    }
+
+    public async Task<(bool ok, string msg, int? debitId)> CreateInsuranceDebitFromClaimAsync(int claimId, DateTime? dueDate, string? note)
+    {
+        var claim = await db.InsuranceClaims
+            .Include(c => c.InsuranceCompany)
+            .Include(c => c.RO).ThenInclude(r => r.Car)
+            .Include(c => c.RO).ThenInclude(r => r.Customer)
+            .FirstOrDefaultAsync(c => c.Id == claimId);
+
+        if (claim == null) return (false, "Không tìm thấy Hồ sơ bồi thường bảo hiểm.", null);
+
+        var existing = await db.InsuranceDebits.FirstOrDefaultAsync(d => d.InsuranceClaimId == claimId && d.Status != InsuranceDebitStatus.Cancelled);
+        if (existing != null)
+            return (false, $"Hồ sơ bồi thường này đã được ghi nợ trước đó ({existing.DebitNo}).", existing.Id);
+
+        var amount = claim.InsuranceAmount > 0 ? claim.InsuranceAmount : claim.ApprovedAmount;
+        if (amount <= 0)
+            return (false, "Số tiền bảo hiểm chi trả chưa được phê duyệt (> 0 đ).", null);
+
+        var today = DateTime.Today;
+        var prefix = $"IDB{today:yyMMdd}-";
+        var count = await db.InsuranceDebits.CountAsync(d => d.DebitNo.StartsWith(prefix)) + 1;
+
+        var debit = new InsuranceDebit
+        {
+            DebitNo = $"{prefix}{count:D3}",
+            InsuranceCompanyId = claim.InsuranceCompanyId,
+            InsNo = claim.InsuranceCompany.InsNo,
+            InsName = claim.InsuranceCompany.InsName,
+            ROId = claim.ROId,
+            RONo = claim.RO?.Code,
+            PlateNo = claim.RO?.Car?.Plate,
+            CarModel = claim.RO?.Car?.Model,
+            CustomerName = claim.RO?.Customer?.Name,
+            InsuranceClaimId = claim.Id,
+            ClaimNo = claim.ClaimNo,
+            PolicyNo = claim.PolicyNo,
+            DebitType = InsuranceDebitType.Claim,
+            Status = InsuranceDebitStatus.Active,
+            DebitDate = today,
+            DueDate = dueDate ?? today.AddDays(30),
+            DebitAmount = amount,
+            PaidAmount = 0,
+            Description = string.IsNullOrWhiteSpace(note) ? $"Công nợ bồi thường theo Hồ sơ duyệt bảo hiểm {claim.ClaimNo} (Đơn BH: {claim.PolicyNo})" : note.Trim(),
+            CreatedBy = "CVDV",
+            CreatedAt = DateTime.Now
+        };
+
+        db.InsuranceDebits.Add(debit);
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo khoản nợ bảo hiểm {debit.DebitNo} theo Hồ sơ {claim.ClaimNo} thành công.", debit.Id);
+    }
+
+    public Task<List<InsuranceCompany>> InsuranceCompaniesForDebitSelectAsync() =>
+        db.InsuranceCompanies.Where(c => c.IsActive).OrderBy(c => c.InsName).ToListAsync();
+
+    public Task<List<RepairOrder>> ROsForInsuranceDebitSelectAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.Lines)
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(30)
+            .ToListAsync();
+
+    public Task<List<InsuranceClaim>> ClaimsForInsuranceDebitSelectAsync() =>
+        db.InsuranceClaims
+            .Include(c => c.InsuranceCompany)
+            .Include(c => c.RO).ThenInclude(r => r.Car)
+            .Where(c => c.Status == InsuranceClaimStatus.Approved || c.Status == InsuranceClaimStatus.Settled || c.Status == InsuranceClaimStatus.Submitted)
+            .OrderByDescending(c => c.CreatedAt)
+            .Take(30)
+            .ToListAsync();
 }
 

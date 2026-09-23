@@ -21,6 +21,14 @@
     <div class="d-flex gap-2">
         <a href="/Insurance" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
         <a href="/Insurance/Print/@Model.Id" target="_blank" class="btn btn-sm btn-outline-dark"><i class="bi bi-printer me-1"></i>In biên bản giám định</a>
+        @if (Model.Status >= InsuranceClaimStatus.Approved)
+        {
+            <form method="post" action="/InsuranceDebit/CreateFromClaim" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="claimId" value="@Model.Id" />
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-wallet2 me-1"></i>Ghi nhận công nợ BH</button>
+            </form>
+        }
         @if (canDelete)
         {
             <form method="post" action="/Insurance/Delete/@Model.Id" onsubmit="return confirm('Bạn có chắc chắn muốn xóa hồ sơ bảo hiểm này?');" class="d-inline">

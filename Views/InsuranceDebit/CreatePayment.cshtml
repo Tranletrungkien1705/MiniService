@@ -1,0 +1,147 @@
+@{
+    ViewData["Title"] = "Lập phiếu thu tiền bồi thường Bảo hiểm";
+    var companies = (List<InsuranceCompany>)ViewBag.Companies;
+    int? selectedCompId = ViewBag.CompanyId;
+    int? selectedDebitId = ViewBag.DebitId;
+    InsuranceDebit? debit = ViewBag.Debit;
+    decimal suggestedAmount = ViewBag.SuggestedAmount ?? 0;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/InsuranceDebit">Công nợ Bảo hiểm</a></li>
+                <li class="breadcrumb-item active">Lập phiếu thu tiền BH</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0"><i class="bi bi-cash-coin text-success me-2"></i>Lập phiếu thu tiền bồi thường Hãng Bảo Hiểm</h5>
+        <div class="text-muted small">Thu tiền bồi hoàn sửa chữa xe từ công ty bảo hiểm theo quy trình chuẩn đại lý (Mẫu số 01 - TT)</div>
+    </div>
+    <a href="/InsuranceDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        @if (debit != null)
+        {
+            <div class="card mb-3 border-primary">
+                <div class="card-body py-2">
+                    <div class="row align-items-center">
+                        <div class="col-md-7">
+                            <span class="badge bg-primary me-2">Khoản nợ chỉ định</span>
+                            <span class="font-monospace fw-bold">@debit.DebitNo</span> —
+                            <span>RO: <strong>@(debit.RONo ?? "—")</strong></span> —
+                            <span>Xe: <strong>@(debit.PlateNo ?? "—")</strong></span>
+                        </div>
+                        <div class="col-md-5 text-end font-monospace">
+                            <span class="text-muted small">Dư nợ còn lại:</span>
+                            <strong class="text-danger fs-6 ms-1">@debit.RemainAmount.ToString("N0")đ</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <div class="card">
+            <div class="card-header bg-light fw-bold py-2">
+                <i class="bi bi-receipt me-1"></i>Thông tin phiếu thu tiền bồi thường
+            </div>
+            <div class="card-body">
+                <form method="post" action="/InsuranceDebit/CreatePayment">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="insuranceDebitId" value="@selectedDebitId" />
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Hãng bảo hiểm thanh toán <span class="text-danger">*</span></label>
+                            <select name="insuranceCompanyId" class="form-select" required>
+                                <option value="">-- Chọn Hãng bảo hiểm --</option>
+                                @foreach (var c in companies)
+                                {
+                                    <option value="@c.Id" selected="@(selectedCompId == c.Id)">
+                                        @c.InsName (@c.InsNo)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Phương thức phân bổ nợ</label>
+                            <input type="text" class="form-control bg-light" readonly
+                                   value="@(debit != null ? $"Cấn trừ trực tiếp vào khoản {debit.DebitNo}" : "Tự động phân bổ vào các khoản nợ cũ nhất (FIFO)")" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Số tiền thu bồi thường (VNĐ) <span class="text-danger">*</span></label>
+                            <input type="number" name="paymentAmount" class="form-control font-monospace fw-bold text-success fs-5" step="1000" min="1000" required
+                                   value="@(suggestedAmount > 0 ? suggestedAmount.ToString("F0") : "")" placeholder="Nhập số tiền thu..." />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Ngày thu tiền</label>
+                            <input type="date" name="paymentDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Hình thức thanh toán</label>
+                            <select name="method" class="form-select">
+                                <option value="BankTransfer" selected>Chuyển khoản ngân hàng</option>
+                                <option value="Cash">Tiền mặt</option>
+                                <option value="CreditCard">Thẻ tín dụng / POS</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Người nộp tiền / Đại diện giám định</label>
+                            <input type="text" name="payPersonName" class="form-control" placeholder="Đại diện giám định viên / Kế toán hãng BH..." />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Số CMND / CCCD</label>
+                            <input type="text" name="payPersonIdCard" class="form-control" placeholder="Số CCCD người nộp..." />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Số điện thoại</label>
+                            <input type="text" name="payPersonPhone" class="form-control" placeholder="SĐT liên hệ..." />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Tài khoản ngân hàng nhận tiền</label>
+                            <input type="text" name="bankAccount" class="form-control font-monospace" value="118002678999" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Ngân hàng thụ hưởng</label>
+                            <input type="text" name="bankName" class="form-control" value="VietinBank - CN Đống Đa" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Số bút toán / Mã UNC</label>
+                            <input type="text" name="transactionRef" class="form-control font-monospace" placeholder="VD: GBC-VCB-2026-001" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-8">
+                            <label class="form-label">Nội dung thu / Diễn giải lý do</label>
+                            <input type="text" name="note" class="form-control" placeholder="Thu tiền bồi hoàn sửa chữa xe theo thư bảo lãnh / quyết định bồi thường..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Thu ngân lập phiếu</label>
+                            <input type="text" name="cashier" class="form-control" value="Thu ngân" />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4 pt-2 border-top">
+                        <a href="/InsuranceDebit" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-printer me-1"></i>Lập phiếu thu &amp; In chứng từ</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
