@@ -27,7 +27,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingOrderComplains = 0, int ApprovedOrderComplains = 0,
     int PendingPartOOs = 0, int StockAvailablePartOOs = 0,
     int ActiveCusDebits = 0, decimal TotalCusDebitBalance = 0, int OverdueCusDebits = 0,
-    int TotalCustomerGroups = 0, int ActiveCustomerGroups = 0, int TotalFleetCars = 0);
+    int TotalCustomerGroups = 0, int ActiveCustomerGroups = 0, int TotalFleetCars = 0,
+    int PendingPartPriceRequests = 0, int RespondedPartPriceRequests = 0);
 
 public interface IRoService
 {
@@ -351,6 +352,18 @@ public interface IRoService
     Task<CustomerGroupMember?> CheckPlateCustomerGroupAsync(string plate);
     Task<(bool ok, string msg, decimal discountAmount)> ApplyCustomerGroupDiscountToRoAsync(int roId, int groupId);
     Task<List<Car>> CarsForCustomerGroupSelectAsync(int? currentGroupId = null);
+    // Part Price Requests (Req_PartPrice / Req_PartPriceDtl - Đề nghị cung cấp giá phụ tùng NCC TST/HTC)
+    Task<List<PartPriceRequest>> PartPriceRequestsAsync(DMSReqPartPriceStatus? dmsStatus, TSTReqPartPriceStatus? tstStatus, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<PartPriceRequest?> GetPartPriceRequestAsync(int id);
+    Task<PartPriceRequest?> GetPartPriceRequestByNoAsync(string reqNo);
+    Task<int> CreatePartPriceRequestAsync(PartPriceRequest request, List<PartPriceRequestLine> items);
+    Task<(bool ok, string msg)> SendPartPriceRequestToTSTAsync(int id);
+    Task<(bool ok, string msg)> SimulateTSTResponseAsync(int id, List<(int lineId, string? tstPartCode, decimal tstPrice, DateTime dateEffect)> linePrices);
+    Task<(bool ok, string msg)> ApprovePartPriceRequestAsync(int id, string? approvedBy = null, bool syncToCatalog = true);
+    Task<(bool ok, string msg, int? orderPartId)> ConvertToOrderPartAsync(int id, string? createdBy = null);
+    Task<(bool ok, string msg)> CancelPartPriceRequestAsync(int id, string? reason = null);
+    Task<(bool ok, string msg)> DeletePartPriceRequestAsync(int id);
+    Task<List<RepairOrder>> ROsForPartPriceRequestSelectAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -859,6 +872,9 @@ public class RoService(AppDbContext db) : IRoService
         var activeCustomerGroups = await db.CustomerGroups.CountAsync(g => g.IsActive);
         var totalFleetCars = await db.CustomerGroupMembers.CountAsync(m => m.IsActive);
 
+        var pendingPartPriceRequests = await db.PartPriceRequests.CountAsync(r => r.DMSStatus == DMSReqPartPriceStatus.Draft || r.DMSStatus == DMSReqPartPriceStatus.Sent);
+        var respondedPartPriceRequests = await db.PartPriceRequests.CountAsync(r => r.DMSStatus == DMSReqPartPriceStatus.Responded);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -915,7 +931,9 @@ public class RoService(AppDbContext db) : IRoService
             overdueCusDebits,
             totalCustomerGroups,
             activeCustomerGroups,
-            totalFleetCars);
+            totalFleetCars,
+            pendingPartPriceRequests,
+            respondedPartPriceRequests);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -7779,5 +7797,350 @@ public class RoService(AppDbContext db) : IRoService
         }
         return await query.OrderBy(c => c.Plate).ToListAsync();
     }
+
+    // =========================================================================
+    // QUẢN LÝ ĐỀ NGHỊ CUNG CẤP GIÁ PHỤ TÙNG NCC TST / HTC (Req_PartPrice / Req_PartPriceDtl)
+    // =========================================================================
+
+    public async Task<List<PartPriceRequest>> PartPriceRequestsAsync(DMSReqPartPriceStatus? dmsStatus, TSTReqPartPriceStatus? tstStatus, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.PartPriceRequests
+            .Include(r => r.RO).ThenInclude(ro => ro!.Car)
+            .Include(r => r.Items).ThenInclude(i => i.Part)
+            .AsQueryable();
+
+        if (dmsStatus.HasValue)
+            query = query.Where(r => r.DMSStatus == dmsStatus.Value);
+
+        if (tstStatus.HasValue)
+            query = query.Where(r => r.TSTStatus == tstStatus.Value);
+
+        if (fromDate.HasValue)
+            query = query.Where(r => r.CreatedAt.Date >= fromDate.Value.Date);
+
+        if (toDate.HasValue)
+            query = query.Where(r => r.CreatedAt.Date <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(r =>
+                r.ReqPartPriceNo.ToLower().Contains(s) ||
+                r.Description.ToLower().Contains(s) ||
+                (r.VIN != null && r.VIN.ToLower().Contains(s)) ||
+                (r.CarModel != null && r.CarModel.ToLower().Contains(s)) ||
+                (r.TSTReqPartPriceID != null && r.TSTReqPartPriceID.ToLower().Contains(s)) ||
+                (r.RO != null && r.RO.Code.ToLower().Contains(s)) ||
+                r.Items.Any(i => i.DMSPartCode.ToLower().Contains(s) || i.VieName.ToLower().Contains(s) || (i.TSTPartCode != null && i.TSTPartCode.ToLower().Contains(s))));
+        }
+
+        return await query.OrderByDescending(r => r.CreatedAt).ToListAsync();
+    }
+
+    public Task<PartPriceRequest?> GetPartPriceRequestAsync(int id) =>
+        db.PartPriceRequests
+            .Include(r => r.RO).ThenInclude(ro => ro!.Car)
+            .Include(r => r.RO).ThenInclude(ro => ro!.Customer)
+            .Include(r => r.Items).ThenInclude(i => i.Part)
+            .FirstOrDefaultAsync(r => r.Id == id);
+
+    public Task<PartPriceRequest?> GetPartPriceRequestByNoAsync(string reqNo)
+    {
+        var clean = reqNo.Trim().ToUpperInvariant();
+        return db.PartPriceRequests
+            .Include(r => r.RO).ThenInclude(ro => ro!.Car)
+            .Include(r => r.Items).ThenInclude(i => i.Part)
+            .FirstOrDefaultAsync(r => r.ReqPartPriceNo.ToUpper() == clean);
+    }
+
+    public async Task<int> CreatePartPriceRequestAsync(PartPriceRequest request, List<PartPriceRequestLine> items)
+    {
+        if (items == null || items.Count == 0)
+            throw new InvalidOperationException("Phiếu đề nghị giá phải có ít nhất 01 dòng phụ tùng.");
+
+        if (string.IsNullOrWhiteSpace(request.Description))
+            throw new InvalidOperationException("Vui lòng nhập lý do / mô tả đề nghị giá.");
+
+        var today = DateTime.Today;
+        if (string.IsNullOrWhiteSpace(request.ReqPartPriceNo))
+        {
+            var prefix = $"RPP{today:yyMMdd}-";
+            var count = await db.PartPriceRequests.CountAsync(r => r.ReqPartPriceNo.StartsWith(prefix)) + 1;
+            request.ReqPartPriceNo = $"{prefix}{count:D3}";
+        }
+
+        request.DealerCode = string.IsNullOrWhiteSpace(request.DealerCode) ? "HTC-CG" : request.DealerCode.Trim();
+        request.DealerName = string.IsNullOrWhiteSpace(request.DealerName) ? "Hyundai Cầu Giấy" : request.DealerName.Trim();
+        request.DMSStatus = DMSReqPartPriceStatus.Draft;
+        request.TSTStatus = TSTReqPartPriceStatus.Pending;
+        request.CreatedAt = DateTime.Now;
+
+        // Auto link VIN & Model from RO if provided
+        if (request.ROId.HasValue && request.ROId.Value > 0)
+        {
+            var ro = await db.ROs.Include(r => r.Car).FirstOrDefaultAsync(r => r.Id == request.ROId.Value);
+            if (ro != null)
+            {
+                if (string.IsNullOrWhiteSpace(request.VIN)) request.VIN = ro.Car?.Vin;
+                if (string.IsNullOrWhiteSpace(request.CarModel)) request.CarModel = ro.Car?.Model;
+            }
+        }
+
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.DMSPartCode))
+                throw new InvalidOperationException("Vui lòng nhập Mã phụ tùng yêu cầu (DMSPartCode).");
+            if (string.IsNullOrWhiteSpace(item.VieName))
+                throw new InvalidOperationException($"Vui lòng nhập Tên phụ tùng tiếng Việt cho mã {item.DMSPartCode}.");
+            if (item.Quantity <= 0) item.Quantity = 1;
+            if (string.IsNullOrWhiteSpace(item.Unit)) item.Unit = "Cái";
+            if (string.IsNullOrWhiteSpace(item.VINCode) && !string.IsNullOrWhiteSpace(request.VIN))
+                item.VINCode = request.VIN;
+
+            // Link existing part if found
+            if (!item.PartId.HasValue || item.PartId.Value <= 0)
+            {
+                var cleanCode = item.DMSPartCode.Trim().ToUpperInvariant();
+                var p = await db.Parts.FirstOrDefaultAsync(x => x.Code.ToUpper() == cleanCode);
+                if (p != null) item.PartId = p.Id;
+            }
+
+            item.Status = ReqPartPriceLineStatus.Pending;
+            request.Items.Add(item);
+        }
+
+        db.PartPriceRequests.Add(request);
+        await db.SaveChangesAsync();
+        return request.Id;
+    }
+
+    public async Task<(bool ok, string msg)> SendPartPriceRequestToTSTAsync(int id)
+    {
+        var request = await db.PartPriceRequests.Include(r => r.Items).FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null) return (false, "Không tìm thấy phiếu đề nghị cung cấp giá.");
+
+        if (request.DMSStatus != DMSReqPartPriceStatus.Draft)
+            return (false, "Chỉ gửi được phiếu đang ở trạng thái Mới tạo (Draft).");
+
+        if (request.Items.Count == 0)
+            return (false, "Phiếu đề nghị chưa có danh sách phụ tùng.");
+
+        request.DMSStatus = DMSReqPartPriceStatus.Sent;
+        request.TSTStatus = TSTReqPartPriceStatus.Processing;
+        request.TSTSentDate = DateTime.Now;
+        if (string.IsNullOrWhiteSpace(request.TSTReqPartPriceID))
+        {
+            request.TSTReqPartPriceID = $"TST-PR-{DateTime.Today:yyyyMM}-{new Random().Next(1000, 9999)}";
+        }
+        request.EstimatedResponseDate = DateTime.Today.AddDays(request.FlagIsCheck ? 1 : 2);
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã gửi đề nghị cung cấp giá sang NCC TST/HTC thành công (Mã số tiếp nhận: {request.TSTReqPartPriceID}).");
+    }
+
+    public async Task<(bool ok, string msg)> SimulateTSTResponseAsync(int id, List<(int lineId, string? tstPartCode, decimal tstPrice, DateTime dateEffect)> linePrices)
+    {
+        var request = await db.PartPriceRequests.Include(r => r.Items).FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null) return (false, "Không tìm thấy phiếu đề nghị giá.");
+
+        if (request.DMSStatus != DMSReqPartPriceStatus.Sent && request.DMSStatus != DMSReqPartPriceStatus.Draft)
+            return (false, "Phiếu đề nghị phải ở trạng thái Đã gửi hoặc Mới tạo để tiếp nhận báo giá từ NCC.");
+
+        if (linePrices == null || linePrices.Count == 0)
+            return (false, "Vui lòng nhập đơn giá do NCC phản hồi.");
+
+        foreach (var lp in linePrices)
+        {
+            var line = request.Items.FirstOrDefault(i => i.Id == lp.lineId);
+            if (line != null)
+            {
+                line.TSTPrice = lp.tstPrice;
+                line.TSTPartCode = !string.IsNullOrWhiteSpace(lp.tstPartCode) ? lp.tstPartCode.Trim() : line.DMSPartCode;
+                line.DateEffect = lp.dateEffect == default ? DateTime.Today : lp.dateEffect;
+                line.Status = lp.tstPrice > 0 ? ReqPartPriceLineStatus.Priced : ReqPartPriceLineStatus.Rejected;
+            }
+        }
+
+        request.DMSStatus = DMSReqPartPriceStatus.Responded;
+        request.TSTStatus = TSTReqPartPriceStatus.Priced;
+        request.EffectiveDate = linePrices.FirstOrDefault().dateEffect == default ? DateTime.Today : linePrices.FirstOrDefault().dateEffect;
+
+        await db.SaveChangesAsync();
+        return (true, $"NCC TST/HTC đã phản hồi báo giá cho {linePrices.Count} hạng mục phụ tùng của phiếu {request.ReqPartPriceNo}.");
+    }
+
+    public async Task<(bool ok, string msg)> ApprovePartPriceRequestAsync(int id, string? approvedBy = null, bool syncToCatalog = true)
+    {
+        var request = await db.PartPriceRequests.Include(r => r.Items).ThenInclude(i => i.Part).FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null) return (false, "Không tìm thấy phiếu đề nghị giá.");
+
+        if (request.DMSStatus != DMSReqPartPriceStatus.Responded)
+            return (false, "Chỉ có thể phê duyệt khi Nhà cung cấp đã phản hồi đơn giá (Responded).");
+
+        request.DMSStatus = DMSReqPartPriceStatus.Approved;
+        request.ApprovedBy = string.IsNullOrWhiteSpace(approvedBy) ? "Quản lý dịch vụ" : approvedBy.Trim();
+        request.ApprovedAt = DateTime.Now;
+        request.IsUpdatePrice = syncToCatalog;
+        request.UpdatedPriceAt = DateTime.Now;
+
+        // Tự động đồng bộ / cập nhật giá vốn và giá bán niêm yết vào danh mục phụ tùng Part master
+        if (syncToCatalog)
+        {
+            foreach (var line in request.Items.Where(i => i.TSTPrice > 0))
+            {
+                if (line.Part != null)
+                {
+                    line.Part.CostPrice = line.TSTPrice;
+                    if (line.Part.SalePrice < line.TSTPrice * 1.15m)
+                    {
+                        line.Part.SalePrice = Math.Round(line.TSTPrice * 1.35m, 0);
+                    }
+                }
+                else
+                {
+                    var cleanCode = line.DMSPartCode.Trim().ToUpperInvariant();
+                    var existing = await db.Parts.FirstOrDefaultAsync(p => p.Code.ToUpper() == cleanCode);
+                    if (existing != null)
+                    {
+                        existing.CostPrice = line.TSTPrice;
+                        if (existing.SalePrice < line.TSTPrice * 1.15m)
+                        {
+                            existing.SalePrice = Math.Round(line.TSTPrice * 1.35m, 0);
+                        }
+                        line.PartId = existing.Id;
+                    }
+                    else
+                    {
+                        var newPart = new Part
+                        {
+                            Code = line.DMSPartCode.Trim(),
+                            Name = line.VieName.Trim(),
+                            Unit = line.Unit,
+                            CostPrice = line.TSTPrice,
+                            SalePrice = Math.Round(line.TSTPrice * 1.35m, 0),
+                            InStock = 0,
+                            MinStock = 1,
+                            Model = request.CarModel ?? "Chung",
+                            Location = "K-VOR-CHUYEN",
+                            IsActive = true,
+                            CreatedAt = DateTime.Now
+                        };
+                        db.Parts.Add(newPart);
+                        await db.SaveChangesAsync();
+                        line.PartId = newPart.Id;
+                    }
+                }
+            }
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã phê duyệt áp dụng đơn giá NCC cho phiếu {request.ReqPartPriceNo}. {(syncToCatalog ? "Đơn giá đã được đồng bộ vào danh mục phụ tùng kho." : "")}");
+    }
+
+    public async Task<(bool ok, string msg, int? orderPartId)> ConvertToOrderPartAsync(int id, string? createdBy = null)
+    {
+        var request = await db.PartPriceRequests.Include(r => r.Items).ThenInclude(i => i.Part).FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null) return (false, "Không tìm thấy phiếu đề nghị giá.", null);
+
+        if (request.DMSStatus != DMSReqPartPriceStatus.Approved)
+            return (false, "Chỉ có thể lập Đơn đặt hàng từ phiếu đề nghị giá đã được phê duyệt.", null);
+
+        var pricedLines = request.Items.Where(i => i.TSTPrice > 0).ToList();
+        if (pricedLines.Count == 0)
+            return (false, "Phiếu đề nghị giá không có hạng mục nào có đơn giá hợp lệ.", null);
+
+        var today = DateTime.Today;
+        var prefix = $"PO{today:yyMMdd}-";
+        var count = await db.OrderParts.CountAsync(o => o.OrderPartNo.StartsWith(prefix)) + 1;
+        var orderNo = $"{prefix}{count:D3}";
+
+        var isVor = pricedLines.Any(i => i.DeliveryForm == PartPriceDeliveryForm.VOR);
+
+        var order = new OrderPart
+        {
+            OrderPartNo = orderNo,
+            SupplierName = "Nhà cung cấp phụ tùng TST Bravo / HTC",
+            DeliveryForm = isVor ? OrderPartDeliveryForm.UrgentVOR : OrderPartDeliveryForm.Normal,
+            DeliveryLocation = "Kho phụ tùng chính - Hyundai Workshop",
+            OrderDate = today,
+            EstimatedDeliverDate = today.AddDays(isVor ? 1 : 3),
+            VIN = request.VIN,
+            ROId = request.ROId,
+            Remark = $"Tạo tự động từ Đề nghị báo giá {request.ReqPartPriceNo} (Mã TST: {request.TSTReqPartPriceID}). {request.Description}",
+            CreatedBy = createdBy ?? "Thủ kho",
+            Status = OrderPartStatus.Pending,
+            CreatedAt = DateTime.Now
+        };
+
+        foreach (var line in pricedLines)
+        {
+            var partId = line.PartId;
+            if (!partId.HasValue || partId.Value <= 0)
+            {
+                var cleanCode = line.DMSPartCode.Trim().ToUpperInvariant();
+                var p = await db.Parts.FirstOrDefaultAsync(x => x.Code.ToUpper() == cleanCode);
+                partId = p?.Id ?? (await db.Parts.Select(x => x.Id).FirstOrDefaultAsync());
+            }
+
+            order.Lines.Add(new OrderPartLine
+            {
+                PartId = partId.GetValueOrDefault(1),
+                Quantity = line.Quantity,
+                UnitPrice = line.TSTPrice,
+                DiscountRate = 0,
+                VatPercent = 8,
+                ApprovedQuantity = line.Quantity,
+                Note = $"{line.DMSPartCode} - {line.VieName} ({line.DeliveryForm})"
+            });
+        }
+
+        db.OrderParts.Add(order);
+        await db.SaveChangesAsync();
+
+        return (true, $"Đã tạo thành công Đơn đặt hàng phụ tùng {order.OrderPartNo} gửi NCC TST/HTC.", order.Id);
+    }
+
+    public async Task<(bool ok, string msg)> CancelPartPriceRequestAsync(int id, string? reason = null)
+    {
+        var request = await db.PartPriceRequests.FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null) return (false, "Không tìm thấy phiếu đề nghị giá.");
+
+        if (request.DMSStatus == DMSReqPartPriceStatus.Approved)
+            return (false, "Không thể hủy phiếu đã được phê duyệt áp dụng giá.");
+
+        request.DMSStatus = DMSReqPartPriceStatus.Cancelled;
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            request.Description = string.IsNullOrWhiteSpace(request.Description)
+                ? $"[Đã hủy: {reason.Trim()}]"
+                : $"{request.Description}\n[Đã hủy: {reason.Trim()}]";
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy phiếu đề nghị giá {request.ReqPartPriceNo}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeletePartPriceRequestAsync(int id)
+    {
+        var request = await db.PartPriceRequests.Include(r => r.Items).FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null) return (false, "Không tìm thấy phiếu đề nghị giá.");
+
+        if (request.DMSStatus == DMSReqPartPriceStatus.Approved)
+            return (false, "Không thể xóa phiếu đã được phê duyệt giá. Vui lòng giữ lại để đối soát báo giá.");
+
+        db.PartPriceRequestLines.RemoveRange(request.Items);
+        db.PartPriceRequests.Remove(request);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu đề nghị giá {request.ReqPartPriceNo} thành công.");
+    }
+
+    public Task<List<RepairOrder>> ROsForPartPriceRequestSelectAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Where(r => r.Status != ROStatus.Rejected && r.Status != ROStatus.Finished)
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(40)
+            .ToListAsync();
 }
 

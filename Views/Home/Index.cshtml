@@ -62,6 +62,12 @@
     </div>
     <div class="col-6 col-lg">
         <div class="card"><div class="card-body">
+            <div class="text-muted small">Đề nghị báo giá NCC</div>
+            <div class="stat-num" style="font-size:18px;color:#0284c7"><a href="/PartPriceRequest" class="text-decoration-none" style="color:#0284c7">@d.PendingPartPriceRequests chờ xử lý</a> @if(d.RespondedPartPriceRequests > 0){<span class="text-success" style="font-size:13px;font-weight:normal">(@d.RespondedPartPriceRequests có giá)</span>}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
             <div class="text-muted small">Nhập kho phụ tùng</div>
             <div class="stat-num text-primary" style="font-size:18px"><span class="text-warning">@d.PendingStockIns chờ</span> · @d.MonthStockInValue.ToString("N0")đ</div>
         </div></div>

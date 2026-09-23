@@ -4903,6 +4903,195 @@ app.MapPost("/api/customer-groups/{id:int}/apply-ro/{roId:int}", async (int id, 
     return ok ? Results.Ok(new { discountAmount, message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// =========================================================================
+// MINIMAL APIS — QUẢN LÝ ĐỀ NGHỊ CUNG CẤP GIÁ PHỤ TÙNG NCC TST / HTC (Req_PartPrice / Req_PartPriceDtl)
+// =========================================================================
+
+app.MapGet("/api/part-price-requests", async (DMSReqPartPriceStatus? dmsStatus, TSTReqPartPriceStatus? tstStatus, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.PartPriceRequestsAsync(dmsStatus, tstStatus, q, fromDate, toDate);
+    return Results.Ok(list.Select(r => new
+    {
+        r.Id,
+        r.ReqPartPriceNo,
+        r.DealerCode,
+        r.DealerName,
+        r.Description,
+        r.TSTReqPartPriceID,
+        r.TSTSentDate,
+        dmsStatus = Ui.DMSReqPartPriceStatus(r.DMSStatus).text,
+        dmsStatusCode = Ui.DMSReqPartPriceStatus(r.DMSStatus).code,
+        dmsStatusValue = (int)r.DMSStatus,
+        tstStatus = Ui.TSTReqPartPriceStatus(r.TSTStatus).text,
+        tstStatusCode = Ui.TSTReqPartPriceStatus(r.TSTStatus).code,
+        tstStatusValue = (int)r.TSTStatus,
+        r.FlagIsCheck,
+        r.IsUpdatePrice,
+        r.UpdatedPriceAt,
+        r.EffectiveDate,
+        r.EstimatedResponseDate,
+        r.CreatedBy,
+        r.CreatedAt,
+        r.ApprovedBy,
+        r.ApprovedAt,
+        r.ROId,
+        roCode = r.RO?.Code,
+        r.VIN,
+        r.CarModel,
+        r.TotalItems,
+        r.TotalPricedAmount,
+        r.CanSend,
+        r.CanSimulateResponse,
+        r.CanApprove,
+        r.CanCreateOrderPart,
+        r.IsApproved
+    }));
+});
+
+app.MapGet("/api/part-price-requests/{id:int}", async (int id, IRoService svc) =>
+{
+    var r = await svc.GetPartPriceRequestAsync(id);
+    if (r == null) return Results.NotFound(new { error = "Không tìm thấy phiếu đề nghị giá." });
+    return Results.Ok(new
+    {
+        r.Id,
+        r.ReqPartPriceNo,
+        r.DealerCode,
+        r.DealerName,
+        r.Description,
+        r.TSTReqPartPriceID,
+        r.TSTSentDate,
+        dmsStatus = Ui.DMSReqPartPriceStatus(r.DMSStatus).text,
+        dmsStatusCode = Ui.DMSReqPartPriceStatus(r.DMSStatus).code,
+        dmsStatusValue = (int)r.DMSStatus,
+        tstStatus = Ui.TSTReqPartPriceStatus(r.TSTStatus).text,
+        tstStatusCode = Ui.TSTReqPartPriceStatus(r.TSTStatus).code,
+        tstStatusValue = (int)r.TSTStatus,
+        r.FlagIsCheck,
+        r.IsUpdatePrice,
+        r.UpdatedPriceAt,
+        r.EffectiveDate,
+        r.EstimatedResponseDate,
+        r.CreatedBy,
+        r.CreatedAt,
+        r.ApprovedBy,
+        r.ApprovedAt,
+        r.ROId,
+        ro = r.RO == null ? null : new { r.RO.Id, r.RO.Code, plate = r.RO.Car?.Plate, model = r.RO.Car?.Model, customerName = r.RO.Customer?.Name },
+        r.VIN,
+        r.CarModel,
+        r.TotalItems,
+        r.TotalPricedAmount,
+        r.CanSend,
+        r.CanSimulateResponse,
+        r.CanApprove,
+        r.CanCreateOrderPart,
+        r.IsApproved,
+        items = r.Items.Select(i => new
+        {
+            i.Id,
+            i.PartId,
+            i.DMSPartCode,
+            i.VieName,
+            i.VINCode,
+            deliveryForm = Ui.PartPriceDeliveryForm(i.DeliveryForm).text,
+            deliveryFormValue = (int)i.DeliveryForm,
+            i.Quantity,
+            i.Unit,
+            i.Remark,
+            i.TSTPartCode,
+            i.TSTPrice,
+            i.DateEffect,
+            i.Amount,
+            status = Ui.ReqPartPriceLineStatus(i.Status).text,
+            statusCode = Ui.ReqPartPriceLineStatus(i.Status).code,
+            statusValue = (int)i.Status
+        })
+    });
+});
+
+app.MapPost("/api/part-price-requests", async (CreatePartPriceRequestDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.Items == null || dto.Items.Count == 0)
+            return Results.BadRequest(new { error = "Phiếu đề nghị giá phải có ít nhất 01 dòng phụ tùng (Items)." });
+
+        var req = new PartPriceRequest
+        {
+            ReqPartPriceNo = dto.ReqPartPriceNo?.Trim() ?? "",
+            DealerCode = dto.DealerCode?.Trim() ?? "HTC-CG",
+            DealerName = dto.DealerName?.Trim() ?? "Hyundai Cầu Giấy",
+            Description = dto.Description?.Trim() ?? "",
+            FlagIsCheck = dto.FlagIsCheck ?? false,
+            ROId = dto.ROId,
+            VIN = dto.VIN?.Trim(),
+            CarModel = dto.CarModel?.Trim(),
+            CreatedBy = dto.CreatedBy?.Trim() ?? "API"
+        };
+
+        var items = dto.Items.Select(i => new PartPriceRequestLine
+        {
+            PartId = i.PartId,
+            DMSPartCode = i.DMSPartCode?.Trim().ToUpperInvariant() ?? "",
+            VieName = i.VieName?.Trim() ?? "",
+            VINCode = i.VINCode?.Trim() ?? dto.VIN?.Trim(),
+            DeliveryForm = i.DeliveryForm ?? (req.FlagIsCheck ? PartPriceDeliveryForm.VOR : PartPriceDeliveryForm.Regular),
+            Quantity = i.Quantity <= 0 ? 1 : i.Quantity,
+            Unit = string.IsNullOrWhiteSpace(i.Unit) ? "Cái" : i.Unit.Trim(),
+            Remark = i.Remark?.Trim(),
+            Status = ReqPartPriceLineStatus.Pending
+        }).ToList();
+
+        var id = await svc.CreatePartPriceRequestAsync(req, items);
+        return Results.Created($"/api/part-price-requests/{id}", new { id, req.ReqPartPriceNo, message = "Đã lập phiếu đề nghị cung cấp giá phụ tùng thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/part-price-requests/{id:int}/send", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.SendPartPriceRequestToTSTAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/part-price-requests/{id:int}/response", async (int id, SimulatePartPriceResponseDto dto, IRoService svc) =>
+{
+    if (dto.Items == null || dto.Items.Count == 0)
+        return Results.BadRequest(new { error = "Vui lòng cung cấp danh sách đơn giá phản hồi (Items)." });
+
+    var list = dto.Items.Select(i => (i.LineId, i.TSTPartCode, i.TSTPrice, i.DateEffect ?? DateTime.Today)).ToList();
+    var (ok, msg) = await svc.SimulateTSTResponseAsync(id, list);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/part-price-requests/{id:int}/approve", async (int id, ApprovePartPriceRequestDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ApprovePartPriceRequestAsync(id, dto.ApprovedBy, dto.SyncToCatalog ?? true);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/part-price-requests/{id:int}/convert-order", async (int id, ConvertPriceRequestToOrderDto dto, IRoService svc) =>
+{
+    var (ok, msg, orderPartId) = await svc.ConvertToOrderPartAsync(id, dto.CreatedBy);
+    return ok ? Results.Ok(new { orderPartId, message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/part-price-requests/{id:int}/cancel", async (int id, CancelPartPriceRequestDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.CancelPartPriceRequestAsync(id, dto.Reason);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/part-price-requests/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeletePartPriceRequestAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -5032,5 +5221,14 @@ record CreateInsuranceDebitPaymentDto(int InsuranceCompanyId, int? InsuranceDebi
 record CreateCustomerGroupDto(string? GroupNo, string GroupName, string? TaxCode, string? Address, string? Telephone, string? Fax, string? Email, string? ContactPerson, string? ContactPhone, string? Description, bool? IsActive, decimal? DiscountPercentLabor, decimal? DiscountPercentPart, decimal? CreditLimit, int? PaymentTermDays, string? ContractNo, DateTime? ContractStartDate, DateTime? ContractEndDate);
 record UpdateCustomerGroupDto(string GroupName, string? TaxCode, string? Address, string? Telephone, string? Fax, string? Email, string? ContactPerson, string? ContactPhone, string? Description, bool? IsActive, decimal? DiscountPercentLabor, decimal? DiscountPercentPart, decimal? CreditLimit, int? PaymentTermDays, string? ContractNo, DateTime? ContractStartDate, DateTime? ContractEndDate);
 record AddCustomerGroupMemberDto(int CarId, string? DriverName, string? DriverPhone, string? Note);
+
+record CreatePartPriceRequestDto(string? ReqPartPriceNo, string? DealerCode, string? DealerName, string Description, bool? FlagIsCheck, int? ROId, string? VIN, string? CarModel, string? CreatedBy, List<CreatePartPriceRequestLineDto> Items);
+record CreatePartPriceRequestLineDto(int? PartId, string DMSPartCode, string VieName, string? VINCode, PartPriceDeliveryForm? DeliveryForm, decimal Quantity, string? Unit, string? Remark);
+record SimulatePartPriceResponseDto(List<SimulatePartPriceLineItemDto> Items);
+record SimulatePartPriceLineItemDto(int LineId, string? TSTPartCode, decimal TSTPrice, DateTime? DateEffect);
+record ApprovePartPriceRequestDto(string? ApprovedBy, bool? SyncToCatalog);
+record ConvertPriceRequestToOrderDto(string? CreatedBy);
+record CancelPartPriceRequestDto(string? Reason);
+
 
 

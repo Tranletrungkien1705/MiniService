@@ -556,6 +556,7 @@ public class RepairOrder : IOrgOwned
     public List<PartOO> PartOOs { get; set; } = [];
     public List<CusDebit> CusDebits { get; set; } = [];
     public List<InsuranceDebit> InsuranceDebits { get; set; } = [];
+    public List<PartPriceRequest> PartPriceRequests { get; set; } = [];
 
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
@@ -585,6 +586,7 @@ public class Part : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public List<PartOO> PartOOs { get; set; } = [];
+    public List<PartPriceRequestLine> PartPriceRequestLines { get; set; } = [];
 
     public bool IsLowStock => InStock <= MinStock;
 }
@@ -2348,6 +2350,107 @@ public class CustomerGroupSummaryDto
     public decimal CurrentDebt { get; set; }
     public bool IsCreditExceeded => CreditLimit > 0 && CurrentDebt > CreditLimit;
 }
+
+/// <summary>Trạng thái đề nghị báo giá tại Đại lý (DMS) — DMSReqPartPriceStatus trong Ser_Inv_Quote/Req_PartPrice (P, A, F, C).</summary>
+public enum DMSReqPartPriceStatus
+{
+    Draft = 0,       // Mới tạo (DRAFT / PEND)
+    Sent = 1,        // Đã gửi NCC TST/HTC (SENT / A)
+    Responded = 2,   // NCC đã phản hồi báo giá (RESP)
+    Approved = 3,    // Đại lý chấp thuận đơn giá (APPR / FNS)
+    Cancelled = 4    // Đã hủy đề nghị (CANC)
+}
+
+/// <summary>Trạng thái xử lý tại NCC TST/HTC — TSTReqPartPriceStatus trong idn.CarService (1, 15, 31, 21).</summary>
+public enum TSTReqPartPriceStatus
+{
+    Pending = 0,     // Chờ tiếp nhận (1)
+    Processing = 1,  // Đang thẩm định đơn giá (15)
+    Priced = 2,      // Đã cấp báo giá (31)
+    Rejected = 3     // Từ chối cung cấp giá (21)
+}
+
+/// <summary>Hình thức cung ứng phụ tùng — Mst_DeliveryForm / Req_PartPrice trong idn.CarService.</summary>
+public enum PartPriceDeliveryForm
+{
+    VOR = 0,         // Khẩn cấp xe nằm xưởng dừng lăn bánh (Vehicle Off Road)
+    Regular = 1,     // Đặt hàng định kỳ bổ sung kho (ĐHĐK)
+    Air = 2,         // Đường hàng không hỏa tốc (Bay)
+    Sea = 3          // Đường biển container (Tàu)
+}
+
+/// <summary>Trạng thái từng dòng phụ tùng đề nghị giá — Req_PartPriceDtl trong idn.CarService.</summary>
+public enum ReqPartPriceLineStatus
+{
+    Pending = 0,     // Chờ NCC cấp giá
+    Priced = 1,      // Đã có giá
+    Rejected = 2     // Không cung cấp / Từ chối
+}
+
+/// <summary>Phiếu Đề nghị cung cấp giá phụ tùng Nhà Cung Cấp TST / HTC — Req_PartPrice trong idn.CarService (MNU_QT_DL_DENHICUNGCAPGIA).</summary>
+public class PartPriceRequest : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ReqPartPriceNo { get; set; } = "";             // Số đề nghị giá (VD: RPP260427-001)
+    public string DealerCode { get; set; } = "HTC-CG";          // Mã đại lý lập đề nghị (DealerCode)
+    public string DealerName { get; set; } = "Hyundai Cầu Giấy"; // Tên đại lý (DealerName)
+    public string Description { get; set; } = "";                // Nội dung / Lý do đề nghị giá (Description)
+    public string? TSTReqPartPriceID { get; set; }               // Mã phiếu NCC tiếp nhận phản hồi (TSTReqPartPriceID)
+    public DateTime? TSTSentDate { get; set; }                   // Thời điểm gửi hồ sơ sang NCC (TSTSentDate)
+    public DMSReqPartPriceStatus DMSStatus { get; set; } = DMSReqPartPriceStatus.Draft; // Trạng thái DMS (DMSReqPartPriceStatus)
+    public TSTReqPartPriceStatus TSTStatus { get; set; } = TSTReqPartPriceStatus.Pending; // Trạng thái NCC (TSTReqPartPriceStatus)
+    public bool FlagIsCheck { get; set; } = false;               // Cờ ưu tiên kiểm tra nhanh VOR (FlagIsCheck)
+    public bool IsUpdatePrice { get; set; } = false;             // Cờ đã cập nhật đơn giá vào danh mục Part (IsUpdatePrice)
+    public DateTime? UpdatedPriceAt { get; set; }                // Thời điểm cập nhật giá vào danh mục Part
+    public DateTime? EffectiveDate { get; set; }                 // Ngày bắt đầu hiệu lực của đơn giá
+    public DateTime? EstimatedResponseDate { get; set; }         // Ngày dự kiến có đơn giá từ NCC
+    public string CreatedBy { get; set; } = "Thủ kho";           // Người lập phiếu đề nghị
+    public DateTime CreatedAt { get; set; } = DateTime.Now;      // Ngày lập
+    public string? ApprovedBy { get; set; }                      // Người phê duyệt đơn giá
+    public DateTime? ApprovedAt { get; set; }                    // Thời điểm duyệt
+    public int? ROId { get; set; }                               // Lệnh sửa chữa liên quan nếu có (ROId)
+    public string? VIN { get; set; }                             // Số khung VIN xe liên quan
+    public string? CarModel { get; set; }                        // Dòng xe tương thích (Model)
+
+    public RepairOrder? RO { get; set; }
+    public List<PartPriceRequestLine> Items { get; set; } = [];
+
+    public int TotalItems => Items.Count;
+    public decimal TotalPricedAmount => Items.Sum(i => i.Amount);
+    public bool CanSend => DMSStatus == DMSReqPartPriceStatus.Draft;
+    public bool CanSimulateResponse => DMSStatus == DMSReqPartPriceStatus.Sent;
+    public bool CanApprove => DMSStatus == DMSReqPartPriceStatus.Responded;
+    public bool CanCancel => DMSStatus == DMSReqPartPriceStatus.Draft || DMSStatus == DMSReqPartPriceStatus.Sent;
+    public bool CanCreateOrderPart => DMSStatus == DMSReqPartPriceStatus.Approved;
+    public bool IsApproved => DMSStatus == DMSReqPartPriceStatus.Approved;
+}
+
+/// <summary>Chi tiết dòng đề nghị cung cấp giá phụ tùng — Req_PartPriceDtl trong idn.CarService.</summary>
+public class PartPriceRequestLine : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int PartPriceRequestId { get; set; }
+    public int? PartId { get; set; }                             // Phụ tùng trong kho nếu đã có mã PartId
+    public string DMSPartCode { get; set; } = "";                // Mã phụ tùng yêu cầu (DMSPartCode)
+    public string VieName { get; set; } = "";                    // Tên tiếng Việt phụ tùng (VieName)
+    public string? VINCode { get; set; }                         // Số khung VIN xe tra cứu sơ đồ Microcat (VINCode)
+    public PartPriceDeliveryForm DeliveryForm { get; set; } = PartPriceDeliveryForm.VOR; // Hình thức giao hàng (DeliveryFormCode)
+    public decimal Quantity { get; set; } = 1;                   // Số lượng yêu cầu
+    public string Unit { get; set; } = "Cái";                    // Đơn vị tính (DVT)
+    public string? Remark { get; set; }                          // Ghi chú kỹ thuật, vị trí lắp đặt (Remark)
+    public string? TSTPartCode { get; set; }                     // Mã phụ tùng do TST cấp chuẩn hóa (TSTPartCode)
+    public decimal TSTPrice { get; set; } = 0;                   // Đơn giá NCC báo cấp (TSTPrice)
+    public DateTime? DateEffect { get; set; }                    // Ngày hiệu lực đơn giá (DateEffect)
+    public ReqPartPriceLineStatus Status { get; set; } = ReqPartPriceLineStatus.Pending;
+
+    public PartPriceRequest PartPriceRequest { get; set; } = null!;
+    public Part? Part { get; set; }
+
+    public decimal Amount => Quantity * TSTPrice;
+}
+
 
 
 

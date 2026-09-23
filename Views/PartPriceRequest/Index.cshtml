@@ -1,0 +1,198 @@
+@model List<PartPriceRequest>
+@{
+    ViewData["Title"] = "Quản lý Đề nghị Cung cấp Giá Phụ tùng NCC TST / HTC (Price Request)";
+    var curDmsStatus = (DMSReqPartPriceStatus?)ViewBag.DMSStatus;
+    var curTstStatus = (TSTReqPartPriceStatus?)ViewBag.TSTStatus;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số đề nghị</div>
+            <div class="stat-num text-primary">@ViewBag.TotalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Mới tạo (Chờ gửi)</div>
+            <div class="stat-num text-secondary">@ViewBag.DraftCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã gửi NCC TST</div>
+            <div class="stat-num text-warning">@ViewBag.SentCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">NCC đã báo giá (Chờ duyệt)</div>
+            <div class="stat-num text-info">@ViewBag.RespondedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đại lý đã duyệt giá</div>
+            <div class="stat-num text-success">@ViewBag.ApprovedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Khẩn cấp VOR</div>
+            <div class="stat-num text-danger">@ViewBag.VorCount</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Số phiếu / Mã phụ tùng / VIN / Model..." style="max-width:240px" />
+                <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" title="Từ ngày" style="max-width:140px" />
+                <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" title="Đến ngày" style="max-width:140px" />
+                <select name="dmsStatus" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Trạng thái DMS —</option>
+                    @foreach (DMSReqPartPriceStatus s in Enum.GetValues(typeof(DMSReqPartPriceStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.DMSReqPartPriceStatus(s);
+                        <option value="@((int)s)" selected="@(curDmsStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <select name="tstStatus" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Thẩm định NCC TST —</option>
+                    @foreach (TSTReqPartPriceStatus s in Enum.GetValues(typeof(TSTReqPartPriceStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.TSTReqPartPriceStatus(s);
+                        <option value="@((int)s)" selected="@(curTstStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curDmsStatus.HasValue || curTstStatus.HasValue || !string.IsNullOrEmpty(ViewBag.Q) || !string.IsNullOrEmpty(ViewBag.FromDate) || !string.IsNullOrEmpty(ViewBag.ToDate))
+                {
+                    <a href="/PartPriceRequest" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/Part" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Danh mục phụ tùng</a>
+                <a href="/OrderPart" class="btn btn-sm btn-outline-secondary"><i class="bi bi-cart-check me-1"></i>Đặt hàng NCC</a>
+                <a href="/PartPriceRequest/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập đề nghị giá mới</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Số đề nghị</th>
+                        <th>Ngày lập</th>
+                        <th>Đại lý &amp; Xe / VIN</th>
+                        <th>Lý do / Diễn giải đề nghị</th>
+                        <th class="text-center">Số vật tư</th>
+                        <th>Trạng thái DMS</th>
+                        <th>Trạng thái NCC TST</th>
+                        <th class="text-end">Tổng giá NCC</th>
+                        <th class="text-center">Cập nhật kho</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>Chưa có phiếu đề nghị cung cấp giá phụ tùng nào phù hợp.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var r in Model)
+                    {
+                        var (dmsName, dmsCode, dmsCss) = Ui.DMSReqPartPriceStatus(r.DMSStatus);
+                        var (tstName, tstCode, tstCss) = Ui.TSTReqPartPriceStatus(r.TSTStatus);
+                        var hasVor = r.FlagIsCheck || r.Items.Any(i => i.DeliveryForm == PartPriceDeliveryForm.VOR);
+
+                        <tr>
+                            <td>
+                                <a href="/PartPriceRequest/Detail/@r.Id" class="fw-bold text-decoration-none">@r.ReqPartPriceNo</a>
+                                @if (hasVor)
+                                {
+                                    <span class="badge bg-danger ms-1" title="Khẩn cấp dừng xe"><i class="bi bi-lightning-fill me-1"></i>VOR</span>
+                                }
+                            </td>
+                            <td>
+                                <div>@r.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                                <small class="text-muted">@r.CreatedBy</small>
+                            </td>
+                            <td>
+                                @if (r.RO != null)
+                                {
+                                    <div><a href="/RO/Detail/@r.RO.Id" class="badge bg-light text-dark border text-decoration-none"><i class="bi bi-clipboard2-pulse me-1"></i>@r.RO.Code</a></div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(r.CarModel))
+                                {
+                                    <div class="small fw-semibold">@r.CarModel</div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(r.VIN))
+                                {
+                                    <div class="font-monospace text-muted" style="font-size:11px">VIN: @r.VIN</div>
+                                }
+                            </td>
+                            <td style="max-width:280px">
+                                <div class="text-truncate" title="@r.Description">@r.Description</div>
+                                @if (r.Items.Count > 0)
+                                {
+                                    <div class="text-muted" style="font-size:11px">
+                                        @string.Join(", ", r.Items.Take(2).Select(i => i.DMSPartCode)) @(r.Items.Count > 2 ? $"và {r.Items.Count - 2} mã khác..." : "")
+                                    </div>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-light text-dark border">@r.TotalItems mã</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-@dmsCss">@dmsName</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-@tstCss">@tstName</span>
+                                @if (!string.IsNullOrWhiteSpace(r.TSTReqPartPriceID))
+                                {
+                                    <div class="font-monospace text-muted" style="font-size:11px">@r.TSTReqPartPriceID</div>
+                                }
+                            </td>
+                            <td class="text-end fw-semibold">
+                                @if (r.TotalPricedAmount > 0)
+                                {
+                                    <span class="text-primary">@r.TotalPricedAmount.ToString("N0") đ</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Chưa có giá</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (r.IsUpdatePrice)
+                                {
+                                    <span class="badge bg-success" title="Đã cập nhật giá vào danh mục Part"><i class="bi bi-check-circle me-1"></i>Đã đồng bộ</span>
+                                }
+                                else if (r.DMSStatus == DMSReqPartPriceStatus.Approved)
+                                {
+                                    <span class="badge bg-info">Đã duyệt</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary">Chưa đồng bộ</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="/PartPriceRequest/Detail/@r.Id" class="btn btn-outline-primary" title="Xem chi tiết"><i class="bi bi-eye"></i></a>
+                                    <a href="/PartPriceRequest/Print/@r.Id" target="_blank" class="btn btn-outline-secondary" title="In phiếu"><i class="bi bi-printer"></i></a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,429 @@
+@model PartPriceRequest
+@{
+    ViewData["Title"] = $"Đề nghị cung cấp giá phụ tùng {Model.ReqPartPriceNo}";
+    var (dmsName, dmsCode, dmsCss) = Ui.DMSReqPartPriceStatus(Model.DMSStatus);
+    var (tstName, tstCode, tstCss) = Ui.TSTReqPartPriceStatus(Model.TSTStatus);
+    var isVor = Model.FlagIsCheck || Model.Items.Any(i => i.DeliveryForm == PartPriceDeliveryForm.VOR);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div class="d-flex align-items-center gap-2">
+        <a href="/PartPriceRequest" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+        <h5 class="mb-0 fw-bold">@Model.ReqPartPriceNo</h5>
+        <span class="badge bg-@dmsCss">[@dmsCode] @dmsName</span>
+        <span class="badge bg-@tstCss">[@tstCode] @tstName</span>
+        @if (isVor)
+        {
+            <span class="badge bg-danger"><i class="bi bi-lightning-fill me-1"></i>VOR Khẩn cấp</span>
+        }
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/PartPriceRequest/Print/@Model.Id" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer me-1"></i>In phiếu đề nghị</a>
+
+        @if (Model.CanSend)
+        {
+            <form method="post" action="/PartPriceRequest/SendTST/@Model.Id" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-primary" onclick="return confirm('Xác nhận gửi hồ sơ đề nghị cung cấp giá sang NCC TST/HTC?');">
+                    <i class="bi bi-send me-1"></i>Gửi sang NCC TST/HTC
+                </button>
+            </form>
+        }
+
+        @if (Model.CanSimulateResponse || Model.DMSStatus == DMSReqPartPriceStatus.Draft)
+        {
+            <button type="button" class="btn btn-sm btn-info text-white" data-bs-toggle="modal" data-bs-target="#responseModal">
+                <i class="bi bi-cash-stack me-1"></i>Ghi nhận báo giá từ NCC
+            </button>
+        }
+
+        @if (Model.CanApprove)
+        {
+            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#approveModal">
+                <i class="bi bi-check-circle me-1"></i>Phê duyệt áp dụng đơn giá
+            </button>
+        }
+
+        @if (Model.CanCreateOrderPart)
+        {
+            <form method="post" action="/PartPriceRequest/ConvertToOrder/@Model.Id" class="d-inline">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="createdBy" value="@(Context.Request.Cookies["user_name"] ?? "Thủ kho Tuấn")" />
+                <button type="submit" class="btn btn-sm btn-warning text-dark fw-semibold" onclick="return confirm('Tạo Đơn đặt hàng NCC (PO) từ đề nghị giá đã duyệt này?');">
+                    <i class="bi bi-cart-plus me-1"></i>Tạo Đơn đặt hàng NCC
+                </button>
+            </form>
+        }
+
+        @if (Model.CanCancel)
+        {
+            <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">
+                <i class="bi bi-x-circle me-1"></i>Hủy đề nghị
+            </button>
+        }
+
+        @if (Model.DMSStatus == DMSReqPartPriceStatus.Draft || Model.DMSStatus == DMSReqPartPriceStatus.Cancelled)
+        {
+            <form method="post" action="/PartPriceRequest/Delete/@Model.Id" class="d-inline">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Bạn có chắc chắn muốn xóa vĩnh viễn phiếu đề nghị này?');">
+                    <i class="bi bi-trash me-1"></i>Xóa
+                </button>
+            </form>
+        }
+    </div>
+</div>
+
+<!-- Workflow status tracker bar -->
+<div class="card mb-3 border-0 bg-light">
+    <div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-center position-relative">
+            <div class="text-center flex-fill">
+                <div class="badge rounded-pill @(Model.DMSStatus >= DMSReqPartPriceStatus.Draft ? "bg-primary" : "bg-secondary") p-2 mb-1">1</div>
+                <div class="small fw-semibold">Lập đề nghị (Draft)</div>
+                <div class="text-muted" style="font-size:11px">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+            </div>
+            <div class="text-center flex-fill">
+                <div class="badge rounded-pill @(Model.DMSStatus >= DMSReqPartPriceStatus.Sent ? "bg-primary" : "bg-secondary") p-2 mb-1">2</div>
+                <div class="small fw-semibold">Gửi NCC TST (Sent)</div>
+                <div class="text-muted" style="font-size:11px">@(Model.TSTSentDate?.ToString("dd/MM/yyyy HH:mm") ?? "Chưa gửi")</div>
+            </div>
+            <div class="text-center flex-fill">
+                <div class="badge rounded-pill @(Model.DMSStatus >= DMSReqPartPriceStatus.Responded ? "bg-primary" : "bg-secondary") p-2 mb-1">3</div>
+                <div class="small fw-semibold">NCC phản hồi (Priced)</div>
+                <div class="text-muted" style="font-size:11px">@(Model.EffectiveDate?.ToString("dd/MM/yyyy") ?? "Chờ cấp giá")</div>
+            </div>
+            <div class="text-center flex-fill">
+                <div class="badge rounded-pill @(Model.DMSStatus == DMSReqPartPriceStatus.Approved ? "bg-success" : (Model.DMSStatus == DMSReqPartPriceStatus.Cancelled ? "bg-danger" : "bg-secondary")) p-2 mb-1">4</div>
+                <div class="small fw-semibold">@(Model.DMSStatus == DMSReqPartPriceStatus.Cancelled ? "Đã hủy (Cancelled)" : "Duyệt giá (Approved)")</div>
+                <div class="text-muted" style="font-size:11px">@(Model.ApprovedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Chờ duyệt")</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <!-- Left: Request Info -->
+    <div class="col-md-8">
+        <div class="card h-100">
+            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin đề nghị cung cấp giá</span>
+                <span class="badge bg-light text-dark border">Đại lý: @Model.DealerName (@Model.DealerCode)</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-md-6">
+                        <span class="text-muted small d-block">Mã số đề nghị:</span>
+                        <strong class="font-monospace fs-6">@Model.ReqPartPriceNo</strong>
+                    </div>
+                    <div class="col-md-6">
+                        <span class="text-muted small d-block">Mã NCC tiếp nhận (TSTReqPartPriceID):</span>
+                        <strong class="font-monospace text-primary">@(Model.TSTReqPartPriceID ?? "Chưa tiếp nhận")</strong>
+                    </div>
+                    <div class="col-md-6">
+                        <span class="text-muted small d-block">Người tạo phiếu:</span>
+                        <span>@Model.CreatedBy</span> <span class="text-muted small">(@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm"))</span>
+                    </div>
+                    <div class="col-md-6">
+                        <span class="text-muted small d-block">Người duyệt đơn giá:</span>
+                        <span>@(Model.ApprovedBy ?? "Chưa duyệt")</span>
+                        @if (Model.ApprovedAt.HasValue)
+                        {
+                            <span class="text-muted small">(@Model.ApprovedAt.Value.ToString("dd/MM/yyyy HH:mm"))</span>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <span class="text-muted small d-block">Ngày gửi NCC:</span>
+                        <span>@(Model.TSTSentDate?.ToString("dd/MM/yyyy HH:mm") ?? "—")</span>
+                    </div>
+                    <div class="col-md-6">
+                        <span class="text-muted small d-block">Ngày hiệu lực đơn giá:</span>
+                        <span>@(Model.EffectiveDate?.ToString("dd/MM/yyyy") ?? "—")</span>
+                    </div>
+                </div>
+
+                <div class="p-2 bg-light rounded border">
+                    <span class="text-muted small d-block fw-semibold mb-1">Lý do / Diễn giải nội dung đề nghị báo giá:</span>
+                    <div class="text-dark">@Model.Description</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Vehicle & Order Linking -->
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header bg-white fw-bold">
+                <i class="bi bi-car-front me-1 text-primary"></i>Xe &amp; Lệnh sửa chữa liên quan
+            </div>
+            <div class="card-body">
+                @if (Model.RO != null)
+                {
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Lệnh sửa chữa (RO):</span>
+                        <a href="/RO/Detail/@Model.RO.Id" class="fw-bold text-decoration-none"><i class="bi bi-clipboard2-pulse me-1"></i>@Model.RO.Code</a>
+                        <span class="badge bg-light text-dark border ms-1">@Model.RO.Status</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Biển số &amp; Model xe:</span>
+                        <div class="fw-bold text-primary">@Model.RO.Car?.Plate</div>
+                        <div class="small">@Model.RO.Car?.Model</div>
+                    </div>
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Khách hàng:</span>
+                        <div>@Model.RO.Customer?.Name — @Model.RO.Customer?.Phone</div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted small mb-2"><i class="bi bi-info-circle me-1"></i>Không liên kết Lệnh RO trực tiếp.</div>
+                }
+
+                <div class="border-top pt-2 mt-2">
+                    <span class="text-muted small d-block">Số khung VIN xe:</span>
+                    <div class="font-monospace fw-bold text-secondary">@(Model.VIN ?? "—")</div>
+                </div>
+                <div class="mt-2">
+                    <span class="text-muted small d-block">Dòng xe:</span>
+                    <div>@(Model.CarModel ?? "Chung")</div>
+                </div>
+
+                <div class="border-top pt-2 mt-2">
+                    <span class="text-muted small d-block">Đồng bộ giá vào kho:</span>
+                    @if (Model.IsUpdatePrice)
+                    {
+                        <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Đã cập nhật danh mục Part</span>
+                        <div class="text-muted" style="font-size:11px">Lúc @Model.UpdatedPriceAt?.ToString("dd/MM/yyyy HH:mm")</div>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">Chưa cập nhật giá vốn kho</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Part items list -->
+<div class="card mb-4 shadow-sm border-0">
+    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h6 class="mb-0 fw-bold text-primary"><i class="bi bi-list-check me-2"></i>Danh mục phụ tùng yêu cầu báo giá (@Model.TotalItems hạng mục)</h6>
+        <div class="d-flex align-items-center gap-3">
+            <span class="text-muted small">Tổng giá trị NCC báo:</span>
+            <span class="fs-5 fw-bold text-primary">@Model.TotalPricedAmount.ToString("N0") đ</span>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-bordered table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width:40px" class="text-center">STT</th>
+                    <th>Mã phụ tùng yêu cầu</th>
+                    <th>Tên tiếng Việt phụ tùng</th>
+                    <th>Số khung VIN</th>
+                    <th class="text-center">Hình thức giao</th>
+                    <th class="text-center">Số lượng</th>
+                    <th class="text-center">ĐVT</th>
+                    <th>Mã chuẩn NCC (TST)</th>
+                    <th class="text-end">Đơn giá NCC (VNĐ)</th>
+                    <th class="text-end">Thành tiền (VNĐ)</th>
+                    <th class="text-center">Hiệu lực</th>
+                    <th class="text-center">Trạng thái</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Model.Items.Count == 0)
+                {
+                    <tr><td colspan="12" class="text-center text-muted py-3">Chưa có dòng phụ tùng nào.</td></tr>
+                }
+                @{ int idx = 1; }
+                @foreach (var i in Model.Items)
+                {
+                    var (formName, formIcon, formCss) = Ui.PartPriceDeliveryForm(i.DeliveryForm);
+                    var (lnName, lnCode, lnCss) = Ui.ReqPartPriceLineStatus(i.Status);
+
+                    <tr>
+                        <td class="text-center text-muted">@(idx++)</td>
+                        <td>
+                            <strong class="font-monospace text-dark">@i.DMSPartCode</strong>
+                            @if (i.Part != null)
+                            {
+                                <span class="badge bg-light text-success border ms-1" title="Đã có trong kho Part"><i class="bi bi-box me-1"></i>Kho: @i.Part.InStock.ToString("N0")</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(i.Remark))
+                            {
+                                <div class="text-muted" style="font-size:11px"><i class="bi bi-chat-left-text me-1"></i>@i.Remark</div>
+                            }
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@i.VieName</div>
+                        </td>
+                        <td class="font-monospace text-muted" style="font-size:12px">
+                            @(i.VINCode ?? Model.VIN ?? "—")
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-@formCss"><i class="bi @formIcon me-1"></i>@i.DeliveryForm</span>
+                        </td>
+                        <td class="text-center fw-bold">@i.Quantity.ToString("N0")</td>
+                        <td class="text-center text-muted small">@i.Unit</td>
+                        <td class="font-monospace text-primary">
+                            @(i.TSTPartCode ?? "—")
+                        </td>
+                        <td class="text-end fw-semibold">
+                            @if (i.TSTPrice > 0)
+                            {
+                                <span class="text-primary">@i.TSTPrice.ToString("N0") đ</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Chờ giá</span>
+                            }
+                        </td>
+                        <td class="text-end fw-bold">
+                            @if (i.Amount > 0)
+                            {
+                                <span class="text-success">@i.Amount.ToString("N0") đ</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">—</span>
+                            }
+                        </td>
+                        <td class="text-center text-muted" style="font-size:11px">
+                            @(i.DateEffect?.ToString("dd/MM/yyyy") ?? "—")
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-@lnCss">@lnName</span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+            <tfoot class="table-light">
+                <tr>
+                    <th colspan="9" class="text-end fw-bold">Tổng cộng giá trị báo giá NCC:</th>
+                    <th class="text-end fw-bold text-success fs-6">@Model.TotalPricedAmount.ToString("N0") đ</th>
+                    <th colspan="2"></th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<!-- Modal: Ghi nhận phản hồi giá từ NCC TST/HTC -->
+<div class="modal fade" id="responseModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="post" action="/PartPriceRequest/SimulateResponse/@Model.Id">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-cash-stack me-2"></i>Ghi nhận Đơn giá Phản hồi từ NCC TST / HTC</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">Nhập đơn giá phụ tùng do bộ phận Báo giá NPP TST / HTC phản hồi kèm ngày hiệu lực áp dụng.</p>
+
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-sm align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Mã yêu cầu</th>
+                                    <th>Tên phụ tùng</th>
+                                    <th>Mã chuẩn TST</th>
+                                    <th>Đơn giá NCC cấp (VNĐ) <span class="text-danger">*</span></th>
+                                    <th>Ngày hiệu lực</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var line in Model.Items)
+                                {
+                                    <tr>
+                                        <td>
+                                            <input type="hidden" name="lineIds" value="@line.Id" />
+                                            <strong class="font-monospace">@line.DMSPartCode</strong>
+                                        </td>
+                                        <td class="small">@line.VieName</td>
+                                        <td>
+                                            <input type="text" name="tstPartCodes" class="form-control form-control-sm font-monospace" value="@(line.TSTPartCode ?? line.DMSPartCode + "-TST")" />
+                                        </td>
+                                        <td>
+                                            <input type="number" name="tstPrices" class="form-control form-control-sm text-end fw-bold text-primary" value="@(line.TSTPrice > 0 ? line.TSTPrice : 1500000)" min="0" step="10000" required />
+                                        </td>
+                                        <td>
+                                            <input type="date" name="dateEffects" class="form-control form-control-sm" value="@(line.DateEffect?.ToString("yyyy-MM-dd") ?? DateTime.Today.ToString("yyyy-MM-dd"))" />
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-info text-white px-3"><i class="bi bi-check-lg me-1"></i>Lưu đơn giá NCC</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Phê duyệt áp dụng đơn giá -->
+<div class="modal fade" id="approveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/PartPriceRequest/Approve/@Model.Id">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-check-circle me-2"></i>Phê duyệt Áp dụng Đơn giá NCC</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Bạn đang xác nhận chấp thuận mức giá do NCC TST/HTC cung cấp cho phiếu <strong>@Model.ReqPartPriceNo</strong> (Tổng: <strong class="text-success">@Model.TotalPricedAmount.ToString("N0") đ</strong>).</p>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Người phê duyệt</label>
+                        <input name="approvedBy" class="form-control" value="@(Context.Request.Cookies["user_name"] ?? "GĐ Dịch vụ Hoàng")" required />
+                    </div>
+
+                    <div class="form-check p-2 bg-light rounded border">
+                        <input class="form-check-input ms-0 me-2" type="checkbox" name="syncToCatalog" value="true" id="syncToCatalog" checked />
+                        <label class="form-check-label fw-bold text-primary" for="syncToCatalog">
+                            <i class="bi bi-arrow-repeat me-1"></i>Tự động đồng bộ giá vốn &amp; giá bán vào danh mục kho (Part Master)
+                        </label>
+                        <div class="text-muted small ps-4">Giá vốn sẽ được cập nhật bằng đơn giá NCC; giá bán niêm yết tự động tính tỷ suất lợi nhuận chuẩn đại lý.</div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-sm btn-success px-3"><i class="bi bi-check-lg me-1"></i>Xác nhận duyệt</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Hủy đề nghị -->
+<div class="modal fade" id="cancelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/PartPriceRequest/Cancel/@Model.Id">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-x-circle me-2"></i>Hủy Phiếu Đề nghị Báo giá</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Phiếu sau khi hủy sẽ không thể tiếp tục gửi duyệt hoặc đặt hàng.</p>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Lý do hủy đề nghị</label>
+                        <textarea name="reason" class="form-control" rows="3" placeholder="Nhập lý do hủy (VD: Khách hàng từ chối sửa chữa; xe chuyển sang phụ tùng cũ tái sử dụng...)" required></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-sm btn-danger px-3">Xác nhận hủy phiếu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,187 @@
+@model PartPriceRequest
+@{
+    Layout = null;
+    var (dmsName, dmsCode, _) = Ui.DMSReqPartPriceStatus(Model.DMSStatus);
+    var isVor = Model.FlagIsCheck || Model.Items.Any(i => i.DeliveryForm == PartPriceDeliveryForm.VOR);
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>In Phiếu Đề Nghị Cung Cấp Giá @Model.ReqPartPriceNo</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #111; background: #f8f9fa; }
+        .page { width: 210mm; min-height: 297mm; padding: 15mm 15mm 20mm 15mm; margin: 10px auto; background: white; border: 1px solid #ddd; }
+        .font-mono { font-family: 'Consolas', monospace; }
+        .header-title { font-size: 18px; font-weight: bold; text-transform: uppercase; color: #002c5f; }
+        .table-print th { background-color: #f1f5f9 !important; font-weight: 600; font-size: 12px; }
+        .table-print td { font-size: 12px; }
+        @@media print {
+            body { background: white; }
+            .page { border: none; margin: 0; padding: 10mm; width: 100%; min-height: auto; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print text-center py-2 bg-light border-bottom">
+        <button onclick="window.print()" class="btn btn-primary btn-sm px-4"><i class="bi bi-printer me-1"></i>In phiếu đề nghị giá</button>
+        <button onclick="window.close()" class="btn btn-outline-secondary btn-sm px-3 ms-2">Đóng cửa sổ</button>
+    </div>
+
+    <div class="page">
+        <!-- Letterhead -->
+        <div class="row align-items-center border-bottom pb-3 mb-3">
+            <div class="col-7">
+                <div class="fw-bold fs-5 text-primary" style="letter-spacing:1px">HYUNDAI CẦU GIẤY — @Model.DealerName</div>
+                <div class="text-muted small">Đại lý Ủy quyền Chính thức của TC Motor / Hyundai Motor Company</div>
+                <div class="text-muted small">Địa chỉ: Số 01 Trịnh Văn Bô, Nam Từ Liêm, TP. Hà Nội · Hotline: 1900 633 699</div>
+                <div class="text-muted small">Bộ phận: Dịch vụ &amp; Quản lý Kho Phụ tùng chính hãng (Parts Dept)</div>
+            </div>
+            <div class="col-5 text-end">
+                <div class="font-mono fw-bold fs-6">Mã phiếu: @Model.ReqPartPriceNo</div>
+                <div class="text-muted small">Ngày lập: @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                <div class="text-muted small">Mã đại lý: <strong>@Model.DealerCode</strong></div>
+                @if (isVor)
+                {
+                    <div class="mt-1"><span class="badge bg-danger text-uppercase px-2 py-1"><i class="bi bi-lightning-fill me-1"></i>Ưu tiên kiểm tra nhanh (VOR)</span></div>
+                }
+            </div>
+        </div>
+
+        <!-- Title -->
+        <div class="text-center my-3">
+            <div class="header-title">PHIẾU ĐỀ NGHỊ CUNG CẤP GIÁ PHỤ TÙNG</div>
+            <div class="text-muted small fst-italic">Kính gửi: Nhà Phân Phối Phụ Tùng TST Bravo / Công Ty CP Liên Doanh Ô Tô Hyundai Thành Công Việt Nam</div>
+        </div>
+
+        <!-- Information section -->
+        <div class="border rounded p-3 mb-3 bg-light">
+            <div class="row g-2">
+                <div class="col-6">
+                    <span class="text-muted">Mã số đề nghị:</span> <strong class="font-mono">@Model.ReqPartPriceNo</strong>
+                </div>
+                <div class="col-6">
+                    <span class="text-muted">Mã tiếp nhận NCC (TST ID):</span> <strong class="font-mono text-primary">@(Model.TSTReqPartPriceID ?? "Chờ cấp mã")</strong>
+                </div>
+                <div class="col-6">
+                    <span class="text-muted">Người lập phiếu:</span> <span>@Model.CreatedBy</span>
+                </div>
+                <div class="col-6">
+                    <span class="text-muted">Trạng thái phiếu:</span> <span class="badge bg-secondary">[@dmsCode] @dmsName</span>
+                </div>
+                <div class="col-6">
+                    <span class="text-muted">Số khung xe (VIN):</span> <strong class="font-mono">@(Model.VIN ?? "—")</strong>
+                </div>
+                <div class="col-6">
+                    <span class="text-muted">Dòng xe (Model):</span> <strong>@(Model.CarModel ?? "Chung")</strong>
+                </div>
+                @if (Model.RO != null)
+                {
+                    <div class="col-6">
+                        <span class="text-muted">Lệnh sửa chữa liên quan:</span> <strong>@Model.RO.Code</strong> (Biển số: @Model.RO.Car?.Plate)
+                    </div>
+                    <div class="col-6">
+                        <span class="text-muted">Khách hàng / Chủ xe:</span> <span>@Model.RO.Customer?.Name</span>
+                    </div>
+                }
+                <div class="col-12 mt-2">
+                    <span class="text-muted">Lý do / Mục đích đề nghị giá:</span>
+                    <div class="fst-italic text-dark">@Model.Description</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Parts Table -->
+        <div class="mb-3">
+            <table class="table table-bordered table-print align-middle mb-0">
+                <thead>
+                    <tr class="text-center">
+                        <th style="width:35px">STT</th>
+                        <th>Mã phụ tùng yêu cầu</th>
+                        <th>Tên tiếng Việt phụ tùng</th>
+                        <th>Số khung VIN</th>
+                        <th style="width:70px">Hình thức</th>
+                        <th style="width:50px">SL</th>
+                        <th style="width:50px">ĐVT</th>
+                        <th>Mã chuẩn NCC (TST)</th>
+                        <th style="width:105px" class="text-end">Đơn giá NCC</th>
+                        <th style="width:115px" class="text-end">Thành tiền (VNĐ)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ int idx = 1; }
+                    @foreach (var line in Model.Items)
+                    {
+                        <tr>
+                            <td class="text-center text-muted">@(idx++)</td>
+                            <td>
+                                <strong class="font-mono">@line.DMSPartCode</strong>
+                                @if (!string.IsNullOrWhiteSpace(line.Remark))
+                                {
+                                    <div class="text-muted fst-italic" style="font-size:11px">@line.Remark</div>
+                                }
+                            </td>
+                            <td>@line.VieName</td>
+                            <td class="font-mono" style="font-size:11px">@(line.VINCode ?? Model.VIN ?? "—")</td>
+                            <td class="text-center">@line.DeliveryForm</td>
+                            <td class="text-center fw-bold">@line.Quantity.ToString("N0")</td>
+                            <td class="text-center">@line.Unit</td>
+                            <td class="font-mono text-primary">@(line.TSTPartCode ?? "—")</td>
+                            <td class="text-end">
+                                @(line.TSTPrice > 0 ? line.TSTPrice.ToString("N0") + " đ" : "—")
+                            </td>
+                            <td class="text-end fw-bold">
+                                @(line.Amount > 0 ? line.Amount.ToString("N0") + " đ" : "—")
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="9" class="text-end fw-bold">Tổng cộng giá trị báo giá do NCC cung cấp:</th>
+                        <th class="text-end fw-bold text-primary fs-6">@Model.TotalPricedAmount.ToString("N0") đ</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        @if (Model.TotalPricedAmount > 0)
+        {
+            <div class="mb-4 fst-italic">
+                Số tiền bằng chữ: <strong>@Ui.MoneyToWords(Model.TotalPricedAmount) đồng chẵn.</strong>
+            </div>
+        }
+
+        <!-- Signatures -->
+        <div class="row text-center mt-5 pt-3">
+            <div class="col-3">
+                <div class="fw-bold">NGƯỜI LẬP PHIẾU</div>
+                <div class="text-muted small mb-5">(Ký, ghi rõ họ tên)</div>
+                <div class="fw-semibold">@Model.CreatedBy</div>
+            </div>
+            <div class="col-3">
+                <div class="fw-bold">CỐ VẤN DỊCH VỤ</div>
+                <div class="text-muted small mb-5">(Ký, ghi rõ họ tên)</div>
+                <div class="fw-semibold">CVDV phụ trách</div>
+            </div>
+            <div class="col-3">
+                <div class="fw-bold">QUẢN LÝ KHO PHỤ TÙNG</div>
+                <div class="text-muted small mb-5">(Ký, ghi rõ họ tên)</div>
+                <div class="fw-semibold">Trưởng phòng Phụ tùng</div>
+            </div>
+            <div class="col-3">
+                <div class="fw-bold">BAN GIÁM ĐỐC ĐẠI LÝ</div>
+                <div class="text-muted small mb-5">(Ký, đóng dấu)</div>
+                <div class="fw-semibold">@(Model.ApprovedBy ?? "Giám đốc Dịch vụ")</div>
+            </div>
+        </div>
+
+        <div class="mt-4 pt-4 border-top text-center text-muted" style="font-size:11px">
+            Biểu mẫu được in tự động từ Hệ thống Quản trị Đại lý Hyundai Service DMS · Ngày in: @DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,219 @@
+@model PartPriceRequest
+@{
+    ViewData["Title"] = "Lập Đề nghị Cung cấp Giá Phụ tùng NCC TST / HTC";
+    var ros = (List<RepairOrder>)ViewBag.ROs;
+    var parts = (List<Part>)ViewBag.Parts;
+    var selectedRoId = (int?)ViewBag.SelectedRoId;
+}
+
+<div class="row justify-content-center">
+    <div class="col-12 col-xl-11">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+                <div>
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-plus me-2"></i>Lập Đề nghị Cung cấp Giá Phụ tùng Mới</h5>
+                    <small class="text-white-50">Gửi yêu cầu tra cứu &amp; báo giá phụ tùng đặc thù / VOR lên Nhà phân phối TST Bravo / HTC</small>
+                </div>
+                <a href="/PartPriceRequest" class="btn btn-sm btn-light"><i class="bi bi-arrow-left me-1"></i>Quay lại danh sách</a>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" id="createForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Số đề nghị giá</label>
+                            <input name="reqPartPriceNo" class="form-control" placeholder="Tự sinh (VD: RPP260427-001)" value="@Model?.ReqPartPriceNo" />
+                            <small class="text-muted">Để trống để hệ thống tự cấp số</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Mã đại lý</label>
+                            <input name="dealerCode" class="form-control" value="@(Model?.DealerCode ?? "HTC-CG")" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Tên đại lý</label>
+                            <input name="dealerName" class="form-control" value="@(Model?.DealerName ?? "Hyundai Cầu Giấy")" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Người lập phiếu</label>
+                            <input name="createdBy" class="form-control" value="@(Model?.CreatedBy ?? "Thủ kho Tuấn")" required />
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Lệnh sửa chữa RO liên quan (nếu có)</label>
+                            <select name="roId" id="roSelect" class="form-select" onchange="onRoChange(this)">
+                                <option value="">— Không gắn RO (Bổ sung kho / Yêu cầu ngoài) —</option>
+                                @foreach (var ro in ros)
+                                {
+                                    <option value="@ro.Id" data-vin="@ro.Car?.Vin" data-model="@ro.Car?.Model" data-plate="@ro.Car?.Plate" selected="@(selectedRoId == ro.Id)">
+                                        @ro.Code — @ro.Car?.Plate (@ro.Car?.Model) — @ro.Customer?.Name
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Số khung xe (VIN)</label>
+                            <input name="vin" id="vinInput" class="form-control font-monospace" placeholder="17 ký tự (VD: KMHFH41BPA123456)" value="@Model?.VIN" maxlength="17" />
+                            <small class="text-muted">Cần số VIN để NCC tra cứu sơ đồ phụ tùng Microcat</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Dòng xe (Model)</label>
+                            <input name="carModel" id="modelInput" class="form-control" placeholder="VD: Hyundai Santa Fe 2024, Creta..." value="@Model?.CarModel" />
+                        </div>
+
+                        <div class="col-12">
+                            <div class="form-check form-switch p-2 bg-light rounded border">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" name="flagIsCheck" value="true" id="flagIsCheck" @(Model?.FlagIsCheck == true ? "checked" : "") />
+                                <label class="form-check-label fw-bold text-danger" for="flagIsCheck">
+                                    <i class="bi bi-lightning-fill me-1"></i>Ưu tiên kiểm tra nhanh (VOR - Xe nằm xưởng dừng lăn bánh)
+                                </label>
+                                <div class="text-muted small ps-4">Khi tích chọn, NCC TST/HTC sẽ ưu tiên xử lý thẩm định và phản hồi trong vòng 24 giờ.</div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Lý do / Diễn giải nội dung đề nghị báo giá <span class="text-danger">*</span></label>
+                            <textarea name="description" class="form-control" rows="2" placeholder="Ghi rõ lý do xin báo giá (VD: Xe tai nạn bảo hiểm cần báo giá cụm túi khí và thước lái; hoặc phụ tùng nhập khẩu chưa có giá niêm yết...)" required>@Model?.Description</textarea>
+                        </div>
+                    </div>
+
+                    <div class="border rounded p-3 mb-4 bg-light">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0 text-primary"><i class="bi bi-list-check me-2"></i>Danh mục phụ tùng yêu cầu báo giá</h6>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><i class="bi bi-plus-lg me-1"></i>Thêm dòng phụ tùng</button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered bg-white align-middle" id="itemsTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width:24%">Mã phụ tùng (DMSPartCode)</th>
+                                        <th style="width:26%">Tên tiếng Việt (VieName)</th>
+                                        <th style="width:16%">Hình thức giao hàng</th>
+                                        <th style="width:10%">Số lượng</th>
+                                        <th style="width:10%">ĐVT</th>
+                                        <th style="width:10%">Ghi chú / Vị trí</th>
+                                        <th style="width:4%" class="text-center">Xóa</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="itemRows">
+                                    <tr class="item-row">
+                                        <td>
+                                            <div class="input-group input-group-sm">
+                                                <input type="text" name="dmsPartCodes" class="form-control font-monospace fw-semibold code-input" placeholder="VD: 56500-S1000" required />
+                                                <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown" title="Chọn từ danh mục kho"></button>
+                                                <ul class="dropdown-menu dropdown-menu-end p-2" style="max-height:240px;overflow-y:auto;width:320px">
+                                                    <li><h6 class="dropdown-header">Chọn nhanh từ danh mục kho</h6></li>
+                                                    @foreach (var p in parts.Take(15))
+                                                    {
+                                                        <li><a class="dropdown-item small" href="javascript:void(0)" onclick="selectPart(this, '@p.Code', '@p.Name.Replace("'", "\\'")', '@p.Unit', @p.Id)"><strong>@p.Code</strong> - @p.Name</a></li>
+                                                    }
+                                                </ul>
+                                            </div>
+                                            <input type="hidden" name="partIds" class="part-id-input" value="0" />
+                                        </td>
+                                        <td>
+                                            <input type="text" name="vieNames" class="form-control form-control-sm name-input" placeholder="Tên phụ tùng tiếng Việt" required />
+                                        </td>
+                                        <td>
+                                            <select name="deliveryForms" class="form-select form-select-sm">
+                                                <option value="0">VOR (Khẩn xe dừng)</option>
+                                                <option value="1" selected>ĐHĐK (Định kỳ)</option>
+                                                <option value="2">Air (Đường bay)</option>
+                                                <option value="3">Sea (Đường biển)</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="number" name="quantities" class="form-control form-control-sm text-center" value="1" min="1" step="1" required />
+                                        </td>
+                                        <td>
+                                            <input type="text" name="units" class="form-control form-control-sm text-center unit-input" value="Cái" />
+                                        </td>
+                                        <td>
+                                            <input type="text" name="remarks" class="form-control form-control-sm" placeholder="Vị trí lắp đặt / Ghi chú" />
+                                        </td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRow(this)" title="Xóa dòng"><i class="bi bi-trash"></i></button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="/PartPriceRequest" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary px-4"><i class="bi bi-save me-1"></i>Lưu đề nghị báo giá</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function onRoChange(sel) {
+        var opt = sel.options[sel.selectedIndex];
+        if (opt && opt.value) {
+            var vin = opt.getAttribute('data-vin');
+            var model = opt.getAttribute('data-model');
+            var plate = opt.getAttribute('data-plate');
+            if (vin) document.getElementById('vinInput').value = vin;
+            if (model) document.getElementById('modelInput').value = model;
+        }
+    }
+
+    function selectPart(btn, code, name, unit, partId) {
+        var row = btn.closest('.item-row');
+        row.querySelector('.code-input').value = code;
+        row.querySelector('.name-input').value = name;
+        row.querySelector('.unit-input').value = unit || 'Cái';
+        row.querySelector('.part-id-input').value = partId || 0;
+    }
+
+    function addRow() {
+        var tbody = document.getElementById('itemRows');
+        var tr = document.createElement('tr');
+        tr.className = 'item-row';
+        tr.innerHTML = `
+            <td>
+                <input type="text" name="dmsPartCodes" class="form-control form-control-sm font-monospace fw-semibold code-input" placeholder="VD: 56500-S1000" required />
+                <input type="hidden" name="partIds" class="part-id-input" value="0" />
+            </td>
+            <td>
+                <input type="text" name="vieNames" class="form-control form-control-sm name-input" placeholder="Tên phụ tùng tiếng Việt" required />
+            </td>
+            <td>
+                <select name="deliveryForms" class="form-select form-select-sm">
+                    <option value="0">VOR (Khẩn xe dừng)</option>
+                    <option value="1" selected>ĐHĐK (Định kỳ)</option>
+                    <option value="2">Air (Đường bay)</option>
+                    <option value="3">Sea (Đường biển)</option>
+                </select>
+            </td>
+            <td>
+                <input type="number" name="quantities" class="form-control form-control-sm text-center" value="1" min="1" step="1" required />
+            </td>
+            <td>
+                <input type="text" name="units" class="form-control form-control-sm text-center unit-input" value="Cái" />
+            </td>
+            <td>
+                <input type="text" name="remarks" class="form-control form-control-sm" placeholder="Vị trí lắp đặt / Ghi chú" />
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeRow(this)" title="Xóa dòng"><i class="bi bi-trash"></i></button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    function removeRow(btn) {
+        var tbody = document.getElementById('itemRows');
+        if (tbody.querySelectorAll('.item-row').length > 1) {
+            btn.closest('.item-row').remove();
+        } else {
+            alert('Phiếu đề nghị giá phải có ít nhất 01 dòng phụ tùng.');
+        }
+    }
+</script>
+}

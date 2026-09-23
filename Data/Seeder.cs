@@ -3632,6 +3632,217 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        if (!await db.PartPriceRequests.AnyAsync())
+        {
+            var ro1 = await db.ROs.Include(r => r.Car).FirstOrDefaultAsync();
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+
+            var requests = new List<PartPriceRequest>
+            {
+                // 1. Đề nghị giá đã được đại lý phê duyệt & đồng bộ vào kho (Approved / Priced)
+                new PartPriceRequest
+                {
+                    ReqPartPriceNo = $"RPP{DateTime.Today:yyMMdd}-001",
+                    DealerCode = "HTC-CG",
+                    DealerName = "Hyundai Cầu Giấy",
+                    Description = "Đề nghị cung cấp giá khẩn cấp cụm thước lái trợ lực điện MDPS và hộp điều khiển túi khí xe Santa Fe 2024 tai nạn bảo hiểm",
+                    TSTReqPartPriceID = "TST-PR-2026-9042",
+                    TSTSentDate = DateTime.Today.AddDays(-2).AddHours(9),
+                    DMSStatus = DMSReqPartPriceStatus.Approved,
+                    TSTStatus = TSTReqPartPriceStatus.Priced,
+                    FlagIsCheck = true,
+                    IsUpdatePrice = true,
+                    UpdatedPriceAt = DateTime.Today.AddDays(-1).AddHours(16),
+                    EffectiveDate = DateTime.Today.AddDays(-1),
+                    EstimatedResponseDate = DateTime.Today.AddDays(-1),
+                    CreatedBy = "Thủ kho Tuấn",
+                    CreatedAt = DateTime.Today.AddDays(-2).AddHours(8),
+                    ApprovedBy = "GĐ Dịch vụ Hoàng",
+                    ApprovedAt = DateTime.Today.AddDays(-1).AddHours(16),
+                    ROId = ro1?.Id,
+                    VIN = "KMHFH41BPA123456",
+                    CarModel = "Hyundai Santa Fe 2.2D HTRAC",
+                    Items = [
+                        new PartPriceRequestLine
+                        {
+                            DMSPartCode = "56500-S1000",
+                            VieName = "Cụm thước lái trợ lực điện MDPS chính hãng",
+                            VINCode = "KMHFH41BPA123456",
+                            DeliveryForm = PartPriceDeliveryForm.VOR,
+                            Quantity = 1,
+                            Unit = "Cụm",
+                            Remark = "Thước lái bị cong vênh trục ty do xe đâm va gầm, yêu cầu VOR khẩn",
+                            TSTPartCode = "56500-S1000-TST",
+                            TSTPrice = 14500000,
+                            DateEffect = DateTime.Today.AddDays(-1),
+                            Status = ReqPartPriceLineStatus.Priced
+                        },
+                        new PartPriceRequestLine
+                        {
+                            DMSPartCode = "95910-S1100",
+                            VieName = "Hộp điều khiển túi khí trung tâm ACU",
+                            VINCode = "KMHFH41BPA123456",
+                            DeliveryForm = PartPriceDeliveryForm.VOR,
+                            Quantity = 1,
+                            Unit = "Hộp",
+                            Remark = "Đã kích nổ túi khí vô lăng và phụ, cần thay thế hộp mới theo quy chuẩn HMC",
+                            TSTPartCode = "95910-S1100-TST",
+                            TSTPrice = 8800000,
+                            DateEffect = DateTime.Today.AddDays(-1),
+                            Status = ReqPartPriceLineStatus.Priced
+                        }
+                    ]
+                },
+
+                // 2. Đề nghị giá NCC đã phản hồi đơn giá (Responded / Priced) — Chờ CVDV/Quản lý duyệt
+                new PartPriceRequest
+                {
+                    ReqPartPriceNo = $"RPP{DateTime.Today:yyMMdd}-002",
+                    DealerCode = "HTC-CG",
+                    DealerName = "Hyundai Cầu Giấy",
+                    Description = "Xin báo giá bơm cao áp nhiên liệu Diesel Common Rail CRDi và cụm van tuần hoàn khí xả EGR xe Tucson máy dầu",
+                    TSTReqPartPriceID = "TST-PR-2026-9118",
+                    TSTSentDate = DateTime.Today.AddHours(-16),
+                    DMSStatus = DMSReqPartPriceStatus.Responded,
+                    TSTStatus = TSTReqPartPriceStatus.Priced,
+                    FlagIsCheck = false,
+                    IsUpdatePrice = false,
+                    EffectiveDate = DateTime.Today,
+                    EstimatedResponseDate = DateTime.Today,
+                    CreatedBy = "CVDV Tuấn Hùng",
+                    CreatedAt = DateTime.Today.AddHours(-18),
+                    VIN = "RLHXXTC002",
+                    CarModel = "Hyundai Tucson 2.0 CRDi",
+                    Items = [
+                        new PartPriceRequestLine
+                        {
+                            DMSPartCode = "33100-2F000",
+                            VieName = "Bơm cao áp nhiên liệu Common Rail Diesel CRDi",
+                            VINCode = "RLHXXTC002",
+                            DeliveryForm = PartPriceDeliveryForm.Regular,
+                            Quantity = 1,
+                            Unit = "Cái",
+                            Remark = "Áp suất đường ống rail tụt khi đạp ga tải nặng, báo lỗi P0087",
+                            TSTPartCode = "33100-2F000-BVO",
+                            TSTPrice = 18200000,
+                            DateEffect = DateTime.Today,
+                            Status = ReqPartPriceLineStatus.Priced
+                        },
+                        new PartPriceRequestLine
+                        {
+                            DMSPartCode = "28410-2F000",
+                            VieName = "Cụm van tuần hoàn khí xả điện tử EGR",
+                            VINCode = "RLHXXTC002",
+                            DeliveryForm = PartPriceDeliveryForm.Regular,
+                            Quantity = 1,
+                            Unit = "Cụm",
+                            Remark = "Kẹt van bám muội carbon không đóng kín buồng đốt",
+                            TSTPartCode = "28410-2F000-TST",
+                            TSTPrice = 4600000,
+                            DateEffect = DateTime.Today,
+                            Status = ReqPartPriceLineStatus.Priced
+                        }
+                    ]
+                },
+
+                // 3. Đề nghị giá đã gửi sang NCC đang thẩm định (Sent / Processing)
+                new PartPriceRequest
+                {
+                    ReqPartPriceNo = $"RPP{DateTime.Today:yyMMdd}-003",
+                    DealerCode = "HTC-CG",
+                    DealerName = "Hyundai Cầu Giấy",
+                    Description = "Đề nghị báo giá bộ cảm biến Radar khoảng cách ADAS SmartSense và giá đỡ cản trước xe Hyundai Creta",
+                    TSTReqPartPriceID = "TST-PR-2026-9204",
+                    TSTSentDate = DateTime.Today.AddHours(-3),
+                    DMSStatus = DMSReqPartPriceStatus.Sent,
+                    TSTStatus = TSTReqPartPriceStatus.Processing,
+                    FlagIsCheck = true,
+                    IsUpdatePrice = false,
+                    EstimatedResponseDate = DateTime.Today.AddDays(1),
+                    CreatedBy = "KTV Đạt",
+                    CreatedAt = DateTime.Today.AddHours(-4),
+                    VIN = "KMHEC81BPA889900",
+                    CarModel = "Hyundai Creta 1.5 Cao Cấp",
+                    Items = [
+                        new PartPriceRequestLine
+                        {
+                            DMSPartCode = "96720-BV000",
+                            VieName = "Cụm cảm biến Radar sóng milimet cản trước (FCA/SCC)",
+                            VINCode = "KMHEC81BPA889900",
+                            DeliveryForm = PartPriceDeliveryForm.Air,
+                            Quantity = 1,
+                            Unit = "Cái",
+                            Remark = "Va quệt nứt vỡ mắt radar, hệ thống FCA báo lỗi không nhận diện khoảng cách",
+                            TSTPartCode = null,
+                            TSTPrice = 0,
+                            Status = ReqPartPriceLineStatus.Pending
+                        },
+                        new PartPriceRequestLine
+                        {
+                            DMSPartCode = "99211-BV000",
+                            VieName = "Giá đỡ & giắc điện cảm biến Radar",
+                            VINCode = "KMHEC81BPA889900",
+                            DeliveryForm = PartPriceDeliveryForm.Air,
+                            Quantity = 1,
+                            Unit = "Bộ",
+                            Remark = "Gãy chân ngàm cài giá đỡ cảm biến",
+                            TSTPartCode = null,
+                            TSTPrice = 0,
+                            Status = ReqPartPriceLineStatus.Pending
+                        }
+                    ]
+                },
+
+                // 4. Đề nghị mới lập tại xưởng (Draft / Pending)
+                new PartPriceRequest
+                {
+                    ReqPartPriceNo = $"RPP{DateTime.Today:yyMMdd}-004",
+                    DealerCode = "HTC-CG",
+                    DealerName = "Hyundai Cầu Giấy",
+                    Description = "Lập đề nghị báo giá giảm xóc điện tử điều khiển biến thiên ECS và rotuyn thanh cân bằng trước xe Palisade",
+                    DMSStatus = DMSReqPartPriceStatus.Draft,
+                    TSTStatus = TSTReqPartPriceStatus.Pending,
+                    FlagIsCheck = false,
+                    IsUpdatePrice = false,
+                    CreatedBy = "Thủ kho Tuấn",
+                    CreatedAt = DateTime.Today.AddMinutes(-45),
+                    VIN = "KMHMU81DPA654321",
+                    CarModel = "Hyundai Palisade 3.8 AWD",
+                    Items = [
+                        new PartPriceRequestLine
+                        {
+                            DMSPartCode = "54651-S8000",
+                            VieName = "Giảm xóc điện tử trước bên phải (ECS Strut FR-RH)",
+                            VINCode = "KMHMU81DPA654321",
+                            DeliveryForm = PartPriceDeliveryForm.Regular,
+                            Quantity = 1,
+                            Unit = "Cây",
+                            Remark = "Chảy dầu phớt ty giảm xóc, qua gờ giảm tốc có tiếng lọc cọc",
+                            TSTPartCode = null,
+                            TSTPrice = 0,
+                            Status = ReqPartPriceLineStatus.Pending
+                        },
+                        new PartPriceRequestLine
+                        {
+                            DMSPartCode = "54830-S8000",
+                            VieName = "Rotuyn thanh cân bằng trước (Link Assy-Front)",
+                            VINCode = "KMHMU81DPA654321",
+                            DeliveryForm = PartPriceDeliveryForm.Regular,
+                            Quantity = 2,
+                            Unit = "Cái",
+                            Remark = "Rách chụp cao su chắn bụi và rơ lỏng khớp cầu",
+                            TSTPartCode = null,
+                            TSTPrice = 0,
+                            Status = ReqPartPriceLineStatus.Pending
+                        }
+                    ]
+                }
+            };
+
+            db.PartPriceRequests.AddRange(requests);
+            await db.SaveChangesAsync();
+        }
     }
 
 
@@ -3672,7 +3883,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -3728,6 +3939,10 @@ public static class Seeder
             "CREATE INDEX IF NOT EXISTS \"IX_CustomerGroupMembers_OrgId_CustomerGroupId\" ON miniservice.\"CustomerGroupMembers\" (\"OrgId\", \"CustomerGroupId\")",
             "CREATE INDEX IF NOT EXISTS \"IX_CustomerGroupMembers_OrgId_CarId\" ON miniservice.\"CustomerGroupMembers\" (\"OrgId\", \"CarId\")",
             "CREATE INDEX IF NOT EXISTS \"IX_CustomerGroupMembers_OrgId_PlateNo\" ON miniservice.\"CustomerGroupMembers\" (\"OrgId\", \"PlateNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"PartPriceRequests\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ReqPartPriceNo\" text NOT NULL, \"DealerCode\" text NOT NULL, \"DealerName\" text NOT NULL, \"Description\" text NOT NULL, \"TSTReqPartPriceID\" text NULL, \"TSTSentDate\" timestamp NULL, \"DMSStatus\" integer NOT NULL, \"TSTStatus\" integer NOT NULL, \"FlagIsCheck\" boolean NOT NULL DEFAULT false, \"IsUpdatePrice\" boolean NOT NULL DEFAULT false, \"UpdatedPriceAt\" timestamp NULL, \"EffectiveDate\" timestamp NULL, \"EstimatedResponseDate\" timestamp NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ApprovedBy\" text NULL, \"ApprovedAt\" timestamp NULL, \"ROId\" integer NULL, \"VIN\" text NULL, \"CarModel\" text NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PartPriceRequests_OrgId_ReqPartPriceNo\" ON miniservice.\"PartPriceRequests\" (\"OrgId\", \"ReqPartPriceNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"PartPriceRequestLines\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"PartPriceRequestId\" integer NOT NULL, \"PartId\" integer NULL, \"DMSPartCode\" text NOT NULL, \"VieName\" text NOT NULL, \"VINCode\" text NULL, \"DeliveryForm\" integer NOT NULL, \"Quantity\" numeric(18,2) NOT NULL, \"Unit\" text NOT NULL, \"Remark\" text NULL, \"TSTPartCode\" text NULL, \"TSTPrice\" numeric(18,2) NOT NULL DEFAULT 0, \"DateEffect\" timestamp NULL, \"Status\" integer NOT NULL DEFAULT 0)",
+            "CREATE INDEX IF NOT EXISTS \"IX_PartPriceRequestLines_OrgId_PartPriceRequestId\" ON miniservice.\"PartPriceRequestLines\" (\"OrgId\", \"PartPriceRequestId\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -4858,7 +5073,53 @@ public static class Seeder
             );",
             @"CREATE INDEX IF NOT EXISTS ""IX_CustomerGroupMembers_OrgId_CustomerGroupId"" ON ""CustomerGroupMembers"" (""OrgId"", ""CustomerGroupId"");",
             @"CREATE INDEX IF NOT EXISTS ""IX_CustomerGroupMembers_OrgId_CarId"" ON ""CustomerGroupMembers"" (""OrgId"", ""CarId"");",
-            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerGroupMembers_OrgId_PlateNo"" ON ""CustomerGroupMembers"" (""OrgId"", ""PlateNo"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerGroupMembers_OrgId_PlateNo"" ON ""CustomerGroupMembers"" (""OrgId"", ""PlateNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""PartPriceRequests"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ReqPartPriceNo"" TEXT NOT NULL,
+                ""DealerCode"" TEXT NOT NULL,
+                ""DealerName"" TEXT NOT NULL,
+                ""Description"" TEXT NOT NULL,
+                ""TSTReqPartPriceID"" TEXT NULL,
+                ""TSTSentDate"" TEXT NULL,
+                ""DMSStatus"" INTEGER NOT NULL,
+                ""TSTStatus"" INTEGER NOT NULL,
+                ""FlagIsCheck"" INTEGER NOT NULL DEFAULT 0,
+                ""IsUpdatePrice"" INTEGER NOT NULL DEFAULT 0,
+                ""UpdatedPriceAt"" TEXT NULL,
+                ""EffectiveDate"" TEXT NULL,
+                ""EstimatedResponseDate"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ApprovedBy"" TEXT NULL,
+                ""ApprovedAt"" TEXT NULL,
+                ""ROId"" INTEGER NULL,
+                ""VIN"" TEXT NULL,
+                ""CarModel"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PartPriceRequests_OrgId_ReqPartPriceNo"" ON ""PartPriceRequests"" (""OrgId"", ""ReqPartPriceNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""PartPriceRequestLines"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PartPriceRequestId"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NULL,
+                ""DMSPartCode"" TEXT NOT NULL,
+                ""VieName"" TEXT NOT NULL,
+                ""VINCode"" TEXT NULL,
+                ""DeliveryForm"" INTEGER NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""Remark"" TEXT NULL,
+                ""TSTPartCode"" TEXT NULL,
+                ""TSTPrice"" TEXT NOT NULL DEFAULT '0',
+                ""DateEffect"" TEXT NULL,
+                ""Status"" INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (""PartPriceRequestId"") REFERENCES ""PartPriceRequests"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE INDEX IF NOT EXISTS ""IX_PartPriceRequestLines_OrgId_PartPriceRequestId"" ON ""PartPriceRequestLines"" (""OrgId"", ""PartPriceRequestId"");"
         };
 
         foreach (var sql in sqls)

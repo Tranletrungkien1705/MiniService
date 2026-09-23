@@ -588,5 +588,41 @@ public static class Ui
         if (currentDebt >= creditLimit * 0.8m) return ("Sắp chạm mức", "warning", "bi-exclamation-triangle-fill");
         return ("An toàn", "success", "bi-shield-check");
     }
+
+    public static (string text, string code, string css) DMSReqPartPriceStatus(DMSReqPartPriceStatus s) => s switch
+    {
+        Models.DMSReqPartPriceStatus.Draft => ("Mới tạo (Chờ gửi)", "DRAFT", "secondary"),
+        Models.DMSReqPartPriceStatus.Sent => ("Đã gửi NCC TST", "SENT", "warning"),
+        Models.DMSReqPartPriceStatus.Responded => ("NCC đã báo giá", "RESP", "info"),
+        Models.DMSReqPartPriceStatus.Approved => ("Đại lý đã duyệt giá", "APPR", "success"),
+        Models.DMSReqPartPriceStatus.Cancelled => ("Đã hủy đề nghị", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string code, string css) TSTReqPartPriceStatus(TSTReqPartPriceStatus s) => s switch
+    {
+        Models.TSTReqPartPriceStatus.Pending => ("Chờ tiếp nhận", "PEND", "secondary"),
+        Models.TSTReqPartPriceStatus.Processing => ("Đang thẩm định giá", "PROC", "warning"),
+        Models.TSTReqPartPriceStatus.Priced => ("Đã cấp báo giá", "PRICED", "success"),
+        Models.TSTReqPartPriceStatus.Rejected => ("Từ chối cấp giá", "REJ", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) PartPriceDeliveryForm(PartPriceDeliveryForm f) => f switch
+    {
+        Models.PartPriceDeliveryForm.VOR => ("Khẩn cấp xe nằm xưởng (VOR)", "bi-lightning-fill", "danger"),
+        Models.PartPriceDeliveryForm.Regular => ("Đặt hàng định kỳ (ĐHĐK)", "bi-calendar-check", "primary"),
+        Models.PartPriceDeliveryForm.Air => ("Đường hàng không hỏa tốc (Bay)", "bi-airplane", "info"),
+        Models.PartPriceDeliveryForm.Sea => ("Đường biển container (Tàu)", "bi-water", "secondary"),
+        _ => (f.ToString(), "bi-box", "secondary")
+    };
+
+    public static (string text, string code, string css) ReqPartPriceLineStatus(ReqPartPriceLineStatus s) => s switch
+    {
+        Models.ReqPartPriceLineStatus.Pending => ("Chờ giá", "PEND", "warning"),
+        Models.ReqPartPriceLineStatus.Priced => ("Đã có giá", "PRICED", "success"),
+        Models.ReqPartPriceLineStatus.Rejected => ("Hết hàng / Từ chối", "REJ", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
 }
 

@@ -71,6 +71,8 @@ public class AppDbContext : DbContext
     public DbSet<InsuranceDebitPayment> InsuranceDebitPayments => Set<InsuranceDebitPayment>();
     public DbSet<CustomerGroup> CustomerGroups => Set<CustomerGroup>();
     public DbSet<CustomerGroupMember> CustomerGroupMembers => Set<CustomerGroupMember>();
+    public DbSet<PartPriceRequest> PartPriceRequests => Set<PartPriceRequest>();
+    public DbSet<PartPriceRequestLine> PartPriceRequestLines => Set<PartPriceRequestLine>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -122,6 +124,7 @@ public class AppDbContext : DbContext
             e.HasMany(x => x.InsuranceClaims).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.PdiRequest).WithMany(x => x.RepairOrders).HasForeignKey(x => x.PdiRequestId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.CusDebits).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.PartPriceRequests).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -719,6 +722,29 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.CustomerGroup).WithMany(g => g.Members).HasForeignKey(x => x.CustomerGroupId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.Car).WithMany(c => c.GroupMemberships).HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany(c => c.GroupMemberships).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PartPriceRequest>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ReqPartPriceNo }).IsUnique();
+            e.Ignore(x => x.TotalItems);
+            e.Ignore(x => x.TotalPricedAmount);
+            e.Ignore(x => x.CanSend);
+            e.Ignore(x => x.CanSimulateResponse);
+            e.Ignore(x => x.CanApprove);
+            e.Ignore(x => x.CanCancel);
+            e.Ignore(x => x.CanCreateOrderPart);
+            e.Ignore(x => x.IsApproved);
+            e.HasOne(x => x.RO).WithMany(r => r.PartPriceRequests).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Items).WithOne(i => i.PartPriceRequest).HasForeignKey(i => i.PartPriceRequestId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PartPriceRequestLine>(e =>
+        {
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.TSTPrice).HasPrecision(18, 2);
+            e.Ignore(x => x.Amount);
+            e.HasOne(x => x.Part).WithMany(p => p.PartPriceRequestLines).HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

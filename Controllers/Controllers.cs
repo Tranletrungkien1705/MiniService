@@ -4684,3 +4684,238 @@ public class CustomerGroupController(IRoService svc) : Controller
         return View(group);
     }
 }
+
+public class PartPriceRequestController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(DMSReqPartPriceStatus? dmsStatus, TSTReqPartPriceStatus? tstStatus, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.DMSStatus = dmsStatus;
+        ViewBag.TSTStatus = tstStatus;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+
+        var list = await svc.PartPriceRequestsAsync(dmsStatus, tstStatus, q, fromDate, toDate);
+        var all = (dmsStatus == null && tstStatus == null && q == null && fromDate == null && toDate == null)
+            ? list
+            : await svc.PartPriceRequestsAsync(null, null, null, null, null);
+
+        ViewBag.TotalCount = all.Count;
+        ViewBag.DraftCount = all.Count(r => r.DMSStatus == DMSReqPartPriceStatus.Draft);
+        ViewBag.SentCount = all.Count(r => r.DMSStatus == DMSReqPartPriceStatus.Sent);
+        ViewBag.RespondedCount = all.Count(r => r.DMSStatus == DMSReqPartPriceStatus.Responded);
+        ViewBag.ApprovedCount = all.Count(r => r.DMSStatus == DMSReqPartPriceStatus.Approved);
+        ViewBag.CancelledCount = all.Count(r => r.DMSStatus == DMSReqPartPriceStatus.Cancelled);
+        ViewBag.VorCount = all.Count(r => r.FlagIsCheck || r.Items.Any(i => i.DeliveryForm == PartPriceDeliveryForm.VOR));
+
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.ROs = await svc.ROsForPartPriceRequestSelectAsync();
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.SelectedRoId = roId;
+
+        var model = new PartPriceRequest
+        {
+            DealerCode = "HTC-CG",
+            DealerName = "Hyundai Cầu Giấy",
+            CreatedBy = "Thủ kho Tuấn",
+            ROId = roId
+        };
+
+        if (roId.HasValue && roId.Value > 0)
+        {
+            var ro = await svc.GetROAsync(roId.Value);
+            if (ro != null)
+            {
+                model.VIN = ro.Car?.Vin;
+                model.CarModel = ro.Car?.Model;
+                model.Description = $"Đề nghị cung cấp đơn giá phụ tùng thay thế cho xe {ro.Car?.Plate} ({ro.Car?.Model}) theo RO {ro.Code}";
+            }
+        }
+
+        return View(model);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        string? reqPartPriceNo,
+        string? dealerCode,
+        string? dealerName,
+        string description,
+        bool flagIsCheck,
+        int? roId,
+        string? vin,
+        string? carModel,
+        string? createdBy,
+        int[]? partIds,
+        string[] dmsPartCodes,
+        string[] vieNames,
+        string[]? vinCodes,
+        PartPriceDeliveryForm[]? deliveryForms,
+        decimal[] quantities,
+        string[]? units,
+        string[]? remarks)
+    {
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            TempData["Error"] = "Vui lòng nhập lý do / diễn giải nội dung đề nghị báo giá.";
+            ViewBag.ROs = await svc.ROsForPartPriceRequestSelectAsync();
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+
+        if (dmsPartCodes == null || dmsPartCodes.Length == 0)
+        {
+            TempData["Error"] = "Vui lòng thêm ít nhất 01 dòng phụ tùng cần xin báo giá.";
+            ViewBag.ROs = await svc.ROsForPartPriceRequestSelectAsync();
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+
+        try
+        {
+            var request = new PartPriceRequest
+            {
+                ReqPartPriceNo = reqPartPriceNo?.Trim() ?? "",
+                DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? "HTC-CG" : dealerCode.Trim(),
+                DealerName = string.IsNullOrWhiteSpace(dealerName) ? "Hyundai Cầu Giấy" : dealerName.Trim(),
+                Description = description.Trim(),
+                FlagIsCheck = flagIsCheck,
+                ROId = (roId.HasValue && roId.Value > 0) ? roId : null,
+                VIN = vin?.Trim(),
+                CarModel = carModel?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Thủ kho" : createdBy.Trim()
+            };
+
+            var items = new List<PartPriceRequestLine>();
+            for (int i = 0; i < dmsPartCodes.Length; i++)
+            {
+                if (string.IsNullOrWhiteSpace(dmsPartCodes[i])) continue;
+                var partId = (partIds != null && partIds.Length > i && partIds[i] > 0) ? (int?)partIds[i] : null;
+                var vieName = (vieNames != null && vieNames.Length > i && !string.IsNullOrWhiteSpace(vieNames[i])) ? vieNames[i].Trim() : dmsPartCodes[i].Trim();
+                var vinCode = (vinCodes != null && vinCodes.Length > i && !string.IsNullOrWhiteSpace(vinCodes[i])) ? vinCodes[i].Trim() : request.VIN;
+                var form = (deliveryForms != null && deliveryForms.Length > i) ? deliveryForms[i] : (flagIsCheck ? PartPriceDeliveryForm.VOR : PartPriceDeliveryForm.Regular);
+                var qty = (quantities != null && quantities.Length > i && quantities[i] > 0) ? quantities[i] : 1;
+                var unit = (units != null && units.Length > i && !string.IsNullOrWhiteSpace(units[i])) ? units[i].Trim() : "Cái";
+                var rem = (remarks != null && remarks.Length > i) ? remarks[i]?.Trim() : null;
+
+                items.Add(new PartPriceRequestLine
+                {
+                    PartId = partId,
+                    DMSPartCode = dmsPartCodes[i].Trim().ToUpperInvariant(),
+                    VieName = vieName,
+                    VINCode = vinCode,
+                    DeliveryForm = form,
+                    Quantity = qty,
+                    Unit = unit,
+                    Remark = rem,
+                    Status = ReqPartPriceLineStatus.Pending
+                });
+            }
+
+            if (items.Count == 0)
+            {
+                TempData["Error"] = "Danh mục phụ tùng yêu cầu không hợp lệ. Vui lòng nhập mã và tên phụ tùng.";
+                ViewBag.ROs = await svc.ROsForPartPriceRequestSelectAsync();
+                ViewBag.Parts = await svc.PartsForSelectAsync();
+                return View();
+            }
+
+            var id = await svc.CreatePartPriceRequestAsync(request, items);
+            TempData["Success"] = $"Đã lập Đề nghị báo giá {request.ReqPartPriceNo} ({items.Count} hạng mục) thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.ROs = await svc.ROsForPartPriceRequestSelectAsync();
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var request = await svc.GetPartPriceRequestAsync(id);
+        if (request == null) return NotFound();
+        return View(request);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendTST(int id)
+    {
+        var (ok, msg) = await svc.SendPartPriceRequestToTSTAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SimulateResponse(int id, int[] lineIds, string[]? tstPartCodes, decimal[] tstPrices, DateTime[]? dateEffects)
+    {
+        if (lineIds == null || lineIds.Length == 0 || tstPrices == null || tstPrices.Length == 0)
+        {
+            TempData["Error"] = "Vui lòng nhập đơn giá phản hồi từ NCC.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var list = new List<(int lineId, string? tstPartCode, decimal tstPrice, DateTime dateEffect)>();
+        for (int i = 0; i < lineIds.Length; i++)
+        {
+            var code = (tstPartCodes != null && tstPartCodes.Length > i) ? tstPartCodes[i] : null;
+            var price = (tstPrices.Length > i) ? tstPrices[i] : 0;
+            var date = (dateEffects != null && dateEffects.Length > i && dateEffects[i] != default) ? dateEffects[i] : DateTime.Today;
+            list.Add((lineIds[i], code, price, date));
+        }
+
+        var (ok, msg) = await svc.SimulateTSTResponseAsync(id, list);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id, string? approvedBy, bool? syncToCatalog)
+    {
+        var (ok, msg) = await svc.ApprovePartPriceRequestAsync(id, approvedBy, syncToCatalog ?? true);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ConvertToOrder(int id, string? createdBy)
+    {
+        var (ok, msg, orderId) = await svc.ConvertToOrderPartAsync(id, createdBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (ok && orderId.HasValue)
+        {
+            return RedirectToAction("Detail", "OrderPart", new { id = orderId.Value });
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string? reason)
+    {
+        var (ok, msg) = await svc.CancelPartPriceRequestAsync(id, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeletePartPriceRequestAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var request = await svc.GetPartPriceRequestAsync(id);
+        if (request == null) return NotFound();
+        return View(request);
+    }
+}
+
