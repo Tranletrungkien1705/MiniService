@@ -5785,3 +5785,41 @@ public class DealerTargetController(IRoService svc) : Controller
         return result;
     }
 }
+/// <summary>Nhật ký thao tác Lệnh sửa chữa (audit log) — Ser_ROHistory trong idn.CarService.
+/// Tra cứu toàn bộ lịch sử: ai làm, lúc nào, ở trạng thái nào, ghi chú gì.</summary>
+public class RoHistoryController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? roId, ROStatus? status, string? q)
+    {
+        ViewBag.RoId = roId;
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.Summary = await svc.GetRoHistorySummaryAsync(roId);
+        var list = await svc.RoHistoriesAsync(roId, status, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var entry = await svc.GetRoHistoryAsync(id);
+        if (entry == null) return NotFound();
+        return View(entry);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int roId, ROStatus status, string? note, string? userCode)
+    {
+        if (roId <= 0) { TempData["Error"] = "Chọn lệnh sửa chữa (RO)."; return RedirectToAction(nameof(Index)); }
+        await svc.AddRoHistoryAsync(roId, status, note, userCode);
+        TempData["Success"] = "Đã ghi nhật ký thao tác.";
+        return RedirectToAction(nameof(Index), new { roId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id, int? roId)
+    {
+        var (ok, msg) = await svc.DeleteRoHistoryAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index), new { roId });
+    }
+}

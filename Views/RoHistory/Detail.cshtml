@@ -1,0 +1,76 @@
+@model RoHistory
+@{
+    ViewData["Title"] = $"Nhật ký thao tác RO #{Model.Id}";
+    var (stTxt, stCode, stCss) = Ui.Status(Model.Status);
+    var (icon, iconCss) = Ui.HistoryAction(Model.Status);
+}
+
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <h5 class="fw-bold mb-1">
+                            <i class="bi @icon text-@iconCss me-1"></i>
+                            Nhật ký thao tác <span class="badge bg-@stCss ms-1" title="@stCode">@stTxt</span>
+                        </h5>
+                        <div class="text-muted small">
+                            <i class="bi bi-clock me-1"></i>@Model.HistoryDate.ToString("HH:mm:ss dd/MM/yyyy")
+                            · <i class="bi bi-person me-1"></i>@(Model.UserCode ?? "—")
+                        </div>
+                    </div>
+                </div>
+                <div class="p-3 bg-light rounded border">
+                    <div class="text-muted small fw-semibold mb-1">Ghi chú thao tác</div>
+                    <div>@(string.IsNullOrWhiteSpace(Model.Note) ? "—" : Model.Note)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3">Lệnh sửa chữa liên quan</h6>
+                @if (Model.RO != null)
+                {
+                    var (roTxt, roCode, roCss) = Ui.Status(Model.RO.Status);
+                    <div class="p-2 bg-light rounded border small">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Mã RO:</span>
+                            <a href="/RO/Detail/@Model.RO.Id" class="fw-semibold text-decoration-none">@Model.RO.Code</a>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Biển số:</span>
+                            <span class="fw-semibold">@(Model.RO.Car?.Plate ?? "—")</span>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Trạng thái hiện tại:</span>
+                            <span class="badge bg-@roCss">@roCode</span>
+                        </div>
+                    </div>
+                    <a href="/RoHistory?roId=@Model.RO.Id" class="btn btn-sm btn-outline-primary w-100 mt-2">
+                        <i class="bi bi-list-ul me-1"></i>Xem toàn bộ nhật ký của RO này
+                    </a>
+                }
+                else
+                {
+                    <div class="text-muted small">RO #@Model.ROId không còn tồn tại.</div>
+                }
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-body">
+                <h6 class="fw-bold mb-2">Thao tác</h6>
+                <a href="/RoHistory" class="btn btn-sm btn-outline-secondary w-100 mb-2"><i class="bi bi-arrow-left me-1"></i>Về danh sách nhật ký</a>
+                <form method="post" action="/RoHistory/Delete/@Model.Id" onsubmit="return confirm('Xóa dòng nhật ký này?')">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="roId" value="@Model.ROId" />
+                    <button type="submit" class="btn btn-sm btn-outline-danger w-100"><i class="bi bi-trash me-1"></i>Xóa dòng nhật ký</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

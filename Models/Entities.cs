@@ -588,6 +588,7 @@ public class RepairOrder : IOrgOwned
     public DateTime? PlanedDeliveryDate { get; set; }
     public string? DeliveryDateRemark { get; set; }       // Lý do điều chỉnh ngày hẹn giao xe (Remark)
     public List<RoDeliveryDateHistory> DeliveryDateHistories { get; set; } = [];
+    public List<RoHistory> Histories { get; set; } = [];
 
     // Nhắc bảo dưỡng định kỳ (Ser_RO.ReminderMaintanceDate / ReminderMaintanceKm / WorkDoneSoon / MemberNo)
     // Cập nhật qua nghiệp vụ Ser_RO_Update_Maintance_DL — chỉ cho phép khi RO chưa Paid/Finished.
@@ -3108,4 +3109,29 @@ public class CusServiceFactorSummaryDto
     public decimal AvgFactor { get; set; }
     public decimal MinFactor { get; set; }
     public decimal MaxFactor { get; set; }
+}
+
+/// <summary>Nhật ký thao tác trên Lệnh sửa chữa (audit log) — Ser_ROHistory trong idn.CarService.
+/// Mỗi lần tạo / cập nhật / chuyển trạng thái / hủy RO đều ghi 1 dòng: ai làm, lúc nào, ở trạng thái nào, ghi chú gì.
+/// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH).</summary>
+public class RoHistory : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ROId { get; set; }                             // Lệnh sửa chữa (ROID)
+    public RepairOrder? RO { get; set; }
+    public ROStatus Status { get; set; }                      // Trạng thái RO tại thời điểm thao tác (Status)
+    public DateTime HistoryDate { get; set; } = DateTime.Now; // Ngày thao tác (HistoryDate)
+    public string? UserCode { get; set; }                     // Người thao tác (UserCode)
+    public string? Note { get; set; }                         // Ghi chú / diễn giải thao tác (Note)
+}
+
+/// <summary>DTO tổng hợp nhật ký thao tác RO — phục vụ màn hình tra cứu lịch sử.</summary>
+public class RoHistorySummaryDto
+{
+    public int TotalEntries { get; set; }
+    public int RejectCount { get; set; }                      // Số lần RO bị hủy (REJ)
+    public int DistinctStatusCount { get; set; }              // Số trạng thái khác nhau đã đi qua
+    public DateTime? FirstEntryAt { get; set; }
+    public DateTime? LastEntryAt { get; set; }
 }

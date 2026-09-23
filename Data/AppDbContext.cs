@@ -86,6 +86,7 @@ public class AppDbContext : DbContext
     public DbSet<RoDeliveryDateHistory> RoDeliveryDateHistories => Set<RoDeliveryDateHistory>();
     public DbSet<CustomerType> CustomerTypes => Set<CustomerType>();
     public DbSet<CusServiceFactor> CusServiceFactors => Set<CusServiceFactor>();
+    public DbSet<RoHistory> RoHistories => Set<RoHistory>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -129,6 +130,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Bulletin).WithMany(x => x.AppliedROs).HasForeignKey(x => x.BulletinId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.MaintenanceSetting).WithMany(x => x.RepairOrders).HasForeignKey(x => x.MaintenanceSettingId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.DeliveryDateHistories).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(x => x.Histories).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Cascade);
             e.Property(x => x.ReminderMaintanceKm).HasPrecision(18, 0);
             e.HasMany(x => x.WarrantyReports).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.StockOuts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
@@ -879,6 +881,13 @@ public class AppDbContext : DbContext
             e.Property(x => x.Factor).HasPrecision(9, 4);
             e.HasOne(x => x.ServiceItem).WithMany().HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.CustomerType).WithMany(t => t.ServiceFactors).HasForeignKey(x => x.CustomerTypeId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<RoHistory>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ROId });
+            e.HasIndex(x => new { x.OrgId, x.Status });
+            e.HasOne(x => x.RO).WithMany(r => r.Histories).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Cascade);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

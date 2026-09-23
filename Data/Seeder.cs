@@ -4929,6 +4929,43 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        // Nhật ký thao tác RO (Ser_ROHistory) — sinh lịch sử mẫu cho các RO đang có
+        if (!await db.RoHistories.AnyAsync())
+        {
+            var ros = await db.ROs.OrderBy(r => r.Id).ToListAsync();
+            var histories = new List<RoHistory>();
+            foreach (var ro in ros)
+            {
+                var baseTime = ro.CreatedAt;
+                histories.Add(new RoHistory { ROId = ro.Id, Status = ROStatus.Created, HistoryDate = baseTime, UserCode = "CVDV.Lan", Note = "Tạo Báo giá" });
+                histories.Add(new RoHistory { ROId = ro.Id, Status = ROStatus.Printed, HistoryDate = baseTime.AddMinutes(15), UserCode = "CVDV.Lan", Note = "In báo giá, chờ khách ký xác nhận" });
+                if (ro.Status is ROStatus.InGarage or ROStatus.Repaired or ROStatus.CheckEnd or ROStatus.Paid or ROStatus.Finished)
+                {
+                    histories.Add(new RoHistory { ROId = ro.Id, Status = ROStatus.HasRO, HistoryDate = baseTime.AddHours(1), UserCode = "CVDV.Lan", Note = "Lập lệnh sửa chữa chính thức" });
+                    histories.Add(new RoHistory { ROId = ro.Id, Status = ROStatus.InGarage, HistoryDate = baseTime.AddHours(2), UserCode = "KTV.Hùng", Note = "Xe vào xưởng, bắt đầu thi công" });
+                }
+                if (ro.Status is ROStatus.Paid or ROStatus.Finished)
+                {
+                    histories.Add(new RoHistory { ROId = ro.Id, Status = ROStatus.Repaired, HistoryDate = baseTime.AddHours(5), UserCode = "KTV.Hùng", Note = "Sửa xong, chờ kiểm tra chất lượng" });
+                    histories.Add(new RoHistory { ROId = ro.Id, Status = ROStatus.CheckEnd, HistoryDate = baseTime.AddHours(6), UserCode = "KCS.Tuấn", Note = "Kiểm tra chất lượng đạt yêu cầu" });
+                    histories.Add(new RoHistory { ROId = ro.Id, Status = ROStatus.Paid, HistoryDate = baseTime.AddHours(7), UserCode = "ThuNgân.Mai", Note = "Khách đã thanh toán" });
+                }
+                if (ro.Status == ROStatus.Finished)
+                {
+                    histories.Add(new RoHistory { ROId = ro.Id, Status = ROStatus.Finished, HistoryDate = baseTime.AddHours(8), UserCode = "CVDV.Lan", Note = "Giao xe, hoàn tất lệnh sửa chữa" });
+                }
+                if (ro.Status == ROStatus.Rejected)
+                {
+                    histories.Add(new RoHistory { ROId = ro.Id, Status = ROStatus.Rejected, HistoryDate = baseTime.AddHours(1), UserCode = "CVDV.Lan", Note = "Khách từ chối báo giá, hủy lệnh" });
+                }
+            }
+            if (histories.Count > 0)
+            {
+                db.RoHistories.AddRange(histories);
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private readonly record struct WarrantyPhotoType_Seed(string Code, string Name);
@@ -4981,7 +5018,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -5099,6 +5136,9 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WarrantyTypes_OrgId_TypeCode_DetailCode\" ON miniservice.\"WarrantyTypes\" (\"OrgId\", \"TypeCode\", \"DetailCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"WarrantyTypePhotos\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"WarrantyTypeId\" integer NOT NULL, \"ROWPTCode\" text NOT NULL, \"ROWPTName\" text NULL)",
             "CREATE INDEX IF NOT EXISTS \"IX_WarrantyTypePhotos_OrgId_WarrantyTypeId\" ON miniservice.\"WarrantyTypePhotos\" (\"OrgId\", \"WarrantyTypeId\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"RoHistories\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ROId\" integer NOT NULL, \"Status\" integer NOT NULL, \"HistoryDate\" timestamp NOT NULL DEFAULT now(), \"UserCode\" text NULL, \"Note\" text NULL)",
+            "CREATE INDEX IF NOT EXISTS \"IX_RoHistories_OrgId_ROId\" ON miniservice.\"RoHistories\" (\"OrgId\", \"ROId\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_RoHistories_OrgId_Status\" ON miniservice.\"RoHistories\" (\"OrgId\", \"Status\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -6584,7 +6624,19 @@ public static class Seeder
                 FOREIGN KEY (""ServiceItemId"") REFERENCES ""ServiceItems"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""CustomerTypeId"") REFERENCES ""CustomerTypes"" (""Id"") ON DELETE CASCADE
             );",
-            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CusServiceFactors_OrgId_ServiceItemId_CustomerTypeId"" ON ""CusServiceFactors"" (""OrgId"", ""ServiceItemId"", ""CustomerTypeId"");"
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CusServiceFactors_OrgId_ServiceItemId_CustomerTypeId"" ON ""CusServiceFactors"" (""OrgId"", ""ServiceItemId"", ""CustomerTypeId"");",
+            @"CREATE TABLE IF NOT EXISTS ""RoHistories"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ROId"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL DEFAULT 0,
+                ""HistoryDate"" TEXT NOT NULL,
+                ""UserCode"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE CASCADE
+            );",
+            @"CREATE INDEX IF NOT EXISTS ""IX_RoHistories_OrgId_ROId"" ON ""RoHistories"" (""OrgId"", ""ROId"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_RoHistories_OrgId_Status"" ON ""RoHistories"" (""OrgId"", ""Status"");"
         };
 
         foreach (var sql in sqls)

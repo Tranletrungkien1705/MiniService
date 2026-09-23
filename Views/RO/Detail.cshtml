@@ -303,6 +303,34 @@
 
         <div class="card mb-3"><div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-clock-history text-secondary me-1"></i>Nhật ký thao tác (Audit Log)</h6>
+                <a href="/RoHistory?roId=@Model.Id" class="btn btn-sm btn-outline-secondary"><i class="bi bi-list-ul me-1"></i>Tất cả</a>
+            </div>
+            @if (Model.Histories.Count > 0)
+            {
+                <div class="list-group list-group-flush small">
+                    @foreach (var h in Model.Histories.OrderByDescending(x => x.HistoryDate).ThenByDescending(x => x.Id).Take(6))
+                    {
+                        var (htxt, hcode, hcss) = Ui.Status(h.Status);
+                        var (hicon, _) = Ui.HistoryAction(h.Status);
+                        <a href="/RoHistory/Detail/@h.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold"><i class="bi @hicon me-1"></i>@(string.IsNullOrWhiteSpace(h.Note) ? htxt : h.Note)</div>
+                                <div class="text-muted" style="font-size:11px">@h.HistoryDate.ToString("dd/MM/yyyy HH:mm") · @(h.UserCode ?? "—")</div>
+                            </div>
+                            <span class="badge bg-@hcss">@hcode</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small">Chưa có nhật ký thao tác cho lệnh này.</div>
+            }
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="fw-bold mb-0"><i class="bi bi-cash-coin text-success me-1"></i>Thu ngân &amp; Thanh toán</h6>
                 <a href="/Payment/Create?roId=@Model.Id" class="btn btn-sm btn-outline-success"><i class="bi bi-plus-lg me-1"></i>Lập phiếu thu</a>
             </div>

@@ -704,5 +704,23 @@ public static class Ui
         > 1m => ($"Tăng giá (×{factor:0.####})", "warning"),
         _ => ("Giá gốc (×1)", "secondary")
     };
+
+    /// <summary>Biểu tượng hành động cho một dòng nhật ký thao tác RO (Ser_ROHistory).</summary>
+    public static (string icon, string css) HistoryAction(ROStatus s) => s switch
+    {
+        ROStatus.Created => ("bi-plus-circle", "secondary"),
+        ROStatus.Printed => ("bi-printer", "secondary"),
+        ROStatus.Wait4Part => ("bi-hourglass-split", "warning"),
+        ROStatus.HasPart => ("bi-box-seam", "info"),
+        ROStatus.HasRO => ("bi-clipboard2-check", "info"),
+        ROStatus.InGarage => ("bi-wrench-adjustable", "primary"),
+        ROStatus.Repaired => ("bi-check2-circle", "primary"),
+        ROStatus.CheckEnd => ("bi-shield-check", "info"),
+        ROStatus.Paid => ("bi-cash-coin", "success"),
+        ROStatus.Finished => ("bi-flag-fill", "success"),
+        ROStatus.Rejected => ("bi-x-octagon", "danger"),
+        ROStatus.NotResponding => ("bi-telephone-x", "dark"),
+        _ => ("bi-dot", "secondary")
+    };
 }
 

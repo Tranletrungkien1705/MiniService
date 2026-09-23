@@ -455,6 +455,12 @@ public interface IRoService
     Task<(bool ok, string msg)> SaveCusServiceFactorAsync(int serviceItemId, int customerTypeId, decimal factor, string? dealerCode, string? user);
     Task<(bool ok, string msg)> ResetCusServiceFactorAsync(int serviceItemId, int customerTypeId);
     Task<decimal> ResolveServicePriceAsync(int serviceItemId, int? customerTypeId);
+    // RO History — Nhật ký thao tác Lệnh sửa chữa (Ser_ROHistory)
+    Task<List<RoHistory>> RoHistoriesAsync(int? roId, ROStatus? status, string? q);
+    Task<RoHistory?> GetRoHistoryAsync(int id);
+    Task<RoHistorySummaryDto> GetRoHistorySummaryAsync(int? roId);
+    Task<int> AddRoHistoryAsync(int roId, ROStatus status, string? note, string? userCode);
+    Task<(bool ok, string msg)> DeleteRoHistoryAsync(int id);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -693,6 +699,7 @@ public class RoService(AppDbContext db) : IRoService
           .Include(r => r.CustomerGroup)
           .Include(r => r.Bulletin).ThenInclude(b => b!.Items)
           .Include(r => r.TechnicalLibraries)
+          .Include(r => r.Histories)
           .FirstOrDefaultAsync(r => r.Id == id);
 
     public async Task<int> CreateROAsync(RepairOrder ro)
@@ -712,6 +719,16 @@ public class RoService(AppDbContext db) : IRoService
         }
 
         db.ROs.Add(ro);
+        await db.SaveChangesAsync();
+        // Ghi nhật ký thao tác — tạo Báo giá (Ser_ROHistory, tương đương InsertToROHistory "Tạo Báo giá")
+        db.RoHistories.Add(new RoHistory
+        {
+            ROId = ro.Id,
+            Status = ROStatus.Created,
+            HistoryDate = DateTime.Now,
+            UserCode = string.IsNullOrWhiteSpace(ro.CreatedBy) ? "system" : ro.CreatedBy,
+            Note = "Tạo Báo giá"
+        });
         await db.SaveChangesAsync();
         return ro.Id;
     }
@@ -867,6 +884,16 @@ public class RoService(AppDbContext db) : IRoService
             }
         }
         await db.SaveChangesAsync();
+        // Ghi nhật ký thao tác — chuyển trạng thái RO (Ser_ROHistory)
+        db.RoHistories.Add(new RoHistory
+        {
+            ROId = ro.Id,
+            Status = to,
+            HistoryDate = DateTime.Now,
+            UserCode = "system",
+            Note = $"Chuyển trạng thái: {Ui.Status(ro.Status).text} → {Ui.Status(to).text}"
+        });
+        await db.SaveChangesAsync();
         return (true, $"Đã chuyển sang: {Ui.Status(to).text}.");
     }
 
@@ -887,7 +914,6 @@ public class RoService(AppDbContext db) : IRoService
         await db.SaveChangesAsync();
         return (true, "Đã xóa RO.");
     }
-
     /// <summary>Cập nhật Nhắc bảo dưỡng định kỳ trên RO — Ser_RO_Update_Maintance_DL trong idn.CarService.
     /// Chỉ cho phép khi RO chưa ở trạng thái Paid/Finished. Đồng bộ ngày khuyến nghị sang các phiếu
     /// Nhắc bảo dưỡng (Ser_CustomerCareMace) đang gắn với RO này.</summary>
@@ -10045,6 +10071,66 @@ public class RoService(AppDbContext db) : IRoService
             }
         }
         return Math.Round(svc.Price * factor, 0);
+    }
+
+    // --- RO History — Nhật ký thao tác Lệnh sửa chữa (Ser_ROHistory) ---
+    public async Task<List<RoHistory>> RoHistoriesAsync(int? roId, ROStatus? status, string? q)
+    {
+        var query = db.RoHistories.Include(h => h.RO).ThenInclude(r => r!.Car).AsQueryable();
+        if (roId.HasValue && roId.Value > 0) query = query.Where(h => h.ROId == roId.Value);
+        if (status.HasValue) query = query.Where(h => h.Status == status.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim();
+            query = query.Where(h =>
+                (h.Note != null && h.Note.Contains(term)) ||
+                (h.UserCode != null && h.UserCode.Contains(term)) ||
+                (h.RO != null && h.RO.Code.Contains(term)));
+        }
+        return await query.OrderByDescending(h => h.HistoryDate).ThenByDescending(h => h.Id).ToListAsync();
+    }
+
+    public Task<RoHistory?> GetRoHistoryAsync(int id) =>
+        db.RoHistories.Include(h => h.RO).ThenInclude(r => r!.Car).FirstOrDefaultAsync(h => h.Id == id);
+
+    public async Task<RoHistorySummaryDto> GetRoHistorySummaryAsync(int? roId)
+    {
+        var query = db.RoHistories.AsQueryable();
+        if (roId.HasValue && roId.Value > 0) query = query.Where(h => h.ROId == roId.Value);
+        var list = await query.ToListAsync();
+        return new RoHistorySummaryDto
+        {
+            TotalEntries = list.Count,
+            RejectCount = list.Count(h => h.Status == ROStatus.Rejected),
+            DistinctStatusCount = list.Select(h => h.Status).Distinct().Count(),
+            FirstEntryAt = list.Count > 0 ? list.Min(h => h.HistoryDate) : null,
+            LastEntryAt = list.Count > 0 ? list.Max(h => h.HistoryDate) : null
+        };
+    }
+
+    /// <summary>Ghi 1 dòng nhật ký thao tác RO — tương đương InsertToROHistory trong idn.CarService.</summary>
+    public async Task<int> AddRoHistoryAsync(int roId, ROStatus status, string? note, string? userCode)
+    {
+        var entry = new RoHistory
+        {
+            ROId = roId,
+            Status = status,
+            HistoryDate = DateTime.Now,
+            Note = note,
+            UserCode = userCode ?? "system"
+        };
+        db.RoHistories.Add(entry);
+        await db.SaveChangesAsync();
+        return entry.Id;
+    }
+
+    public async Task<(bool ok, string msg)> DeleteRoHistoryAsync(int id)
+    {
+        var entry = await db.RoHistories.FirstOrDefaultAsync(h => h.Id == id);
+        if (entry == null) return (false, "Không tìm thấy dòng nhật ký.");
+        db.RoHistories.Remove(entry);
+        await db.SaveChangesAsync();
+        return (true, "Đã xóa dòng nhật ký thao tác.");
     }
 }
 

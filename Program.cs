@@ -58,6 +58,76 @@ app.MapPost("/api/ro/{id:int}/maintenance-reminder", async (int id, UpdateMainte
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Nhật ký thao tác Lệnh sửa chữa (Ser_ROHistory)
+app.MapGet("/api/ro-histories", async (int? roId, ROStatus? status, string? q, IRoService svc) =>
+{
+    var list = await svc.RoHistoriesAsync(roId, status, q);
+    return Results.Ok(list.Select(h => new
+    {
+        h.Id,
+        h.ROId,
+        roCode = h.RO?.Code,
+        plate = h.RO?.Car?.Plate,
+        status = Ui.Status(h.Status).text,
+        statusCode = Ui.Status(h.Status).code,
+        statusValue = (int)h.Status,
+        h.HistoryDate,
+        h.UserCode,
+        h.Note
+    }));
+});
+
+app.MapGet("/api/ro-histories/summary", async (int? roId, IRoService svc) =>
+{
+    var s = await svc.GetRoHistorySummaryAsync(roId);
+    return Results.Ok(new
+    {
+        s.TotalEntries,
+        s.RejectCount,
+        s.DistinctStatusCount,
+        s.FirstEntryAt,
+        s.LastEntryAt
+    });
+});
+
+app.MapGet("/api/ro-histories/{id:int}", async (int id, IRoService svc) =>
+{
+    var h = await svc.GetRoHistoryAsync(id);
+    if (h == null) return Results.NotFound(new { error = "Không tìm thấy dòng nhật ký." });
+    return Results.Ok(new
+    {
+        h.Id,
+        h.ROId,
+        ro = h.RO != null ? new { h.RO.Id, h.RO.Code, h.RO.Status, plate = h.RO.Car?.Plate } : null,
+        status = Ui.Status(h.Status).text,
+        statusCode = Ui.Status(h.Status).code,
+        statusValue = (int)h.Status,
+        h.HistoryDate,
+        h.UserCode,
+        h.Note
+    });
+});
+
+app.MapPost("/api/ro-histories", async (CreateRoHistoryDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.RoId <= 0) return Results.BadRequest(new { error = "Cần chọn lệnh sửa chữa (RoId)." });
+        var id = await svc.AddRoHistoryAsync(dto.RoId, dto.Status, dto.Note, dto.UserCode ?? "api");
+        return Results.Ok(new { roHistoryId = id, message = "Đã ghi nhật ký thao tác RO." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapDelete("/api/ro-histories/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteRoHistoryAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 // API danh mục phụ tùng & tồn kho
 app.MapGet("/api/parts", async (string? q, bool? lowStock, IRoService svc) =>
 {
@@ -5983,6 +6053,7 @@ app.Run();
 
 record RegisterOrgDto(string Name);
 record UpdateMaintenanceReminderDto(DateTime? ReminderDate, int? ReminderKm, bool WorkDoneSoon, string? MemberNo, string? UpdatedBy);
+record CreateRoHistoryDto(int RoId, ROStatus Status, string? Note, string? UserCode);
 record AdjustStockDto(decimal Quantity, string? Mode, string? Note);
 record CreateWarrantyDto(int RoId, string IssueDesc, string DiagResult, string? ErrorCodeCD, string? ErrorCodePN, int? PartIdError, string? CreatedBy);
 record TransitionWarrantyDto(WarrantyStatus ToStatus, decimal? ApprovedAmount, string? Note);
