@@ -3619,6 +3619,222 @@ public class PartOOController(IRoService svc) : Controller
     }
 }
 
+public class CusDebitController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? onlyHasDebit, CusDebitStatus? status, CusDebitType? type, string? tab)
+    {
+        ViewBag.Q = q;
+        ViewBag.OnlyHasDebit = onlyHasDebit;
+        ViewBag.Status = status;
+        ViewBag.Type = type;
+        ViewBag.ActiveTab = string.IsNullOrWhiteSpace(tab) ? "summaries" : tab.Trim();
+
+        var summaries = await svc.CustomerDebitSummariesAsync(q, onlyHasDebit);
+        var debits = await svc.CusDebitsAsync(null, status, type, q, null, null, null);
+
+        // Overall stats
+        var allSummaries = (q == null && onlyHasDebit == null) ? summaries : await svc.CustomerDebitSummariesAsync(null, null);
+        ViewBag.TotalDebitAmount = allSummaries.Sum(s => s.TotalDebitAmount);
+        ViewBag.TotalPaidAmount = allSummaries.Sum(s => s.TotalPaidAmount);
+        ViewBag.TotalRemainingDebit = allSummaries.Sum(s => s.RemainingDebit);
+        ViewBag.CustomersWithDebitCount = allSummaries.Count(s => s.HasDebit);
+        ViewBag.OverdueDebitCount = allSummaries.Sum(s => s.OverdueDebitCount);
+
+        ViewBag.Summaries = summaries;
+        ViewBag.Debits = debits;
+
+        return View();
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        try
+        {
+            var profile = await svc.GetCustomerDebitProfileAsync(id);
+            return View(profile);
+        }
+        catch
+        {
+            return NotFound();
+        }
+    }
+
+    public async Task<IActionResult> DebitDetail(int id)
+    {
+        var debit = await svc.GetCusDebitAsync(id);
+        if (debit == null) return NotFound();
+        return View(debit);
+    }
+
+    public async Task<IActionResult> Create(int? customerId, int? roId)
+    {
+        ViewBag.Customers = await svc.CustomersForDebitSelectAsync();
+        ViewBag.ROs = await svc.ROsWithUnpaidBalanceAsync();
+        ViewBag.CustomerId = customerId;
+        ViewBag.ROId = roId;
+
+        if (roId.HasValue && roId.Value > 0)
+        {
+            var ro = await svc.GetROAsync(roId.Value);
+            if (ro != null)
+            {
+                ViewBag.CustomerId = ro.CustomerId;
+                ViewBag.SuggestedAmount = ro.RemainingBalance;
+                ViewBag.RO = ro;
+            }
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int customerId, int? carId, int? roId, CusDebitType debitType, decimal debitAmount, DateTime? debitDate, DateTime? dueDate, string? description, string? createdBy)
+    {
+        if (customerId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn khách hàng.";
+            return RedirectToAction(nameof(Create), new { customerId, roId });
+        }
+
+        if (debitAmount <= 0)
+        {
+            TempData["Error"] = "Số tiền công nợ phải lớn hơn 0.";
+            return RedirectToAction(nameof(Create), new { customerId, roId });
+        }
+
+        try
+        {
+            var debit = new CusDebit
+            {
+                CustomerId = customerId,
+                CarId = (carId.HasValue && carId.Value > 0) ? carId : null,
+                ROId = (roId.HasValue && roId.Value > 0) ? roId : null,
+                DebitType = debitType,
+                DebitAmount = debitAmount,
+                DebitDate = debitDate ?? DateTime.Today,
+                DueDate = dueDate ?? DateTime.Today.AddDays(30),
+                Description = description?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "CVDV" : createdBy.Trim()
+            };
+
+            var id = await svc.CreateCusDebitAsync(debit);
+            TempData["Success"] = $"Đã ghi nhận khoản công nợ {debit.DebitNo} số tiền {debit.DebitAmount:N0} đ thành công.";
+            return RedirectToAction(nameof(Detail), new { id = customerId });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { customerId, roId });
+        }
+    }
+
+    public async Task<IActionResult> CreatePayment(int? customerId, int? debitId)
+    {
+        ViewBag.Customers = await svc.CustomersForDebitSelectAsync();
+        ViewBag.CustomerId = customerId;
+        ViewBag.DebitId = debitId;
+
+        if (debitId.HasValue && debitId.Value > 0)
+        {
+            var debit = await svc.GetCusDebitAsync(debitId.Value);
+            if (debit != null)
+            {
+                ViewBag.Debit = debit;
+                ViewBag.CustomerId = debit.CustomerId;
+                ViewBag.CustomerName = debit.Customer.Name;
+                ViewBag.SuggestedAmount = debit.RemainAmount;
+            }
+        }
+        else if (customerId.HasValue && customerId.Value > 0)
+        {
+            var profile = await svc.GetCustomerDebitProfileAsync(customerId.Value);
+            ViewBag.Customer = profile.customer;
+            ViewBag.SuggestedAmount = profile.remainingDebit;
+            ViewBag.CustomerDebits = profile.debits.Where(d => d.Status == CusDebitStatus.Active && d.RemainAmount > 0).ToList();
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreatePayment(int customerId, int? debitId, decimal paymentAmount, DateTime? paymentDate, PaymentMethod method, string? payPersonName, string? payPersonIdCard, string? payPersonPhone, string? transactionRef, string? note, string? collector)
+    {
+        if (customerId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn khách hàng nộp tiền.";
+            return RedirectToAction(nameof(CreatePayment), new { customerId, debitId });
+        }
+
+        if (paymentAmount <= 0)
+        {
+            TempData["Error"] = "Số tiền thu nợ phải lớn hơn 0.";
+            return RedirectToAction(nameof(CreatePayment), new { customerId, debitId });
+        }
+
+        try
+        {
+            var payment = new CusDebitPayment
+            {
+                CustomerId = customerId,
+                CusDebitId = (debitId.HasValue && debitId.Value > 0) ? debitId : null,
+                PaymentAmount = paymentAmount,
+                PaymentDate = paymentDate ?? DateTime.Today,
+                Method = method,
+                PayPersonName = payPersonName?.Trim() ?? "",
+                PayPersonIdCard = payPersonIdCard?.Trim(),
+                PayPersonPhone = payPersonPhone?.Trim(),
+                TransactionRef = transactionRef?.Trim(),
+                Note = note?.Trim(),
+                Collector = string.IsNullOrWhiteSpace(collector) ? "Thu ngân" : collector.Trim()
+            };
+
+            var id = await svc.CreateCusDebitPaymentAsync(payment);
+            TempData["Success"] = $"Đã lập phiếu thu nợ {payment.PaymentNo} số tiền {payment.PaymentAmount:N0} đ thành công.";
+            return RedirectToAction(nameof(Print), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(CreatePayment), new { customerId, debitId });
+        }
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var p = await svc.GetCusDebitPaymentAsync(id);
+        if (p == null) return NotFound();
+        return View(p);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeletePayment(int id, int? customerId)
+    {
+        var (ok, msg) = await svc.DeleteCusDebitPaymentAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (customerId.HasValue && customerId.Value > 0)
+            return RedirectToAction(nameof(Detail), new { id = customerId.Value });
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelDebit(int id, string reason, int? customerId)
+    {
+        var (ok, msg) = await svc.CancelCusDebitAsync(id, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (customerId.HasValue && customerId.Value > 0)
+            return RedirectToAction(nameof(Detail), new { id = customerId.Value });
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateFromRO(int roId, decimal? amount, DateTime? dueDate, string? note)
+    {
+        var (ok, msg, debitId) = await svc.CreateDebitFromROAsync(roId, amount, dueDate, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction("Detail", "RO", new { id = roId });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

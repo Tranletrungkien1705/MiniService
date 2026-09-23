@@ -1,0 +1,183 @@
+@model CusDebit
+@{
+    ViewData["Title"] = $"Chi tiết khoản nợ: {Model.DebitNo}";
+    var (stxt, scode, scss) = Ui.CusDebitStatus(Model.Status);
+    var (ttxt, ticon, tcss) = Ui.CusDebitType(Model.DebitType);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/CusDebit">Công nợ</a></li>
+                <li class="breadcrumb-item"><a href="/CusDebit/Detail/@Model.CustomerId">@Model.Customer.Name</a></li>
+                <li class="breadcrumb-item active">@Model.DebitNo</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0">
+            <i class="bi bi-wallet2 text-danger me-2"></i>Khoản nợ: @Model.DebitNo
+            <span class="badge bg-@scss ms-2">@stxt</span>
+            <span class="badge bg-@tcss ms-1"><i class="bi @ticon me-1"></i>@ttxt</span>
+        </h5>
+    </div>
+    <div class="d-flex gap-2">
+        @if (Model.CanPay)
+        {
+            <a href="/CusDebit/CreatePayment?debitId=@Model.Id" class="btn btn-success"><i class="bi bi-cash-coin me-1"></i>Lập phiếu thu nợ</a>
+        }
+        <a href="/CusDebit/Detail/@Model.CustomerId" class="btn btn-outline-primary"><i class="bi bi-person me-1"></i>Hồ sơ khách hàng</a>
+        <a href="/CusDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card h-100"><div class="card-body">
+            <div class="text-muted small">Số tiền nợ gốc</div>
+            <div class="stat-num text-primary" style="font-size:22px">@Model.DebitAmount.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">Ngày ghi nhận: @Model.DebitDate.ToString("dd/MM/yyyy")</div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100"><div class="card-body">
+            <div class="text-muted small">Đã thanh toán</div>
+            <div class="stat-num text-success" style="font-size:22px">@Model.PaidAmount.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">@Model.Payments.Count phiếu thu liên kết</div>
+        </div></div>
+    </div>
+    <div class="col-md-4">
+        <div class="card @(Model.RemainAmount > 0 ? "border-danger" : "border-success") h-100"><div class="card-body">
+            <div class="text-muted small">Dư nợ còn lại</div>
+            <div class="stat-num @(Model.RemainAmount > 0 ? "text-danger" : "text-success")" style="font-size:22px">@Model.RemainAmount.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">
+                @if (Model.DueDate.HasValue)
+                {
+                    <span class="@(Model.IsOverdue ? "text-danger fw-bold" : "text-muted")">
+                        Hạn thanh toán: @Model.DueDate.Value.ToString("dd/MM/yyyy")
+                        @(Model.IsOverdue ? " (ĐÃ QUÁ HẠN!)" : "")
+                    </span>
+                }
+                else
+                {
+                    <span class="text-muted">Không giới hạn ngày</span>
+                }
+            </div>
+        </div></div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-info-circle me-1"></i>Thông tin khoản ghi nợ</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Mã chứng từ nợ:</span>
+                    <span class="font-monospace fw-bold">@Model.DebitNo</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Khách hàng:</span>
+                    <a href="/CusDebit/Detail/@Model.CustomerId" class="fw-bold text-decoration-none">@Model.Customer.Name</a>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Số điện thoại:</span>
+                    <span>@(Model.Customer.Phone ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Xe sửa chữa:</span>
+                    <span>@(Model.Car != null ? $"{Model.Car.Plate} ({Model.Car.Model})" : "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Lệnh sửa chữa liên kết:</span>
+                    @if (Model.RO != null)
+                    {
+                        <a href="/RO/Detail/@Model.RO.Id" class="fw-semibold text-decoration-none">RO: @Model.RO.Code</a>
+                    }
+                    else
+                    {
+                        <span class="text-muted">—</span>
+                    }
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Người lập:</span>
+                    <span>@Model.CreatedBy</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Thời điểm lập:</span>
+                    <span>@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</span>
+                </div>
+                @if (Model.ClearedAt.HasValue)
+                {
+                    <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                        <span class="text-muted">Thời điểm tất toán:</span>
+                        <span class="text-success fw-semibold">@Model.ClearedAt.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                    </div>
+                }
+                <div class="mt-2">
+                    <span class="text-muted small">Diễn giải lý do ghi nợ:</span>
+                    <div class="p-2 bg-light rounded mt-1 small">@(string.IsNullOrWhiteSpace(Model.Description) ? "Không có ghi chú thêm." : Model.Description)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                <span class="fw-bold"><i class="bi bi-cash-stack me-1"></i>Các phiếu thu cấn trừ khoản nợ này (@Model.Payments.Count)</span>
+                @if (Model.CanPay)
+                {
+                    <a href="/CusDebit/CreatePayment?debitId=@Model.Id" class="btn btn-sm btn-success"><i class="bi bi-plus-lg me-1"></i>Thu nợ</a>
+                }
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light small">
+                            <tr>
+                                <th>Số phiếu</th>
+                                <th>Ngày thu</th>
+                                <th class="text-end">Số tiền</th>
+                                <th>Người nộp</th>
+                                <th>In</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (Model.Payments.Count == 0)
+                            {
+                                <tr>
+                                    <td colspan="5" class="text-center py-3 text-muted small">Chưa có phiếu thu nào cấn trừ trực tiếp vào khoản nợ này.</td>
+                                </tr>
+                            }
+                            @foreach (var p in Model.Payments)
+                            {
+                                <tr>
+                                    <td><a href="/CusDebit/Print/@p.Id" class="font-monospace fw-semibold text-decoration-none">@p.PaymentNo</a></td>
+                                    <td>@p.PaymentDate.ToString("dd/MM/yyyy")</td>
+                                    <td class="text-end fw-bold text-success">@p.PaymentAmount.ToString("N0")đ</td>
+                                    <td>@p.PayPersonName</td>
+                                    <td>
+                                        <a href="/CusDebit/Print/@p.Id" class="btn btn-sm btn-outline-secondary py-0" title="In phiếu thu"><i class="bi bi-printer"></i></a>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            @if (Model.Status == CusDebitStatus.Active && Model.PaidAmount == 0)
+            {
+                <div class="card-footer bg-white border-top">
+                    <form asp-action="CancelDebit" method="post" onsubmit="return confirm('Hủy khoản công nợ @Model.DebitNo?')">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <input type="hidden" name="customerId" value="@Model.CustomerId" />
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="reason" class="form-control" placeholder="Lý do hủy nợ..." required />
+                            <button type="submit" class="btn btn-outline-danger"><i class="bi bi-x-circle me-1"></i>Hủy khoản nợ</button>
+                        </div>
+                    </form>
+                </div>
+            }
+        </div>
+    </div>
+</div>

@@ -3888,6 +3888,241 @@ app.MapDelete("/api/part-oos/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Công nợ khách hàng dịch vụ (Ser_CusDebit, Ser_CusDebitPayment, Ser_InvReportCusDebitRpt - MH 54)
+app.MapGet("/api/cusdebits", async (int? customerId, CusDebitStatus? status, CusDebitType? type, string? q, bool? isOverdue, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.CusDebitsAsync(customerId, status, type, q, isOverdue, fromDate, toDate);
+    return Results.Ok(list.Select(d => new
+    {
+        d.Id,
+        d.DebitNo,
+        d.DebitDate,
+        d.CustomerId,
+        customerName = d.Customer?.Name,
+        customerPhone = d.Customer?.Phone,
+        d.CarId,
+        plate = d.Car?.Plate,
+        carModel = d.Car?.Model,
+        d.ROId,
+        roCode = d.RO?.Code,
+        type = Ui.CusDebitType(d.DebitType).text,
+        typeCode = (int)d.DebitType,
+        status = Ui.CusDebitStatus(d.Status).text,
+        statusCode = Ui.CusDebitStatus(d.Status).code,
+        statusValue = (int)d.Status,
+        d.DebitAmount,
+        d.PaidAmount,
+        d.RemainAmount,
+        d.DueDate,
+        d.IsOverdue,
+        d.CanPay,
+        d.Description,
+        d.CreatedBy,
+        d.CreatedAt,
+        d.ClearedAt
+    }));
+});
+
+app.MapGet("/api/cusdebits/summaries", async (string? q, bool? onlyHasDebit, IRoService svc) =>
+{
+    var list = await svc.CustomerDebitSummariesAsync(q, onlyHasDebit);
+    return Results.Ok(list);
+});
+
+app.MapGet("/api/cusdebits/customer/{customerId:int}", async (int customerId, IRoService svc) =>
+{
+    try
+    {
+        var (customer, debits, payments, totalDebit, totalPaid, remainingDebit) = await svc.GetCustomerDebitProfileAsync(customerId);
+        return Results.Ok(new
+        {
+            customer = new
+            {
+                customer.Id,
+                customer.Code,
+                customer.Name,
+                customer.Phone,
+                customer.Email,
+                cars = customer.Cars.Select(c => new { c.Id, c.Plate, c.Model, c.Vin, c.Year })
+            },
+            totalDebit,
+            totalPaid,
+            remainingDebit,
+            hasDebit = remainingDebit > 0,
+            debits = debits.Select(d => new
+            {
+                d.Id,
+                d.DebitNo,
+                d.DebitDate,
+                type = Ui.CusDebitType(d.DebitType).text,
+                typeValue = (int)d.DebitType,
+                status = Ui.CusDebitStatus(d.Status).text,
+                statusCode = Ui.CusDebitStatus(d.Status).code,
+                d.DebitAmount,
+                d.PaidAmount,
+                d.RemainAmount,
+                d.DueDate,
+                d.IsOverdue,
+                plate = d.Car?.Plate,
+                roCode = d.RO?.Code,
+                d.Description
+            }),
+            payments = payments.Select(p => new
+            {
+                p.Id,
+                p.PaymentNo,
+                p.PaymentDate,
+                p.PaymentAmount,
+                method = Ui.PaymentMethod(p.Method).text,
+                p.PayPersonName,
+                p.PayPersonPhone,
+                p.PayPersonIdCard,
+                p.TransactionRef,
+                p.Note,
+                p.Collector,
+                debitNo = p.CusDebit?.DebitNo
+            })
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/cusdebits/{id:int}", async (int id, IRoService svc) =>
+{
+    var d = await svc.GetCusDebitAsync(id);
+    if (d == null) return Results.NotFound(new { error = "Không tìm thấy khoản công nợ." });
+    return Results.Ok(new
+    {
+        d.Id,
+        d.DebitNo,
+        d.DebitDate,
+        customer = new { d.Customer.Id, d.Customer.Code, d.Customer.Name, d.Customer.Phone },
+        car = d.Car != null ? new { d.Car.Id, d.Car.Plate, d.Car.Model } : null,
+        ro = d.RO != null ? new { d.RO.Id, d.RO.Code, d.RO.Status, d.RO.Total } : null,
+        type = Ui.CusDebitType(d.DebitType).text,
+        typeValue = (int)d.DebitType,
+        status = Ui.CusDebitStatus(d.Status).text,
+        statusCode = Ui.CusDebitStatus(d.Status).code,
+        statusValue = (int)d.Status,
+        d.DebitAmount,
+        d.PaidAmount,
+        d.RemainAmount,
+        d.DueDate,
+        d.IsOverdue,
+        d.CanPay,
+        d.Description,
+        d.CreatedBy,
+        d.CreatedAt,
+        d.ClearedAt,
+        payments = d.Payments.Select(p => new
+        {
+            p.Id,
+            p.PaymentNo,
+            p.PaymentDate,
+            p.PaymentAmount,
+            method = Ui.PaymentMethod(p.Method).text,
+            p.PayPersonName,
+            p.Collector
+        })
+    });
+});
+
+app.MapPost("/api/cusdebits", async (CreateCusDebitDto dto, IRoService svc) =>
+{
+    try
+    {
+        var debit = new CusDebit
+        {
+            CustomerId = dto.CustomerId,
+            CarId = dto.CarId,
+            ROId = dto.ROId,
+            DebitType = dto.DebitType ?? CusDebitType.RO,
+            DebitAmount = dto.DebitAmount,
+            DebitDate = dto.DebitDate ?? DateTime.Today,
+            DueDate = dto.DueDate ?? DateTime.Today.AddDays(30),
+            Description = dto.Description?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreateCusDebitAsync(debit);
+        return Results.Created($"/api/cusdebits/{id}", new { id, debit.DebitNo, message = "Đã ghi nhận công nợ thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/cusdebits/create-from-ro", async (CreateDebitFromRoDto dto, IRoService svc) =>
+{
+    var (ok, msg, debitId) = await svc.CreateDebitFromROAsync(dto.ROId, dto.Amount, dto.DueDate, dto.Note);
+    return ok ? Results.Ok(new { message = msg, debitId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/cusdebits/{id:int}/cancel", async (int id, CancelCusDebitDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.CancelCusDebitAsync(id, dto?.Reason);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/cusdebits/payments", async (CreateCusDebitPaymentDto dto, IRoService svc) =>
+{
+    try
+    {
+        var payment = new CusDebitPayment
+        {
+            CustomerId = dto.CustomerId,
+            CusDebitId = dto.CusDebitId,
+            PaymentAmount = dto.PaymentAmount,
+            PaymentDate = dto.PaymentDate ?? DateTime.Today,
+            Method = dto.Method ?? PaymentMethod.Cash,
+            PayPersonName = dto.PayPersonName ?? "",
+            PayPersonIdCard = dto.PayPersonIdCard?.Trim(),
+            PayPersonPhone = dto.PayPersonPhone?.Trim(),
+            TransactionRef = dto.TransactionRef?.Trim(),
+            Note = dto.Note?.Trim(),
+            Collector = dto.Collector ?? "Thu ngân"
+        };
+        var id = await svc.CreateCusDebitPaymentAsync(payment);
+        return Results.Created($"/api/cusdebits/payments/{id}", new { id, payment.PaymentNo, message = "Đã lập phiếu thu nợ thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/cusdebits/payments/{paymentId:int}", async (int paymentId, IRoService svc) =>
+{
+    var p = await svc.GetCusDebitPaymentAsync(paymentId);
+    if (p == null) return Results.NotFound(new { error = "Không tìm thấy phiếu thu nợ." });
+    return Results.Ok(new
+    {
+        p.Id,
+        p.PaymentNo,
+        p.PaymentDate,
+        p.PaymentAmount,
+        method = Ui.PaymentMethod(p.Method).text,
+        methodValue = (int)p.Method,
+        p.PayPersonName,
+        p.PayPersonIdCard,
+        p.PayPersonPhone,
+        p.TransactionRef,
+        p.Note,
+        p.Collector,
+        customer = new { p.Customer.Id, p.Customer.Code, p.Customer.Name, p.Customer.Phone },
+        debit = p.CusDebit != null ? new { p.CusDebit.Id, p.CusDebit.DebitNo, p.CusDebit.DebitAmount, p.CusDebit.RemainAmount } : null
+    });
+});
+
+app.MapDelete("/api/cusdebits/payments/{paymentId:int}", async (int paymentId, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCusDebitPaymentAsync(paymentId);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -3997,3 +4232,7 @@ record CreatePartOODto(int PartId, string OOPlateNo, string? Model, decimal SoLu
 record UpdatePartOODto(string? Model, decimal SoLuongNo, decimal SoLuongTra, string? CVDV, DateTime? NgayDatHang, DateTime? NgayVeDuKien, DateTime? NgayHenTra, string? GhiChu);
 record ReturnPartOODto(decimal ReturnQty, bool? DeductStock, string? ReturnedBy, string? Note);
 record CancelPartOODto(string Reason);
+record CreateCusDebitDto(int CustomerId, int? CarId, int? ROId, CusDebitType? DebitType, decimal DebitAmount, DateTime? DebitDate, DateTime? DueDate, string? Description, string? CreatedBy);
+record CreateDebitFromRoDto(int ROId, decimal? Amount, DateTime? DueDate, string? Note);
+record CancelCusDebitDto(string? Reason);
+record CreateCusDebitPaymentDto(int CustomerId, int? CusDebitId, decimal PaymentAmount, DateTime? PaymentDate, PaymentMethod? Method, string? PayPersonName, string? PayPersonIdCard, string? PayPersonPhone, string? TransactionRef, string? Note, string? Collector);

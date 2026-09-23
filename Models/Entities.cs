@@ -417,6 +417,22 @@ public enum PartOOStatus
     Cancelled = 3   // 3: Đã hủy nợ / Khách từ chối hoặc bồi hoàn tiền
 }
 
+/// <summary>Phân loại công nợ khách hàng dịch vụ — theo Ser_CusDebit DebitType idn.CarService (1: RO, 2: Part, 3: Other).</summary>
+public enum CusDebitType
+{
+    RO = 1,       // 1: Nợ Lệnh sửa chữa xe (Repair Order)
+    Part = 2,     // 2: Nợ mua Phụ tùng / Bán lẻ xuất kho
+    Other = 3     // 3: Nợ dịch vụ khác / Gia công ngoài
+}
+
+/// <summary>Trạng thái công nợ khách hàng — theo Ser_CusDebit idn.CarService.</summary>
+public enum CusDebitStatus
+{
+    Active = 1,    // 1: Còn nợ (Active / Unpaid / Partially Paid)
+    Cleared = 2,   // 2: Đã tất toán (Cleared / Fully Paid)
+    Cancelled = 3  // 3: Đã hủy nợ (Cancelled)
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -427,6 +443,8 @@ public class Customer : IOrgOwned
     public string? Email { get; set; }
     public List<Car> Cars { get; set; } = [];
     public List<Quote> Quotes { get; set; } = [];
+    public List<CusDebit> CusDebits { get; set; } = [];
+    public List<CusDebitPayment> CusDebitPayments { get; set; } = [];
 }
 
 public class Car : IOrgOwned
@@ -489,6 +507,7 @@ public class RepairOrder : IOrgOwned
     public List<TechnicalLibrary> TechnicalLibraries { get; set; } = [];
     public List<StockOutOrder> StockOutOrders { get; set; } = [];
     public List<PartOO> PartOOs { get; set; } = [];
+    public List<CusDebit> CusDebits { get; set; } = [];
 
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
@@ -1859,6 +1878,79 @@ public class PartOO : IOrgOwned
     public bool IsStockAvailable => Part != null && Part.InStock >= SoLuongConNo && IsConNoKhach; // Phụ tùng đã về kho đủ số lượng để trả
     public decimal TotalOwedAmount => Part != null ? SoLuongNo * Part.SalePrice : 0;
     public decimal RemainingAmount => Part != null ? SoLuongConNo * Part.SalePrice : 0;
+}
+
+/// <summary>Phiếu ghi nhận công nợ khách hàng dịch vụ — Ser_CusDebit trong idn.CarService.</summary>
+public class CusDebit : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string DebitNo { get; set; } = "";                             // Mã ghi nợ (VD: CDB260427-001)
+    public int CustomerId { get; set; }                                  // Khách hàng ghi nợ (CusID)
+    public int? CarId { get; set; }                                       // Xe dịch vụ (nếu có)
+    public int? ROId { get; set; }                                        // Lệnh sửa chữa phát sinh công nợ (ROID)
+    public CusDebitType DebitType { get; set; } = CusDebitType.RO;        // Phân loại công nợ (DebitType = '1')
+    public CusDebitStatus Status { get; set; } = CusDebitStatus.Active;  // Trạng thái nợ (Active / Cleared / Cancelled)
+    public DateTime DebitDate { get; set; } = DateTime.Today;             // Ngày phát sinh nợ (DebitDate)
+    public DateTime? DueDate { get; set; }                                // Hạn thanh toán công nợ
+    public decimal DebitAmount { get; set; }                              // Số tiền nợ gốc phát sinh (DebitAmount)
+    public decimal PaidAmount { get; set; } = 0;                          // Số tiền đã thanh toán (PaymentAmount)
+    public string? Description { get; set; }                              // Lý do ghi nợ / Ghi chú (Note)
+    public string CreatedBy { get; set; } = "CVDV";                       // Người lập phiếu ghi nợ
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ClearedAt { get; set; }                              // Thời điểm tất toán nợ
+
+    public Customer Customer { get; set; } = null!;
+    public Car? Car { get; set; }
+    public RepairOrder? RO { get; set; }
+    public List<CusDebitPayment> Payments { get; set; } = [];
+
+    public decimal RemainAmount => Math.Max(0, DebitAmount - PaidAmount); // Dư nợ còn lại (Deb)
+    public bool IsOverdue => Status == CusDebitStatus.Active && DueDate.HasValue && DueDate.Value.Date < DateTime.Today;
+    public bool CanPay => Status == CusDebitStatus.Active && RemainAmount > 0;
+}
+
+/// <summary>Phiếu thu nợ khách hàng dịch vụ — Ser_Payment / SerCusDebitPayment trong idn.CarService (PaymentType = '1').</summary>
+public class CusDebitPayment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PaymentNo { get; set; } = "";                             // Số phiếu thu nợ (VD: CDP260427-001)
+    public int CustomerId { get; set; }                                  // Khách hàng nộp tiền (CusID)
+    public int? CusDebitId { get; set; }                                  // Khoản nợ cụ thể được cấn trừ (nếu có)
+    public DateTime PaymentDate { get; set; } = DateTime.Today;             // Ngày thu tiền (PayDate)
+    public decimal PaymentAmount { get; set; }                            // Số tiền thu nợ (PaymentAmount)
+    public PaymentMethod Method { get; set; } = PaymentMethod.Cash;        // Hình thức thanh toán (Tiền mặt / CK / Thẻ)
+    public string PayPersonName { get; set; } = "";                       // Người nộp tiền (PayPersonName)
+    public string? PayPersonIdCard { get; set; }                          // CMND/CCCD người nộp (PayPersonIDCardNo)
+    public string? PayPersonPhone { get; set; }                           // SĐT người nộp
+    public string? TransactionRef { get; set; }                           // Mã giao dịch ngân hàng / POS
+    public string? Note { get; set; }                                     // Diễn giải / Lý do thu (Note)
+    public string Collector { get; set; } = "Thu ngân";                   // Nhân viên thu nợ
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public Customer Customer { get; set; } = null!;
+    public CusDebit? CusDebit { get; set; }
+}
+
+/// <summary>DTO tổng hợp công nợ theo khách hàng — Ser_InvReportCusDebitRpt / Ser_CusDebitPayment trong idn.CarService.</summary>
+public class CustomerDebitSummaryDto
+{
+    public int CustomerId { get; set; }
+    public string CustomerCode { get; set; } = "";
+    public string CustomerName { get; set; } = "";
+    public string? Phone { get; set; }
+    public string? PlateNo { get; set; }
+    public string? CarModel { get; set; }
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalPaidAmount { get; set; }
+    public decimal RemainingDebit => Math.Max(0, TotalDebitAmount - TotalPaidAmount);
+    public int ActiveDebitCount { get; set; }
+    public int OverdueDebitCount { get; set; }
+    public bool HasDebit => RemainingDebit > 0;
+    public DateTime? LastDebitDate { get; set; }
+    public DateTime? LastPaymentDate { get; set; }
 }
 
 

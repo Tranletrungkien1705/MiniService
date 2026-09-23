@@ -1,0 +1,151 @@
+@{
+    ViewData["Title"] = "Lập phiếu thu nợ khách hàng";
+    var customers = (List<Customer>)ViewBag.Customers;
+    int? selectedCusId = ViewBag.CustomerId;
+    int? selectedDebitId = ViewBag.DebitId;
+    decimal? suggestedAmount = ViewBag.SuggestedAmount;
+    CusDebit? preloadedDebit = ViewBag.Debit;
+    Customer? preloadedCustomer = ViewBag.Customer;
+    var customerDebits = (List<CusDebit>?)ViewBag.CustomerDebits;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/CusDebit">Công nợ khách hàng</a></li>
+                <li class="breadcrumb-item active">Lập phiếu thu nợ</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0"><i class="bi bi-cash-coin text-success me-2"></i>Lập phiếu thu nợ khách hàng</h5>
+    </div>
+    <a href="/CusDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-receipt me-1"></i>Thông tin phiếu thu nợ (Mẫu số 01-TT)</div>
+            <div class="card-body">
+                <form asp-action="CreatePayment" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Khách hàng nộp tiền <span class="text-danger">*</span></label>
+                            <select id="cusSelect" name="customerId" class="form-select" required onchange="onCusSelectChange()">
+                                <option value="">-- Chọn khách hàng --</option>
+                                @foreach (var c in customers)
+                                {
+                                    <option value="@c.Id" data-name="@c.Name" data-phone="@c.Phone" selected="@(selectedCusId == c.Id)">
+                                        @c.Code - @c.Name @(c.Phone != null ? $"({c.Phone})" : "")
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Khoản nợ cấn trừ</label>
+                            <select id="debitSelect" name="debitId" class="form-select" onchange="onDebitSelectChange()">
+                                <option value="">-- Tự động phân bổ vào các khoản nợ cũ nhất (FIFO) --</option>
+                                @if (preloadedDebit != null)
+                                {
+                                    <option value="@preloadedDebit.Id" data-remain="@preloadedDebit.RemainAmount" selected>
+                                        @preloadedDebit.DebitNo - Nợ: @preloadedDebit.DebitAmount.ToString("N0")đ (Còn thiếu: @preloadedDebit.RemainAmount.ToString("N0")đ)
+                                    </option>
+                                }
+                                @if (customerDebits != null)
+                                {
+                                    foreach (var cd in customerDebits)
+                                    {
+                                        if (preloadedDebit?.Id == cd.Id) continue;
+                                        <option value="@cd.Id" data-remain="@cd.RemainAmount">
+                                            @cd.DebitNo (@cd.DebitDate.ToString("dd/MM/yyyy")) - Còn thiếu: @cd.RemainAmount.ToString("N0")đ
+                                        </option>
+                                    }
+                                }
+                            </select>
+                            <div class="form-text small">Để trống để hệ thống tự động cấn trừ các khoản nợ theo thứ tự thời gian.</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Số tiền thu nợ (VNĐ) <span class="text-danger">*</span></label>
+                            <input id="payAmountInput" type="number" step="1000" name="paymentAmount" class="form-control" value="@(suggestedAmount > 0 ? suggestedAmount : "")" placeholder="Số tiền..." required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Ngày thu tiền <span class="text-danger">*</span></label>
+                            <input type="date" name="paymentDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Hình thức thanh toán <span class="text-danger">*</span></label>
+                            <select name="method" class="form-select" required>
+                                <option value="1">Tiền mặt (Cash)</option>
+                                <option value="2">Chuyển khoản (Bank Transfer)</option>
+                                <option value="3">Quẹt thẻ POS / Thẻ tín dụng</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Họ tên người nộp <span class="text-danger">*</span></label>
+                            <input id="payPersonNameInput" type="text" name="payPersonName" class="form-control" value="@(preloadedCustomer?.Name ?? preloadedDebit?.Customer.Name ?? "")" placeholder="Người nộp tiền..." required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Số CMND / CCCD</label>
+                            <input type="text" name="payPersonIdCard" class="form-control" placeholder="Số căn cước công dân..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Số điện thoại</label>
+                            <input id="payPersonPhoneInput" type="text" name="payPersonPhone" class="form-control" value="@(preloadedCustomer?.Phone ?? preloadedDebit?.Customer.Phone ?? "")" placeholder="SĐT liên hệ..." />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Mã tham chiếu GD (POS/Bank)</label>
+                            <input type="text" name="transactionRef" class="form-control" placeholder="Mã chuẩn chi / Trace No..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Nhân viên thu ngân</label>
+                            <input type="text" name="collector" class="form-control" value="Thu ngân Trang" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Lý do thu / Ghi chú</label>
+                            <input type="text" name="note" class="form-control" placeholder="VD: Khách trả nợ đợt 1 tiền sửa chữa xe..." />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-4">
+                        <a href="/CusDebit" class="btn btn-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-printer me-1"></i>Lưu &amp; In phiếu thu</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function onCusSelectChange() {
+    var sel = document.getElementById('cusSelect');
+    var opt = sel.options[sel.selectedIndex];
+    if (opt && opt.value) {
+        var name = opt.getAttribute('data-name');
+        var phone = opt.getAttribute('data-phone');
+        if (name) document.getElementById('payPersonNameInput').value = name;
+        if (phone) document.getElementById('payPersonPhoneInput').value = phone;
+    }
+}
+function onDebitSelectChange() {
+    var sel = document.getElementById('debitSelect');
+    var opt = sel.options[sel.selectedIndex];
+    if (opt && opt.value) {
+        var rem = opt.getAttribute('data-remain');
+        if (rem && Number(rem) > 0) {
+            document.getElementById('payAmountInput').value = rem;
+        }
+    }
+}
+</script>

@@ -2821,6 +2821,136 @@ public static class Seeder
             db.PartOOs.AddRange(partOOs);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.CusDebits.AnyAsync())
+        {
+            var customers = await db.Customers.Include(c => c.Cars).ToListAsync();
+            var c1 = customers.FirstOrDefault();
+            var c2 = customers.Skip(1).FirstOrDefault();
+            var c3 = customers.Skip(2).FirstOrDefault();
+            var ros = await db.ROs.Include(r => r.Car).Include(r => r.Customer).ToListAsync();
+            var ro1 = ros.FirstOrDefault();
+            var ro2 = ros.Skip(1).FirstOrDefault();
+
+            var debits = new List<CusDebit>();
+
+            // 1. Khoản nợ còn lại của Khách hàng 1 (Trần Văn An) phát sinh từ RO bảo dưỡng định kỳ
+            var deb1 = new CusDebit
+            {
+                DebitNo = $"CDB{DateTime.Today:yyMMdd}-001",
+                CustomerId = c1?.Id ?? 1,
+                CarId = c1?.Cars.FirstOrDefault()?.Id ?? ro1?.CarId,
+                ROId = ro1?.Id,
+                DebitType = CusDebitType.RO,
+                Status = CusDebitStatus.Active,
+                DebitDate = DateTime.Today.AddDays(-10),
+                DueDate = DateTime.Today.AddDays(20),
+                DebitAmount = 2850000,
+                PaidAmount = 1000000,
+                Description = "Khách nợ lại tiền công bảo dưỡng cấp 20.000km và thay dầu máy, hẹn thanh toán trước ngày 20.",
+                CreatedBy = "CVDV Tuấn",
+                CreatedAt = DateTime.Now.AddDays(-10)
+            };
+            debits.Add(deb1);
+
+            // 2. Khoản nợ quá hạn của Khách hàng 2 (Lê Thị Bình) - Thay má phanh và phụ tùng
+            var deb2 = new CusDebit
+            {
+                DebitNo = $"CDB{DateTime.Today:yyMMdd}-002",
+                CustomerId = c2?.Id ?? 2,
+                CarId = c2?.Cars.FirstOrDefault()?.Id ?? ro2?.CarId,
+                ROId = ro2?.Id,
+                DebitType = CusDebitType.RO,
+                Status = CusDebitStatus.Active,
+                DebitDate = DateTime.Today.AddDays(-35),
+                DueDate = DateTime.Today.AddDays(-5), // Đã quá hạn 5 ngày
+                DebitAmount = 4200000,
+                PaidAmount = 0,
+                Description = "Ghi nợ chi phí thay má phanh và công gò sơn cản trước xe Accent. Quá hạn thanh toán 5 ngày.",
+                CreatedBy = "CVDV Hương",
+                CreatedAt = DateTime.Now.AddDays(-35)
+            };
+            debits.Add(deb2);
+
+            // 3. Khoản nợ mua phụ tùng bán lẻ xuất kho của Khách hàng 3 (Phạm Quốc Cường)
+            var deb3 = new CusDebit
+            {
+                DebitNo = $"CDB{DateTime.Today:yyMMdd}-003",
+                CustomerId = c3?.Id ?? 3,
+                CarId = c3?.Cars.FirstOrDefault()?.Id,
+                DebitType = CusDebitType.Part,
+                Status = CusDebitStatus.Active,
+                DebitDate = DateTime.Today.AddDays(-3),
+                DueDate = DateTime.Today.AddDays(15),
+                DebitAmount = 1650000,
+                PaidAmount = 0,
+                Description = "Nợ tiền mua 02 bình ắc quy và lọc gió động cơ mang về tự thay.",
+                CreatedBy = "Thủ kho Tuấn",
+                CreatedAt = DateTime.Now.AddDays(-3)
+            };
+            debits.Add(deb3);
+
+            // 4. Khoản nợ đã được tất toán 100% (Cleared) của Khách hàng 1
+            var deb4 = new CusDebit
+            {
+                DebitNo = $"CDB{DateTime.Today:yyMMdd}-004",
+                CustomerId = c1?.Id ?? 1,
+                CarId = c1?.Cars.FirstOrDefault()?.Id,
+                DebitType = CusDebitType.Other,
+                Status = CusDebitStatus.Cleared,
+                DebitDate = DateTime.Today.AddDays(-20),
+                DueDate = DateTime.Today.AddDays(-5),
+                DebitAmount = 1500000,
+                PaidAmount = 1500000,
+                Description = "Gia công tiện đĩa phanh ngoài và vệ sinh buồng đốt khí hydro. Đã thanh toán đầy đủ.",
+                CreatedBy = "CVDV Tuấn",
+                CreatedAt = DateTime.Now.AddDays(-20),
+                ClearedAt = DateTime.Now.AddDays(-8)
+            };
+            debits.Add(deb4);
+
+            db.CusDebits.AddRange(debits);
+            await db.SaveChangesAsync();
+
+            // Seed Payments
+            var payments = new List<CusDebitPayment>
+            {
+                new CusDebitPayment
+                {
+                    PaymentNo = $"CDP{DateTime.Today:yyMMdd}-001",
+                    CustomerId = c1?.Id ?? 1,
+                    CusDebitId = deb1.Id,
+                    PaymentDate = DateTime.Today.AddDays(-5),
+                    PaymentAmount = 1000000,
+                    Method = PaymentMethod.BankTransfer,
+                    PayPersonName = c1?.Name ?? "Trần Văn An",
+                    PayPersonPhone = c1?.Phone ?? "0912.345.678",
+                    PayPersonIdCard = "001085002199",
+                    TransactionRef = "MBB-FT260422-9981",
+                    Note = "Thanh toán đợt 1 tiền nợ công sửa chữa RO.",
+                    Collector = "Thu ngân Trang",
+                    CreatedAt = DateTime.Now.AddDays(-5)
+                },
+                new CusDebitPayment
+                {
+                    PaymentNo = $"CDP{DateTime.Today:yyMMdd}-002",
+                    CustomerId = c1?.Id ?? 1,
+                    CusDebitId = deb4.Id,
+                    PaymentDate = DateTime.Today.AddDays(-8),
+                    PaymentAmount = 1500000,
+                    Method = PaymentMethod.Cash,
+                    PayPersonName = c1?.Name ?? "Trần Văn An",
+                    PayPersonPhone = c1?.Phone ?? "0912.345.678",
+                    PayPersonIdCard = "001085002199",
+                    Note = "Tất toán toàn bộ chi phí gia công ngoài.",
+                    Collector = "Thu ngân Trang",
+                    CreatedAt = DateTime.Now.AddDays(-8)
+                }
+            };
+
+            db.CusDebitPayments.AddRange(payments);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static List<PdiChecklistItem> CreateDefaultChecklist() =>

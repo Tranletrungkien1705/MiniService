@@ -61,6 +61,8 @@ public class AppDbContext : DbContext
     public DbSet<StockOutOrder> StockOutOrders => Set<StockOutOrder>();
     public DbSet<StockOutOrderDetail> StockOutOrderDetails => Set<StockOutOrderDetail>();
     public DbSet<PartOO> PartOOs => Set<PartOO>();
+    public DbSet<CusDebit> CusDebits => Set<CusDebit>();
+    public DbSet<CusDebitPayment> CusDebitPayments => Set<CusDebitPayment>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -105,6 +107,7 @@ public class AppDbContext : DbContext
             e.HasMany(x => x.AssignmentWorks).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.InsuranceClaims).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.PdiRequest).WithMany(x => x.RepairOrders).HasForeignKey(x => x.PdiRequestId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.CusDebits).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RepairLine>(e =>
@@ -596,6 +599,28 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.RO).WithMany(x => x.PartOOs).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CusDebit>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.DebitNo }).IsUnique();
+            e.Property(x => x.DebitAmount).HasPrecision(18, 2);
+            e.Property(x => x.PaidAmount).HasPrecision(18, 2);
+            e.Ignore(x => x.RemainAmount);
+            e.Ignore(x => x.IsOverdue);
+            e.Ignore(x => x.CanPay);
+            e.HasOne(x => x.Customer).WithMany(x => x.CusDebits).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.RO).WithMany(x => x.CusDebits).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Payments).WithOne(x => x.CusDebit).HasForeignKey(x => x.CusDebitId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CusDebitPayment>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PaymentNo }).IsUnique();
+            e.Property(x => x.PaymentAmount).HasPrecision(18, 2);
+            e.HasOne(x => x.Customer).WithMany(x => x.CusDebitPayments).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.CusDebit).WithMany(x => x.Payments).HasForeignKey(x => x.CusDebitId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

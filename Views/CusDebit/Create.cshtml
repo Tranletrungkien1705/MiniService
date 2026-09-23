@@ -1,0 +1,149 @@
+@{
+    ViewData["Title"] = "Ghi nhận công nợ mới";
+    var customers = (List<Customer>)ViewBag.Customers;
+    var ros = (List<RepairOrder>)ViewBag.ROs;
+    int? selectedCusId = ViewBag.CustomerId;
+    int? selectedRoId = ViewBag.ROId;
+    decimal? suggestedAmount = ViewBag.SuggestedAmount;
+    RepairOrder? preloadedRo = ViewBag.RO;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/CusDebit">Công nợ khách hàng</a></li>
+                <li class="breadcrumb-item active">Ghi nhận công nợ mới</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0"><i class="bi bi-wallet2 text-danger me-2"></i>Ghi nhận khoản công nợ khách hàng mới</h5>
+    </div>
+    <a href="/CusDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-file-earmark-plus me-1"></i>Thông tin chứng từ công nợ</div>
+            <div class="card-body">
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Khách hàng <span class="text-danger">*</span></label>
+                            <select id="customerSelect" name="customerId" class="form-select" required onchange="onCustomerChange()">
+                                <option value="">-- Chọn khách hàng --</option>
+                                @foreach (var c in customers)
+                                {
+                                    var firstPlate = c.Cars.FirstOrDefault()?.Plate;
+                                    var plateText = !string.IsNullOrWhiteSpace(firstPlate) ? $" ({firstPlate})" : "";
+                                    <option value="@c.Id" selected="@(selectedCusId == c.Id)">@c.Name - @c.Phone@plateText</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Phân loại công nợ <span class="text-danger">*</span></label>
+                            <select name="debitType" class="form-select" required>
+                                <option value="1">Lệnh sửa chữa (Repair Order)</option>
+                                <option value="2">Mua phụ tùng / Bán lẻ xuất kho</option>
+                                <option value="3">Dịch vụ khác / Gia công ngoài</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Lệnh sửa chữa liên kết (RO)</label>
+                            <select id="roSelect" name="roId" class="form-select" onchange="onRoChange()">
+                                <option value="">-- Không liên kết RO (hoặc công nợ chung) --</option>
+                                @foreach (var r in ros)
+                                {
+                                    <option value="@r.Id" data-customer="@r.CustomerId" data-car="@r.CarId" data-balance="@r.RemainingBalance" selected="@(selectedRoId == r.Id)">
+                                        @r.Code - Xe @r.Car?.Plate (@r.Customer?.Name) - Còn thiếu: @r.RemainingBalance.ToString("N0")đ
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text small">Nếu chọn Lệnh RO, số tiền nợ còn thiếu sẽ được tự động cập nhật.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Xe dịch vụ</label>
+                            <select id="carSelect" name="carId" class="form-select">
+                                <option value="">-- Chọn xe hoặc để trống --</option>
+                                @foreach (var c in customers)
+                                {
+                                    foreach (var car in c.Cars)
+                                    {
+                                        <option value="@car.Id" data-customer="@c.Id" selected="@(preloadedRo?.CarId == car.Id)">@car.Plate - @car.Model (@c.Name)</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Số tiền nợ (VNĐ) <span class="text-danger">*</span></label>
+                            <input id="amountInput" type="number" step="1000" name="debitAmount" class="form-control" value="@(suggestedAmount > 0 ? suggestedAmount : "")" placeholder="Nhập số tiền..." required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Ngày ghi nợ <span class="text-danger">*</span></label>
+                            <input type="date" name="debitDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Hạn thanh toán (DueDate)</label>
+                            <input type="date" name="dueDate" class="form-control" value="@DateTime.Today.AddDays(30).ToString("yyyy-MM-dd")" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Người lập phiếu</label>
+                            <input type="text" name="createdBy" class="form-control" value="CVDV Tuấn" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Diễn giải / Lý do ghi nợ</label>
+                            <input type="text" name="description" class="form-control" placeholder="VD: Khách xin nợ đến cuối tháng trả, xe công ty thanh toán đợt 2..." />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-4">
+                        <a href="/CusDebit" class="btn btn-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu khoản công nợ</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function onRoChange() {
+    var roSel = document.getElementById('roSelect');
+    var opt = roSel.options[roSel.selectedIndex];
+    if (opt && opt.value) {
+        var cusId = opt.getAttribute('data-customer');
+        var carId = opt.getAttribute('data-car');
+        var bal = opt.getAttribute('data-balance');
+        if (cusId) document.getElementById('customerSelect').value = cusId;
+        if (carId) document.getElementById('carSelect').value = carId;
+        if (bal && Number(bal) > 0) document.getElementById('amountInput').value = bal;
+    }
+}
+function onCustomerChange() {
+    var cusSel = document.getElementById('customerSelect');
+    var cusId = cusSel.value;
+    var carSel = document.getElementById('carSelect');
+    for (var i = 0; i < carSel.options.length; i++) {
+        var opt = carSel.options[i];
+        if (!opt.value) continue;
+        var optCus = opt.getAttribute('data-customer');
+        if (!cusId || optCus === cusId) {
+            opt.style.display = '';
+            if (optCus === cusId && !carSel.value) carSel.value = opt.value;
+        } else {
+            opt.style.display = 'none';
+        }
+    }
+}
+</script>

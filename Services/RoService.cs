@@ -25,7 +25,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int ActiveBulletins = 0, int PendingBulletinVins = 0,
     int PendingPdiRequests = 0, int CompletedPdiVehicles = 0,
     int PendingOrderComplains = 0, int ApprovedOrderComplains = 0,
-    int PendingPartOOs = 0, int StockAvailablePartOOs = 0);
+    int PendingPartOOs = 0, int StockAvailablePartOOs = 0,
+    int ActiveCusDebits = 0, decimal TotalCusDebitBalance = 0, int OverdueCusDebits = 0);
 
 public interface IRoService
 {
@@ -284,6 +285,19 @@ public interface IRoService
     Task<(bool ok, string msg)> DeletePartOOAsync(int id);
     Task<List<PartOO>> GetPartOOStockAlertsAsync();
     Task<List<PartOO>> GetPartOOsByPlateAsync(string plate);
+    // Customer Debit Management (Ser_CusDebit, Ser_CusDebitPayment, Ser_InvReportCusDebitRpt / MH 54)
+    Task<List<CusDebit>> CusDebitsAsync(int? customerId, CusDebitStatus? status, CusDebitType? type, string? q, bool? isOverdue, DateTime? fromDate, DateTime? toDate);
+    Task<List<CustomerDebitSummaryDto>> CustomerDebitSummariesAsync(string? q, bool? onlyHasDebit);
+    Task<(Customer customer, List<CusDebit> debits, List<CusDebitPayment> payments, decimal totalDebit, decimal totalPaid, decimal remainingDebit)> GetCustomerDebitProfileAsync(int customerId);
+    Task<CusDebit?> GetCusDebitAsync(int id);
+    Task<CusDebitPayment?> GetCusDebitPaymentAsync(int paymentId);
+    Task<int> CreateCusDebitAsync(CusDebit debit);
+    Task<int> CreateCusDebitPaymentAsync(CusDebitPayment payment);
+    Task<(bool ok, string msg)> CancelCusDebitAsync(int id, string? reason);
+    Task<(bool ok, string msg)> DeleteCusDebitPaymentAsync(int paymentId);
+    Task<(bool ok, string msg, int? debitId)> CreateDebitFromROAsync(int roId, decimal? amount, DateTime? dueDate, string? note);
+    Task<List<Customer>> CustomersForDebitSelectAsync();
+    Task<List<RepairOrder>> ROsWithUnpaidBalanceAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -515,7 +529,7 @@ public class RoService(AppDbContext db) : IRoService
           .Include(r => r.Lines).ThenInclude(l => l.Part)
           .Include(r => r.Lines).ThenInclude(l => l.ServiceItem)
           .Include(r => r.Appointment)
-          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.StockOutOrders).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet).Include(r => r.PartOOs)
+          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.StockOutOrders).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet).Include(r => r.PartOOs).Include(r => r.CusDebits).ThenInclude(d => d.Payments)
           .Include(r => r.AssignmentWorks).ThenInclude(a => a.Engineers).ThenInclude(e => e.Engineer)
           .Include(r => r.InsuranceClaims).ThenInclude(c => c.InsuranceCompany)
           .Include(r => r.Bulletin).ThenInclude(b => b!.Items)
@@ -771,6 +785,11 @@ public class RoService(AppDbContext db) : IRoService
         var pendingPartOOs = await db.PartOOs.CountAsync(o => o.Status != PartOOStatus.Cancelled && o.Status != PartOOStatus.Completed && o.SoLuongNo > o.SoLuongTra);
         var stockAvailablePartOOs = await db.PartOOs.Include(o => o.Part).CountAsync(o => o.Status != PartOOStatus.Cancelled && o.Status != PartOOStatus.Completed && o.SoLuongNo > o.SoLuongTra && o.Part.InStock >= (o.SoLuongNo - o.SoLuongTra));
 
+        var activeCusDebitsList = await db.CusDebits.Where(d => d.Status == CusDebitStatus.Active && d.DebitAmount > d.PaidAmount).ToListAsync();
+        var activeCusDebits = activeCusDebitsList.Count;
+        var totalCusDebitBalance = activeCusDebitsList.Sum(d => d.DebitAmount - d.PaidAmount);
+        var overdueCusDebits = activeCusDebitsList.Count(d => d.DueDate.HasValue && d.DueDate.Value.Date < today);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -821,7 +840,10 @@ public class RoService(AppDbContext db) : IRoService
             pendingOrderComplains,
             approvedOrderComplains,
             pendingPartOOs,
-            stockAvailablePartOOs);
+            stockAvailablePartOOs,
+            activeCusDebits,
+            totalCusDebitBalance,
+            overdueCusDebits);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -5785,4 +5807,382 @@ public class RoService(AppDbContext db) : IRoService
             .OrderByDescending(o => o.CreatedAt)
             .ToListAsync();
     }
+
+    // --- Customer Debit Management (Ser_CusDebit, Ser_CusDebitPayment, Ser_InvReportCusDebitRpt / MH 54) ---
+    public async Task<List<CusDebit>> CusDebitsAsync(int? customerId, CusDebitStatus? status, CusDebitType? type, string? q, bool? isOverdue, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.CusDebits
+            .Include(d => d.Customer)
+            .Include(d => d.Car)
+            .Include(d => d.RO)
+            .Include(d => d.Payments)
+            .AsQueryable();
+
+        if (customerId.HasValue && customerId.Value > 0)
+            query = query.Where(d => d.CustomerId == customerId.Value);
+
+        if (status.HasValue)
+            query = query.Where(d => d.Status == status.Value);
+
+        if (type.HasValue)
+            query = query.Where(d => d.DebitType == type.Value);
+
+        if (isOverdue.HasValue)
+        {
+            var today = DateTime.Today;
+            if (isOverdue.Value)
+                query = query.Where(d => d.Status == CusDebitStatus.Active && d.DueDate.HasValue && d.DueDate.Value.Date < today);
+            else
+                query = query.Where(d => d.Status != CusDebitStatus.Active || !d.DueDate.HasValue || d.DueDate.Value.Date >= today);
+        }
+
+        if (fromDate.HasValue)
+            query = query.Where(d => d.DebitDate >= fromDate.Value.Date);
+
+        if (toDate.HasValue)
+            query = query.Where(d => d.DebitDate <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(d =>
+                d.DebitNo.ToLower().Contains(kw) ||
+                d.Customer.Name.ToLower().Contains(kw) ||
+                (d.Customer.Phone != null && d.Customer.Phone.Contains(kw)) ||
+                (d.Car != null && d.Car.Plate.ToLower().Contains(kw)) ||
+                (d.RO != null && d.RO.Code.ToLower().Contains(kw)) ||
+                (d.Description != null && d.Description.ToLower().Contains(kw)));
+        }
+
+        return await query.OrderByDescending(d => d.DebitDate).ThenByDescending(d => d.CreatedAt).ToListAsync();
+    }
+
+    public async Task<List<CustomerDebitSummaryDto>> CustomerDebitSummariesAsync(string? q, bool? onlyHasDebit)
+    {
+        var customers = await db.Customers
+            .Include(c => c.Cars)
+            .Include(c => c.CusDebits)
+            .Include(c => c.CusDebitPayments)
+            .ToListAsync();
+
+        var list = new List<CustomerDebitSummaryDto>();
+        var today = DateTime.Today;
+
+        foreach (var c in customers)
+        {
+            var validDebits = c.CusDebits.Where(d => d.Status != CusDebitStatus.Cancelled).ToList();
+            var totalDebit = validDebits.Sum(d => d.DebitAmount);
+            var totalPaid = validDebits.Sum(d => d.PaidAmount);
+            var rem = Math.Max(0, totalDebit - totalPaid);
+            var activeCount = validDebits.Count(d => d.Status == CusDebitStatus.Active && d.DebitAmount > d.PaidAmount);
+            var overdueCount = validDebits.Count(d => d.Status == CusDebitStatus.Active && d.DebitAmount > d.PaidAmount && d.DueDate.HasValue && d.DueDate.Value.Date < today);
+
+            var firstCar = c.Cars.FirstOrDefault();
+
+            list.Add(new CustomerDebitSummaryDto
+            {
+                CustomerId = c.Id,
+                CustomerCode = c.Code,
+                CustomerName = c.Name,
+                Phone = c.Phone,
+                PlateNo = firstCar?.Plate,
+                CarModel = firstCar?.Model,
+                TotalDebitAmount = totalDebit,
+                TotalPaidAmount = totalPaid,
+                ActiveDebitCount = activeCount,
+                OverdueDebitCount = overdueCount,
+                LastDebitDate = validDebits.OrderByDescending(d => d.DebitDate).FirstOrDefault()?.DebitDate,
+                LastPaymentDate = c.CusDebitPayments.OrderByDescending(p => p.PaymentDate).FirstOrDefault()?.PaymentDate
+            });
+        }
+
+        if (onlyHasDebit.HasValue && onlyHasDebit.Value)
+        {
+            list = list.Where(x => x.HasDebit).ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            list = list.Where(x =>
+                x.CustomerName.ToLower().Contains(kw) ||
+                x.CustomerCode.ToLower().Contains(kw) ||
+                (x.Phone != null && x.Phone.Contains(kw)) ||
+                (x.PlateNo != null && x.PlateNo.ToLower().Contains(kw)) ||
+                (x.CarModel != null && x.CarModel.ToLower().Contains(kw))).ToList();
+        }
+
+        return list.OrderByDescending(x => x.RemainingDebit).ThenBy(x => x.CustomerName).ToList();
+    }
+
+    public async Task<(Customer customer, List<CusDebit> debits, List<CusDebitPayment> payments, decimal totalDebit, decimal totalPaid, decimal remainingDebit)> GetCustomerDebitProfileAsync(int customerId)
+    {
+        var customer = await db.Customers
+            .Include(c => c.Cars)
+            .Include(c => c.CusDebits).ThenInclude(d => d.RO)
+            .Include(c => c.CusDebits).ThenInclude(d => d.Car)
+            .Include(c => c.CusDebits).ThenInclude(d => d.Payments)
+            .Include(c => c.CusDebitPayments).ThenInclude(p => p.CusDebit)
+            .FirstOrDefaultAsync(c => c.Id == customerId);
+
+        if (customer == null) throw new InvalidOperationException("Không tìm thấy khách hàng.");
+
+        var debits = customer.CusDebits.OrderByDescending(d => d.DebitDate).ThenByDescending(d => d.CreatedAt).ToList();
+        var payments = customer.CusDebitPayments.OrderByDescending(p => p.PaymentDate).ThenByDescending(p => p.CreatedAt).ToList();
+
+        var validDebits = debits.Where(d => d.Status != CusDebitStatus.Cancelled).ToList();
+        var totalDebit = validDebits.Sum(d => d.DebitAmount);
+        var totalPaid = validDebits.Sum(d => d.PaidAmount);
+        var remainingDebit = Math.Max(0, totalDebit - totalPaid);
+
+        return (customer, debits, payments, totalDebit, totalPaid, remainingDebit);
+    }
+
+    public Task<CusDebit?> GetCusDebitAsync(int id) =>
+        db.CusDebits
+            .Include(d => d.Customer)
+            .Include(d => d.Car)
+            .Include(d => d.RO)
+            .Include(d => d.Payments)
+            .FirstOrDefaultAsync(d => d.Id == id);
+
+    public Task<CusDebitPayment?> GetCusDebitPaymentAsync(int paymentId) =>
+        db.CusDebitPayments
+            .Include(p => p.Customer)
+            .Include(p => p.CusDebit).ThenInclude(d => d!.Car)
+            .Include(p => p.CusDebit).ThenInclude(d => d!.RO)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+    public async Task<int> CreateCusDebitAsync(CusDebit debit)
+    {
+        if (debit.DebitAmount <= 0)
+            throw new InvalidOperationException("Số tiền công nợ phải lớn hơn 0.");
+
+        if (debit.CustomerId <= 0)
+            throw new InvalidOperationException("Vui lòng chọn khách hàng.");
+
+        if (string.IsNullOrWhiteSpace(debit.DebitNo))
+        {
+            var today = DateTime.Today;
+            var prefix = $"CDB{today:yyMMdd}-";
+            var count = await db.CusDebits.CountAsync(d => d.DebitNo.StartsWith(prefix)) + 1;
+            debit.DebitNo = $"{prefix}{count:D3}";
+        }
+
+        // Fill Car and Customer from RO if RO provided
+        if (debit.ROId.HasValue && debit.ROId.Value > 0)
+        {
+            var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == debit.ROId.Value);
+            if (ro != null)
+            {
+                if (debit.CustomerId <= 0) debit.CustomerId = ro.CustomerId;
+                if (!debit.CarId.HasValue) debit.CarId = ro.CarId;
+            }
+        }
+
+        debit.DebitDate = debit.DebitDate == default ? DateTime.Today : debit.DebitDate;
+        debit.Status = CusDebitStatus.Active;
+        debit.PaidAmount = 0;
+        debit.CreatedAt = DateTime.Now;
+
+        db.CusDebits.Add(debit);
+        await db.SaveChangesAsync();
+        return debit.Id;
+    }
+
+    public async Task<int> CreateCusDebitPaymentAsync(CusDebitPayment payment)
+    {
+        if (payment.PaymentAmount <= 0)
+            throw new InvalidOperationException("Số tiền thu nợ phải lớn hơn 0.");
+
+        if (payment.CustomerId <= 0)
+            throw new InvalidOperationException("Vui lòng chọn khách hàng.");
+
+        var customer = await db.Customers.FirstOrDefaultAsync(c => c.Id == payment.CustomerId);
+        if (customer == null)
+            throw new InvalidOperationException("Không tìm thấy khách hàng.");
+
+        if (string.IsNullOrWhiteSpace(payment.PayPersonName))
+            payment.PayPersonName = customer.Name;
+
+        if (string.IsNullOrWhiteSpace(payment.PaymentNo))
+        {
+            var today = DateTime.Today;
+            var prefix = $"CDP{today:yyMMdd}-";
+            var count = await db.CusDebitPayments.CountAsync(p => p.PaymentNo.StartsWith(prefix)) + 1;
+            payment.PaymentNo = $"{prefix}{count:D3}";
+        }
+
+        payment.PaymentDate = payment.PaymentDate == default ? DateTime.Today : payment.PaymentDate;
+        payment.CreatedAt = DateTime.Now;
+
+        // Allocation logic
+        if (payment.CusDebitId.HasValue && payment.CusDebitId.Value > 0)
+        {
+            var debit = await db.CusDebits.Include(d => d.RO).FirstOrDefaultAsync(d => d.Id == payment.CusDebitId.Value);
+            if (debit == null)
+                throw new InvalidOperationException("Không tìm thấy khoản nợ được chỉ định.");
+
+            if (debit.Status == CusDebitStatus.Cancelled)
+                throw new InvalidOperationException("Khoản nợ này đã bị hủy.");
+
+            debit.PaidAmount += payment.PaymentAmount;
+            if (debit.PaidAmount >= debit.DebitAmount)
+            {
+                debit.Status = CusDebitStatus.Cleared;
+                debit.ClearedAt = DateTime.Now;
+            }
+
+            // Đồng bộ trạng thái RO nếu Lệnh sửa chữa đã thu đủ tiền
+            if (debit.ROId.HasValue && debit.RO != null)
+            {
+                var otherDebits = await db.CusDebits.Where(d => d.ROId == debit.ROId.Value && d.Status == CusDebitStatus.Active).ToListAsync();
+                if (otherDebits.All(d => d.Id == debit.Id || d.PaidAmount >= d.DebitAmount))
+                {
+                    if (debit.RO.Status is ROStatus.CheckEnd or ROStatus.Repaired or ROStatus.HasRO)
+                    {
+                        debit.RO.Status = ROStatus.Paid;
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Tự động phân bổ vào các khoản nợ của khách theo thứ tự thời gian phát sinh (FIFO)
+            var activeDebits = await db.CusDebits
+                .Include(d => d.RO)
+                .Where(d => d.CustomerId == payment.CustomerId && d.Status == CusDebitStatus.Active && d.DebitAmount > d.PaidAmount)
+                .OrderBy(d => d.DebitDate)
+                .ThenBy(d => d.Id)
+                .ToListAsync();
+
+            var moneyLeft = payment.PaymentAmount;
+            foreach (var d in activeDebits)
+            {
+                if (moneyLeft <= 0) break;
+                var needed = d.DebitAmount - d.PaidAmount;
+                var alloc = Math.Min(moneyLeft, needed);
+                d.PaidAmount += alloc;
+                moneyLeft -= alloc;
+
+                if (d.PaidAmount >= d.DebitAmount)
+                {
+                    d.Status = CusDebitStatus.Cleared;
+                    d.ClearedAt = DateTime.Now;
+
+                    if (d.ROId.HasValue && d.RO != null)
+                    {
+                        if (d.RO.Status is ROStatus.CheckEnd or ROStatus.Repaired or ROStatus.HasRO)
+                        {
+                            d.RO.Status = ROStatus.Paid;
+                        }
+                    }
+                }
+            }
+        }
+
+        db.CusDebitPayments.Add(payment);
+        await db.SaveChangesAsync();
+        return payment.Id;
+    }
+
+    public async Task<(bool ok, string msg)> CancelCusDebitAsync(int id, string? reason)
+    {
+        var debit = await db.CusDebits.FirstOrDefaultAsync(d => d.Id == id);
+        if (debit == null) return (false, "Không tìm thấy khoản nợ.");
+
+        if (debit.PaidAmount > 0)
+            return (false, $"Khoản nợ đã phát sinh thanh toán ({debit.PaidAmount:N0} đ), không thể hủy trực tiếp.");
+
+        debit.Status = CusDebitStatus.Cancelled;
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            debit.Description = string.IsNullOrWhiteSpace(debit.Description)
+                ? $"[Hủy: {reason.Trim()}]"
+                : $"{debit.Description}\n[Hủy: {reason.Trim()}]";
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy khoản nợ {debit.DebitNo}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCusDebitPaymentAsync(int paymentId)
+    {
+        var payment = await db.CusDebitPayments
+            .Include(p => p.CusDebit)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null) return (false, "Không tìm thấy phiếu thu nợ.");
+
+        if (payment.CusDebit != null)
+        {
+            payment.CusDebit.PaidAmount = Math.Max(0, payment.CusDebit.PaidAmount - payment.PaymentAmount);
+            if (payment.CusDebit.Status == CusDebitStatus.Cleared && payment.CusDebit.PaidAmount < payment.CusDebit.DebitAmount)
+            {
+                payment.CusDebit.Status = CusDebitStatus.Active;
+                payment.CusDebit.ClearedAt = null;
+            }
+        }
+
+        db.CusDebitPayments.Remove(payment);
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy phiếu thu nợ {payment.PaymentNo} và hoàn trả dư nợ.");
+    }
+
+    public async Task<(bool ok, string msg, int? debitId)> CreateDebitFromROAsync(int roId, decimal? amount, DateTime? dueDate, string? note)
+    {
+        var ro = await db.ROs
+            .Include(r => r.Lines)
+            .Include(r => r.Payments)
+            .Include(r => r.Customer)
+            .Include(r => r.Car)
+            .FirstOrDefaultAsync(r => r.Id == roId);
+
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa (RO).", null);
+
+        var debtAmount = amount ?? ro.RemainingBalance;
+        if (debtAmount <= 0)
+            return (false, "Lệnh sửa chữa đã được thanh toán đủ, không có dư nợ phát sinh.", null);
+
+        var today = DateTime.Today;
+        var prefix = $"CDB{today:yyMMdd}-";
+        var count = await db.CusDebits.CountAsync(d => d.DebitNo.StartsWith(prefix)) + 1;
+
+        var debit = new CusDebit
+        {
+            DebitNo = $"{prefix}{count:D3}",
+            CustomerId = ro.CustomerId,
+            CarId = ro.CarId,
+            ROId = ro.Id,
+            DebitType = CusDebitType.RO,
+            Status = CusDebitStatus.Active,
+            DebitDate = DateTime.Today,
+            DueDate = dueDate ?? DateTime.Today.AddDays(30),
+            DebitAmount = debtAmount,
+            PaidAmount = 0,
+            Description = !string.IsNullOrWhiteSpace(note) ? note.Trim() : $"Ghi nhận công nợ từ Lệnh sửa chữa {ro.Code} (Xe {ro.Car?.Plate})",
+            CreatedBy = "CVDV",
+            CreatedAt = DateTime.Now
+        };
+
+        db.CusDebits.Add(debit);
+        await db.SaveChangesAsync();
+        return (true, $"Đã ghi nhận công nợ {debit.DebitNo} số tiền {debtAmount:N0} đ cho Lệnh sửa chữa {ro.Code}.", debit.Id);
+    }
+
+    public Task<List<Customer>> CustomersForDebitSelectAsync() =>
+        db.Customers
+            .Include(c => c.Cars)
+            .OrderBy(c => c.Name)
+            .ToListAsync();
+
+    public Task<List<RepairOrder>> ROsWithUnpaidBalanceAsync() =>
+        db.ROs
+            .Include(r => r.Customer)
+            .Include(r => r.Car)
+            .Include(r => r.Lines)
+            .Include(r => r.Payments)
+            .Where(r => r.Status != ROStatus.Rejected && r.Status != ROStatus.NotResponding)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
 }

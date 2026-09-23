@@ -1,0 +1,290 @@
+@{
+    ViewData["Title"] = "Quản lý công nợ khách hàng (Customer Debit)";
+    var summaries = (List<CustomerDebitSummaryDto>)ViewBag.Summaries;
+    var debits = (List<CusDebit>)ViewBag.Debits;
+    var activeTab = (string)ViewBag.ActiveTab;
+    decimal totalDebit = ViewBag.TotalDebitAmount ?? 0;
+    decimal totalPaid = ViewBag.TotalPaidAmount ?? 0;
+    decimal totalRemaining = ViewBag.TotalRemainingDebit ?? 0;
+    int customersWithDebit = ViewBag.CustomersWithDebitCount ?? 0;
+    int overdueCount = ViewBag.OverdueDebitCount ?? 0;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="fw-bold mb-0"><i class="bi bi-wallet2 text-danger me-2"></i>Quản lý công nợ khách hàng</h5>
+        <div class="text-muted small">Theo dõi công nợ dịch vụ sửa chữa RO, phụ tùng và lịch sử thu nợ chuẩn đại lý</div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/CusDebit/CreatePayment" class="btn btn-success"><i class="bi bi-cash-coin me-1"></i>Lập phiếu thu nợ</a>
+        <a href="/CusDebit/Create" class="btn btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>Ghi nhận nợ mới</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card border-danger"><div class="card-body">
+            <div class="text-muted small">Tổng dư nợ phải thu</div>
+            <div class="stat-num text-danger" style="font-size:22px">@totalRemaining.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">@customersWithDebit khách hàng đang có nợ</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng nợ phát sinh</div>
+            <div class="stat-num text-primary" style="font-size:22px">@totalDebit.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">Bao gồm RO và phụ tùng</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã thu hồi</div>
+            <div class="stat-num text-success" style="font-size:22px">@totalPaid.ToString("N0")đ</div>
+            <div class="text-muted small mt-1">Tỷ lệ thu hồi: @(totalDebit > 0 ? (totalPaid / totalDebit * 100).ToString("N1") : "100")%</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card @(overdueCount > 0 ? "border-warning bg-warning bg-opacity-10" : "")"><div class="card-body">
+            <div class="text-muted small">Khoản nợ quá hạn</div>
+            <div class="stat-num text-danger" style="font-size:22px">@overdueCount</div>
+            <div class="text-muted small mt-1">Cần nhắc thanh toán sớm</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="get" class="row g-2 align-items-center">
+            <input type="hidden" name="tab" value="@activeTab" />
+            <div class="col-md-4">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-search"></i></span>
+                    <input type="text" name="q" value="@ViewBag.Q" class="form-control" placeholder="Tìm theo tên KH, SĐT, biển số, mã nợ..." />
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select name="onlyHasDebit" class="form-select form-select-sm">
+                    <option value="">Tất cả khách hàng</option>
+                    <option value="true" selected="@(ViewBag.OnlyHasDebit == true)">Chỉ khách đang còn nợ</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="type" class="form-select form-select-sm">
+                    <option value="">Tất cả loại nợ</option>
+                    <option value="1" selected="@(ViewBag.Type == CusDebitType.RO)">Lệnh RO</option>
+                    <option value="2" selected="@(ViewBag.Type == CusDebitType.Part)">Phụ tùng</option>
+                    <option value="3" selected="@(ViewBag.Type == CusDebitType.Other)">Dịch vụ khác</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">Tất cả trạng thái</option>
+                    <option value="1" selected="@(ViewBag.Status == CusDebitStatus.Active)">Còn nợ</option>
+                    <option value="2" selected="@(ViewBag.Status == CusDebitStatus.Cleared)">Đã tất toán</option>
+                    <option value="3" selected="@(ViewBag.Status == CusDebitStatus.Cancelled)">Đã hủy</option>
+                </select>
+            </div>
+            <div class="col-md-1 d-flex gap-1">
+                <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-funnel"></i></button>
+                <a href="/CusDebit" class="btn btn-sm btn-outline-secondary" title="Đặt lại"><i class="bi bi-arrow-counterclockwise"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item">
+        <a class="nav-link @(activeTab == "summaries" ? "active fw-bold" : "")" href="?tab=summaries&q=@ViewBag.Q&onlyHasDebit=@ViewBag.OnlyHasDebit">
+            <i class="bi bi-people me-1"></i>Tổng hợp theo khách hàng (@summaries.Count)
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link @(activeTab == "debits" ? "active fw-bold" : "")" href="?tab=debits&q=@ViewBag.Q&status=@ViewBag.Status&type=@ViewBag.Type">
+            <i class="bi bi-card-list me-1"></i>Danh sách khoản nợ chi tiết (@debits.Count)
+        </a>
+    </li>
+</ul>
+
+@if (activeTab == "summaries")
+{
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Mã KH</th>
+                        <th>Họ tên khách hàng</th>
+                        <th>Số điện thoại</th>
+                        <th>Xe / Biển số</th>
+                        <th class="text-end">Tổng nợ phát sinh</th>
+                        <th class="text-end">Đã thanh toán</th>
+                        <th class="text-end">Dư nợ còn lại</th>
+                        <th class="text-center">Khoản nợ</th>
+                        <th class="text-center">Tình trạng</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (summaries.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-center py-4 text-muted">Không tìm thấy khách hàng nào phù hợp với điều kiện tìm kiếm.</td>
+                        </tr>
+                    }
+                    @foreach (var s in summaries)
+                    {
+                        <tr>
+                            <td><span class="font-monospace text-muted">@s.CustomerCode</span></td>
+                            <td>
+                                <a href="/CusDebit/Detail/@s.CustomerId" class="fw-bold text-decoration-none">@s.CustomerName</a>
+                            </td>
+                            <td>@(s.Phone ?? "—")</td>
+                            <td>
+                                @if (!string.IsNullOrWhiteSpace(s.PlateNo))
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@s.PlateNo</span>
+                                    <span class="text-muted small ms-1">@s.CarModel</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td class="text-end fw-semibold">@s.TotalDebitAmount.ToString("N0")đ</td>
+                            <td class="text-end text-success">@s.TotalPaidAmount.ToString("N0")đ</td>
+                            <td class="text-end">
+                                <span class="fw-bold @(s.RemainingDebit > 0 ? "text-danger" : "text-muted")" style="font-size:15px">
+                                    @s.RemainingDebit.ToString("N0")đ
+                                </span>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-secondary">@s.ActiveDebitCount đang nợ</span>
+                                @if (s.OverdueDebitCount > 0)
+                                {
+                                    <span class="badge bg-danger ms-1" title="Khoản nợ quá hạn">@s.OverdueDebitCount quá hạn</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (s.RemainingDebit > 0)
+                                {
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-circle me-1"></i>Còn nợ</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success"><i class="bi bi-check2-circle me-1"></i>Hết nợ</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    @if (s.RemainingDebit > 0)
+                                    {
+                                        <a href="/CusDebit/CreatePayment?customerId=@s.CustomerId" class="btn btn-outline-success" title="Lập phiếu thu nợ"><i class="bi bi-cash-coin me-1"></i>Thu nợ</a>
+                                    }
+                                    <a href="/CusDebit/Detail/@s.CustomerId" class="btn btn-outline-primary" title="Xem hồ sơ công nợ chi tiết"><i class="bi bi-eye"></i></a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+else
+{
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Mã nợ</th>
+                        <th>Ngày nợ</th>
+                        <th>Khách hàng</th>
+                        <th>Xe / Lệnh RO</th>
+                        <th>Loại công nợ</th>
+                        <th class="text-end">Tiền nợ gốc</th>
+                        <th class="text-end">Đã trả</th>
+                        <th class="text-end">Còn nợ</th>
+                        <th>Hạn nộp</th>
+                        <th class="text-center">Trạng thái</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (debits.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="11" class="text-center py-4 text-muted">Không tìm thấy khoản công nợ nào.</td>
+                        </tr>
+                    }
+                    @foreach (var d in debits)
+                    {
+                        var (stxt, scode, scss) = Ui.CusDebitStatus(d.Status);
+                        var (ttxt, ticon, tcss) = Ui.CusDebitType(d.DebitType);
+                        <tr>
+                            <td>
+                                <a href="/CusDebit/DebitDetail/@d.Id" class="font-monospace fw-bold text-decoration-none">@d.DebitNo</a>
+                            </td>
+                            <td>@d.DebitDate.ToString("dd/MM/yyyy")</td>
+                            <td>
+                                <a href="/CusDebit/Detail/@d.CustomerId" class="fw-semibold text-decoration-none">@d.Customer.Name</a>
+                                @if (!string.IsNullOrWhiteSpace(d.Customer.Phone))
+                                {
+                                    <div class="text-muted small" style="font-size:11px">@d.Customer.Phone</div>
+                                }
+                            </td>
+                            <td>
+                                @if (d.Car != null)
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@d.Car.Plate</span>
+                                }
+                                @if (d.RO != null)
+                                {
+                                    <a href="/RO/Detail/@d.RO.Id" class="text-decoration-none small d-block">RO: @d.RO.Code</a>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-@tcss"><i class="bi @ticon me-1"></i>@ttxt</span>
+                            </td>
+                            <td class="text-end fw-semibold">@d.DebitAmount.ToString("N0")đ</td>
+                            <td class="text-end text-success">@d.PaidAmount.ToString("N0")đ</td>
+                            <td class="text-end">
+                                <span class="fw-bold @(d.RemainAmount > 0 ? "text-danger" : "text-muted")">
+                                    @d.RemainAmount.ToString("N0")đ
+                                </span>
+                            </td>
+                            <td>
+                                @if (d.DueDate.HasValue)
+                                {
+                                    <span class="@(d.IsOverdue ? "text-danger fw-bold" : "text-muted")">
+                                        @d.DueDate.Value.ToString("dd/MM/yyyy")
+                                        @if (d.IsOverdue)
+                                        {
+                                            <i class="bi bi-exclamation-triangle-fill ms-1" title="Quá hạn thanh toán"></i>
+                                        }
+                                    </span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-@scss">@stxt</span>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    @if (d.CanPay)
+                                    {
+                                        <a href="/CusDebit/CreatePayment?debitId=@d.Id" class="btn btn-outline-success" title="Thu tiền cho khoản nợ này"><i class="bi bi-cash-coin me-1"></i>Thu</a>
+                                    }
+                                    <a href="/CusDebit/DebitDetail/@d.Id" class="btn btn-outline-primary" title="Xem chi tiết khoản nợ"><i class="bi bi-eye"></i></a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}

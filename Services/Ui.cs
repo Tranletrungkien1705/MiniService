@@ -505,4 +505,20 @@ public static class Ui
         Models.PartOOStatus.Cancelled => ("Đã hủy", "CANC", "danger"),
         _ => (s.ToString(), "", "secondary")
     };
+
+    public static (string text, string code, string css) CusDebitStatus(CusDebitStatus s) => s switch
+    {
+        Models.CusDebitStatus.Active => ("Còn nợ", "ACTIVE", "warning"),
+        Models.CusDebitStatus.Cleared => ("Đã tất toán", "CLEARED", "success"),
+        Models.CusDebitStatus.Cancelled => ("Đã hủy", "CANCELLED", "secondary"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) CusDebitType(CusDebitType t) => t switch
+    {
+        Models.CusDebitType.RO => ("Lệnh sửa chữa (RO)", "bi-clipboard2-pulse", "primary"),
+        Models.CusDebitType.Part => ("Phụ tùng / Bán lẻ", "bi-box-seam", "info"),
+        Models.CusDebitType.Other => ("Dịch vụ khác", "bi-three-dots", "secondary"),
+        _ => (t.ToString(), "bi-tag", "secondary")
+    };
 }
