@@ -6498,3 +6498,86 @@ public class SharePartController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+public class PartPriceController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? isActive, DateTime? dateFrom, DateTime? dateTo, int? partId)
+    {
+        ViewBag.Q = q;
+        ViewBag.IsActive = isActive;
+        ViewBag.DateFrom = dateFrom;
+        ViewBag.DateTo = dateTo;
+        ViewBag.PartId = partId;
+        ViewBag.Summary = await svc.GetPartPriceSummaryAsync();
+        ViewBag.Parts = await svc.PartsAsync(null, null);
+        var list = await svc.PartPricesAsync(q, isActive, dateFrom, dateTo, partId);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var price = await svc.GetPartPriceAsync(id);
+        if (price == null) return NotFound();
+        ViewBag.History = await svc.GetPartPriceHistoryAsync(price.PartId);
+        return View(price);
+    }
+
+    public async Task<IActionResult> Create(int? partId)
+    {
+        ViewBag.Parts = await svc.PartsAsync(null, null);
+        ViewBag.PartId = partId;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int partId, decimal price, DateTime? dateEffect, string? remark)
+    {
+        try
+        {
+            var row = new PartPrice
+            {
+                PartId = partId,
+                Price = price,
+                DateEffect = dateEffect ?? DateTime.Today,
+                Remark = remark,
+                CreatedBy = "web"
+            };
+            var id = await svc.CreatePartPriceAsync(row);
+            TempData["Success"] = $"Đã lập giá bán phụ tùng [{id}].";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Parts = await svc.PartsAsync(null, null);
+            ViewBag.PartId = partId;
+            return View();
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, int partId, decimal price, DateTime? dateEffect, string? remark, bool isActive)
+    {
+        var row = new PartPrice
+        {
+            Id = id,
+            PartId = partId,
+            Price = price,
+            DateEffect = dateEffect ?? DateTime.Today,
+            Remark = remark,
+            IsActive = isActive,
+            LogLUBy = "web"
+        };
+        var (ok, msg) = await svc.UpdatePartPriceAsync(row);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeletePartPriceAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}

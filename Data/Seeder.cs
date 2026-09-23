@@ -2585,6 +2585,40 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Lịch sử giá bán phụ tùng (Ser_Inv_PartPrice) — lịch sử điều chỉnh giá theo ngày hiệu lực
+        if (!await db.PartPrices.AnyAsync())
+        {
+            var seedParts = await db.Parts.OrderBy(p => p.Id).Take(4).ToListAsync();
+            if (seedParts.Count > 0)
+            {
+                var priceRows = new List<PartPrice>();
+                foreach (var p in seedParts)
+                {
+                    // Giá cũ (đã hết hiệu lực) + giá hiện hành (đang hiệu lực) — minh họa lịch sử điều chỉnh giá
+                    priceRows.Add(new PartPrice
+                    {
+                        PartId = p.Id,
+                        Price = Math.Round(p.SalePrice * 0.9m, 0),
+                        DateEffect = DateTime.Today.AddMonths(-6),
+                        Remark = "Giá niêm yết cũ (đã điều chỉnh)",
+                        IsActive = false,
+                        CreatedBy = "Hệ thống HTC"
+                    });
+                    priceRows.Add(new PartPrice
+                    {
+                        PartId = p.Id,
+                        Price = p.SalePrice,
+                        DateEffect = DateTime.Today,
+                        Remark = "Giá niêm yết hiện hành",
+                        IsActive = true,
+                        CreatedBy = "Hệ thống HTC"
+                    });
+                }
+                db.PartPrices.AddRange(priceRows);
+                await db.SaveChangesAsync();
+            }
+        }
+
         // Seed Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
         if (!await db.Boms.AnyAsync())
         {
@@ -5277,6 +5311,8 @@ public static class Seeder
             "CREATE TABLE IF NOT EXISTS miniservice.\"PartGroups\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"DealerCode\" text NULL, \"ParentId\" integer NULL, \"FamilyId\" integer NULL, \"OrderId\" integer NULL, \"GroupCode\" text NOT NULL, \"GroupName\" text NOT NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PartGroups_OrgId_DealerCode_GroupCode\" ON miniservice.\"PartGroups\" (\"OrgId\", \"DealerCode\", \"GroupCode\")",
             "CREATE INDEX IF NOT EXISTS \"IX_PartGroups_OrgId_DealerCode\" ON miniservice.\"PartGroups\" (\"OrgId\", \"DealerCode\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"PartPrices\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"PartId\" integer NOT NULL, \"Price\" numeric(18,2) NOT NULL, \"DateEffect\" timestamp NOT NULL, \"Remark\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE INDEX IF NOT EXISTS \"IX_PartPrices_OrgId_PartId_DateEffect\" ON miniservice.\"PartPrices\" (\"OrgId\", \"PartId\", \"DateEffect\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"Suppliers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Address\" text NULL, \"Phone\" text NULL, \"Email\" text NULL, \"ContactName\" text NULL, \"ContactPhone\" text NULL, \"TaxCode\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankAccount\" text NULL",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankName\" text NULL",
@@ -6964,6 +7000,16 @@ public static class Seeder
                     "CREATE INDEX IF NOT EXISTS \"IX_PartGroups_OrgId_DealerCode\" ON \"PartGroups\" (\"OrgId\", \"DealerCode\");"
                 };
                 foreach (var sql in partGroupSqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+                // Lịch sử giá bán phụ tùng (Ser_Inv_PartPrice) — SQLite
+                var partPriceSqls = new[]
+                {
+                    "CREATE TABLE IF NOT EXISTS \"PartPrices\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"PartId\" INTEGER NOT NULL, \"Price\" TEXT NOT NULL DEFAULT '0', \"DateEffect\" TEXT NOT NULL, \"Remark\" TEXT NULL, \"IsActive\" INTEGER NOT NULL DEFAULT 1, \"CreatedBy\" TEXT NOT NULL DEFAULT 'web', \"CreatedAt\" TEXT NOT NULL, \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL);",
+                    "CREATE INDEX IF NOT EXISTS \"IX_PartPrices_OrgId_PartId_DateEffect\" ON \"PartPrices\" (\"OrgId\", \"PartId\", \"DateEffect\");"
+                };
+                foreach (var sql in partPriceSqls)
                 {
                     try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
                 }

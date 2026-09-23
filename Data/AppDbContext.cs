@@ -98,6 +98,7 @@ public class AppDbContext : DbContext
     public DbSet<SharePart> ShareParts => Set<SharePart>();
     public DbSet<SharePartLine> SharePartLines => Set<SharePartLine>();
     public DbSet<PartGroup> PartGroups => Set<PartGroup>();
+    public DbSet<PartPrice> PartPrices => Set<PartPrice>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -977,6 +978,13 @@ public class AppDbContext : DbContext
             e.HasIndex(x => new { x.OrgId, x.DealerCode });
             e.Ignore(x => x.ChildCount);
             e.HasOne(x => x.Parent).WithMany(x => x.Children).HasForeignKey(x => x.ParentId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PartPrice>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PartId, x.DateEffect });
+            e.Property(x => x.Price).HasPrecision(18, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

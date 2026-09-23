@@ -6801,6 +6801,102 @@ app.MapDelete("/api/part-groups/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
+app.MapGet("/api/part-prices", async (string? q, bool? isActive, DateTime? dateFrom, DateTime? dateTo, int? partId, IRoService svc) =>
+{
+    var list = await svc.PartPricesAsync(q, isActive, dateFrom, dateTo, partId);
+    return Results.Ok(list.Select(p => new
+    {
+        p.Id,
+        p.PartId,
+        partCode = p.Part?.Code,
+        partName = p.Part?.Name,
+        p.Price,
+        p.DateEffect,
+        p.Remark,
+        p.IsActive,
+        p.CreatedBy,
+        p.CreatedAt,
+        p.LogLUBy,
+        p.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/part-prices/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetPartPriceSummaryAsync();
+    return Results.Ok(new { s.TotalPrices, s.ActivePrices, s.InactivePrices, s.PartCount, s.TstPartCount, s.AvgPrice });
+});
+
+app.MapGet("/api/part-prices/{id:int}", async (int id, IRoService svc) =>
+{
+    var p = await svc.GetPartPriceAsync(id);
+    if (p == null) return Results.NotFound(new { error = "Không tìm thấy dòng giá phụ tùng." });
+    return Results.Ok(new
+    {
+        p.Id,
+        p.PartId,
+        part = p.Part != null ? new { p.Part.Id, p.Part.Code, p.Part.Name, p.Part.Unit, p.Part.SalePrice } : null,
+        p.Price,
+        p.DateEffect,
+        p.Remark,
+        p.IsActive,
+        p.CreatedBy,
+        p.CreatedAt,
+        p.LogLUBy,
+        p.LogLUDateTime
+    });
+});
+
+app.MapGet("/api/part-prices/history/{partId:int}", async (int partId, IRoService svc) =>
+{
+    var list = await svc.GetPartPriceHistoryAsync(partId);
+    return Results.Ok(list.Select(p => new { p.Id, p.Price, p.DateEffect, p.Remark, p.IsActive }));
+});
+
+app.MapPost("/api/part-prices", async (CreatePartPriceDto dto, IRoService svc) =>
+{
+    try
+    {
+        var row = new PartPrice
+        {
+            PartId = dto.PartId,
+            Price = dto.Price,
+            DateEffect = dto.DateEffect ?? DateTime.Today,
+            Remark = dto.Remark?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreatePartPriceAsync(row);
+        return Results.Ok(new { partPriceId = id, message = "Đã lập giá bán phụ tùng." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/part-prices/{id:int}", async (int id, UpdatePartPriceDto dto, IRoService svc) =>
+{
+    var row = new PartPrice
+    {
+        Id = id,
+        PartId = dto.PartId,
+        Price = dto.Price,
+        DateEffect = dto.DateEffect ?? DateTime.Today,
+        Remark = dto.Remark?.Trim(),
+        IsActive = dto.IsActive ?? true,
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+    var (ok, msg) = await svc.UpdatePartPriceAsync(row);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/part-prices/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeletePartPriceAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -6984,6 +7080,10 @@ record UpdateServiceTypeDto(string TypeName, string? DealerCode, string? Updated
 // Danh mục Nhóm vật tư / Loại vật tư (Ser_MST_PartGroup)
 record CreatePartGroupDto(string GroupCode, string GroupName, string? DealerCode, int? ParentId, int? OrderId, string? CreatedBy);
 record UpdatePartGroupDto(string GroupCode, string GroupName, string? DealerCode, int? ParentId, int? OrderId, string? UpdatedBy);
+
+// Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
+record CreatePartPriceDto(int PartId, decimal Price, DateTime? DateEffect, string? Remark, string? CreatedBy);
+record UpdatePartPriceDto(int PartId, decimal Price, DateTime? DateEffect, string? Remark, bool? IsActive, string? UpdatedBy);
 
 
 

@@ -1,0 +1,145 @@
+@model List<PartPrice>
+@{
+    ViewData["Title"] = "Lịch sử giá bán phụ tùng (Part Price)";
+    var summary = ViewBag.Summary as PartPriceSummaryDto ?? new PartPriceSummaryDto();
+    var parts = ViewBag.Parts as List<Part> ?? [];
+    var isActive = ViewBag.IsActive as bool?;
+    var dateFrom = ViewBag.DateFrom as DateTime?;
+    var dateTo = ViewBag.DateTo as DateTime?;
+    var partId = ViewBag.PartId as int?;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số dòng giá</div>
+                <div class="stat-num text-primary">@summary.TotalPrices</div>
+                <div class="text-muted" style="font-size:11.5px">Lịch sử giá bán (Ser_Inv_PartPrice)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đang hiệu lực / Ngừng</div>
+                <div class="stat-num text-success">@summary.ActivePrices <span class="fs-6 text-muted">/ @summary.InactivePrices</span></div>
+                <div class="text-muted" style="font-size:11.5px">Theo cờ IsActive</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Phụ tùng có lịch sử giá</div>
+                <div class="stat-num text-info">@summary.PartCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số phụ tùng khác nhau</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Giá bán trung bình</div>
+                <div class="stat-num text-warning">@summary.AvgPrice.ToString("N0")</div>
+                <div class="text-muted" style="font-size:11.5px">Đơn vị: VNĐ</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:260px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Mã / tên phụ tùng, ghi chú..." />
+                </div>
+                <select name="partId" class="form-select form-select-sm" style="width:220px" onchange="this.form.submit()">
+                    <option value="">-- Phụ tùng --</option>
+                    @foreach (var p in parts)
+                    {
+                        <option value="@p.Id" selected="@(partId == p.Id)">@p.Code - @p.Name</option>
+                    }
+                </select>
+                <select name="isActive" class="form-select form-select-sm" style="width:150px" onchange="this.form.submit()">
+                    <option value="">-- Trạng thái --</option>
+                    <option value="true" selected="@(isActive == true)">Đang hiệu lực</option>
+                    <option value="false" selected="@(isActive == false)">Ngừng hiệu lực</option>
+                </select>
+                <input name="dateFrom" type="date" value="@(dateFrom?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" style="width:150px" />
+                <input name="dateTo" type="date" value="@(dateTo?.ToString("yyyy-MM-dd"))" class="form-control form-control-sm" style="width:150px" />
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || isActive.HasValue || dateFrom.HasValue || dateTo.HasValue || partId.HasValue)
+                {
+                    <a href="/PartPrice" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/Part" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Danh mục phụ tùng</a>
+                <a href="/PartPrice/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập giá bán</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:70px">ID</th>
+                        <th style="width:150px">Mã phụ tùng</th>
+                        <th>Tên phụ tùng</th>
+                        <th class="text-end" style="width:130px">Giá bán</th>
+                        <th style="width:130px">Ngày hiệu lực</th>
+                        <th>Ghi chú</th>
+                        <th class="text-center" style="width:120px">Trạng thái</th>
+                        <th class="text-end" style="width:90px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy dòng giá phụ tùng nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var p in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace text-secondary">@p.Id</td>
+                            <td class="font-monospace fw-semibold">@p.Part?.Code</td>
+                            <td>
+                                <a asp-action="Detail" asp-route-id="@p.Id" class="fw-semibold text-dark text-decoration-none">
+                                    @p.Part?.Name
+                                </a>
+                            </td>
+                            <td class="text-end fw-semibold">@p.Price.ToString("N0")</td>
+                            <td>@p.DateEffect.ToString("dd/MM/yyyy")</td>
+                            <td class="text-muted small">@(string.IsNullOrEmpty(p.Remark) ? "—" : p.Remark)</td>
+                            <td class="text-center">
+                                @if (p.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Hiệu lực</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border">Ngừng</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@p.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,49 @@
+@{
+    ViewData["Title"] = "Lập giá bán phụ tùng (Part Price)";
+    var parts = ViewBag.Parts as List<Part> ?? [];
+    var partId = ViewBag.PartId as int?;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/PartPrice" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Lịch sử giá bán phụ tùng</a>
+        <h5 class="mb-0 fw-bold mt-1"><i class="bi bi-cash-coin me-2 text-primary"></i>Lập Giá bán Phụ tùng Mới (Ser_Inv_PartPrice)</h5>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0" style="max-width:680px">
+    <div class="card-body">
+        <form asp-action="Create" method="post">
+            @Html.AntiForgeryToken()
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Phụ tùng (PartID) <span class="text-danger">*</span></label>
+                    <select name="partId" class="form-select" required>
+                        <option value="">— Chọn phụ tùng —</option>
+                        @foreach (var p in parts)
+                        {
+                            <option value="@p.Id" selected="@(partId == p.Id)">@p.Code - @p.Name</option>
+                        }
+                    </select>
+                    <div class="form-text">Chỉ lập giá cho phụ tùng đang hoạt động trong danh mục.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Giá bán (Price) <span class="text-danger">*</span></label>
+                    <input name="price" type="number" step="1000" min="0" class="form-control" placeholder="VD: 180000" required />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Ngày hiệu lực (DateEffect)</label>
+                    <input name="dateEffect" type="date" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Ghi chú (Remark)</label>
+                    <input name="remark" class="form-control" placeholder="VD: Điều chỉnh giá theo bảng giá mới của hãng" />
+                </div>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu giá bán</button>
+                <a href="/PartPrice" class="btn btn-outline-secondary">Hủy</a>
+            </div>
+        </form>
+    </div>
+</div>

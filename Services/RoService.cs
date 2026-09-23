@@ -303,6 +303,14 @@ public interface IRoService
     Task<PartGroupSummaryDto> GetPartGroupSummaryAsync();
     Task<List<string>> GetDistinctPartGroupDealersAsync();
     Task<List<PartGroup>> GetPartGroupParentsAsync(string? dealerCode, int? excludeId);
+    // Part Price — Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
+    Task<List<PartPrice>> PartPricesAsync(string? q, bool? isActive, DateTime? dateFrom, DateTime? dateTo, int? partId);
+    Task<PartPrice?> GetPartPriceAsync(int id);
+    Task<List<PartPrice>> GetPartPriceHistoryAsync(int partId);
+    Task<int> CreatePartPriceAsync(PartPrice price);
+    Task<(bool ok, string msg)> UpdatePartPriceAsync(PartPrice price);
+    Task<(bool ok, string msg)> DeletePartPriceAsync(int id);
+    Task<PartPriceSummaryDto> GetPartPriceSummaryAsync();
     // Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
     Task<List<Bom>> BomsAsync(bool? isActive, string? q);
     Task<Bom?> GetBomAsync(int id);
@@ -6079,6 +6087,112 @@ public class RoService(AppDbContext db) : IRoService
             var g = await db.PartGroups.FirstOrDefaultAsync(x => x.Id == id);
             if (g != null) g.FamilyId = await ResolvePartGroupFamilyIdAsync(id);
         }
+    }
+
+    // --- Part Price — Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice) ---
+    public async Task<List<PartPrice>> PartPricesAsync(string? q, bool? isActive, DateTime? dateFrom, DateTime? dateTo, int? partId)
+    {
+        var query = db.PartPrices.Include(p => p.Part).AsQueryable();
+        if (isActive.HasValue) query = query.Where(p => p.IsActive == isActive.Value);
+        if (partId.HasValue && partId.Value > 0) query = query.Where(p => p.PartId == partId.Value);
+        if (dateFrom.HasValue) query = query.Where(p => p.DateEffect >= dateFrom.Value.Date);
+        if (dateTo.HasValue) query = query.Where(p => p.DateEffect <= dateTo.Value.Date);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(p => p.Part.Code.ToLower().Contains(s)
+                || p.Part.Name.ToLower().Contains(s)
+                || (p.Remark != null && p.Remark.ToLower().Contains(s)));
+        }
+        return await query
+            .OrderBy(p => p.Part.Code).ThenByDescending(p => p.DateEffect)
+            .ToListAsync();
+    }
+
+    public Task<PartPrice?> GetPartPriceAsync(int id) =>
+        db.PartPrices.Include(p => p.Part).FirstOrDefaultAsync(p => p.Id == id);
+
+    public Task<List<PartPrice>> GetPartPriceHistoryAsync(int partId) =>
+        db.PartPrices.Include(p => p.Part)
+            .Where(p => p.PartId == partId)
+            .OrderByDescending(p => p.DateEffect)
+            .ToListAsync();
+
+    public async Task<int> CreatePartPriceAsync(PartPrice price)
+    {
+        // Ser_Inv_PartPrice_Create: PartID bắt buộc, Price bắt buộc, phụ tùng phải tồn tại & đang hoạt động.
+        if (price.PartId <= 0)
+            throw new InvalidOperationException("Vui lòng chọn phụ tùng (PartID).");
+        if (price.Price <= 0)
+            throw new InvalidOperationException("Vui lòng nhập giá bán (Price) lớn hơn 0.");
+
+        var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == price.PartId);
+        if (part == null)
+            throw new InvalidOperationException("Không tìm thấy phụ tùng trong hệ thống.");
+        if (!part.IsActive)
+            throw new InvalidOperationException($"Phụ tùng '{part.Code}' đã ngừng hoạt động, không thể lập giá.");
+
+        price.DateEffect = price.DateEffect == default ? DateTime.Today : price.DateEffect.Date;
+        price.Remark = string.IsNullOrWhiteSpace(price.Remark) ? null : price.Remark.Trim();
+        price.IsActive = true;
+        price.CreatedAt = DateTime.Now;
+        price.LogLUDateTime = DateTime.Now;
+        price.LogLUBy = price.CreatedBy;
+        db.PartPrices.Add(price);
+        await db.SaveChangesAsync();
+        return price.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdatePartPriceAsync(PartPrice price)
+    {
+        var existing = await db.PartPrices.FirstOrDefaultAsync(p => p.Id == price.Id);
+        if (existing == null) return (false, "Không tìm thấy dòng giá phụ tùng.");
+
+        if (price.PartId <= 0) return (false, "Vui lòng chọn phụ tùng (PartID).");
+        if (price.Price <= 0) return (false, "Vui lòng nhập giá bán (Price) lớn hơn 0.");
+
+        var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == price.PartId);
+        if (part == null) return (false, "Không tìm thấy phụ tùng trong hệ thống.");
+        if (!part.IsActive) return (false, $"Phụ tùng '{part.Code}' đã ngừng hoạt động, không thể cập nhật giá.");
+
+        existing.PartId = price.PartId;
+        existing.Price = price.Price;
+        existing.DateEffect = price.DateEffect == default ? existing.DateEffect : price.DateEffect.Date;
+        existing.Remark = string.IsNullOrWhiteSpace(price.Remark) ? null : price.Remark.Trim();
+        existing.IsActive = price.IsActive;
+        existing.LogLUBy = price.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật giá bán phụ tùng [{existing.Id}] {part.Code}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeletePartPriceAsync(int id)
+    {
+        var existing = await db.PartPrices.Include(p => p.Part).FirstOrDefaultAsync(p => p.Id == id);
+        if (existing == null) return (false, "Không tìm thấy dòng giá phụ tùng.");
+        if (!existing.IsActive) return (false, "Dòng giá này đã ngừng hiệu lực.");
+
+        // Ser_Inv_PartPrice_Delete: xóa mềm (IsActive=0); chặn xóa nếu phụ tùng là hàng TST (FlagInTST).
+        // MiniService chưa có cờ FlagInTST trên Part — ghi nợ rõ, không suy diễn.
+        existing.IsActive = false;
+        existing.LogLUBy = "web";
+        existing.LogLUDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+        return (true, $"Đã ngừng hiệu lực dòng giá [{id}] của phụ tùng {existing.Part?.Code}.");
+    }
+
+    public async Task<PartPriceSummaryDto> GetPartPriceSummaryAsync()
+    {
+        var all = await db.PartPrices.ToListAsync();
+        return new PartPriceSummaryDto
+        {
+            TotalPrices = all.Count,
+            ActivePrices = all.Count(p => p.IsActive),
+            InactivePrices = all.Count(p => !p.IsActive),
+            PartCount = all.Select(p => p.PartId).Distinct().Count(),
+            TstPartCount = 0, // MiniService chưa có cờ FlagInTST trên Part
+            AvgPrice = all.Count > 0 ? Math.Round(all.Average(p => p.Price), 0) : 0
+        };
     }
 
     // --- Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl) ---

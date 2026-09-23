@@ -1,0 +1,183 @@
+@model PartPrice
+@{
+    ViewData["Title"] = $"Chi tiết giá bán phụ tùng [{Model.Id}] {Model.Part?.Code}";
+    var history = ViewBag.History as List<PartPrice> ?? [];
+    var parts = ViewBag.Parts as List<Part> ?? [];
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/PartPrice" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Lịch sử giá bán phụ tùng</a>
+        <h5 class="mb-0 fw-bold mt-1">
+            <span class="font-monospace text-primary">#@Model.Id</span> - @Model.Part?.Code @Model.Part?.Name
+        </h5>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editPriceModal">
+            <i class="bi bi-pencil me-1"></i>Chỉnh sửa
+        </button>
+        @if (Model.IsActive)
+        {
+            <form asp-action="Delete" asp-route-id="@Model.Id" method="post" onsubmit="return confirm('Bạn có chắc muốn ngừng hiệu lực dòng giá này?');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-slash-circle me-1"></i>Ngừng hiệu lực</button>
+            </form>
+        }
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin giá bán</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">ID (PartPriceID)</dt>
+                    <dd class="col-sm-7 font-monospace fw-bold">@Model.Id</dd>
+
+                    <dt class="col-sm-5 text-muted small">Mã phụ tùng (PartCode)</dt>
+                    <dd class="col-sm-7 font-monospace fw-semibold">@Model.Part?.Code</dd>
+
+                    <dt class="col-sm-5 text-muted small">Tên phụ tùng (VieName)</dt>
+                    <dd class="col-sm-7">@Model.Part?.Name</dd>
+
+                    <dt class="col-sm-5 text-muted small">Giá bán (Price)</dt>
+                    <dd class="col-sm-7 fw-bold text-success">@Model.Price.ToString("N0") VNĐ</dd>
+
+                    <dt class="col-sm-5 text-muted small">Ngày hiệu lực (DateEffect)</dt>
+                    <dd class="col-sm-7">@Model.DateEffect.ToString("dd/MM/yyyy")</dd>
+
+                    <dt class="col-sm-5 text-muted small">Ghi chú (Remark)</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(Model.Remark) ? "—" : Model.Remark)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Trạng thái (IsActive)</dt>
+                    <dd class="col-sm-7">
+                        @if (Model.IsActive)
+                        {
+                            <span class="badge bg-success-subtle text-success border border-success-subtle">Đang hiệu lực</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary-subtle text-secondary border">Ngừng hiệu lực</span>
+                        }
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-clock-history me-1 text-secondary"></i>Lịch sử cập nhật</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Người tạo (CreatedBy)</dt>
+                    <dd class="col-sm-7">@Model.CreatedBy</dd>
+
+                    <dt class="col-sm-5 text-muted small">Ngày tạo (CreatedDate)</dt>
+                    <dd class="col-sm-7">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</dd>
+
+                    <dt class="col-sm-5 text-muted small">Người cập nhật cuối (LogLUBy)</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(Model.LogLUBy) ? "-" : Model.LogLUBy)</dd>
+
+                    <dt class="col-sm-5 text-muted small">Cập nhật cuối (LogLUDateTime)</dt>
+                    <dd class="col-sm-7">@(Model.LogLUDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "-")</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (history.Count > 1)
+{
+    <div class="card shadow-sm border-0 mt-3">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-graph-up-arrow me-1 text-primary"></i>Lịch sử điều chỉnh giá của phụ tùng (@history.Count dòng)</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width:70px">ID</th>
+                            <th class="text-end" style="width:150px">Giá bán</th>
+                            <th style="width:140px">Ngày hiệu lực</th>
+                            <th>Ghi chú</th>
+                            <th class="text-center" style="width:120px">Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var h in history)
+                        {
+                            <tr class="@(h.Id == Model.Id ? "table-active" : "")">
+                                <td class="font-monospace">
+                                    <a asp-action="Detail" asp-route-id="@h.Id" class="text-decoration-none">@h.Id</a>
+                                </td>
+                                <td class="text-end fw-semibold">@h.Price.ToString("N0")</td>
+                                <td>@h.DateEffect.ToString("dd/MM/yyyy")</td>
+                                <td class="text-muted small">@(string.IsNullOrEmpty(h.Remark) ? "—" : h.Remark)</td>
+                                <td class="text-center">
+                                    @if (h.IsActive)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">Hiệu lực</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary-subtle text-secondary border">Ngừng</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Modal Chỉnh sửa giá bán -->
+<div class="modal fade" id="editPriceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Update" asp-route-id="@Model.Id" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-pencil-square me-2 text-primary"></i>Chỉnh sửa giá bán #@Model.Id</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Phụ tùng (PartID) <span class="text-danger">*</span></label>
+                            <select name="partId" class="form-select" required>
+                                @foreach (var p in parts)
+                                {
+                                    <option value="@p.Id" selected="@(Model.PartId == p.Id)">@p.Code - @p.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Giá bán (Price) <span class="text-danger">*</span></label>
+                            <input name="price" type="number" step="1000" min="0" class="form-control" value="@Model.Price" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Ngày hiệu lực (DateEffect)</label>
+                            <input name="dateEffect" type="date" class="form-control" value="@Model.DateEffect.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Ghi chú (Remark)</label>
+                            <input name="remark" class="form-control" value="@Model.Remark" />
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input name="isActive" value="true" type="checkbox" class="form-check-input" id="chkActive" checked="@Model.IsActive" />
+                                <label class="form-check-label small" for="chkActive">Đang hiệu lực (IsActive)</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu thay đổi</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

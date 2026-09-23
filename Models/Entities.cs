@@ -3503,3 +3503,35 @@ public class PartGroupSummaryDto
     public int DealerCount { get; set; }                      // Số đại lý khác nhau
     public int ActiveGroups { get; set; }                     // Số nhóm đang hoạt động
 }
+/// <summary>Lịch sử giá bán phụ tùng theo ngày hiệu lực — Ser_Inv_PartPrice trong idn.CarService.
+/// Mỗi dòng là một mức giá bán (Price) của một phụ tùng (PartID) có hiệu lực từ ngày DateEffect.
+/// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH) / đại lý (Dealer).
+/// Nghiệp vụ: Ser_Inv_PartPrice_Create / _Update / _Delete (xóa mềm IsActive=0) / _Get_HQ / _Get_DL.
+/// Lưu ý nguồn: nếu phụ tùng là hàng TST (Ser_Mst_Part.FlagInTST) thì giá bán LUÔN lấy theo giá TST,
+/// và KHÔNG cho xóa dòng giá của phụ tùng TST.</summary>
+public class PartPrice : IOrgOwned
+{
+    public int Id { get; set; }                               // PartPriceID
+    public Guid OrgId { get; set; }
+    public int PartId { get; set; }                           // Phụ tùng áp dụng (PartID → Part)
+    public Part Part { get; set; } = null!;
+    public decimal Price { get; set; }                        // Giá bán (Price)
+    public DateTime DateEffect { get; set; } = DateTime.Today; // Ngày hiệu lực (DateEffect)
+    public string? Remark { get; set; }                       // Ghi chú (Remark)
+    public bool IsActive { get; set; } = true;                // Trạng thái hiệu lực (IsActive)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo (CreatedDate)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục Lịch sử giá bán phụ tùng — phục vụ màn hình quản lý PartPrice.</summary>
+public class PartPriceSummaryDto
+{
+    public int TotalPrices { get; set; }                      // Tổng số dòng giá
+    public int ActivePrices { get; set; }                     // Số dòng đang hiệu lực
+    public int InactivePrices { get; set; }                   // Số dòng đã ngừng hiệu lực
+    public int PartCount { get; set; }                        // Số phụ tùng khác nhau có lịch sử giá
+    public int TstPartCount { get; set; }                     // Số dòng giá thuộc phụ tùng TST (khóa xóa)
+    public decimal AvgPrice { get; set; }                     // Giá bán trung bình
+}
