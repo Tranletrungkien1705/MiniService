@@ -3534,4 +3534,36 @@ public class PartPriceSummaryDto
     public int PartCount { get; set; }                        // Số phụ tùng khác nhau có lịch sử giá
     public int TstPartCount { get; set; }                     // Số dòng giá thuộc phụ tùng TST (khóa xóa)
     public decimal AvgPrice { get; set; }                     // Giá bán trung bình
+}/// <summary>Thiết lập nguồn gốc model xe theo số khung (VIN Model Origin) — Mst_VINModelOrginal trong idn.CarService.
+/// Mỗi dòng ánh xạ một tiền tố số khung VIN (VINCode, 4–5 ký tự) sang dòng xe (ModelCode) và
+/// nguồn gốc/xuất xứ (OrginalCode) phục vụ tra cứu & phân loại xe khi tiếp nhận.
+/// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH).
+/// Nghiệp vụ: Mst_VINModelOrginal_Get / _Update / _Delete / _Import (upsert theo VINCode).
+/// Luật kiểm tra khi nhập: VINCode dài đúng 4 hoặc 5 ký tự và chỉ gồm chữ/số (regex [^a-zA-Z0-9]);
+/// ModelCode và OrginalCode bắt buộc.</summary>
+public class VinModelOrigin : IOrgOwned
+{
+    public int Id { get; set; }                               // Khóa chính nội bộ
+    public Guid OrgId { get; set; }
+    public string VINCode { get; set; } = "";                 // Tiền tố số khung VIN (VINCode) — 4 hoặc 5 ký tự
+    public string ModelCode { get; set; } = "";               // Mã dòng xe (ModelCode)
+    public string OrginalCode { get; set; } = "";             // Mã nguồn gốc/xuất xứ (OrginalCode)
+    public bool IsActive { get; set; } = true;                // Cờ hoạt động (FlagActive)
+    public string? Remark { get; set; }                       // Ghi chú (Remark)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo (CreatedDate)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục Nguồn gốc model xe — phục vụ màn hình quản lý VIN Model Origin.</summary>
+public class VinModelOriginSummaryDto
+{
+    public int TotalRecords { get; set; }                     // Tổng số dòng ánh xạ VIN
+    public int ActiveRecords { get; set; }                    // Số dòng đang hoạt động
+    public int InactiveRecords { get; set; }                  // Số dòng tạm dừng
+    public int ModelCount { get; set; }                       // Số dòng xe (ModelCode) khác nhau
+    public int OrginalCount { get; set; }                     // Số nguồn gốc (OrginalCode) khác nhau
+    public int Vin4Count { get; set; }                        // Số VINCode dài 4 ký tự
+    public int Vin5Count { get; set; }                        // Số VINCode dài 5 ký tự
 }

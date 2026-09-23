@@ -6897,6 +6897,96 @@ app.MapDelete("/api/part-prices/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Thiết lập nguồn gốc model xe theo số khung (Mst_VINModelOrginal)
+app.MapGet("/api/vin-model-origins", async (string? q, bool? isActive, string? modelCode, string? orginalCode, IRoService svc) =>
+{
+    var list = await svc.VinModelOriginsAsync(q, isActive, modelCode, orginalCode);
+    return Results.Ok(list.Select(x => new
+    {
+        x.Id, x.VINCode, x.ModelCode, x.OrginalCode, x.IsActive, x.Remark,
+        x.CreatedBy, x.CreatedAt, x.LogLUBy, x.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/vin-model-origins/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetVinModelOriginSummaryAsync();
+    return Results.Ok(new
+    {
+        s.TotalRecords, s.ActiveRecords, s.InactiveRecords,
+        s.ModelCount, s.OrginalCount, s.Vin4Count, s.Vin5Count
+    });
+});
+
+app.MapGet("/api/vin-model-origins/{id:int}", async (int id, IRoService svc) =>
+{
+    var x = await svc.GetVinModelOriginAsync(id);
+    if (x == null) return Results.NotFound(new { error = "Không tìm thấy dòng nguồn gốc model xe." });
+    return Results.Ok(new { x.Id, x.VINCode, x.ModelCode, x.OrginalCode, x.IsActive, x.Remark, x.CreatedBy, x.CreatedAt, x.LogLUBy, x.LogLUDateTime });
+});
+
+app.MapGet("/api/vin-model-origins/by-vin/{vinCode}", async (string vinCode, IRoService svc) =>
+{
+    var x = await svc.GetVinModelOriginByVinAsync(vinCode);
+    if (x == null) return Results.NotFound(new { error = $"Không tìm thấy nguồn gốc cho VIN '{vinCode}'." });
+    return Results.Ok(new { x.Id, x.VINCode, x.ModelCode, x.OrginalCode, x.IsActive, x.Remark });
+});
+
+app.MapPost("/api/vin-model-origins", async (CreateVinModelOriginDto dto, IRoService svc) =>
+{
+    try
+    {
+        var row = new VinModelOrigin
+        {
+            VINCode = dto.VINCode ?? "",
+            ModelCode = dto.ModelCode ?? "",
+            OrginalCode = dto.OrginalCode ?? "",
+            Remark = dto.Remark?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreateVinModelOriginAsync(row);
+        return Results.Ok(new { vinModelOriginId = id, message = "Đã thêm nguồn gốc model xe." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/vin-model-origins/{id:int}", async (int id, UpdateVinModelOriginDto dto, IRoService svc) =>
+{
+    var row = new VinModelOrigin
+    {
+        Id = id,
+        VINCode = dto.VINCode ?? "",
+        ModelCode = dto.ModelCode ?? "",
+        OrginalCode = dto.OrginalCode ?? "",
+        IsActive = dto.IsActive ?? true,
+        Remark = dto.Remark?.Trim(),
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+    var (ok, msg) = await svc.UpdateVinModelOriginAsync(row);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/vin-model-origins/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteVinModelOriginAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/vin-model-origins/import", async (ImportVinModelOriginsDto dto, IRoService svc) =>
+{
+    var rows = (dto.Rows ?? []).Select(r => new VinModelOrigin
+    {
+        VINCode = r.VINCode ?? "",
+        ModelCode = r.ModelCode ?? "",
+        OrginalCode = r.OrginalCode ?? ""
+    }).ToList();
+    var (ok, msg, added, updated) = await svc.ImportVinModelOriginsAsync(rows, dto.UserCode ?? "api");
+    return ok ? Results.Ok(new { message = msg, added, updated }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -7084,6 +7174,12 @@ record UpdatePartGroupDto(string GroupCode, string GroupName, string? DealerCode
 // Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
 record CreatePartPriceDto(int PartId, decimal Price, DateTime? DateEffect, string? Remark, string? CreatedBy);
 record UpdatePartPriceDto(int PartId, decimal Price, DateTime? DateEffect, string? Remark, bool? IsActive, string? UpdatedBy);
+
+// Thiết lập nguồn gốc model xe theo số khung (Mst_VINModelOrginal)
+record CreateVinModelOriginDto(string VINCode, string ModelCode, string OrginalCode, string? Remark, string? CreatedBy);
+record UpdateVinModelOriginDto(string VINCode, string ModelCode, string OrginalCode, bool? IsActive, string? Remark, string? UpdatedBy);
+record ImportVinModelOriginsDto(List<ImportVinModelOriginRowDto>? Rows, string? UserCode);
+record ImportVinModelOriginRowDto(string VINCode, string ModelCode, string OrginalCode);
 
 
 

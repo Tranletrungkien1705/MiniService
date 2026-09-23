@@ -6581,3 +6581,99 @@ public class PartPriceController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+/// <summary>Thiết lập nguồn gốc model xe theo số khung (VIN Model Origin) — Mst_VINModelOrginal trong idn.CarService.
+/// Nguồn: Mst_VINModelOrginal_Get / _Update / _Delete / _Import (BizCarSv.Master.cs).</summary>
+public class VinModelOriginController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? isActive, string? modelCode, string? orginalCode)
+    {
+        ViewBag.Q = q;
+        ViewBag.IsActive = isActive;
+        ViewBag.ModelCode = modelCode;
+        ViewBag.OrginalCode = orginalCode;
+        ViewBag.Summary = await svc.GetVinModelOriginSummaryAsync();
+        var list = await svc.VinModelOriginsAsync(q, isActive, modelCode, orginalCode);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var row = await svc.GetVinModelOriginAsync(id);
+        if (row == null) return NotFound();
+        return View(row);
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string vinCode, string modelCode, string orginalCode, string? remark)
+    {
+        try
+        {
+            var row = new VinModelOrigin
+            {
+                VINCode = vinCode ?? "",
+                ModelCode = modelCode ?? "",
+                OrginalCode = orginalCode ?? "",
+                Remark = remark?.Trim(),
+                CreatedBy = "web"
+            };
+            var id = await svc.CreateVinModelOriginAsync(row);
+            TempData["Success"] = $"Đã thêm nguồn gốc model xe [{id}] {row.VINCode}.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string vinCode, string modelCode, string orginalCode, bool isActive, string? remark)
+    {
+        var row = new VinModelOrigin
+        {
+            Id = id,
+            VINCode = vinCode ?? "",
+            ModelCode = modelCode ?? "",
+            OrginalCode = orginalCode ?? "",
+            IsActive = isActive,
+            Remark = remark?.Trim(),
+            LogLUBy = "web"
+        };
+        var (ok, msg) = await svc.UpdateVinModelOriginAsync(row);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteVinModelOriginAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Import(string? bulkText)
+    {
+        try
+        {
+            var rows = new List<VinModelOrigin>();
+            foreach (var raw in (bulkText ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var parts = raw.Split(new[] { ',', '\t', ';' }, StringSplitOptions.TrimEntries);
+                if (parts.Length < 3) continue;
+                rows.Add(new VinModelOrigin { VINCode = parts[0], ModelCode = parts[1], OrginalCode = parts[2] });
+            }
+            var (ok, msg, added, updated) = await svc.ImportVinModelOriginsAsync(rows, "web");
+            TempData[ok ? "Success" : "Error"] = msg;
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+}

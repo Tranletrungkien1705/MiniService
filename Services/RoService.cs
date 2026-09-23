@@ -311,6 +311,15 @@ public interface IRoService
     Task<(bool ok, string msg)> UpdatePartPriceAsync(PartPrice price);
     Task<(bool ok, string msg)> DeletePartPriceAsync(int id);
     Task<PartPriceSummaryDto> GetPartPriceSummaryAsync();
+    // VIN Model Origin — Thiết lập nguồn gốc model xe theo số khung (Mst_VINModelOrginal)
+    Task<List<VinModelOrigin>> VinModelOriginsAsync(string? q, bool? isActive, string? modelCode, string? orginalCode);
+    Task<VinModelOrigin?> GetVinModelOriginAsync(int id);
+    Task<VinModelOrigin?> GetVinModelOriginByVinAsync(string vinCode);
+    Task<int> CreateVinModelOriginAsync(VinModelOrigin row);
+    Task<(bool ok, string msg)> UpdateVinModelOriginAsync(VinModelOrigin row);
+    Task<(bool ok, string msg)> DeleteVinModelOriginAsync(int id);
+    Task<(bool ok, string msg, int added, int updated)> ImportVinModelOriginsAsync(List<VinModelOrigin> rows, string userCode);
+    Task<VinModelOriginSummaryDto> GetVinModelOriginSummaryAsync();
     // Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
     Task<List<Bom>> BomsAsync(bool? isActive, string? q);
     Task<Bom?> GetBomAsync(int id);
@@ -11442,6 +11451,171 @@ public class RoService(AppDbContext db) : IRoService
         // Nguồn: Ser_Mst_Part_SP_Get — chỉ lấy phụ tùng đang hoạt động, ưu tiên phụ tùng tồn dư (InStock > MinStock).
         // Lưu ý: danh mục Part trong MiniService không phân tách theo đại lý nên bỏ qua tham số dealerCode.
         return await db.Parts.Where(p => p.IsActive).OrderBy(p => p.Code).ToListAsync();
+    }
+
+    // --- VIN Model Origin — Thiết lập nguồn gốc model xe theo số khung (Mst_VINModelOrginal) ---
+    public async Task<List<VinModelOrigin>> VinModelOriginsAsync(string? q, bool? isActive, string? modelCode, string? orginalCode)
+    {
+        var query = db.VinModelOrigins.AsQueryable();
+        if (isActive.HasValue) query = query.Where(x => x.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(modelCode))
+        {
+            var mc = modelCode.Trim().ToLower();
+            query = query.Where(x => x.ModelCode.ToLower().Contains(mc));
+        }
+        if (!string.IsNullOrWhiteSpace(orginalCode))
+        {
+            var oc = orginalCode.Trim().ToLower();
+            query = query.Where(x => x.OrginalCode.ToLower().Contains(oc));
+        }
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(x => x.VINCode.ToLower().Contains(s)
+                || x.ModelCode.ToLower().Contains(s)
+                || x.OrginalCode.ToLower().Contains(s));
+        }
+        return await query.OrderBy(x => x.VINCode).ToListAsync();
+    }
+
+    public Task<VinModelOrigin?> GetVinModelOriginAsync(int id) =>
+        db.VinModelOrigins.FirstOrDefaultAsync(x => x.Id == id);
+
+    public Task<VinModelOrigin?> GetVinModelOriginByVinAsync(string vinCode)
+    {
+        var v = (vinCode ?? "").Trim().ToUpperInvariant();
+        return db.VinModelOrigins.FirstOrDefaultAsync(x => x.VINCode == v);
+    }
+
+    // Kiểm tra VINCode: dài đúng 4 hoặc 5 ký tự và chỉ gồm chữ/số (regex [^a-zA-Z0-9] không khớp).
+    private static string? ValidateVinModelOrigin(VinModelOrigin row)
+    {
+        var vin = (row.VINCode ?? "").Trim();
+        if (vin.Length != 4 && vin.Length != 5)
+            return "Mã số khung (VINCode) phải dài đúng 4 hoặc 5 ký tự.";
+        if (System.Text.RegularExpressions.Regex.IsMatch(vin, "[^a-zA-Z0-9]"))
+            return "Mã số khung (VINCode) chỉ được gồm chữ cái và chữ số.";
+        if (string.IsNullOrWhiteSpace(row.ModelCode))
+            return "Vui lòng nhập mã dòng xe (ModelCode).";
+        if (string.IsNullOrWhiteSpace(row.OrginalCode))
+            return "Vui lòng nhập mã nguồn gốc (OrginalCode).";
+        return null;
+    }
+
+    public async Task<int> CreateVinModelOriginAsync(VinModelOrigin row)
+    {
+        row.VINCode = (row.VINCode ?? "").Trim().ToUpperInvariant();
+        row.ModelCode = (row.ModelCode ?? "").Trim();
+        row.OrginalCode = (row.OrginalCode ?? "").Trim();
+
+        var err = ValidateVinModelOrigin(row);
+        if (err != null) throw new InvalidOperationException(err);
+
+        // Mst_VINModelOrginal_Update: VINCode là khóa nghiệp vụ, không được trùng.
+        var exists = await db.VinModelOrigins.AnyAsync(x => x.VINCode == row.VINCode);
+        if (exists)
+            throw new InvalidOperationException($"Mã số khung '{row.VINCode}' đã tồn tại trong danh mục nguồn gốc model xe.");
+
+        row.IsActive = true;
+        row.CreatedAt = DateTime.Now;
+        row.LogLUDateTime = DateTime.Now;
+        row.LogLUBy = row.CreatedBy;
+        db.VinModelOrigins.Add(row);
+        await db.SaveChangesAsync();
+        return row.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateVinModelOriginAsync(VinModelOrigin row)
+    {
+        var existing = await db.VinModelOrigins.FirstOrDefaultAsync(x => x.Id == row.Id);
+        if (existing == null) return (false, "Không tìm thấy dòng nguồn gốc model xe.");
+
+        var newVin = (row.VINCode ?? "").Trim().ToUpperInvariant();
+        var newModel = (row.ModelCode ?? "").Trim();
+        var newOrginal = (row.OrginalCode ?? "").Trim();
+
+        var err = ValidateVinModelOrigin(new VinModelOrigin { VINCode = newVin, ModelCode = newModel, OrginalCode = newOrginal });
+        if (err != null) return (false, err);
+
+        // Mst_VINModelOrginal_Update: VINCode không trùng với dòng khác.
+        var dup = await db.VinModelOrigins.AnyAsync(x => x.Id != row.Id && x.VINCode == newVin);
+        if (dup) return (false, $"Mã số khung '{newVin}' đã tồn tại trong danh mục nguồn gốc model xe.");
+
+        existing.VINCode = newVin;
+        existing.ModelCode = newModel;
+        existing.OrginalCode = newOrginal;
+        existing.IsActive = row.IsActive;
+        existing.Remark = row.Remark;
+        existing.LogLUBy = row.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật nguồn gốc model xe [{existing.Id}] {existing.VINCode}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteVinModelOriginAsync(int id)
+    {
+        var existing = await db.VinModelOrigins.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return (false, "Không tìm thấy dòng nguồn gốc model xe.");
+        db.VinModelOrigins.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa nguồn gốc model xe [{id}] {existing.VINCode}.");
+    }
+
+    // Mst_VINModelOrginal_Import: nhập danh sách, upsert theo VINCode (thêm mới hoặc cập nhật ModelCode/OrginalCode).
+    public async Task<(bool ok, string msg, int added, int updated)> ImportVinModelOriginsAsync(List<VinModelOrigin> rows, string userCode)
+    {
+        if (rows == null || rows.Count == 0)
+            return (false, "Danh sách nhập rỗng.", 0, 0);
+
+        var added = 0;
+        var updated = 0;
+        foreach (var r in rows)
+        {
+            r.VINCode = (r.VINCode ?? "").Trim().ToUpperInvariant();
+            r.ModelCode = (r.ModelCode ?? "").Trim();
+            r.OrginalCode = (r.OrginalCode ?? "").Trim();
+
+            var err = ValidateVinModelOrigin(r);
+            if (err != null) return (false, $"Dòng VIN '{r.VINCode}': {err}", added, updated);
+
+            var existing = await db.VinModelOrigins.FirstOrDefaultAsync(x => x.VINCode == r.VINCode);
+            if (existing == null)
+            {
+                r.IsActive = true;
+                r.CreatedBy = userCode;
+                r.CreatedAt = DateTime.Now;
+                r.LogLUBy = userCode;
+                r.LogLUDateTime = DateTime.Now;
+                db.VinModelOrigins.Add(r);
+                added++;
+            }
+            else
+            {
+                existing.ModelCode = r.ModelCode;
+                existing.OrginalCode = r.OrginalCode;
+                existing.IsActive = true;
+                existing.LogLUBy = userCode;
+                existing.LogLUDateTime = DateTime.Now;
+                updated++;
+            }
+        }
+        await db.SaveChangesAsync();
+        return (true, $"Đã nhập {added} dòng mới, cập nhật {updated} dòng.", added, updated);
+    }
+
+    public async Task<VinModelOriginSummaryDto> GetVinModelOriginSummaryAsync()
+    {
+        var all = await db.VinModelOrigins.ToListAsync();
+        return new VinModelOriginSummaryDto
+        {
+            TotalRecords = all.Count,
+            ActiveRecords = all.Count(x => x.IsActive),
+            InactiveRecords = all.Count(x => !x.IsActive),
+            ModelCount = all.Select(x => x.ModelCode).Distinct().Count(),
+            OrginalCount = all.Select(x => x.OrginalCode).Distinct().Count(),
+            Vin4Count = all.Count(x => x.VINCode.Length == 4),
+            Vin5Count = all.Count(x => x.VINCode.Length == 5)
+        };
     }
 }
 

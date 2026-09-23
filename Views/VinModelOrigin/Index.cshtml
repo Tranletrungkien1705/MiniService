@@ -1,0 +1,198 @@
+@model List<VinModelOrigin>
+@{
+    ViewData["Title"] = "Nguồn gốc model xe (VIN Model Origin)";
+    var summary = ViewBag.Summary as VinModelOriginSummaryDto ?? new VinModelOriginSummaryDto();
+    var isActive = ViewBag.IsActive as bool?;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số dòng VIN</div>
+                <div class="stat-num text-primary">@summary.TotalRecords</div>
+                <div class="text-muted" style="font-size:11.5px">Danh mục nguồn gốc model xe (Mst_VINModelOrginal)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đang hoạt động</div>
+                <div class="stat-num text-success">@summary.ActiveRecords <span class="fs-6 text-muted">/ @summary.InactiveRecords tạm dừng</span></div>
+                <div class="text-muted" style="font-size:11.5px">Cờ FlagActive</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Dòng xe / Nguồn gốc</div>
+                <div class="stat-num text-info">@summary.ModelCount <span class="fs-6 text-muted">/ @summary.OrginalCount</span></div>
+                <div class="text-muted" style="font-size:11.5px">Số ModelCode / OrginalCode khác nhau</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">VIN 4 ký tự / 5 ký tự</div>
+                <div class="stat-num text-warning">@summary.Vin4Count <span class="fs-6 text-muted">/ @summary.Vin5Count</span></div>
+                <div class="text-muted" style="font-size:11.5px">Độ dài VINCode hợp lệ</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:260px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="VIN / Model / Nguồn gốc..." />
+                </div>
+                <input name="modelCode" value="@ViewBag.ModelCode" class="form-control form-control-sm" style="width:150px" placeholder="ModelCode" />
+                <input name="orginalCode" value="@ViewBag.OrginalCode" class="form-control form-control-sm" style="width:150px" placeholder="OrginalCode" />
+                <select name="isActive" class="form-select form-select-sm" style="width:150px" onchange="this.form.submit()">
+                    <option value="">-- Trạng thái --</option>
+                    <option value="true" selected="@(isActive == true)">Đang hoạt động</option>
+                    <option value="false" selected="@(isActive == false)">Tạm dừng</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || !string.IsNullOrEmpty(ViewBag.ModelCode as string) || !string.IsNullOrEmpty(ViewBag.OrginalCode as string) || isActive.HasValue)
+                {
+                    <a href="/VinModelOrigin" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#importModal">
+                    <i class="bi bi-upload me-1"></i>Nhập hàng loạt
+                </button>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm nguồn gốc
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:70px">ID</th>
+                        <th style="width:150px">VINCode</th>
+                        <th style="width:180px">ModelCode</th>
+                        <th style="width:180px">OrginalCode</th>
+                        <th>Ghi chú</th>
+                        <th class="text-center" style="width:120px">Trạng thái</th>
+                        <th class="text-end" style="width:90px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy dòng nguồn gốc model xe nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var r in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace text-secondary">@r.Id</td>
+                            <td class="font-monospace fw-semibold">
+                                <a asp-action="Detail" asp-route-id="@r.Id" class="text-decoration-none">@r.VINCode</a>
+                            </td>
+                            <td class="font-monospace">@r.ModelCode</td>
+                            <td class="font-monospace">@r.OrginalCode</td>
+                            <td class="text-muted small">@(string.IsNullOrEmpty(r.Remark) ? "—" : r.Remark)</td>
+                            <td class="text-center">
+                                @if (r.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Hoạt động</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border">Tạm dừng</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@r.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm nguồn gốc model xe -->
+<div class="modal fade" id="createModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-signpost-split-fill me-2 text-primary"></i>Thêm Nguồn gốc Model xe (Mst_VINModelOrginal)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Mã số khung (VINCode) <span class="text-danger">*</span></label>
+                            <input name="vinCode" class="form-control font-monospace" placeholder="VD: KMHF hoặc RLHXX" required maxlength="5" style="text-transform:uppercase" />
+                            <div class="form-text">Dài đúng 4 hoặc 5 ký tự, chỉ gồm chữ cái và chữ số.</div>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Mã dòng xe (ModelCode) <span class="text-danger">*</span></label>
+                            <input name="modelCode" class="form-control font-monospace" placeholder="VD: SANTAFE" required />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Mã nguồn gốc (OrginalCode) <span class="text-danger">*</span></label>
+                            <input name="orginalCode" class="form-control font-monospace" placeholder="VD: KR" required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Ghi chú (Remark)</label>
+                            <input name="remark" class="form-control" placeholder="VD: Xe nhập khẩu Hàn Quốc" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu nguồn gốc</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nhập hàng loạt -->
+<div class="modal fade" id="importModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form asp-action="Import" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-upload me-2 text-primary"></i>Nhập hàng loạt nguồn gốc model xe</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label small fw-semibold">Mỗi dòng: VINCode, ModelCode, OrginalCode</label>
+                    <textarea name="bulkText" class="form-control font-monospace" rows="8" placeholder="KMHF, SANTAFE, KR&#10;RLHXX, TUCSON, VN&#10;KMHJ, CRETA, KR"></textarea>
+                    <div class="form-text">Dòng đã tồn tại (theo VINCode) sẽ được cập nhật ModelCode/OrginalCode; dòng mới sẽ được thêm.</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Nhập dữ liệu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

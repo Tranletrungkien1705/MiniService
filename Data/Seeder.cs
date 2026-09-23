@@ -2619,6 +2619,20 @@ public static class Seeder
             }
         }
 
+        // Seed Thiết lập nguồn gốc model xe theo số khung (Mst_VINModelOrginal) — ánh xạ VIN → dòng xe → nguồn gốc
+        if (!await db.VinModelOrigins.AnyAsync())
+        {
+            db.VinModelOrigins.AddRange(
+                new VinModelOrigin { VINCode = "KMHF", ModelCode = "SANTAFE", OrginalCode = "KR", Remark = "Santa Fe nhập khẩu Hàn Quốc", CreatedBy = "Hệ thống HTC" },
+                new VinModelOrigin { VINCode = "KMHJ", ModelCode = "CRETA", OrginalCode = "KR", Remark = "Creta nhập khẩu Hàn Quốc", CreatedBy = "Hệ thống HTC" },
+                new VinModelOrigin { VINCode = "RLHXX", ModelCode = "TUCSON", OrginalCode = "VN", Remark = "Tucson lắp ráp trong nước (HTC)", CreatedBy = "Hệ thống HTC" },
+                new VinModelOrigin { VINCode = "RLHXA", ModelCode = "ACCENT", OrginalCode = "VN", Remark = "Accent lắp ráp trong nước (HTC)", CreatedBy = "Hệ thống HTC" },
+                new VinModelOrigin { VINCode = "KMHK", ModelCode = "ELANTRA", OrginalCode = "KR", Remark = "Elantra nhập khẩu Hàn Quốc", CreatedBy = "Hệ thống HTC" },
+                new VinModelOrigin { VINCode = "RLHXC", ModelCode = "CUSTIN", OrginalCode = "VN", Remark = "Custin lắp ráp trong nước (HTC)", CreatedBy = "Hệ thống HTC" }
+            );
+            await db.SaveChangesAsync();
+        }
+
         // Seed Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
         if (!await db.Boms.AnyAsync())
         {
@@ -5313,6 +5327,10 @@ public static class Seeder
             "CREATE INDEX IF NOT EXISTS \"IX_PartGroups_OrgId_DealerCode\" ON miniservice.\"PartGroups\" (\"OrgId\", \"DealerCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"PartPrices\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"PartId\" integer NOT NULL, \"Price\" numeric(18,2) NOT NULL, \"DateEffect\" timestamp NOT NULL, \"Remark\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
             "CREATE INDEX IF NOT EXISTS \"IX_PartPrices_OrgId_PartId_DateEffect\" ON miniservice.\"PartPrices\" (\"OrgId\", \"PartId\", \"DateEffect\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"VinModelOrigins\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"VINCode\" text NOT NULL, \"ModelCode\" text NOT NULL, \"OrginalCode\" text NOT NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"Remark\" text NULL, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_VINCode\" ON miniservice.\"VinModelOrigins\" (\"OrgId\", \"VINCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_ModelCode\" ON miniservice.\"VinModelOrigins\" (\"OrgId\", \"ModelCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_OrginalCode\" ON miniservice.\"VinModelOrigins\" (\"OrgId\", \"OrginalCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"Suppliers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Address\" text NULL, \"Phone\" text NULL, \"Email\" text NULL, \"ContactName\" text NULL, \"ContactPhone\" text NULL, \"TaxCode\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankAccount\" text NULL",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankName\" text NULL",
@@ -7010,6 +7028,18 @@ public static class Seeder
                     "CREATE INDEX IF NOT EXISTS \"IX_PartPrices_OrgId_PartId_DateEffect\" ON \"PartPrices\" (\"OrgId\", \"PartId\", \"DateEffect\");"
                 };
                 foreach (var sql in partPriceSqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+                // Thiết lập nguồn gốc model xe theo số khung (Mst_VINModelOrginal) — SQLite
+                var vinModelOriginSqls = new[]
+                {
+                    "CREATE TABLE IF NOT EXISTS \"VinModelOrigins\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"VINCode\" TEXT NOT NULL, \"ModelCode\" TEXT NOT NULL, \"OrginalCode\" TEXT NOT NULL, \"IsActive\" INTEGER NOT NULL DEFAULT 1, \"Remark\" TEXT NULL, \"CreatedBy\" TEXT NOT NULL DEFAULT 'web', \"CreatedAt\" TEXT NOT NULL, \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_VINCode\" ON \"VinModelOrigins\" (\"OrgId\", \"VINCode\");",
+                    "CREATE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_ModelCode\" ON \"VinModelOrigins\" (\"OrgId\", \"ModelCode\");",
+                    "CREATE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_OrginalCode\" ON \"VinModelOrigins\" (\"OrgId\", \"OrginalCode\");"
+                };
+                foreach (var sql in vinModelOriginSqls)
                 {
                     try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
                 }
