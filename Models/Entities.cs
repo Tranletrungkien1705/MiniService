@@ -3567,3 +3567,34 @@ public class VinModelOriginSummaryDto
     public int Vin4Count { get; set; }                        // Số VINCode dài 4 ký tự
     public int Vin5Count { get; set; }                        // Số VINCode dài 5 ký tự
 }
+
+/// <summary>Danh mục Thương hiệu xe (Car Trademark) — Ser_Mst_TradeMark trong idn.CarService.
+/// Mỗi dòng là một thương hiệu/hãng xe (TradeMarkCode) thuộc một đại lý (DealerCode) với tên hiển thị
+/// (TradeMarkName) và cờ hoạt động (IsActive). Khóa nghiệp vụ là cặp (TradeMarkCode, DealerCode).
+/// Nguồn lưu ở CSDL TRUNG TÂM (CmCenter) và đồng bộ sang kho (WH) / đại lý (Dealer).
+/// Nghiệp vụ: Ser_Mst_TradeMark_Get_HQ / _Get_DL / _Create / _Update / _Delete.
+/// Luật: không cho xóa thương hiệu đang được dòng xe (Ser_MST_Model) tham chiếu.</summary>
+public class TradeMark : IOrgOwned
+{
+    public int Id { get; set; }                               // Khóa chính nội bộ
+    public Guid OrgId { get; set; }
+    public string TradeMarkCode { get; set; } = "";           // Mã thương hiệu (TradeMarkCode) — khóa nghiệp vụ
+    public string DealerCode { get; set; } = "";              // Mã đại lý áp dụng (DealerCode) — khóa nghiệp vụ
+    public string TradeMarkName { get; set; } = "";           // Tên thương hiệu (TradeMarkName)
+    public bool IsActive { get; set; } = true;                // Cờ hoạt động (IsActive)
+    public string? Logo { get; set; }                         // Đường dẫn logo thương hiệu (Logo)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo (CreatedDate)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục Thương hiệu xe — phục vụ màn hình quản lý TradeMark.</summary>
+public class TradeMarkSummaryDto
+{
+    public int TotalTradeMarks { get; set; }                  // Tổng số thương hiệu
+    public int ActiveTradeMarks { get; set; }                 // Số thương hiệu đang hoạt động
+    public int InactiveTradeMarks { get; set; }               // Số thương hiệu tạm dừng
+    public int DealerCount { get; set; }                      // Số đại lý khác nhau
+    public int WithLogoCount { get; set; }                    // Số thương hiệu có logo
+}

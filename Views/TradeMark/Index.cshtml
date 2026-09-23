@@ -1,0 +1,167 @@
+@model List<TradeMark>
+@{
+    ViewData["Title"] = "Danh mục Thương hiệu xe (Car Trademark)";
+    var summary = ViewBag.Summary as TradeMarkSummaryDto ?? new TradeMarkSummaryDto();
+    var isActive = ViewBag.IsActive as bool?;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số thương hiệu</div>
+                <div class="stat-num text-primary">@summary.TotalTradeMarks</div>
+                <div class="text-muted" style="font-size:11.5px">Danh mục thương hiệu xe (Ser_Mst_TradeMark)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đang hoạt động</div>
+                <div class="stat-num text-success">@summary.ActiveTradeMarks <span class="fs-6 text-muted">/ @summary.InactiveTradeMarks tạm dừng</span></div>
+                <div class="text-muted" style="font-size:11.5px">Cờ IsActive</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Số đại lý</div>
+                <div class="stat-num text-info">@summary.DealerCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số DealerCode khác nhau</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Có logo</div>
+                <div class="stat-num text-warning">@summary.WithLogoCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số thương hiệu đã gắn logo</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:260px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Mã / Tên thương hiệu..." />
+                </div>
+                <input name="dealerCode" value="@ViewBag.DealerCode" class="form-control form-control-sm" style="width:150px" placeholder="DealerCode" />
+                <select name="isActive" class="form-select form-select-sm" style="width:150px" onchange="this.form.submit()">
+                    <option value="">-- Trạng thái --</option>
+                    <option value="true" selected="@(isActive == true)">Đang hoạt động</option>
+                    <option value="false" selected="@(isActive == false)">Tạm dừng</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || !string.IsNullOrEmpty(ViewBag.DealerCode as string) || isActive.HasValue)
+                {
+                    <a href="/TradeMark" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createModal">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm thương hiệu
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:70px">ID</th>
+                        <th style="width:150px">TradeMarkCode</th>
+                        <th>Tên thương hiệu</th>
+                        <th style="width:130px">DealerCode</th>
+                        <th class="text-center" style="width:120px">Trạng thái</th>
+                        <th class="text-end" style="width:90px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy thương hiệu xe nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var r in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace text-secondary">@r.Id</td>
+                            <td class="font-monospace fw-semibold">
+                                <a asp-action="Detail" asp-route-id="@r.Id" class="text-decoration-none">@r.TradeMarkCode</a>
+                            </td>
+                            <td>@r.TradeMarkName</td>
+                            <td class="font-monospace">@r.DealerCode</td>
+                            <td class="text-center">
+                                @if (r.IsActive)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">Hoạt động</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border">Tạm dừng</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@r.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm thương hiệu xe -->
+<div class="modal fade" id="createModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-award-fill me-2 text-primary"></i>Thêm Thương hiệu xe (Ser_Mst_TradeMark)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Mã thương hiệu (TradeMarkCode) <span class="text-danger">*</span></label>
+                            <input name="tradeMarkCode" class="form-control font-monospace" placeholder="VD: HMC" required style="text-transform:uppercase" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                            <input name="dealerCode" class="form-control font-monospace" placeholder="VD: VS058" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Tên thương hiệu (TradeMarkName) <span class="text-danger">*</span></label>
+                            <input name="tradeMarkName" class="form-control" placeholder="VD: Hyundai Thành Công" required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Logo (đường dẫn)</label>
+                            <input name="logo" class="form-control" placeholder="VD: /img/hyundai.png" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu thương hiệu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

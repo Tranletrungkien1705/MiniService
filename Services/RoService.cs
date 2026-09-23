@@ -320,6 +320,14 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteVinModelOriginAsync(int id);
     Task<(bool ok, string msg, int added, int updated)> ImportVinModelOriginsAsync(List<VinModelOrigin> rows, string userCode);
     Task<VinModelOriginSummaryDto> GetVinModelOriginSummaryAsync();
+    // Car Trademark — Danh mục Thương hiệu xe (Ser_Mst_TradeMark)
+    Task<List<TradeMark>> TradeMarksAsync(string? q, bool? isActive, string? dealerCode);
+    Task<TradeMark?> GetTradeMarkAsync(int id);
+    Task<TradeMark?> GetTradeMarkByCodeAsync(string tradeMarkCode, string dealerCode);
+    Task<int> CreateTradeMarkAsync(TradeMark row);
+    Task<(bool ok, string msg)> UpdateTradeMarkAsync(TradeMark row);
+    Task<(bool ok, string msg)> DeleteTradeMarkAsync(int id);
+    Task<TradeMarkSummaryDto> GetTradeMarkSummaryAsync();
     // Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
     Task<List<Bom>> BomsAsync(bool? isActive, string? q);
     Task<Bom?> GetBomAsync(int id);
@@ -11615,6 +11623,123 @@ public class RoService(AppDbContext db) : IRoService
             OrginalCount = all.Select(x => x.OrginalCode).Distinct().Count(),
             Vin4Count = all.Count(x => x.VINCode.Length == 4),
             Vin5Count = all.Count(x => x.VINCode.Length == 5)
+        };
+    }
+
+    // --- Car Trademark — Danh mục Thương hiệu xe (Ser_Mst_TradeMark) ---
+    public async Task<List<TradeMark>> TradeMarksAsync(string? q, bool? isActive, string? dealerCode)
+    {
+        var query = db.TradeMarks.AsQueryable();
+        if (isActive.HasValue) query = query.Where(x => x.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim().ToLower();
+            query = query.Where(x => x.DealerCode.ToLower().Contains(dc));
+        }
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(x => x.TradeMarkCode.ToLower().Contains(s)
+                || x.TradeMarkName.ToLower().Contains(s));
+        }
+        return await query.OrderBy(x => x.TradeMarkCode).ThenBy(x => x.DealerCode).ToListAsync();
+    }
+
+    public Task<TradeMark?> GetTradeMarkAsync(int id) =>
+        db.TradeMarks.FirstOrDefaultAsync(x => x.Id == id);
+
+    public Task<TradeMark?> GetTradeMarkByCodeAsync(string tradeMarkCode, string dealerCode)
+    {
+        var code = (tradeMarkCode ?? "").Trim();
+        var dc = (dealerCode ?? "").Trim();
+        return db.TradeMarks.FirstOrDefaultAsync(x => x.TradeMarkCode == code && x.DealerCode == dc);
+    }
+
+    // Kiểm tra đầu vào: TradeMarkCode và TradeMarkName bắt buộc.
+    private static string? ValidateTradeMark(TradeMark row)
+    {
+        if (string.IsNullOrWhiteSpace(row.TradeMarkCode))
+            return "Vui lòng nhập mã thương hiệu (TradeMarkCode).";
+        if (string.IsNullOrWhiteSpace(row.TradeMarkName))
+            return "Vui lòng nhập tên thương hiệu (TradeMarkName).";
+        return null;
+    }
+
+    public async Task<int> CreateTradeMarkAsync(TradeMark row)
+    {
+        row.TradeMarkCode = (row.TradeMarkCode ?? "").Trim();
+        row.TradeMarkName = (row.TradeMarkName ?? "").Trim();
+        row.DealerCode = (row.DealerCode ?? "").Trim();
+
+        var err = ValidateTradeMark(row);
+        if (err != null) throw new InvalidOperationException(err);
+
+        // Ser_Mst_TradeMark_CheckDB: cặp (TradeMarkCode, DealerCode) là khóa nghiệp vụ, không được trùng.
+        var exists = await db.TradeMarks.AnyAsync(x => x.TradeMarkCode == row.TradeMarkCode && x.DealerCode == row.DealerCode);
+        if (exists)
+            throw new InvalidOperationException($"Thương hiệu '{row.TradeMarkCode}' của đại lý '{row.DealerCode}' đã tồn tại trong danh mục.");
+
+        row.IsActive = true; // Ser_Mst_TradeMark_Create: mặc định IsActive = Active
+        row.CreatedAt = DateTime.Now;
+        row.LogLUDateTime = DateTime.Now;
+        row.LogLUBy = row.CreatedBy;
+        db.TradeMarks.Add(row);
+        await db.SaveChangesAsync();
+        return row.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateTradeMarkAsync(TradeMark row)
+    {
+        var existing = await db.TradeMarks.FirstOrDefaultAsync(x => x.Id == row.Id);
+        if (existing == null) return (false, "Không tìm thấy thương hiệu xe.");
+
+        var newCode = (row.TradeMarkCode ?? "").Trim();
+        var newName = (row.TradeMarkName ?? "").Trim();
+        var newDealer = (row.DealerCode ?? "").Trim();
+
+        var err = ValidateTradeMark(new TradeMark { TradeMarkCode = newCode, TradeMarkName = newName });
+        if (err != null) return (false, err);
+
+        // Ser_Mst_TradeMark_Update: cặp khóa nghiệp vụ không trùng với dòng khác.
+        var dup = await db.TradeMarks.AnyAsync(x => x.Id != row.Id && x.TradeMarkCode == newCode && x.DealerCode == newDealer);
+        if (dup) return (false, $"Thương hiệu '{newCode}' của đại lý '{newDealer}' đã tồn tại trong danh mục.");
+
+        existing.TradeMarkCode = newCode;
+        existing.TradeMarkName = newName;
+        existing.DealerCode = newDealer;
+        existing.IsActive = row.IsActive;
+        existing.Logo = row.Logo;
+        existing.LogLUBy = row.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật thương hiệu xe [{existing.Id}] {existing.TradeMarkCode}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteTradeMarkAsync(int id)
+    {
+        var existing = await db.TradeMarks.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return (false, "Không tìm thấy thương hiệu xe.");
+
+        // CheckTrademarkForDelete: chặn xóa khi còn dòng xe (Ser_MST_Model) tham chiếu thương hiệu này.
+        var usedByModel = await db.CarModels.AnyAsync(m => m.TradeMarkCode == existing.TradeMarkCode);
+        if (usedByModel)
+            return (false, $"Không thể xóa thương hiệu '{existing.TradeMarkCode}' vì đang được dòng xe (Model) sử dụng.");
+
+        db.TradeMarks.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa thương hiệu xe [{id}] {existing.TradeMarkCode}.");
+    }
+
+    public async Task<TradeMarkSummaryDto> GetTradeMarkSummaryAsync()
+    {
+        var all = await db.TradeMarks.ToListAsync();
+        return new TradeMarkSummaryDto
+        {
+            TotalTradeMarks = all.Count,
+            ActiveTradeMarks = all.Count(x => x.IsActive),
+            InactiveTradeMarks = all.Count(x => !x.IsActive),
+            DealerCount = all.Select(x => x.DealerCode).Distinct().Count(),
+            WithLogoCount = all.Count(x => !string.IsNullOrWhiteSpace(x.Logo))
         };
     }
 }

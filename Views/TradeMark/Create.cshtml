@@ -1,0 +1,40 @@
+@{
+    ViewData["Title"] = "Thêm Thương hiệu xe (Car Trademark)";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/TradeMark" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Danh mục thương hiệu xe</a>
+        <h5 class="mb-0 fw-bold mt-1"><i class="bi bi-award-fill me-2 text-primary"></i>Thêm Thương hiệu xe (Ser_Mst_TradeMark)</h5>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0" style="max-width:680px">
+    <div class="card-body">
+        <form asp-action="Create" method="post">
+            @Html.AntiForgeryToken()
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Mã thương hiệu (TradeMarkCode) <span class="text-danger">*</span></label>
+                    <input name="tradeMarkCode" class="form-control font-monospace" placeholder="VD: HMC" required style="text-transform:uppercase" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                    <input name="dealerCode" class="form-control font-monospace" placeholder="VD: VS058" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Tên thương hiệu (TradeMarkName) <span class="text-danger">*</span></label>
+                    <input name="tradeMarkName" class="form-control" placeholder="VD: Hyundai Thành Công" required />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Logo (đường dẫn)</label>
+                    <input name="logo" class="form-control" placeholder="VD: /img/hyundai.png" />
+                </div>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu thương hiệu</button>
+                <a href="/TradeMark" class="btn btn-outline-secondary">Hủy</a>
+            </div>
+        </form>
+    </div>
+</div>

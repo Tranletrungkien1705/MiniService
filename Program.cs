@@ -6987,6 +6987,107 @@ app.MapPost("/api/vin-model-origins/import", async (ImportVinModelOriginsDto dto
     return ok ? Results.Ok(new { message = msg, added, updated }) : Results.BadRequest(new { error = msg });
 });
 
+// API Danh mục Thương hiệu xe (Ser_Mst_TradeMark)
+app.MapGet("/api/trade-marks", async (string? q, bool? isActive, string? dealerCode, IRoService svc) =>
+{
+    var list = await svc.TradeMarksAsync(q, isActive, dealerCode);
+    return Results.Ok(list.Select(x => new
+    {
+        x.Id,
+        x.TradeMarkCode,
+        x.TradeMarkName,
+        x.DealerCode,
+        x.IsActive,
+        x.Logo,
+        x.CreatedBy,
+        x.CreatedAt,
+        x.LogLUBy,
+        x.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/trade-marks/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetTradeMarkSummaryAsync();
+    return Results.Ok(new
+    {
+        s.TotalTradeMarks,
+        s.ActiveTradeMarks,
+        s.InactiveTradeMarks,
+        s.DealerCount,
+        s.WithLogoCount
+    });
+});
+
+app.MapGet("/api/trade-marks/{id:int}", async (int id, IRoService svc) =>
+{
+    var x = await svc.GetTradeMarkAsync(id);
+    if (x == null) return Results.NotFound(new { error = "Không tìm thấy thương hiệu xe." });
+    return Results.Ok(new
+    {
+        x.Id,
+        x.TradeMarkCode,
+        x.TradeMarkName,
+        x.DealerCode,
+        x.IsActive,
+        x.Logo,
+        x.CreatedBy,
+        x.CreatedAt,
+        x.LogLUBy,
+        x.LogLUDateTime
+    });
+});
+
+app.MapGet("/api/trade-marks/by-code/{tradeMarkCode}", async (string tradeMarkCode, string? dealerCode, IRoService svc) =>
+{
+    var x = await svc.GetTradeMarkByCodeAsync(tradeMarkCode, dealerCode ?? "");
+    if (x == null) return Results.NotFound(new { error = $"Không tìm thấy thương hiệu '{tradeMarkCode}'." });
+    return Results.Ok(new { x.Id, x.TradeMarkCode, x.TradeMarkName, x.DealerCode, x.IsActive, x.Logo });
+});
+
+app.MapPost("/api/trade-marks", async (CreateTradeMarkDto dto, IRoService svc) =>
+{
+    try
+    {
+        var row = new TradeMark
+        {
+            TradeMarkCode = dto.TradeMarkCode ?? "",
+            TradeMarkName = dto.TradeMarkName ?? "",
+            DealerCode = dto.DealerCode ?? "",
+            Logo = dto.Logo?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreateTradeMarkAsync(row);
+        return Results.Ok(new { tradeMarkId = id, message = "Đã thêm thương hiệu xe." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/trade-marks/{id:int}", async (int id, UpdateTradeMarkDto dto, IRoService svc) =>
+{
+    var row = new TradeMark
+    {
+        Id = id,
+        TradeMarkCode = dto.TradeMarkCode ?? "",
+        TradeMarkName = dto.TradeMarkName ?? "",
+        DealerCode = dto.DealerCode ?? "",
+        IsActive = dto.IsActive ?? true,
+        Logo = dto.Logo?.Trim(),
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+    var (ok, msg) = await svc.UpdateTradeMarkAsync(row);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/trade-marks/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteTradeMarkAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -7180,6 +7281,10 @@ record CreateVinModelOriginDto(string VINCode, string ModelCode, string OrginalC
 record UpdateVinModelOriginDto(string VINCode, string ModelCode, string OrginalCode, bool? IsActive, string? Remark, string? UpdatedBy);
 record ImportVinModelOriginsDto(List<ImportVinModelOriginRowDto>? Rows, string? UserCode);
 record ImportVinModelOriginRowDto(string VINCode, string ModelCode, string OrginalCode);
+
+// Danh mục Thương hiệu xe (Ser_Mst_TradeMark)
+record CreateTradeMarkDto(string TradeMarkCode, string TradeMarkName, string? DealerCode, string? Logo, string? CreatedBy);
+record UpdateTradeMarkDto(string TradeMarkCode, string TradeMarkName, string? DealerCode, bool? IsActive, string? Logo, string? UpdatedBy);
 
 
 

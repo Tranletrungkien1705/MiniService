@@ -2633,6 +2633,18 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Danh mục Thương hiệu xe (Ser_Mst_TradeMark) — thương hiệu chuẩn đại lý VS058
+        if (!await db.TradeMarks.AnyAsync())
+        {
+            db.TradeMarks.AddRange(
+                new TradeMark { TradeMarkCode = "HMC", TradeMarkName = "Hyundai Motor Company", DealerCode = "VS058", Logo = "/img/hyundai.png", CreatedBy = "Hệ thống HTC" },
+                new TradeMark { TradeMarkCode = "HTC", TradeMarkName = "Hyundai Thành Công", DealerCode = "VS058", Logo = "/img/htc.png", CreatedBy = "Hệ thống HTC" },
+                new TradeMark { TradeMarkCode = "KIA", TradeMarkName = "Kia Motors", DealerCode = "VS058", CreatedBy = "Hệ thống HTC" },
+                new TradeMark { TradeMarkCode = "GEN", TradeMarkName = "Genesis", DealerCode = "VS058", CreatedBy = "Hệ thống HTC" }
+            );
+            await db.SaveChangesAsync();
+        }
+
         // Seed Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
         if (!await db.Boms.AnyAsync())
         {
@@ -5331,6 +5343,9 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_VINCode\" ON miniservice.\"VinModelOrigins\" (\"OrgId\", \"VINCode\")",
             "CREATE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_ModelCode\" ON miniservice.\"VinModelOrigins\" (\"OrgId\", \"ModelCode\")",
             "CREATE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_OrginalCode\" ON miniservice.\"VinModelOrigins\" (\"OrgId\", \"OrginalCode\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"TradeMarks\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"TradeMarkCode\" text NOT NULL, \"DealerCode\" text NOT NULL DEFAULT '', \"TradeMarkName\" text NOT NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"Logo\" text NULL, \"CreatedBy\" text NOT NULL DEFAULT 'web', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TradeMarks_OrgId_TradeMarkCode_DealerCode\" ON miniservice.\"TradeMarks\" (\"OrgId\", \"TradeMarkCode\", \"DealerCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_TradeMarks_OrgId_DealerCode\" ON miniservice.\"TradeMarks\" (\"OrgId\", \"DealerCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"Suppliers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Address\" text NULL, \"Phone\" text NULL, \"Email\" text NULL, \"ContactName\" text NULL, \"ContactPhone\" text NULL, \"TaxCode\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankAccount\" text NULL",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankName\" text NULL",
@@ -7040,6 +7055,17 @@ public static class Seeder
                     "CREATE INDEX IF NOT EXISTS \"IX_VinModelOrigins_OrgId_OrginalCode\" ON \"VinModelOrigins\" (\"OrgId\", \"OrginalCode\");"
                 };
                 foreach (var sql in vinModelOriginSqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+                // Danh mục Thương hiệu xe (Ser_Mst_TradeMark) — SQLite
+                var tradeMarkSqls = new[]
+                {
+                    "CREATE TABLE IF NOT EXISTS \"TradeMarks\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"TradeMarkCode\" TEXT NOT NULL, \"DealerCode\" TEXT NOT NULL DEFAULT '', \"TradeMarkName\" TEXT NOT NULL, \"IsActive\" INTEGER NOT NULL DEFAULT 1, \"Logo\" TEXT NULL, \"CreatedBy\" TEXT NOT NULL DEFAULT 'web', \"CreatedAt\" TEXT NOT NULL, \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TradeMarks_OrgId_TradeMarkCode_DealerCode\" ON \"TradeMarks\" (\"OrgId\", \"TradeMarkCode\", \"DealerCode\");",
+                    "CREATE INDEX IF NOT EXISTS \"IX_TradeMarks_OrgId_DealerCode\" ON \"TradeMarks\" (\"OrgId\", \"DealerCode\");"
+                };
+                foreach (var sql in tradeMarkSqls)
                 {
                     try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
                 }

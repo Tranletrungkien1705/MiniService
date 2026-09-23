@@ -6677,3 +6677,77 @@ public class VinModelOriginController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+
+/// <summary>Quản lý Danh mục Thương hiệu xe (Car Trademark) — Ser_Mst_TradeMark (MH Danh mục thương hiệu).
+/// Nguồn: Ser_Mst_TradeMark_Get_HQ / _Get_DL / _Create / _Update / _Delete (BizCarSv.Master.cs).</summary>
+public class TradeMarkController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? isActive, string? dealerCode)
+    {
+        ViewBag.Q = q;
+        ViewBag.IsActive = isActive;
+        ViewBag.DealerCode = dealerCode;
+        ViewBag.Summary = await svc.GetTradeMarkSummaryAsync();
+        var list = await svc.TradeMarksAsync(q, isActive, dealerCode);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var row = await svc.GetTradeMarkAsync(id);
+        if (row == null) return NotFound();
+        return View(row);
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string tradeMarkCode, string tradeMarkName, string? dealerCode, string? logo)
+    {
+        try
+        {
+            var row = new TradeMark
+            {
+                TradeMarkCode = tradeMarkCode ?? "",
+                TradeMarkName = tradeMarkName ?? "",
+                DealerCode = dealerCode ?? "",
+                Logo = logo?.Trim(),
+                CreatedBy = "web"
+            };
+            var id = await svc.CreateTradeMarkAsync(row);
+            TempData["Success"] = $"Đã thêm thương hiệu xe [{id}] {row.TradeMarkCode}.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string tradeMarkCode, string tradeMarkName, string? dealerCode, bool isActive, string? logo)
+    {
+        var row = new TradeMark
+        {
+            Id = id,
+            TradeMarkCode = tradeMarkCode ?? "",
+            TradeMarkName = tradeMarkName ?? "",
+            DealerCode = dealerCode ?? "",
+            IsActive = isActive,
+            Logo = logo?.Trim(),
+            LogLUBy = "web"
+        };
+        var (ok, msg) = await svc.UpdateTradeMarkAsync(row);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteTradeMarkAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
