@@ -5391,5 +5391,258 @@ public class WarrantyWorkController(IRoService svc) : Controller
     }
 }
 
+public class MaintenanceSettingController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? minKm, int? maxKm, MaintenanceLevel? level, bool? flagWarranty, bool? flagActive, string? q)
+    {
+        ViewBag.MinKm = minKm;
+        ViewBag.MaxKm = maxKm;
+        ViewBag.Level = level;
+        ViewBag.FlagWarranty = flagWarranty;
+        ViewBag.FlagActive = flagActive;
+        ViewBag.Q = q;
+
+        var summary = await svc.GetMaintenanceSettingSummaryAsync();
+        ViewBag.Summary = summary;
+        ViewBag.OpenROs = await svc.ROsForMaintenanceSelectAsync();
+
+        var list = await svc.MaintenanceSettingsAsync(minKm, maxKm, level, flagWarranty, flagActive, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.ServicePackages = await svc.ServicePackagesAsync(null, null, true);
+        return View(new MaintenanceSetting
+        {
+            ROMSID = "ROMS-",
+            Km = 5000,
+            Maintances = 1,
+            Level = MaintenanceLevel.Level1Minor,
+            MonthsInterval = 6,
+            TakingTimeHours = 1.0m,
+            EstimatedCost = 650_000m,
+            FlagWarranty = true,
+            FlagActive = true
+        });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(MaintenanceSetting setting)
+    {
+        if (string.IsNullOrWhiteSpace(setting.ROMSID) || setting.Km <= 0)
+        {
+            TempData["Error"] = "Vui lòng nhập đầy đủ Mã ROMSID và Mốc số Kilomet (> 0).";
+            ViewBag.ServicePackages = await svc.ServicePackagesAsync(null, null, true);
+            return View(setting);
+        }
+
+        try
+        {
+            var id = await svc.CreateMaintenanceSettingAsync(setting);
+            TempData["Success"] = $"Đã tạo mốc chu kỳ bảo dưỡng {setting.ROMSID} ({setting.Km:N0} km) thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.ServicePackages = await svc.ServicePackagesAsync(null, null, true);
+            return View(setting);
+        }
+    }
+
+    public async Task<IActionResult> Edit(int id)
+    {
+        var setting = await svc.GetMaintenanceSettingAsync(id);
+        if (setting == null) return NotFound();
+
+        ViewBag.ServicePackages = await svc.ServicePackagesAsync(null, null, true);
+        return View(setting);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, MaintenanceSetting input)
+    {
+        var (ok, msg) = await svc.UpdateMaintenanceSettingAsync(id, input);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (!ok)
+        {
+            ViewBag.ServicePackages = await svc.ServicePackagesAsync(null, null, true);
+            return View(input);
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var setting = await svc.GetMaintenanceSettingAsync(id);
+        if (setting == null) return NotFound();
+
+        ViewBag.OpenROs = await svc.ROsForMaintenanceSelectAsync();
+        return View(setting);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleActive(int id)
+    {
+        var (ok, msg) = await svc.ToggleMaintenanceSettingActiveAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ApplyToRO(int settingId, int roId, bool addPackageCombo = true)
+    {
+        var (ok, msg) = await svc.ApplyMaintenanceToRoAsync(settingId, roId, addPackageCombo);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id = settingId });
+    }
+
+    public async Task<IActionResult> Suggest(int km)
+    {
+        var suggestion = await svc.SuggestMaintenanceForKmAsync(km);
+        return Json(suggestion);
+    }
+
+    public async Task<IActionResult> Print(MaintenanceLevel? level)
+    {
+        ViewBag.SelectedLevel = level;
+        var list = await svc.MaintenanceSettingsAsync(null, null, level, null, true, null);
+        return View(list);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteMaintenanceSettingAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
 
 
+
+
+public class WarrantyTypeController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(WarrantyTypeCode? typeCode, bool? flagActive, string? q)
+    {
+        ViewBag.TypeCode = typeCode;
+        ViewBag.FlagActive = flagActive;
+        ViewBag.Q = q;
+
+        ViewBag.Summary = await svc.GetWarrantyTypeSummaryAsync();
+        ViewBag.PhotoTypes = await svc.WarrantyPhotoTypesAsync(true);
+
+        var list = await svc.WarrantyTypesAsync(typeCode, flagActive, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create()
+    {
+        ViewBag.PhotoTypes = await svc.WarrantyPhotoTypesAsync(true);
+        return View(new WarrantyType
+        {
+            TypeCode = WarrantyTypeCode.XM,
+            DetailCode = WarrantyTypeDetailCode.A,
+            FlagActive = true
+        });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(WarrantyType type, string? photoCodes)
+    {
+        if (string.IsNullOrWhiteSpace(type.TypeName) || string.IsNullOrWhiteSpace(type.DetailName))
+        {
+            TempData["Error"] = "Vui lòng nhập đầy đủ Tên loại bảo hành chính và chi tiết.";
+            ViewBag.PhotoTypes = await svc.WarrantyPhotoTypesAsync(true);
+            return View(type);
+        }
+
+        try
+        {
+            var photos = await BuildPhotosAsync(photoCodes);
+            var id = await svc.CreateWarrantyTypeAsync(type, photos);
+            TempData["Success"] = $"Đã tạo loại bảo hành {type.TypeCode}/{type.DetailCode} thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.PhotoTypes = await svc.WarrantyPhotoTypesAsync(true);
+            return View(type);
+        }
+    }
+
+    public async Task<IActionResult> Edit(int id)
+    {
+        var type = await svc.GetWarrantyTypeAsync(id);
+        if (type == null) return NotFound();
+
+        ViewBag.PhotoTypes = await svc.WarrantyPhotoTypesAsync(true);
+        return View(type);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, WarrantyType input, string? photoCodes)
+    {
+        var photos = await BuildPhotosAsync(photoCodes);
+        var (ok, msg) = await svc.UpdateWarrantyTypeAsync(id, input, photos);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (!ok)
+        {
+            ViewBag.PhotoTypes = await svc.WarrantyPhotoTypesAsync(true);
+            return View(input);
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var type = await svc.GetWarrantyTypeAsync(id);
+        if (type == null) return NotFound();
+        return View(type);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ToggleActive(int id)
+    {
+        var (ok, msg) = await svc.ToggleWarrantyTypeActiveAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Print(WarrantyTypeCode? typeCode)
+    {
+        ViewBag.SelectedTypeCode = typeCode;
+        var list = await svc.WarrantyTypesAsync(typeCode, true, null);
+        return View(list);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteWarrantyTypeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Dựng danh sách loại ảnh từ chuỗi mã (phân tách bởi dấu phẩy) + tra tên từ master.</summary>
+    private async Task<List<WarrantyTypePhoto>> BuildPhotosAsync(string? photoCodes)
+    {
+        var result = new List<WarrantyTypePhoto>();
+        if (string.IsNullOrWhiteSpace(photoCodes)) return result;
+
+        var master = await svc.WarrantyPhotoTypesAsync(null);
+        var lookup = master.ToDictionary(p => p.ROWPTCode, p => p.ROWPTName, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var raw in photoCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var code = raw.Trim();
+            if (code.Length == 0) continue;
+            lookup.TryGetValue(code, out var name);
+            result.Add(new WarrantyTypePhoto { ROWPTCode = code, ROWPTName = name ?? code });
+        }
+        return result;
+    }
+}

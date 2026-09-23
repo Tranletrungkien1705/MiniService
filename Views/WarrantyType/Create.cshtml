@@ -1,0 +1,116 @@
+@model WarrantyType
+@{
+    ViewData["Title"] = "Thêm Loại bảo hành RO (Ser_MST_ROWarrantyType)";
+    var photoTypes = ViewBag.PhotoTypes as List<WarrantyPhotoType> ?? [];
+    var selected = (Model.Photos ?? []).Select(p => p.ROWPTCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 border-0">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="mb-0 fw-bold text-primary">
+                            <i class="bi bi-shield-check me-2"></i>Thêm Mới Loại bảo hành RO
+                        </h5>
+                        <div class="text-muted small">Cấu hình cặp Loại chính × Loại chi tiết và các loại ảnh chứng minh bắt buộc</div>
+                    </div>
+                    <a href="/WarrantyType" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-arrow-left me-1"></i> Quay lại
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="/WarrantyType/Create">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Loại bảo hành chính (ROWTypeCode) <span class="text-danger">*</span></label>
+                            <select name="TypeCode" class="form-select" required>
+                                <option value="@((int)WarrantyTypeCode.XM)" selected="@(Model.TypeCode == WarrantyTypeCode.XM)">XM — Xe mới / Bảo hành tiêu chuẩn</option>
+                                <option value="@((int)WarrantyTypeCode.SB)" selected="@(Model.TypeCode == WarrantyTypeCode.SB)">SB — Sửa chữa bảo hành</option>
+                                <option value="@((int)WarrantyTypeCode.PT)" selected="@(Model.TypeCode == WarrantyTypeCode.PT)">PT — Phụ tùng bảo hành</option>
+                                <option value="@((int)WarrantyTypeCode.TC)" selected="@(Model.TypeCode == WarrantyTypeCode.TC)">TC — Bảo hành thiện chí</option>
+                                <option value="@((int)WarrantyTypeCode.BT)" selected="@(Model.TypeCode == WarrantyTypeCode.BT)">BT — Bảo hành bổ sung</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Tên loại chính (ROWTypeName) <span class="text-danger">*</span></label>
+                            <input type="text" name="TypeName" value="@Model.TypeName" class="form-control" placeholder="VD: Bảo hành xe mới" required />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Loại chi tiết (ROWTypeDtlCode) <span class="text-danger">*</span></label>
+                            <select name="DetailCode" class="form-select" required>
+                                <option value="@((int)WarrantyTypeDetailCode.A)" selected="@(Model.DetailCode == WarrantyTypeDetailCode.A)">A — Hư hỏng do lỗi sản xuất</option>
+                                <option value="@((int)WarrantyTypeDetailCode.B)" selected="@(Model.DetailCode == WarrantyTypeDetailCode.B)">B — Hư hỏng do linh kiện</option>
+                                <option value="@((int)WarrantyTypeDetailCode.P)" selected="@(Model.DetailCode == WarrantyTypeDetailCode.P)">P — Phụ tùng</option>
+                                <option value="@((int)WarrantyTypeDetailCode.W)" selected="@(Model.DetailCode == WarrantyTypeDetailCode.W)">W — Công việc bảo hành</option>
+                                <option value="@((int)WarrantyTypeDetailCode.S)" selected="@(Model.DetailCode == WarrantyTypeDetailCode.S)">S — Sửa chữa</option>
+                                <option value="@((int)WarrantyTypeDetailCode.R)" selected="@(Model.DetailCode == WarrantyTypeDetailCode.R)">R — Bổ sung / phát sinh</option>
+                                <option value="@((int)WarrantyTypeDetailCode.C)" selected="@(Model.DetailCode == WarrantyTypeDetailCode.C)">C — Chi phí khác</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Tên loại chi tiết (ROWTypeDtlName) <span class="text-danger">*</span></label>
+                            <input type="text" name="DetailName" value="@Model.DetailName" class="form-control" placeholder="VD: Hư hỏng do lỗi sản xuất" required />
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Mã loại bảo hành (ROWTID)</label>
+                            <input type="text" name="ROWTID" value="@Model.ROWTID" class="form-control font-monospace" placeholder="Để trống sẽ tự sinh theo loại" />
+                            <div class="form-text">Khoá tự tăng nguồn — để trống hệ thống tự sinh.</div>
+                        </div>
+                        <div class="col-md-6 d-flex align-items-center">
+                            <div class="form-check form-switch mt-4">
+                                <input class="form-check-input" type="checkbox" name="FlagActive" value="true" @(Model.FlagActive ? "checked" : "") id="flagActiveSwitch" />
+                                <label class="form-check-label fw-semibold" for="flagActiveSwitch">Đang có hiệu lực</label>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Loại ảnh chứng minh bắt buộc</label>
+                            <div class="border rounded p-3 bg-light">
+                                @if (photoTypes.Count == 0)
+                                {
+                                    <div class="text-muted small">Chưa có danh mục loại ảnh. Vui lòng bổ sung danh mục loại ảnh bảo hành.</div>
+                                }
+                                else
+                                {
+                                    <div class="row g-2">
+                                        @foreach (var pt in photoTypes)
+                                        {
+                                            <div class="col-md-4">
+                                                <div class="form-check">
+                                                    <input class="form-check-input" type="checkbox" name="photoCodes" value="@pt.ROWPTCode"
+                                                           id="pt_@pt.ROWPTCode" @(selected.Contains(pt.ROWPTCode) ? "checked" : "") />
+                                                    <label class="form-check-label" for="pt_@pt.ROWPTCode">
+                                                        <span class="font-monospace small">@pt.ROWPTCode</span> — @pt.ROWPTName
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            <div class="form-text">Một loại bảo hành có thể yêu cầu nhiều loại ảnh chứng minh (quan hệ 1-n).</div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4" />
+
+                    <div class="d-flex justify-content-between">
+                        <a href="/WarrantyType" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle me-1"></i> Hủy bỏ
+                        </a>
+                        <button type="submit" class="btn btn-success px-4">
+                            <i class="bi bi-check-circle me-1"></i> Lưu loại bảo hành
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

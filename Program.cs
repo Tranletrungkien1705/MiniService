@@ -5770,6 +5770,199 @@ app.MapDelete("/api/warranty-works/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// --- Maintenance Interval & Milestone Settings Minimal APIs (Ser_MST_ROMaintanceSetting) ---
+app.MapGet("/api/maintenance-settings", async (int? minKm, int? maxKm, MaintenanceLevel? level, bool? flagWarranty, bool? flagActive, string? q, IRoService svc) =>
+    Results.Ok(await svc.MaintenanceSettingsAsync(minKm, maxKm, level, flagWarranty, flagActive, q)));
+
+app.MapGet("/api/maintenance-settings/summary", async (IRoService svc) =>
+    Results.Ok(await svc.GetMaintenanceSettingSummaryAsync()));
+
+app.MapGet("/api/maintenance-settings/suggest", async (int km, IRoService svc) =>
+    Results.Ok(await svc.SuggestMaintenanceForKmAsync(km)));
+
+app.MapGet("/api/maintenance-settings/{id:int}", async (int id, IRoService svc) =>
+{
+    var item = await svc.GetMaintenanceSettingAsync(id);
+    return item != null ? Results.Ok(item) : Results.NotFound(new { error = "Không tìm thấy thiết lập bảo dưỡng." });
+});
+
+app.MapGet("/api/maintenance-settings/by-romsid/{romsId}", async (string romsId, IRoService svc) =>
+{
+    var item = await svc.GetMaintenanceSettingByRomsIdAsync(romsId);
+    return item != null ? Results.Ok(item) : Results.NotFound(new { error = $"Không tìm thấy thiết lập với ROMSID '{romsId}'." });
+});
+
+app.MapPost("/api/maintenance-settings", async (CreateMaintenanceSettingDto dto, IRoService svc) =>
+{
+    try
+    {
+        var setting = new MaintenanceSetting
+        {
+            ROMSID = dto.ROMSID,
+            Name = dto.Name ?? "",
+            Km = dto.Km,
+            Maintances = dto.Maintances ?? 1,
+            Level = dto.Level ?? MaintenanceLevel.Level1Minor,
+            MonthsInterval = dto.MonthsInterval ?? 6,
+            TakingTimeHours = dto.TakingTimeHours ?? 1.0m,
+            EstimatedCost = dto.EstimatedCost ?? 650_000m,
+            ServicePackageId = dto.ServicePackageId,
+            RequiredChecklist = dto.RequiredChecklist,
+            Description = dto.Description,
+            FlagWarranty = dto.FlagWarranty ?? true,
+            FlagActive = dto.FlagActive ?? true,
+            CreatedBy = dto.CreatedBy ?? "API"
+        };
+        var id = await svc.CreateMaintenanceSettingAsync(setting);
+        return Results.Created($"/api/maintenance-settings/{id}", new { id, romsId = setting.ROMSID });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/maintenance-settings/{id:int}", async (int id, UpdateMaintenanceSettingDto dto, IRoService svc) =>
+{
+    var input = new MaintenanceSetting
+    {
+        ROMSID = dto.ROMSID,
+        Name = dto.Name,
+        Km = dto.Km,
+        Maintances = dto.Maintances,
+        Level = dto.Level,
+        MonthsInterval = dto.MonthsInterval,
+        TakingTimeHours = dto.TakingTimeHours,
+        EstimatedCost = dto.EstimatedCost,
+        ServicePackageId = dto.ServicePackageId,
+        RequiredChecklist = dto.RequiredChecklist,
+        Description = dto.Description,
+        FlagWarranty = dto.FlagWarranty,
+        FlagActive = dto.FlagActive,
+        UpdatedBy = dto.UpdatedBy ?? "API"
+    };
+    var (ok, msg) = await svc.UpdateMaintenanceSettingAsync(id, input);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/maintenance-settings/{id:int}/toggle-active", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ToggleMaintenanceSettingActiveAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/maintenance-settings/{id:int}/apply-to-ro", async (int id, ApplyMaintenanceToRoDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ApplyMaintenanceToRoAsync(id, dto.RoId, dto.AddPackageCombo ?? true);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/maintenance-settings/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteMaintenanceSettingAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+// --- Warranty Type Catalog Minimal APIs (Ser_MST_ROWarrantyType / Ser_MST_ROWarrantyType_PhotoType / Ser_MST_ROWarrantyPhotoType) ---
+app.MapGet("/api/warranty-types", async (WarrantyTypeCode? typeCode, bool? flagActive, string? q, IRoService svc) =>
+{
+    var list = await svc.WarrantyTypesAsync(typeCode, flagActive, q);
+    return Results.Ok(list.Select(t => new
+    {
+        t.Id,
+        t.ROWTID,
+        typeCode = t.TypeCode.ToString(),
+        typeCodeValue = (int)t.TypeCode,
+        t.TypeName,
+        detailCode = t.DetailCode.ToString(),
+        detailCodeValue = (int)t.DetailCode,
+        t.DetailName,
+        t.PhotoTypeDisplay,
+        t.FlagActive,
+        photoCount = t.Photos.Count,
+        photos = t.Photos.Select(p => new { p.ROWPTCode, p.ROWPTName })
+    }));
+});
+
+app.MapGet("/api/warranty-types/summary", async (IRoService svc) =>
+    Results.Ok(await svc.GetWarrantyTypeSummaryAsync()));
+
+app.MapGet("/api/warranty-types/photo-types", async (bool? flagActive, IRoService svc) =>
+    Results.Ok(await svc.WarrantyPhotoTypesAsync(flagActive)));
+
+app.MapGet("/api/warranty-types/{id:int}", async (int id, IRoService svc) =>
+{
+    var t = await svc.GetWarrantyTypeAsync(id);
+    if (t == null) return Results.NotFound(new { error = "Không tìm thấy loại bảo hành." });
+    return Results.Ok(new
+    {
+        t.Id,
+        t.ROWTID,
+        typeCode = t.TypeCode.ToString(),
+        typeCodeValue = (int)t.TypeCode,
+        t.TypeName,
+        detailCode = t.DetailCode.ToString(),
+        detailCodeValue = (int)t.DetailCode,
+        t.DetailName,
+        t.PhotoTypeDisplay,
+        t.FlagActive,
+        t.LogLuDateTime,
+        t.LogLUBy,
+        photos = t.Photos.Select(p => new { p.Id, p.ROWPTCode, p.ROWPTName })
+    });
+});
+
+app.MapPost("/api/warranty-types", async (CreateWarrantyTypeDto dto, IRoService svc) =>
+{
+    try
+    {
+        var type = new WarrantyType
+        {
+            ROWTID = dto.ROWTID ?? "",
+            TypeCode = dto.TypeCode,
+            TypeName = dto.TypeName ?? "",
+            DetailCode = dto.DetailCode,
+            DetailName = dto.DetailName ?? "",
+            FlagActive = dto.FlagActive ?? true
+        };
+        var photos = (dto.PhotoCodes ?? []).Select(c => new WarrantyTypePhoto { ROWPTCode = c }).ToList();
+        var id = await svc.CreateWarrantyTypeAsync(type, photos);
+        return Results.Created($"/api/warranty-types/{id}", new { id, typeCode = type.TypeCode.ToString(), detailCode = type.DetailCode.ToString(), message = "Đã tạo loại bảo hành RO thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/warranty-types/{id:int}", async (int id, UpdateWarrantyTypeDto dto, IRoService svc) =>
+{
+    var input = new WarrantyType
+    {
+        TypeCode = dto.TypeCode,
+        TypeName = dto.TypeName ?? "",
+        DetailCode = dto.DetailCode,
+        DetailName = dto.DetailName ?? "",
+        FlagActive = dto.FlagActive,
+        UpdatedBy = dto.UpdatedBy ?? "API"
+    };
+    var photos = dto.PhotoCodes?.Select(c => new WarrantyTypePhoto { ROWPTCode = c }).ToList();
+    var (ok, msg) = await svc.UpdateWarrantyTypeAsync(id, input, photos);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/warranty-types/{id:int}/toggle-active", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ToggleWarrantyTypeActiveAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/warranty-types/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteWarrantyTypeAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -5923,6 +6116,13 @@ record BookBirthdayAppointmentDto(DateTime AppointmentDate, AppointmentServiceTy
 record CreateWarrantyWorkDto(string Code, string Name, string? Model, WarrantyLaborGroup LaborGroup, WarrantyCoverageType? CoverageType, string? AppTypeCode, string? EngineType, decimal RateHour, decimal RatePrice, int? VatPercent, string? RequiredPhotos, string? Remark, bool? FlagActive, string? CreatedBy);
 record UpdateWarrantyWorkDto(string Code, string Name, string Model, WarrantyLaborGroup LaborGroup, WarrantyCoverageType CoverageType, string? AppTypeCode, string? EngineType, decimal RateHour, decimal RatePrice, int VatPercent, string? RequiredPhotos, string? Remark, bool FlagActive, string? UpdatedBy);
 record ApplyWarrantyWorkToRoDto(int RoId, decimal? CustomHours, string? Note);
+
+record CreateMaintenanceSettingDto(string ROMSID, string? Name, int Km, int? Maintances, MaintenanceLevel? Level, int? MonthsInterval, decimal? TakingTimeHours, decimal? EstimatedCost, int? ServicePackageId, string? RequiredChecklist, string? Description, bool? FlagWarranty, bool? FlagActive, string? CreatedBy);
+record UpdateMaintenanceSettingDto(string ROMSID, string Name, int Km, int Maintances, MaintenanceLevel Level, int MonthsInterval, decimal TakingTimeHours, decimal EstimatedCost, int? ServicePackageId, string? RequiredChecklist, string? Description, bool FlagWarranty, bool FlagActive, string? UpdatedBy);
+record ApplyMaintenanceToRoDto(int RoId, bool? AddPackageCombo);
+
+record CreateWarrantyTypeDto(string? ROWTID, WarrantyTypeCode TypeCode, string? TypeName, WarrantyTypeDetailCode DetailCode, string? DetailName, bool? FlagActive, List<string>? PhotoCodes);
+record UpdateWarrantyTypeDto(WarrantyTypeCode TypeCode, string? TypeName, WarrantyTypeDetailCode DetailCode, string? DetailName, bool FlagActive, List<string>? PhotoCodes, string? UpdatedBy);
 
 
 

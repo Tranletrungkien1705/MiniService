@@ -4572,8 +4572,329 @@ public static class Seeder
                 await db.SaveChangesAsync();
             }
         }
+
+        // Seed Thiết lập Chu kỳ & Cấp độ Định mức Bảo dưỡng Định kỳ xe (Ser_MST_ROMaintanceSetting)
+        if (!await db.MaintenanceSettings.AnyAsync())
+        {
+            var pkg5k = await db.ServicePackages.FirstOrDefaultAsync(p => p.PackageNo == "PKG-BD-5K");
+            var pkg10k = await db.ServicePackages.FirstOrDefaultAsync(p => p.PackageNo == "PKG-BD-10K");
+            var pkg20k = await db.ServicePackages.FirstOrDefaultAsync(p => p.PackageNo == "PKG-BD-20K");
+            var pkg40k = await db.ServicePackages.FirstOrDefaultAsync(p => p.PackageNo == "PKG-BD-40K");
+
+            var settings = new List<MaintenanceSetting>
+            {
+                new()
+                {
+                    ROMSID = "ROMS-01K",
+                    Name = "Bảo dưỡng lần đầu 1.000 km",
+                    Km = 1000,
+                    Maintances = 0,
+                    Level = MaintenanceLevel.Initial1K,
+                    MonthsInterval = 1,
+                    TakingTimeHours = 0.5m,
+                    EstimatedCost = 0m,
+                    ServicePackageId = null,
+                    RequiredChecklist = "Kiểm tra siết ốc gầm; Kiểm tra rò rỉ dung dịch khoang máy; Kiểm tra áp suất & siết bu-lông 4 bánh; Hướng dẫn khách hàng lịch bảo dưỡng",
+                    Description = "Mốc bảo dưỡng chạy rà roda đầu tiên sau khi xuất xưởng. Miễn phí 100% tiền công kiểm tra toàn diện xe.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-05K",
+                    Name = "Bảo dưỡng Cấp 1 - 5.000 km (Nhỏ)",
+                    Km = 5000,
+                    Maintances = 1,
+                    Level = MaintenanceLevel.Level1Minor,
+                    MonthsInterval = 3,
+                    TakingTimeHours = 0.8m,
+                    EstimatedCost = 650000m,
+                    ServicePackageId = pkg5k?.Id,
+                    RequiredChecklist = "Thay dầu động cơ & long đen rốn dầu; Kiểm tra mức dung dịch phanh, nước làm mát, nước rửa kính; Vệ sinh lọc gió động cơ & điều hòa; Kiểm tra hệ thống phanh",
+                    Description = "Bảo dưỡng định kỳ cấp nhỏ tiêu chuẩn Hyundai. Duy trì độ êm ái của động cơ và phát hiện sớm các dấu hiệu bất thường.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-10K",
+                    Name = "Bảo dưỡng Cấp 2 - 10.000 km (Trung bình)",
+                    Km = 10000,
+                    Maintances = 2,
+                    Level = MaintenanceLevel.Level2Medium,
+                    MonthsInterval = 6,
+                    TakingTimeHours = 1.2m,
+                    EstimatedCost = 1250000m,
+                    ServicePackageId = pkg10k?.Id,
+                    RequiredChecklist = "Thay dầu động cơ & lọc dầu nhớt; Đảo lốp & cân chỉnh áp suất lốp; Vệ sinh bảo dưỡng 4 cụm phanh; Vệ sinh lọc gió động cơ & điều hòa; Kiểm tra điện áp ắc quy",
+                    Description = "Bảo dưỡng định kỳ cấp trung bình. Bắt buộc thay cốc lọc dầu động cơ và đảo lốp để đảm bảo an toàn vận hành.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-15K",
+                    Name = "Bảo dưỡng Cấp 1 - 15.000 km (Nhỏ)",
+                    Km = 15000,
+                    Maintances = 1,
+                    Level = MaintenanceLevel.Level1Minor,
+                    MonthsInterval = 9,
+                    TakingTimeHours = 0.8m,
+                    EstimatedCost = 650000m,
+                    ServicePackageId = pkg5k?.Id,
+                    RequiredChecklist = "Thay dầu động cơ & long đen rốn dầu; Kiểm tra an toàn 15 điểm tiêu chuẩn xưởng; Kiểm tra bổ sung nước làm mát, nước rửa kính",
+                    Description = "Bảo dưỡng cấp 1 lặp lại giữa chu kỳ 10.000 km và 20.000 km.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-20K",
+                    Name = "Bảo dưỡng Cấp 3 - 20.000 km (Trung bình lớn)",
+                    Km = 20000,
+                    Maintances = 3,
+                    Level = MaintenanceLevel.Level3Major,
+                    MonthsInterval = 12,
+                    TakingTimeHours = 1.8m,
+                    EstimatedCost = 2450000m,
+                    ServicePackageId = pkg20k?.Id,
+                    RequiredChecklist = "Thay dầu động cơ & cốc lọc dầu; Thay lọc gió động cơ; Thay lọc gió điều hòa kháng khuẩn; Cân bằng động 4 bánh xe; Bảo dưỡng toàn bộ hệ thống phanh; Kiểm tra hệ thống treo & rô-tuyn lái",
+                    Description = "Mốc bảo dưỡng quan trọng tròn 1 năm hoặc 20.000 km. Bắt buộc để bảo lưu quyền lợi bảo hành hệ thống động cơ & truyền động.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-30K",
+                    Name = "Bảo dưỡng Cấp 2 - 30.000 km (Trung bình)",
+                    Km = 30000,
+                    Maintances = 2,
+                    Level = MaintenanceLevel.Level2Medium,
+                    MonthsInterval = 18,
+                    TakingTimeHours = 1.2m,
+                    EstimatedCost = 1250000m,
+                    ServicePackageId = pkg10k?.Id,
+                    RequiredChecklist = "Thay dầu máy & lọc dầu; Đảo lốp; Vệ sinh bảo dưỡng phanh đĩa; Kiểm tra hệ thống xả và ống xả khí thải; Kiểm tra dây curoa phụ",
+                    Description = "Bảo dưỡng định kỳ cấp 2 mốc 30.000 km.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-40K",
+                    Name = "Bảo dưỡng Cấp 4 - 40.000 km (Lớn toàn diện)",
+                    Km = 40000,
+                    Maintances = 4,
+                    Level = MaintenanceLevel.Level4Comprehensive,
+                    MonthsInterval = 24,
+                    TakingTimeHours = 3.0m,
+                    EstimatedCost = 5800000m,
+                    ServicePackageId = pkg40k?.Id,
+                    RequiredChecklist = "Thay dầu máy & cốc lọc dầu; Thay lọc gió động cơ & điều hòa; Thay dầu phanh DOT4 toàn bộ hệ thống; Thay dầu trợ lực lái & nước làm mát két nước; Thay dầu hộp số tự động/ATF; Kiểm tra bảo dưỡng bugi đánh lửa; Siết bu-lông gầm theo lực tiêu chuẩn",
+                    Description = "Đại bảo dưỡng cấp 4 mốc 40.000 km hoặc 24 tháng. Thay thế toàn bộ các loại dung dịch tuần hoàn trên xe.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-50K",
+                    Name = "Bảo dưỡng Cấp 1 - 50.000 km (Nhỏ)",
+                    Km = 50000,
+                    Maintances = 1,
+                    Level = MaintenanceLevel.Level1Minor,
+                    MonthsInterval = 30,
+                    TakingTimeHours = 0.8m,
+                    EstimatedCost = 650000m,
+                    ServicePackageId = pkg5k?.Id,
+                    RequiredChecklist = "Thay dầu động cơ; Kiểm tra an toàn hệ thống gầm máy, phanh và lốp xe; Kiểm tra bình ắc quy",
+                    Description = "Bảo dưỡng cấp nhỏ mốc 50.000 km.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-60K",
+                    Name = "Bảo dưỡng Cấp 3 - 60.000 km (Trung bình lớn)",
+                    Km = 60000,
+                    Maintances = 3,
+                    Level = MaintenanceLevel.Level3Major,
+                    MonthsInterval = 36,
+                    TakingTimeHours = 2.0m,
+                    EstimatedCost = 2800000m,
+                    ServicePackageId = pkg20k?.Id,
+                    RequiredChecklist = "Thay dầu máy & lọc dầu; Thay lọc gió động cơ & điều hòa; Thay cụm lọc nhiên liệu thùng xăng/dầu; Cân bằng động bánh xe & chỉnh góc đặt bánh xe; Kiểm tra giảm xóc, cao su càng A",
+                    Description = "Bảo dưỡng cấp 3 mốc 60.000 km hoặc 3 năm. Bắt buộc thay thế lọc nhiên liệu để bảo vệ kim phun và bơm cao áp.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-80K",
+                    Name = "Bảo dưỡng Cấp 4 - 80.000 km (Lớn cấp 4)",
+                    Km = 80000,
+                    Maintances = 4,
+                    Level = MaintenanceLevel.Level4Comprehensive,
+                    MonthsInterval = 48,
+                    TakingTimeHours = 3.5m,
+                    EstimatedCost = 6900000m,
+                    ServicePackageId = pkg40k?.Id,
+                    RequiredChecklist = "Thay dầu máy & toàn bộ các loại lọc; Thay bộ 4 bugi đánh lửa Iridium cao cấp; Thay dầu phanh, dầu hộp số tự động, nước làm mát máy; Kiểm tra dây curoa tổng & cụm tăng curoa tự động; Vệ sinh họng hút & buồng đốt",
+                    Description = "Bảo dưỡng lớn cấp 4 mốc 80.000 km hoặc 4 năm. Thay thế bugi đánh lửa và toàn bộ dung dịch bôi trơn truyền động.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                },
+                new()
+                {
+                    ROMSID = "ROMS-100K",
+                    Name = "Bảo dưỡng Cấp 4 - 100.000 km (Đại tu chu kỳ)",
+                    Km = 100000,
+                    Maintances = 4,
+                    Level = MaintenanceLevel.Level4Comprehensive,
+                    MonthsInterval = 60,
+                    TakingTimeHours = 4.0m,
+                    EstimatedCost = 8500000m,
+                    ServicePackageId = pkg40k?.Id,
+                    RequiredChecklist = "Tổng kiểm tra đại tu mốc 100.000 km: Thay toàn bộ lọc & dung dịch; Thay đai cam (nếu dùng đai); Kiểm tra bơm nước làm mát; Kiểm tra hệ thống lái trợ lực điện MDPS; Cân chỉnh thước lái 3D",
+                    Description = "Mốc đại tu hoàn chỉnh chu kỳ 100.000 km hoặc 5 năm bảo hành tiêu chuẩn của Hyundai.",
+                    FlagWarranty = true,
+                    FlagActive = true,
+                    CreatedBy = "Hệ thống HTC"
+                }
+            };
+
+            db.MaintenanceSettings.AddRange(settings);
+            await db.SaveChangesAsync();
+
+            // Link existing ROs to matching maintenance milestone
+            var allRos = await db.ROs.ToListAsync();
+            foreach (var ro in allRos)
+            {
+                var matched = settings
+                    .Where(s => Math.Abs(s.Km - ro.Odometer) <= 3000)
+                    .OrderBy(s => Math.Abs(s.Km - ro.Odometer))
+                    .FirstOrDefault();
+
+                if (matched != null)
+                {
+                    ro.MaintenanceSettingId = matched.Id;
+                    ro.MaintenanceMilestone = $"{matched.ROMSID} ({matched.Name})";
+                }
+            }
+            await db.SaveChangesAsync();
+        }
+
+        // Seed Danh mục Loại ảnh bảo hành (Ser_MST_ROWarrantyPhotoType)
+        if (!await db.WarrantyPhotoTypes.AnyAsync())
+        {
+            db.WarrantyPhotoTypes.AddRange(
+                new WarrantyPhotoType { ROWPTCode = "VIN", ROWPTName = "Ảnh số khung VIN" },
+                new WarrantyPhotoType { ROWPTCode = "ODO", ROWPTName = "Ảnh đồng hồ ODO" },
+                new WarrantyPhotoType { ROWPTCode = "LOI", ROWPTName = "Ảnh chi tiết lỗi / hư hỏng" },
+                new WarrantyPhotoType { ROWPTCode = "TONGTHE", ROWPTName = "Ảnh tổng thể xe" },
+                new WarrantyPhotoType { ROWPTCode = "NGHIEMTHU", ROWPTName = "Ảnh nghiệm thu sau sửa chữa" },
+                new WarrantyPhotoType { ROWPTCode = "PHUTUNG", ROWPTName = "Ảnh phụ tùng thay thế" },
+                new WarrantyPhotoType { ROWPTCode = "KHAC", ROWPTName = "Ảnh khác (không hiển thị tóm tắt)" },
+                new WarrantyPhotoType { ROWPTCode = "PXK", ROWPTName = "Ảnh phiếu xuất kho (không hiển thị tóm tắt)" },
+                new WarrantyPhotoType { ROWPTCode = "MPTC", ROWPTName = "Ảnh mã phụ tùng chính (không hiển thị tóm tắt)" },
+                new WarrantyPhotoType { ROWPTCode = "MPTM", ROWPTName = "Ảnh mã phụ tùng mới (không hiển thị tóm tắt)" }
+            );
+            await db.SaveChangesAsync();
+        }
+
+        // Seed Danh mục Loại bảo hành RO (Ser_MST_ROWarrantyType + Ser_MST_ROWarrantyType_PhotoType)
+        if (!await db.WarrantyTypes.AnyAsync())
+        {
+            var types = new List<WarrantyType>
+            {
+                new()
+                {
+                    ROWTID = "ROWT-XMA", TypeCode = WarrantyTypeCode.XM, TypeName = "Bảo hành xe mới",
+                    DetailCode = WarrantyTypeDetailCode.A, DetailName = "Hư hỏng do lỗi sản xuất",
+                    Photos =
+                    [
+                        new WarrantyPhotoType_Seed("VIN", "Ảnh số khung VIN"),
+                        new WarrantyPhotoType_Seed("ODO", "Ảnh đồng hồ ODO"),
+                        new WarrantyPhotoType_Seed("LOI", "Ảnh chi tiết lỗi / hư hỏng"),
+                        new WarrantyPhotoType_Seed("NGHIEMTHU", "Ảnh nghiệm thu sau sửa chữa")
+                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                },
+                new()
+                {
+                    ROWTID = "ROWT-SBB", TypeCode = WarrantyTypeCode.SB, TypeName = "Sửa chữa bảo hành",
+                    DetailCode = WarrantyTypeDetailCode.B, DetailName = "Hư hỏng do linh kiện",
+                    Photos =
+                    [
+                        new WarrantyPhotoType_Seed("VIN", "Ảnh số khung VIN"),
+                        new WarrantyPhotoType_Seed("LOI", "Ảnh chi tiết lỗi / hư hỏng"),
+                        new WarrantyPhotoType_Seed("PHUTUNG", "Ảnh phụ tùng thay thế")
+                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                },
+                new()
+                {
+                    ROWTID = "ROWT-PTP", TypeCode = WarrantyTypeCode.PT, TypeName = "Phụ tùng bảo hành",
+                    DetailCode = WarrantyTypeDetailCode.P, DetailName = "Phụ tùng",
+                    Photos =
+                    [
+                        new WarrantyPhotoType_Seed("PHUTUNG", "Ảnh phụ tùng thay thế"),
+                        new WarrantyPhotoType_Seed("MPTC", "Ảnh mã phụ tùng chính (không hiển thị tóm tắt)")
+                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                },
+                new()
+                {
+                    ROWTID = "ROWT-TCW", TypeCode = WarrantyTypeCode.TC, TypeName = "Bảo hành thiện chí",
+                    DetailCode = WarrantyTypeDetailCode.W, DetailName = "Công việc bảo hành",
+                    Photos =
+                    [
+                        new WarrantyPhotoType_Seed("VIN", "Ảnh số khung VIN"),
+                        new WarrantyPhotoType_Seed("TONGTHE", "Ảnh tổng thể xe")
+                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                },
+                new()
+                {
+                    ROWTID = "ROWT-BTS", TypeCode = WarrantyTypeCode.BT, TypeName = "Bảo hành bổ sung",
+                    DetailCode = WarrantyTypeDetailCode.S, DetailName = "Sửa chữa",
+                    Photos =
+                    [
+                        new WarrantyPhotoType_Seed("VIN", "Ảnh số khung VIN"),
+                        new WarrantyPhotoType_Seed("LOI", "Ảnh chi tiết lỗi / hư hỏng"),
+                        new WarrantyPhotoType_Seed("NGHIEMTHU", "Ảnh nghiệm thu sau sửa chữa")
+                    ].Select(p => new WarrantyTypePhoto { ROWPTCode = p.Code, ROWPTName = p.Name }).ToList()
+                }
+            };
+
+            foreach (var t in types)
+            {
+                t.PhotoTypeDisplay = BuildPhotoDisplay(t.Photos);
+                t.LogLuDateTime = DateTime.Now;
+            }
+
+            db.WarrantyTypes.AddRange(types);
+            await db.SaveChangesAsync();
+        }
     }
 
+    private readonly record struct WarrantyPhotoType_Seed(string Code, string Name);
+
+    /// <summary>Dựng chuỗi hiển thị loại ảnh: bỏ 4 mã KHAC/PXK/MPTC/MPTM (đúng luật nguồn).</summary>
+    private static string? BuildPhotoDisplay(List<WarrantyTypePhoto> photos)
+    {
+        var excluded = new[] { "KHAC", "PXK", "MPTC", "MPTM" };
+        var names = photos
+            .Where(p => !excluded.Contains(p.ROWPTCode, StringComparer.OrdinalIgnoreCase))
+            .Select(p => p.ROWPTName ?? p.ROWPTCode)
+            .ToList();
+        return names.Count > 0 ? string.Join(", ", names) : null;
+    }
 
     private static List<PdiChecklistItem> CreateDefaultChecklist() =>
     [
@@ -4612,7 +4933,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -4638,6 +4959,8 @@ public static class Seeder
             "CREATE TABLE IF NOT EXISTS miniservice.\"ServiceItems\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"ROType\" integer NOT NULL, \"StdManHour\" numeric(5,2) NOT NULL, \"Price\" numeric(18,2) NOT NULL, \"Cost\" numeric(18,2) NOT NULL, \"VatPercent\" numeric(5,2) NOT NULL, \"Model\" text NULL, \"FlagWarranty\" boolean NOT NULL DEFAULT false, \"Note\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ServiceItems_OrgId_Code\" ON miniservice.\"ServiceItems\" (\"OrgId\", \"Code\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"Suppliers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Address\" text NULL, \"Phone\" text NULL, \"Email\" text NULL, \"ContactName\" text NULL, \"ContactPhone\" text NULL, \"TaxCode\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
+            "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankAccount\" text NULL",
+            "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankName\" text NULL",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Suppliers_OrgId_Code\" ON miniservice.\"Suppliers\" (\"OrgId\", \"Code\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"SupplierPayments\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"SupplierPaymentNo\" text NOT NULL, \"SupplierId\" integer NULL, \"SupplierName\" text NOT NULL, \"Address\" text NULL, \"PaymentDate\" timestamp NOT NULL, \"PaymentType\" integer NOT NULL, \"Status\" integer NOT NULL, \"OrderPartId\" integer NULL, \"OrderPartNo\" text NULL, \"TSTRequestNo\" text NULL, \"Description\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ApprovedBy\" text NULL, \"ApprovedAt\" timestamp NULL)",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SupplierPayments_OrgId_SupplierPaymentNo\" ON miniservice.\"SupplierPayments\" (\"OrgId\", \"SupplierPaymentNo\")",
@@ -4649,6 +4972,14 @@ public static class Seeder
             "CREATE TABLE IF NOT EXISTS miniservice.\"PartOOs\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"OONo\" text NOT NULL, \"PartId\" integer NOT NULL, \"PartCode\" text NOT NULL, \"PartName\" text NOT NULL, \"OOPlateNo\" text NOT NULL, \"Model\" text NULL, \"SoLuongNo\" numeric(18,2) NOT NULL, \"SoLuongTra\" numeric(18,2) NOT NULL DEFAULT 0, \"CVDV\" text NULL, \"NgayDatHang\" timestamp NULL, \"NgayVeDuKien\" timestamp NULL, \"NgayHenTra\" timestamp NULL, \"GhiChu\" text NULL, \"Status\" integer NOT NULL DEFAULT 0, \"ROId\" integer NULL, \"CarId\" integer NULL, \"CustomerId\" integer NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"FinishedAt\" timestamp NULL, \"ReturnedBy\" text NULL)",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PartOOs_OrgId_OONo\" ON miniservice.\"PartOOs\" (\"OrgId\", \"OONo\")",
             "CREATE INDEX IF NOT EXISTS \"IX_PartOOs_OrgId_OOPlateNo\" ON miniservice.\"PartOOs\" (\"OrgId\", \"OOPlateNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"CusDebits\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"DebitNo\" text NOT NULL, \"CustomerId\" integer NOT NULL, \"CarId\" integer NULL, \"ROId\" integer NULL, \"DebitType\" integer NOT NULL, \"Status\" integer NOT NULL, \"DebitDate\" timestamp NOT NULL, \"DueDate\" timestamp NULL, \"DebitAmount\" numeric(18,2) NOT NULL, \"PaidAmount\" numeric(18,2) NOT NULL DEFAULT 0, \"Description\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ClearedAt\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CusDebits_OrgId_DebitNo\" ON miniservice.\"CusDebits\" (\"OrgId\", \"DebitNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"CusDebitPayments\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"PaymentNo\" text NOT NULL, \"CustomerId\" integer NOT NULL, \"CusDebitId\" integer NULL, \"PaymentDate\" timestamp NOT NULL, \"PaymentAmount\" numeric(18,2) NOT NULL, \"Method\" integer NOT NULL, \"PayPersonName\" text NOT NULL, \"PayPersonIdCard\" text NULL, \"PayPersonPhone\" text NULL, \"TransactionRef\" text NULL, \"Note\" text NULL, \"Collector\" text NOT NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CusDebitPayments_OrgId_PaymentNo\" ON miniservice.\"CusDebitPayments\" (\"OrgId\", \"PaymentNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"SupplierDebits\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"DebitNo\" text NOT NULL, \"SupplierId\" integer NOT NULL, \"StockInId\" integer NULL, \"OrderPartId\" integer NULL, \"DebitType\" integer NOT NULL, \"Status\" integer NOT NULL, \"DebitDate\" timestamp NOT NULL, \"DueDate\" timestamp NULL, \"DebitAmount\" numeric(18,2) NOT NULL, \"PaidAmount\" numeric(18,2) NOT NULL DEFAULT 0, \"Description\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ClearedAt\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SupplierDebits_OrgId_DebitNo\" ON miniservice.\"SupplierDebits\" (\"OrgId\", \"DebitNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"SupplierDebitPayments\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"PaymentNo\" text NOT NULL, \"SupplierId\" integer NOT NULL, \"SupplierDebitId\" integer NULL, \"PaymentDate\" timestamp NOT NULL, \"PaymentAmount\" numeric(18,2) NOT NULL, \"Method\" integer NOT NULL, \"PayPersonName\" text NOT NULL, \"PayPersonIdCard\" text NULL, \"PayPersonPhone\" text NULL, \"BankAccount\" text NULL, \"BankName\" text NULL, \"TransactionRef\" text NULL, \"Note\" text NULL, \"Cashier\" text NOT NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SupplierDebitPayments_OrgId_PaymentNo\" ON miniservice.\"SupplierDebitPayments\" (\"OrgId\", \"PaymentNo\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"DealerHistoryRecords\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"RecordNo\" text NOT NULL, \"DealerCode\" text NOT NULL, \"DealerName\" text NOT NULL, \"PlateNo\" text NOT NULL, \"FrameNo\" text NOT NULL, \"EngineNo\" text NULL, \"TradeMarkName\" text NOT NULL, \"ModelName\" text NOT NULL, \"ColorCode\" text NULL, \"ProductYear\" integer NOT NULL, \"CusName\" text NOT NULL, \"CusPhone\" text NULL, \"CusAddress\" text NULL, \"RONo\" text NOT NULL, \"ROId\" integer NULL, \"CheckInDate\" timestamp NOT NULL, \"ActualDeliveryDate\" timestamp NULL, \"Odometer\" integer NOT NULL, \"ServiceAdvisor\" text NOT NULL, \"Technician\" text NULL, \"CustomerRequest\" text NULL, \"CarStatus\" text NULL, \"RepairResult\" text NULL, \"TotalLaborAmount\" numeric(18,2) NOT NULL, \"TotalPartAmount\" numeric(18,2) NOT NULL, \"TotalAmount\" numeric(18,2) NOT NULL, \"FlagClaim\" boolean NOT NULL DEFAULT false, \"ClaimNo\" text NULL, \"ClaimStatus\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_DealerHistoryRecords_OrgId_RecordNo\" ON miniservice.\"DealerHistoryRecords\" (\"OrgId\", \"RecordNo\")",
             "CREATE INDEX IF NOT EXISTS \"IX_DealerHistoryRecords_OrgId_PlateNo\" ON miniservice.\"DealerHistoryRecords\" (\"OrgId\", \"PlateNo\")",
@@ -4704,6 +5035,12 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WarrantyWorks_OrgId_Code\" ON miniservice.\"WarrantyWorks\" (\"OrgId\", \"Code\")",
             "CREATE INDEX IF NOT EXISTS \"IX_WarrantyWorks_OrgId_Model\" ON miniservice.\"WarrantyWorks\" (\"OrgId\", \"Model\")",
             "CREATE INDEX IF NOT EXISTS \"IX_WarrantyWorks_OrgId_LaborGroup\" ON miniservice.\"WarrantyWorks\" (\"OrgId\", \"LaborGroup\")",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"MaintenanceSettingId\" integer NULL",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"MaintenanceMilestone\" text NULL",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"MaintenanceSettings\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"ROMSID\" text NOT NULL, \"Name\" text NOT NULL, \"Km\" integer NOT NULL, \"Maintances\" integer NOT NULL DEFAULT 1, \"Level\" integer NOT NULL DEFAULT 1, \"MonthsInterval\" integer NOT NULL DEFAULT 6, \"TakingTimeHours\" numeric(5,2) NOT NULL DEFAULT 1.0, \"EstimatedCost\" numeric(18,2) NOT NULL DEFAULT 650000, \"ServicePackageId\" integer NULL, \"RequiredChecklist\" text NULL, \"Description\" text NULL, \"FlagWarranty\" boolean NOT NULL DEFAULT true, \"FlagActive\" boolean NOT NULL DEFAULT true, \"LogLuDateTime\" timestamp NULL, \"LogLUBy\" text NULL, \"CreatedBy\" text NOT NULL DEFAULT 'Hệ thống HTC', \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"UpdatedAt\" timestamp NULL, \"UpdatedBy\" text NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_MaintenanceSettings_OrgId_ROMSID\" ON miniservice.\"MaintenanceSettings\" (\"OrgId\", \"ROMSID\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_MaintenanceSettings_OrgId_Km\" ON miniservice.\"MaintenanceSettings\" (\"OrgId\", \"Km\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_MaintenanceSettings_OrgId_Level\" ON miniservice.\"MaintenanceSettings\" (\"OrgId\", \"Level\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -5560,6 +5897,8 @@ public static class Seeder
                 ""IsActive"" INTEGER NOT NULL,
                 ""CreatedAt"" TEXT NOT NULL
             );",
+            @"ALTER TABLE ""Suppliers"" ADD COLUMN ""BankAccount"" TEXT NULL;",
+            @"ALTER TABLE ""Suppliers"" ADD COLUMN ""BankName"" TEXT NULL;",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Suppliers_OrgId_Code"" ON ""Suppliers"" (""OrgId"", ""Code"");",
             @"CREATE TABLE IF NOT EXISTS ""SupplierPayments"" (
                 ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -5676,6 +6015,94 @@ public static class Seeder
             );",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PartOOs_OrgId_OONo"" ON ""PartOOs"" (""OrgId"", ""OONo"");",
             @"CREATE INDEX IF NOT EXISTS ""IX_PartOOs_OrgId_OOPlateNo"" ON ""PartOOs"" (""OrgId"", ""OOPlateNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""CusDebits"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""DebitNo"" TEXT NOT NULL,
+                ""CustomerId"" INTEGER NOT NULL,
+                ""CarId"" INTEGER NULL,
+                ""ROId"" INTEGER NULL,
+                ""DebitType"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""DebitDate"" TEXT NOT NULL,
+                ""DueDate"" TEXT NULL,
+                ""DebitAmount"" TEXT NOT NULL,
+                ""PaidAmount"" TEXT NOT NULL DEFAULT '0',
+                ""Description"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ClearedAt"" TEXT NULL,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CusDebits_OrgId_DebitNo"" ON ""CusDebits"" (""OrgId"", ""DebitNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""CusDebitPayments"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PaymentNo"" TEXT NOT NULL,
+                ""CustomerId"" INTEGER NOT NULL,
+                ""CusDebitId"" INTEGER NULL,
+                ""PaymentDate"" TEXT NOT NULL,
+                ""PaymentAmount"" TEXT NOT NULL,
+                ""Method"" INTEGER NOT NULL,
+                ""PayPersonName"" TEXT NOT NULL,
+                ""PayPersonIdCard"" TEXT NULL,
+                ""PayPersonPhone"" TEXT NULL,
+                ""TransactionRef"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                ""Collector"" TEXT NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CusDebitId"") REFERENCES ""CusDebits"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CusDebitPayments_OrgId_PaymentNo"" ON ""CusDebitPayments"" (""OrgId"", ""PaymentNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""SupplierDebits"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""DebitNo"" TEXT NOT NULL,
+                ""SupplierId"" INTEGER NOT NULL,
+                ""StockInId"" INTEGER NULL,
+                ""OrderPartId"" INTEGER NULL,
+                ""DebitType"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""DebitDate"" TEXT NOT NULL,
+                ""DueDate"" TEXT NULL,
+                ""DebitAmount"" TEXT NOT NULL,
+                ""PaidAmount"" TEXT NOT NULL DEFAULT '0',
+                ""Description"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ClearedAt"" TEXT NULL,
+                FOREIGN KEY (""SupplierId"") REFERENCES ""Suppliers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""StockInId"") REFERENCES ""StockIns"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""OrderPartId"") REFERENCES ""OrderParts"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_SupplierDebits_OrgId_DebitNo"" ON ""SupplierDebits"" (""OrgId"", ""DebitNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""SupplierDebitPayments"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PaymentNo"" TEXT NOT NULL,
+                ""SupplierId"" INTEGER NOT NULL,
+                ""SupplierDebitId"" INTEGER NULL,
+                ""PaymentDate"" TEXT NOT NULL,
+                ""PaymentAmount"" TEXT NOT NULL,
+                ""Method"" INTEGER NOT NULL,
+                ""PayPersonName"" TEXT NOT NULL,
+                ""PayPersonIdCard"" TEXT NULL,
+                ""PayPersonPhone"" TEXT NULL,
+                ""BankAccount"" TEXT NULL,
+                ""BankName"" TEXT NULL,
+                ""TransactionRef"" TEXT NULL,
+                ""Note"" TEXT NULL,
+                ""Cashier"" TEXT NOT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""SupplierId"") REFERENCES ""Suppliers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""SupplierDebitId"") REFERENCES ""SupplierDebits"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_SupplierDebitPayments_OrgId_PaymentNo"" ON ""SupplierDebitPayments"" (""OrgId"", ""PaymentNo"");",
             @"CREATE TABLE IF NOT EXISTS ""DealerHistoryRecords"" (
                 ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 ""OrgId"" TEXT NOT NULL,
@@ -6007,7 +6434,35 @@ public static class Seeder
             );",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_WarrantyWorks_OrgId_Code"" ON ""WarrantyWorks"" (""OrgId"", ""Code"");",
             @"CREATE INDEX IF NOT EXISTS ""IX_WarrantyWorks_OrgId_Model"" ON ""WarrantyWorks"" (""OrgId"", ""Model"");",
-            @"CREATE INDEX IF NOT EXISTS ""IX_WarrantyWorks_OrgId_LaborGroup"" ON ""WarrantyWorks"" (""OrgId"", ""LaborGroup"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_WarrantyWorks_OrgId_LaborGroup"" ON ""WarrantyWorks"" (""OrgId"", ""LaborGroup"");",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""MaintenanceSettingId"" INTEGER NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""MaintenanceMilestone"" TEXT NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""MaintenanceSettings"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ROMSID"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""Km"" INTEGER NOT NULL,
+                ""Maintances"" INTEGER NOT NULL DEFAULT 1,
+                ""Level"" INTEGER NOT NULL DEFAULT 1,
+                ""MonthsInterval"" INTEGER NOT NULL DEFAULT 6,
+                ""TakingTimeHours"" TEXT NOT NULL DEFAULT '1.0',
+                ""EstimatedCost"" TEXT NOT NULL DEFAULT '650000',
+                ""ServicePackageId"" INTEGER NULL,
+                ""RequiredChecklist"" TEXT NULL,
+                ""Description"" TEXT NULL,
+                ""FlagWarranty"" INTEGER NOT NULL DEFAULT 1,
+                ""FlagActive"" INTEGER NOT NULL DEFAULT 1,
+                ""LogLuDateTime"" TEXT NULL,
+                ""LogLUBy"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL DEFAULT 'Hệ thống HTC',
+                ""CreatedAt"" TEXT NOT NULL,
+                ""UpdatedAt"" TEXT NULL,
+                ""UpdatedBy"" TEXT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_MaintenanceSettings_OrgId_ROMSID"" ON ""MaintenanceSettings"" (""OrgId"", ""ROMSID"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_MaintenanceSettings_OrgId_Km"" ON ""MaintenanceSettings"" (""OrgId"", ""Km"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_MaintenanceSettings_OrgId_Level"" ON ""MaintenanceSettings"" (""OrgId"", ""Level"");"
         };
 
         foreach (var sql in sqls)

@@ -1,0 +1,174 @@
+@model List<MaintenanceSetting>
+@{
+    Layout = null;
+    MaintenanceLevel? selectedLevel = ViewBag.SelectedLevel;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sổ tay Chu kỳ & Định mức Bảo dưỡng Định kỳ Hyundai</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; font-size: 13px; line-height: 1.4; background-color: #f8fafc; }
+        .print-container { max-width: 960px; margin: 20px auto; background: #fff; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-radius: 8px; }
+        .table-custom th { background-color: #0f172a !important; color: #fff !important; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .level-badge { font-size: 11px; padding: 4px 8px; font-weight: 600; border-radius: 4px; }
+        @@media print {
+            body { background: #fff; font-size: 12px; }
+            .print-container { margin: 0; padding: 0; box-shadow: none; max-width: 100%; }
+            .no-print { display: none !important; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-container">
+        <!-- Print Action Bar -->
+        <div class="d-flex justify-content-between align-items-center mb-4 no-print pb-3 border-bottom">
+            <div>
+                <a href="/MaintenanceSetting" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i> Quay lại</a>
+                <span class="text-muted ms-2 small">Bản in chuẩn A4 ngang / dọc cho Cố vấn Dịch vụ & Khách hàng</span>
+            </div>
+            <button onclick="window.print()" class="btn btn-primary btn-sm px-4"><i class="bi bi-printer me-1"></i> In tài liệu ngay</button>
+        </div>
+
+        <!-- Header -->
+        <div class="row align-items-center mb-4 pb-3 border-bottom border-dark border-2">
+            <div class="col-8">
+                <div class="d-flex align-items-center mb-1">
+                    <span class="fs-4 fw-black text-primary me-2 font-monospace">HYUNDAI SERVICE</span>
+                    <span class="badge bg-primary text-uppercase px-2 py-1">Tiêu chuẩn HTC</span>
+                </div>
+                <h4 class="fw-bold mb-1 text-uppercase text-dark">SỔ TAY CHU KỲ & ĐỊNH MỨC BẢO DƯỠNG ĐỊNH KỲ</h4>
+                <div class="text-muted" style="font-size:12px">Hệ thống Định mức Chu kỳ Kỹ thuật & Chính sách Bảo hành Toàn quốc (Ser_MST_ROMaintanceSetting)</div>
+            </div>
+            <div class="col-4 text-end">
+                <div class="fw-bold">ĐẠI LÝ ỦY QUYỀN HYUNDAI</div>
+                <div class="text-muted small">Phòng Dịch vụ & Chăm sóc Khách hàng</div>
+                <div class="text-muted small">Ngày ban hành: @DateTime.Today.ToString("dd/MM/yyyy")</div>
+            </div>
+        </div>
+
+        <!-- 4 Cấp độ Bảo dưỡng Tiêu chuẩn -->
+        <div class="row g-2 mb-4">
+            <div class="col">
+                <div class="border rounded p-2 text-center bg-light">
+                    <span class="badge bg-secondary mb-1">Cấp 0</span>
+                    <div class="fw-bold small">1.000 km (1 tháng)</div>
+                    <div class="text-muted" style="font-size:11px">Kiểm tra miễn phí roda</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="border rounded p-2 text-center bg-light">
+                    <span class="badge bg-info text-dark mb-1">Cấp 1 - Nhỏ</span>
+                    <div class="fw-bold small">5.000 / 15.000 km</div>
+                    <div class="text-muted" style="font-size:11px">Dầu máy & an toàn 15 điểm</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="border rounded p-2 text-center bg-light">
+                    <span class="badge bg-primary mb-1">Cấp 2 - Trung bình</span>
+                    <div class="fw-bold small">10.000 / 30.000 km</div>
+                    <div class="text-muted" style="font-size:11px">Dầu, lọc nhớt, vệ sinh phanh, đảo lốp</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="border rounded p-2 text-center bg-light">
+                    <span class="badge bg-warning text-dark mb-1">Cấp 3 - TB lớn</span>
+                    <div class="fw-bold small">20.000 / 60.000 km</div>
+                    <div class="text-muted" style="font-size:11px">Lọc gió, lọc nhiên liệu, cân mâm</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="border rounded p-2 text-center bg-light">
+                    <span class="badge bg-danger mb-1">Cấp 4 - Lớn</span>
+                    <div class="fw-bold small">40.000 / 80.000 km</div>
+                    <div class="text-muted" style="font-size:11px">Dầu phanh, dầu hộp số, bugi, nước mát</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bảng Chi tiết Định mức Chu kỳ -->
+        <div class="table-responsive mb-4">
+            <table class="table table-bordered table-sm table-custom align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:75px">Mã ROMS</th>
+                        <th style="width:95px" class="text-end">Mốc Km</th>
+                        <th style="width:130px">Cấp độ bảo dưỡng</th>
+                        <th style="width:80px" class="text-center">Chu kỳ</th>
+                        <th>Hạng mục kiểm tra & thay thế chính (Checklist HTC)</th>
+                        <th style="width:85px" class="text-end">Giờ công</th>
+                        <th style="width:115px" class="text-end">Chi phí ước tính</th>
+                        <th style="width:85px" class="text-center">CSBH</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace fw-bold small">@item.ROMSID</td>
+                            <td class="text-end fw-bold">@item.Km.ToString("N0") km</td>
+                            <td>
+                                <span class="badge @item.LevelBadgeClass" style="font-size:10.5px">
+                                    @item.LevelName
+                                </span>
+                            </td>
+                            <td class="text-center small">@item.MonthsInterval tháng</td>
+                            <td>
+                                <div class="fw-semibold small">@item.Name</div>
+                                <div class="text-muted small" style="font-size:11.5px">
+                                    @item.RequiredChecklist
+                                </div>
+                            </td>
+                            <td class="text-end small">@item.TakingTimeHours.ToString("N1") h</td>
+                            <td class="text-end fw-bold small text-success">@item.EstimatedCost.ToString("N0") đ</td>
+                            <td class="text-center">
+                                @if (item.FlagWarranty)
+                                {
+                                    <span class="text-danger fw-bold" style="font-size:11px">Bắt buộc</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted" style="font-size:11px">Tùy chọn</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Điều khoản Chính sách Bảo hành Hãng Hyundai HTC -->
+        <div class="border rounded p-3 mb-4 bg-light">
+            <h6 class="fw-bold mb-2 text-danger">
+                <i class="bi bi-shield-exclamation me-1"></i> LƯU Ý QUAN TRỌNG VỀ CHÍNH SÁCH BẢO HÀNH XE (HTC WARRANTY POLICY):
+            </h6>
+            <ol class="mb-0 ps-3 small text-secondary">
+                <li>Xe du lịch Hyundai được áp dụng chế độ bảo hành chính hãng tiêu chuẩn <strong>5 năm hoặc 100.000 km</strong> (tùy điều kiện nào đến trước).</li>
+                <li>Để duy trì hiệu lực bảo hành của các cụm chi tiết động cơ, hộp số và hệ thống truyền động, xe phải được thực hiện bảo dưỡng định kỳ đúng hạn tại các Đại lý Ủy quyền của Hyundai Thành Công Việt Nam theo các mốc Km nêu trên.</li>
+                <li><strong>Giới hạn quá hạn tối đa cho phép:</strong> Không vượt quá <strong>1.500 km</strong> hoặc <strong>1 tháng</strong> so với mốc định mức bảo dưỡng tiêu chuẩn. Mọi trường hợp bỏ lỡ bảo dưỡng vượt quá ngưỡng này có thể dẫn đến việc từ chối bảo hành đối với các hư hỏng phát sinh do thiếu bôi trơn hoặc hao mòn bất thường.</li>
+                <li>Khuyến nghị khách hàng chỉ sử dụng Phụ tùng chính hãng (Hyundai Genuine Parts) và dầu động cơ tiêu chuẩn do Hyundai chỉ định.</li>
+            </ol>
+        </div>
+
+        <!-- Chữ ký -->
+        <div class="row text-center pt-2">
+            <div class="col-6">
+                <div class="text-muted small">ĐẠI DIỆN KHÁCH HÀNG</div>
+                <div class="fw-bold text-dark mb-5">Chủ xe / Người lái xe</div>
+                <div class="text-muted small">(Ký và ghi rõ họ tên)</div>
+            </div>
+            <div class="col-6">
+                <div class="text-muted small">ĐẠI LÝ ỦY QUYỀN HYUNDAI</div>
+                <div class="fw-bold text-dark mb-5">Cố vấn Dịch vụ / Quản đốc xưởng</div>
+                <div class="text-muted small">(Ký, đóng dấu và ghi rõ họ tên)</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

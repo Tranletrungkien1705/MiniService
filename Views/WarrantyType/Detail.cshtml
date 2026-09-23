@@ -1,0 +1,86 @@
+@model WarrantyType
+@{
+    ViewData["Title"] = $"Chi tiết Loại bảo hành {Model.TypeCode}/{Model.DetailCode}";
+}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+            <h4 class="mb-0 fw-bold font-monospace text-primary">@Model.TypeCode / @Model.DetailCode</h4>
+            <span class="badge bg-dark fs-6">@Model.TypeCodeText</span>
+            @if (Model.FlagActive)
+            {
+                <span class="badge bg-success">Đang áp dụng</span>
+            }
+            else
+            {
+                <span class="badge bg-secondary">Ngừng áp dụng</span>
+            }
+        </div>
+        <div class="text-muted">@Model.TypeName · @Model.DetailName</div>
+    </div>
+    <div class="btn-group">
+        <a href="/WarrantyType/Print?typeCode=@((int)Model.TypeCode)" target="_blank" class="btn btn-outline-info">
+            <i class="bi bi-printer me-1"></i> In
+        </a>
+        <a href="/WarrantyType/Edit/@Model.Id" class="btn btn-outline-secondary">
+            <i class="bi bi-pencil me-1"></i> Sửa
+        </a>
+        <form method="post" action="/WarrantyType/ToggleActive/@Model.Id" class="d-inline">
+            @Html.AntiForgeryToken()
+            <button type="submit" class="btn btn-outline-warning">
+                <i class="bi @(Model.FlagActive ? "bi-pause" : "bi-play") me-1"></i>@(Model.FlagActive ? "Tạm ngưng" : "Kích hoạt")
+            </button>
+        </form>
+        <a href="/WarrantyType" class="btn btn-outline-dark">
+            <i class="bi bi-arrow-left me-1"></i> Danh sách
+        </a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-3 border-0">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-info-circle text-primary me-2"></i>Thông tin loại bảo hành</h6>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr><th style="width:180px">Mã loại bảo hành (ROWTID)</th><td class="font-monospace">@Model.ROWTID</td></tr>
+                        <tr><th>Loại chính (ROWTypeCode)</th><td><span class="badge bg-dark font-monospace">@Model.TypeCode</span> @Model.TypeName</td></tr>
+                        <tr><th>Loại chi tiết (ROWTypeDtlCode)</th><td><span class="badge bg-secondary font-monospace">@Model.DetailCode</span> @Model.DetailName</td></tr>
+                        <tr><th>Chuỗi hiển thị loại ảnh</th><td>@(string.IsNullOrWhiteSpace(Model.PhotoTypeDisplay) ? "—" : Model.PhotoTypeDisplay)</td></tr>
+                        <tr><th>Trạng thái hiệu lực</th><td>@(Model.FlagActive ? "Đang áp dụng" : "Ngừng áp dụng")</td></tr>
+                        <tr><th>Cập nhật cuối</th><td>@(Model.LogLuDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "—") @(string.IsNullOrWhiteSpace(Model.LogLUBy) ? "" : $"bởi {Model.LogLUBy}")</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white py-3 border-0 d-flex align-items-center justify-content-between">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-images text-info me-2"></i>Loại ảnh chứng minh bắt buộc</h6>
+                <span class="badge bg-info-subtle text-info border border-info-subtle">@Model.PhotoCount loại ảnh</span>
+            </div>
+            <div class="card-body">
+                @if (Model.Photos.Count == 0)
+                {
+                    <div class="text-muted small">Loại bảo hành này không yêu cầu ảnh chứng minh.</div>
+                }
+                else
+                {
+                    <ul class="list-group list-group-flush">
+                        @foreach (var p in Model.Photos)
+                        {
+                            <li class="list-group-item d-flex align-items-center justify-content-between px-0">
+                                <span><span class="badge bg-light text-dark border font-monospace me-2">@p.ROWPTCode</span>@p.ROWPTName</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+    </div>
+</div>

@@ -31,7 +31,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingPartPriceRequests = 0, int RespondedPartPriceRequests = 0,
     int TotalComplaintDiagnosticErrors = 0, int TotalComplaintCodes = 0, int TotalDiagnosticCodes = 0,
     int TotalBirthdays = 0, int ThisMonthBirthdays = 0, int TodayBirthdays = 0, int PendingBirthdays = 0,
-    int TotalWarrantyWorks = 0, int ActiveWarrantyWorks = 0);
+    int TotalWarrantyWorks = 0, int ActiveWarrantyWorks = 0,
+    int TotalMaintenanceSettings = 0, int ActiveMaintenanceSettings = 0);
 
 public interface IRoService
 {
@@ -413,6 +414,27 @@ public interface IRoService
     Task<(bool ok, string msg, int? lineId)> ApplyWarrantyWorkToRoAsync(int warrantyWorkId, int roId, decimal? customHours, string? note);
     Task<List<RepairOrder>> ROsForWarrantyWorkSelectAsync();
     Task<List<string>> DistinctWarrantyModelsAsync();
+    // Maintenance Interval & Milestone Settings (Ser_MST_ROMaintanceSetting / MNU_QT_DL_THIETLAPBAODUONG)
+    Task<List<MaintenanceSetting>> MaintenanceSettingsAsync(int? minKm, int? maxKm, MaintenanceLevel? level, bool? flagWarranty, bool? flagActive, string? q);
+    Task<MaintenanceSetting?> GetMaintenanceSettingAsync(int id);
+    Task<MaintenanceSetting?> GetMaintenanceSettingByRomsIdAsync(string romsId);
+    Task<MaintenanceSettingSummaryDto> GetMaintenanceSettingSummaryAsync();
+    Task<int> CreateMaintenanceSettingAsync(MaintenanceSetting setting);
+    Task<(bool ok, string msg)> UpdateMaintenanceSettingAsync(int id, MaintenanceSetting input);
+    Task<(bool ok, string msg)> ToggleMaintenanceSettingActiveAsync(int id);
+    Task<(bool ok, string msg)> DeleteMaintenanceSettingAsync(int id);
+    Task<MaintenanceSuggestionDto> SuggestMaintenanceForKmAsync(int km);
+    Task<(bool ok, string msg)> ApplyMaintenanceToRoAsync(int settingId, int roId, bool addPackageCombo);
+    Task<List<RepairOrder>> ROsForMaintenanceSelectAsync();
+    // Warranty Type Catalog (Ser_MST_ROWarrantyType / Ser_MST_ROWarrantyType_PhotoType / Ser_MST_ROWarrantyPhotoType)
+    Task<List<WarrantyType>> WarrantyTypesAsync(WarrantyTypeCode? typeCode, bool? flagActive, string? q);
+    Task<WarrantyType?> GetWarrantyTypeAsync(int id);
+    Task<WarrantyTypeSummaryDto> GetWarrantyTypeSummaryAsync();
+    Task<int> CreateWarrantyTypeAsync(WarrantyType type, List<WarrantyTypePhoto> photos);
+    Task<(bool ok, string msg)> UpdateWarrantyTypeAsync(int id, WarrantyType input, List<WarrantyTypePhoto>? photos);
+    Task<(bool ok, string msg)> ToggleWarrantyTypeActiveAsync(int id);
+    Task<(bool ok, string msg)> DeleteWarrantyTypeAsync(int id);
+    Task<List<WarrantyPhotoType>> WarrantyPhotoTypesAsync(bool? flagActive);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -969,6 +991,9 @@ public class RoService(AppDbContext db) : IRoService
         var totalWarrantyWorks = await db.WarrantyWorks.CountAsync();
         var activeWarrantyWorks = await db.WarrantyWorks.CountAsync(w => w.FlagActive);
 
+        var totalMaintenanceSettings = await db.MaintenanceSettings.CountAsync();
+        var activeMaintenanceSettings = await db.MaintenanceSettings.CountAsync(s => s.FlagActive);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -1036,7 +1061,9 @@ public class RoService(AppDbContext db) : IRoService
             todayBirthdays,
             pendingBirthdays,
             totalWarrantyWorks,
-            activeWarrantyWorks);
+            activeWarrantyWorks,
+            totalMaintenanceSettings,
+            activeMaintenanceSettings);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -9163,6 +9190,481 @@ public class RoService(AppDbContext db) : IRoService
             .Distinct()
             .OrderBy(m => m)
             .ToListAsync();
+    }
+
+    // =========================================================================
+    // THIẾT LẬP CHU KỲ & ĐỊNH MỨC BẢO DƯỠNG ĐỊNH KỲ XE (Ser_MST_ROMaintanceSetting)
+    // =========================================================================
+
+    public async Task<List<MaintenanceSetting>> MaintenanceSettingsAsync(int? minKm, int? maxKm, MaintenanceLevel? level, bool? flagWarranty, bool? flagActive, string? q)
+    {
+        var query = db.MaintenanceSettings
+            .Include(m => m.ServicePackage)
+            .Include(m => m.RepairOrders)
+            .AsQueryable();
+
+        if (minKm.HasValue) query = query.Where(m => m.Km >= minKm.Value);
+        if (maxKm.HasValue) query = query.Where(m => m.Km <= maxKm.Value);
+        if (level.HasValue) query = query.Where(m => m.Level == level.Value);
+        if (flagWarranty.HasValue) query = query.Where(m => m.FlagWarranty == flagWarranty.Value);
+        if (flagActive.HasValue) query = query.Where(m => m.FlagActive == flagActive.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(m =>
+                m.ROMSID.ToLower().Contains(term) ||
+                m.Name.ToLower().Contains(term) ||
+                (m.Description != null && m.Description.ToLower().Contains(term)) ||
+                (m.RequiredChecklist != null && m.RequiredChecklist.ToLower().Contains(term)));
+        }
+
+        return await query.OrderBy(m => m.Km).ToListAsync();
+    }
+
+    public async Task<MaintenanceSetting?> GetMaintenanceSettingAsync(int id)
+    {
+        return await db.MaintenanceSettings
+            .Include(m => m.ServicePackage)
+                .ThenInclude(p => p!.Items)
+            .Include(m => m.RepairOrders)
+                .ThenInclude(r => r.Car)
+            .Include(m => m.RepairOrders)
+                .ThenInclude(r => r.Customer)
+            .FirstOrDefaultAsync(m => m.Id == id);
+    }
+
+    public async Task<MaintenanceSetting?> GetMaintenanceSettingByRomsIdAsync(string romsId)
+    {
+        if (string.IsNullOrWhiteSpace(romsId)) return null;
+        var r = romsId.Trim().ToUpper();
+        return await db.MaintenanceSettings
+            .Include(m => m.ServicePackage)
+            .FirstOrDefaultAsync(m => m.ROMSID.ToUpper() == r);
+    }
+
+    public async Task<MaintenanceSettingSummaryDto> GetMaintenanceSettingSummaryAsync()
+    {
+        var list = await db.MaintenanceSettings
+            .Include(m => m.RepairOrders)
+            .ToListAsync();
+
+        var total = list.Count;
+        var active = list.Count(m => m.FlagActive);
+        var inactive = total - active;
+        var warrantyReq = list.Count(m => m.FlagWarranty);
+        var linkedPkg = list.Count(m => m.ServicePackageId.HasValue);
+        var avgHours = total > 0 ? Math.Round(list.Average(m => m.TakingTimeHours), 1) : 0m;
+        var avgCost = total > 0 ? Math.Round(list.Average(m => m.EstimatedCost), 0) : 0m;
+        var maxKm = list.Count > 0 ? list.Max(m => m.Km) : 0;
+        var totalROs = list.Sum(m => m.RepairOrders.Count);
+
+        return new MaintenanceSettingSummaryDto
+        {
+            TotalSettings = total,
+            ActiveSettings = active,
+            InactiveSettings = inactive,
+            WarrantyRequiredCount = warrantyReq,
+            LinkedPackageCount = linkedPkg,
+            AvgLaborHours = avgHours,
+            AvgEstimatedCost = avgCost,
+            MaxKm = maxKm,
+            TotalROsApplied = totalROs
+        };
+    }
+
+    public async Task<int> CreateMaintenanceSettingAsync(MaintenanceSetting setting)
+    {
+        setting.ROMSID = setting.ROMSID.Trim().ToUpper();
+        if (string.IsNullOrWhiteSpace(setting.ROMSID))
+            throw new ArgumentException("Mã thiết lập bảo dưỡng (ROMSID) không được để trống.");
+
+        var existsRomsId = await db.MaintenanceSettings.AnyAsync(m => m.ROMSID == setting.ROMSID);
+        if (existsRomsId)
+            throw new InvalidOperationException($"Mã thiết lập bảo dưỡng '{setting.ROMSID}' đã tồn tại.");
+
+        if (setting.Km <= 0)
+            throw new ArgumentException("Mốc số Kilomet phải lớn hơn 0.");
+
+        var existsKm = await db.MaintenanceSettings.AnyAsync(m => m.Km == setting.Km);
+        if (existsKm)
+            throw new InvalidOperationException($"Mốc số Kilomet {setting.Km:N0} km đã được thiết lập trước đó.");
+
+        if (string.IsNullOrWhiteSpace(setting.Name))
+            setting.Name = $"Bảo dưỡng {setting.LevelName} - {setting.Km:N0} km";
+
+        if (setting.TakingTimeHours <= 0) setting.TakingTimeHours = 1.0m;
+        if (setting.EstimatedCost < 0) setting.EstimatedCost = 0m;
+        if (setting.CreatedAt == default) setting.CreatedAt = DateTime.Now;
+        setting.LogLuDateTime = DateTime.Now;
+
+        db.MaintenanceSettings.Add(setting);
+        await db.SaveChangesAsync();
+        return setting.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateMaintenanceSettingAsync(int id, MaintenanceSetting input)
+    {
+        var setting = await db.MaintenanceSettings.FirstOrDefaultAsync(m => m.Id == id);
+        if (setting == null) return (false, "Không tìm thấy thiết lập bảo dưỡng.");
+
+        var romsId = input.ROMSID.Trim().ToUpper();
+        if (string.IsNullOrWhiteSpace(romsId)) return (false, "Mã thiết lập bảo dưỡng (ROMSID) không được để trống.");
+
+        var dupRomsId = await db.MaintenanceSettings.AnyAsync(m => m.Id != id && m.ROMSID == romsId);
+        if (dupRomsId) return (false, $"Mã thiết lập '{romsId}' đã được sử dụng cho bản ghi khác.");
+
+        if (input.Km <= 0) return (false, "Mốc số Kilomet phải lớn hơn 0.");
+
+        var dupKm = await db.MaintenanceSettings.AnyAsync(m => m.Id != id && m.Km == input.Km);
+        if (dupKm) return (false, $"Mốc {input.Km:N0} km đã tồn tại trong hệ thống.");
+
+        setting.ROMSID = romsId;
+        setting.Name = input.Name.Trim();
+        setting.Km = input.Km;
+        setting.Maintances = input.Maintances;
+        setting.Level = input.Level;
+        setting.MonthsInterval = input.MonthsInterval > 0 ? input.MonthsInterval : 6;
+        setting.TakingTimeHours = input.TakingTimeHours > 0 ? input.TakingTimeHours : 1.0m;
+        setting.EstimatedCost = input.EstimatedCost >= 0 ? input.EstimatedCost : 0m;
+        setting.ServicePackageId = input.ServicePackageId;
+        setting.RequiredChecklist = input.RequiredChecklist?.Trim();
+        setting.Description = input.Description?.Trim();
+        setting.FlagWarranty = input.FlagWarranty;
+        setting.FlagActive = input.FlagActive;
+        setting.UpdatedAt = DateTime.Now;
+        setting.UpdatedBy = input.UpdatedBy ?? "web";
+        setting.LogLuDateTime = DateTime.Now;
+        setting.LogLUBy = input.UpdatedBy ?? "web";
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật mốc bảo dưỡng {setting.ROMSID} ({setting.Km:N0} km).");
+    }
+
+    public async Task<(bool ok, string msg)> ToggleMaintenanceSettingActiveAsync(int id)
+    {
+        var setting = await db.MaintenanceSettings.FirstOrDefaultAsync(m => m.Id == id);
+        if (setting == null) return (false, "Không tìm thấy thiết lập bảo dưỡng.");
+
+        setting.FlagActive = !setting.FlagActive;
+        setting.UpdatedAt = DateTime.Now;
+        setting.LogLuDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+
+        return (true, $"Đã {(setting.FlagActive ? "kích hoạt" : "ngừng áp dụng")} mốc bảo dưỡng {setting.ROMSID}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteMaintenanceSettingAsync(int id)
+    {
+        var setting = await db.MaintenanceSettings
+            .Include(m => m.RepairOrders)
+            .FirstOrDefaultAsync(m => m.Id == id);
+        if (setting == null) return (false, "Không tìm thấy thiết lập bảo dưỡng.");
+
+        if (setting.RepairOrders.Count > 0)
+        {
+            setting.FlagActive = false;
+            setting.UpdatedAt = DateTime.Now;
+            await db.SaveChangesAsync();
+            return (true, $"Mốc {setting.ROMSID} đã được áp dụng cho {setting.RepairOrders.Count} Lệnh RO — đã chuyển trạng thái ngừng áp dụng (ngưng hiệu lực).");
+        }
+
+        db.MaintenanceSettings.Remove(setting);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa mốc bảo dưỡng {setting.ROMSID}.");
+    }
+
+    public async Task<MaintenanceSuggestionDto> SuggestMaintenanceForKmAsync(int km)
+    {
+        if (km < 0) km = 0;
+        var activeSettings = await db.MaintenanceSettings
+            .Include(m => m.ServicePackage)
+                .ThenInclude(p => p!.Items)
+            .Where(m => m.FlagActive)
+            .OrderBy(m => m.Km)
+            .ToListAsync();
+
+        if (activeSettings.Count == 0)
+        {
+            return new MaintenanceSuggestionDto
+            {
+                CurrentKm = km,
+                StatusAdvice = "Chưa có cấu hình định mức bảo dưỡng trong hệ thống",
+                AdviceNote = "Vui lòng thiết lập danh mục mốc bảo dưỡng trong hệ thống."
+            };
+        }
+
+        // Tìm mốc gần nhất theo khoảng cách số Km
+        var matched = activeSettings
+            .OrderBy(s => Math.Abs(s.Km - km))
+            .First();
+
+        var next = activeSettings.FirstOrDefault(s => s.Km > km);
+        var diff = km - matched.Km;
+
+        string advice;
+        string badgeClass;
+        bool isCompliant = true;
+        string adviceNote;
+
+        if (Math.Abs(diff) <= 500)
+        {
+            advice = "Đúng hạn bảo dưỡng";
+            badgeClass = "bg-success";
+            adviceNote = $"Xe hiện đạt {km:N0} km, rất chuẩn với mốc {matched.Km:N0} km ({matched.Name}). Khuyến nghị thực hiện đầy đủ các hạng mục theo tiêu chuẩn hãng.";
+        }
+        else if (diff > 500)
+        {
+            advice = $"Quá hạn {diff:N0} km";
+            badgeClass = "bg-danger";
+            if (diff > 1500 && matched.FlagWarranty)
+            {
+                isCompliant = false;
+                adviceNote = $"CẢNH BÁO: Xe đã vượt mốc {matched.Km:N0} km hơn {diff:N0} km! Theo Chính sách Bảo hành của hãng HTC, việc quá hạn bảo dưỡng vượt quá 1.500 km có thể làm mất quyền lợi bảo hành các cụm chi tiết liên quan nếu xảy ra hư hỏng do dầu mỡ bôi trơn.";
+            }
+            else
+            {
+                adviceNote = $"Xe đã chạy vượt mốc {matched.Km:N0} km. Cần thực hiện bảo dưỡng ngay để tránh mài mòn các chi tiết động cơ.";
+            }
+        }
+        else
+        {
+            advice = $"Sắp đến hạn (còn {Math.Abs(diff):N0} km)";
+            badgeClass = "bg-info text-dark";
+            adviceNote = $"Xe còn cách mốc {matched.Km:N0} km khoảng {Math.Abs(diff):N0} km. Quý khách có thể thực hiện bảo dưỡng sớm hoặc tiếp tục vận hành thêm.";
+        }
+
+        return new MaintenanceSuggestionDto
+        {
+            CurrentKm = km,
+            MatchedSetting = matched,
+            NextSetting = next,
+            KmDifference = diff,
+            StatusAdvice = advice,
+            LevelBadgeClass = badgeClass,
+            SuggestedPackage = matched.ServicePackage,
+            IsWarrantyCompliant = isCompliant,
+            AdviceNote = adviceNote
+        };
+    }
+
+    public async Task<(bool ok, string msg)> ApplyMaintenanceToRoAsync(int settingId, int roId, bool addPackageCombo)
+    {
+        var setting = await db.MaintenanceSettings
+            .Include(m => m.ServicePackage)
+                .ThenInclude(p => p!.Items)
+            .FirstOrDefaultAsync(m => m.Id == settingId);
+        if (setting == null) return (false, "Không tìm thấy thiết lập bảo dưỡng.");
+
+        var ro = await db.ROs
+            .Include(r => r.Lines)
+            .Include(r => r.Car)
+            .FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy Lệnh sửa chữa RO.");
+
+        if (ro.Status is ROStatus.Finished or ROStatus.Paid or ROStatus.Rejected or ROStatus.NotResponding)
+            return (false, $"RO {ro.Code} ở trạng thái {ro.Status} — không thể cập nhật mốc bảo dưỡng.");
+
+        ro.MaintenanceSettingId = setting.Id;
+        ro.MaintenanceMilestone = $"{setting.ROMSID} ({setting.Name})";
+
+        int itemsAdded = 0;
+        if (addPackageCombo && setting.ServicePackage != null && setting.ServicePackage.Items.Count > 0)
+        {
+            foreach (var item in setting.ServicePackage.Items)
+            {
+                var line = new RepairLine
+                {
+                    ROId = roId,
+                    Type = item.Type,
+                    PartId = item.PartId,
+                    Name = $"[{setting.ROMSID}] {item.Name}",
+                    Quantity = item.Quantity,
+                    UnitPrice = item.UnitPrice,
+                    ExpenseType = item.ExpenseType,
+                    StdManHour = item.Type == LineType.Labor ? setting.TakingTimeHours : null
+                };
+                db.Lines.Add(line);
+                itemsAdded++;
+            }
+        }
+
+        await db.SaveChangesAsync();
+
+        var comboNote = itemsAdded > 0 ? $" và tự động nạp {itemsAdded} hạng mục gói {setting.ServicePackage?.Name}" : "";
+        return (true, $"Đã gán mốc bảo dưỡng {setting.ROMSID} vào RO {ro.Code}{comboNote} thành công.");
+    }
+
+    public async Task<List<RepairOrder>> ROsForMaintenanceSelectAsync()
+    {
+        var openStatuses = new[] { ROStatus.Created, ROStatus.Printed, ROStatus.Wait4Part, ROStatus.HasPart, ROStatus.HasRO, ROStatus.InGarage, ROStatus.Repaired, ROStatus.CheckEnd };
+        return await db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Where(r => openStatuses.Contains(r.Status))
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync();
+    }
+
+    // ===== Danh mục Loại bảo hành RO (Ser_MST_ROWarrantyType) =====
+    public async Task<List<WarrantyType>> WarrantyTypesAsync(WarrantyTypeCode? typeCode, bool? flagActive, string? q)
+    {
+        var query = db.WarrantyTypes
+            .Include(t => t.Photos)
+            .AsQueryable();
+
+        if (typeCode.HasValue) query = query.Where(t => t.TypeCode == typeCode.Value);
+        if (flagActive.HasValue) query = query.Where(t => t.FlagActive == flagActive.Value);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(t =>
+                t.TypeName.ToLower().Contains(term) ||
+                t.DetailName.ToLower().Contains(term) ||
+                (t.PhotoTypeDisplay != null && t.PhotoTypeDisplay.ToLower().Contains(term)));
+        }
+
+        return await query
+            .OrderBy(t => t.TypeCode).ThenBy(t => t.DetailCode)
+            .ToListAsync();
+    }
+
+    public async Task<WarrantyType?> GetWarrantyTypeAsync(int id)
+    {
+        return await db.WarrantyTypes
+            .Include(t => t.Photos)
+            .FirstOrDefaultAsync(t => t.Id == id);
+    }
+
+    public async Task<WarrantyTypeSummaryDto> GetWarrantyTypeSummaryAsync()
+    {
+        var list = await db.WarrantyTypes.Include(t => t.Photos).ToListAsync();
+        var total = list.Count;
+        var active = list.Count(t => t.FlagActive);
+        return new WarrantyTypeSummaryDto
+        {
+            TotalTypes = total,
+            ActiveTypes = active,
+            InactiveTypes = total - active,
+            TotalPhotoTypes = list.Sum(t => t.Photos.Count),
+            TypesWithPhotos = list.Count(t => t.Photos.Count > 0),
+            DistinctMainCodes = list.Select(t => t.TypeCode).Distinct().Count(),
+            DistinctDetailCodes = list.Select(t => t.DetailCode).Distinct().Count()
+        };
+    }
+
+    public async Task<int> CreateWarrantyTypeAsync(WarrantyType type, List<WarrantyTypePhoto> photos)
+    {
+        if (string.IsNullOrWhiteSpace(type.TypeName))
+            throw new ArgumentException("Tên loại bảo hành chính không được để trống.");
+        if (string.IsNullOrWhiteSpace(type.DetailName))
+            throw new ArgumentException("Tên loại bảo hành chi tiết không được để trống.");
+
+        var exists = await db.WarrantyTypes.AnyAsync(t => t.TypeCode == type.TypeCode && t.DetailCode == type.DetailCode);
+        if (exists)
+            throw new InvalidOperationException($"Cặp loại bảo hành {type.TypeCode}/{type.DetailCode} đã tồn tại.");
+
+        type.TypeName = type.TypeName.Trim();
+        type.DetailName = type.DetailName.Trim();
+        type.ROWTID = string.IsNullOrWhiteSpace(type.ROWTID) ? $"ROWT-{type.TypeCode}{type.DetailCode}" : type.ROWTID.Trim();
+        type.Photos = NormalizePhotos(photos);
+        type.PhotoTypeDisplay = BuildPhotoDisplay(type.Photos);
+        type.LogLuDateTime = DateTime.Now;
+        if (type.CreatedAt == default) type.CreatedAt = DateTime.Now;
+
+        db.WarrantyTypes.Add(type);
+        await db.SaveChangesAsync();
+        return type.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateWarrantyTypeAsync(int id, WarrantyType input, List<WarrantyTypePhoto>? photos)
+    {
+        var type = await db.WarrantyTypes.Include(t => t.Photos).FirstOrDefaultAsync(t => t.Id == id);
+        if (type == null) return (false, "Không tìm thấy loại bảo hành.");
+
+        if (string.IsNullOrWhiteSpace(input.TypeName)) return (false, "Tên loại bảo hành chính không được để trống.");
+        if (string.IsNullOrWhiteSpace(input.DetailName)) return (false, "Tên loại bảo hành chi tiết không được để trống.");
+
+        var dup = await db.WarrantyTypes.AnyAsync(t => t.Id != id && t.TypeCode == input.TypeCode && t.DetailCode == input.DetailCode);
+        if (dup) return (false, $"Cặp loại bảo hành {input.TypeCode}/{input.DetailCode} đã được dùng cho bản ghi khác.");
+
+        type.TypeCode = input.TypeCode;
+        type.TypeName = input.TypeName.Trim();
+        type.DetailCode = input.DetailCode;
+        type.DetailName = input.DetailName.Trim();
+        type.FlagActive = input.FlagActive;
+        type.UpdatedAt = DateTime.Now;
+        type.UpdatedBy = input.UpdatedBy ?? "web";
+        type.LogLuDateTime = DateTime.Now;
+        type.LogLUBy = input.UpdatedBy ?? "web";
+
+        // Gửi danh sách ảnh = thay trọn; không gửi = giữ nguyên (đúng hành vi nguồn).
+        if (photos != null)
+        {
+            db.WarrantyTypePhotos.RemoveRange(type.Photos);
+            type.Photos = NormalizePhotos(photos);
+        }
+        type.PhotoTypeDisplay = BuildPhotoDisplay(type.Photos);
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật loại bảo hành {type.TypeCode}/{type.DetailCode}.");
+    }
+
+    public async Task<(bool ok, string msg)> ToggleWarrantyTypeActiveAsync(int id)
+    {
+        var type = await db.WarrantyTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (type == null) return (false, "Không tìm thấy loại bảo hành.");
+
+        type.FlagActive = !type.FlagActive;
+        type.UpdatedAt = DateTime.Now;
+        type.LogLuDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+        return (true, $"Đã {(type.FlagActive ? "kích hoạt" : "ngừng áp dụng")} loại bảo hành {type.TypeCode}/{type.DetailCode}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteWarrantyTypeAsync(int id)
+    {
+        var type = await db.WarrantyTypes.Include(t => t.Photos).FirstOrDefaultAsync(t => t.Id == id);
+        if (type == null) return (false, "Không tìm thấy loại bảo hành.");
+
+        db.WarrantyTypePhotos.RemoveRange(type.Photos);
+        db.WarrantyTypes.Remove(type);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại bảo hành {type.TypeCode}/{type.DetailCode}.");
+    }
+
+    public async Task<List<WarrantyPhotoType>> WarrantyPhotoTypesAsync(bool? flagActive)
+    {
+        var query = db.WarrantyPhotoTypes.AsQueryable();
+        if (flagActive.HasValue) query = query.Where(p => p.FlagActive == flagActive.Value);
+        return await query.OrderBy(p => p.ROWPTCode).ToListAsync();
+    }
+
+    /// <summary>Chuẩn hoá danh sách loại ảnh: bỏ dòng trống, chống trùng mã ảnh, gán tên từ master nếu thiếu.</summary>
+    private static List<WarrantyTypePhoto> NormalizePhotos(List<WarrantyTypePhoto> photos)
+    {
+        var result = new List<WarrantyTypePhoto>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in photos)
+        {
+            var code = (p.ROWPTCode ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(code)) continue;
+            if (!seen.Add(code)) continue;
+            result.Add(new WarrantyTypePhoto { ROWPTCode = code, ROWPTName = p.ROWPTName?.Trim() });
+        }
+        return result;
+    }
+
+    /// <summary>Dựng chuỗi hiển thị loại ảnh theo đúng 2 luật nguồn: bỏ 4 mã KHAC/PXK/MPTC/MPTM và bỏ cặp TC+R.</summary>
+    private static string? BuildPhotoDisplay(List<WarrantyTypePhoto> photos)
+    {
+        var excluded = new[] { "KHAC", "PXK", "MPTC", "MPTM" };
+        var names = photos
+            .Where(p => !excluded.Contains(p.ROWPTCode, StringComparer.OrdinalIgnoreCase))
+            .Select(p => p.ROWPTName ?? p.ROWPTCode)
+            .ToList();
+        return names.Count > 0 ? string.Join(", ", names) : null;
     }
 }
 

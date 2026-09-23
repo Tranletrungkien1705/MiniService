@@ -1,0 +1,108 @@
+@model List<WarrantyType>
+@{
+    Layout = null;
+    WarrantyTypeCode? selectedTypeCode = ViewBag.SelectedTypeCode;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Danh mục Loại bảo hành RO — Hyundai Service</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; font-size: 13px; line-height: 1.4; background-color: #f8fafc; }
+        .print-container { max-width: 960px; margin: 20px auto; background: #fff; padding: 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-radius: 8px; }
+        .table-custom th { background-color: #0f172a !important; color: #fff !important; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        @@media print {
+            body { background: #fff; font-size: 12px; }
+            .print-container { margin: 0; padding: 0; box-shadow: none; max-width: 100%; }
+            .no-print { display: none !important; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+        }
+    </style>
+</head>
+<body>
+    <div class="print-container">
+        <div class="d-flex justify-content-between align-items-center mb-4 no-print pb-3 border-bottom">
+            <div>
+                <a href="/WarrantyType" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i> Quay lại</a>
+                <span class="text-muted ms-2 small">Bản in chuẩn A4 cho Cố vấn Dịch vụ & Kỹ thuật viên</span>
+            </div>
+            <button onclick="window.print()" class="btn btn-primary btn-sm px-4"><i class="bi bi-printer me-1"></i> In tài liệu ngay</button>
+        </div>
+
+        <div class="row align-items-center mb-4 pb-3 border-bottom border-dark border-2">
+            <div class="col-8">
+                <div class="d-flex align-items-center mb-1">
+                    <span class="fs-4 fw-black text-primary me-2 font-monospace">HYUNDAI SERVICE</span>
+                    <span class="badge bg-primary text-uppercase px-2 py-1">Tiêu chuẩn HTC</span>
+                </div>
+                <h4 class="fw-bold mb-1 text-uppercase text-dark">DANH MỤC LOẠI BẢO HÀNH LỆNH SỬA CHỮA (RO)</h4>
+                <div class="text-muted" style="font-size:12px">Cấu hình Loại chính × Loại chi tiết & Loại ảnh chứng minh bắt buộc (Ser_MST_ROWarrantyType)</div>
+            </div>
+            <div class="col-4 text-end">
+                <div class="fw-bold">ĐẠI LÝ ỦY QUYỀN HYUNDAI</div>
+                <div class="text-muted small">Phòng Dịch vụ & Bảo hành</div>
+                <div class="text-muted small">Ngày ban hành: @DateTime.Today.ToString("dd/MM/yyyy")</div>
+            </div>
+        </div>
+
+        <div class="table-responsive mb-4">
+            <table class="table table-bordered table-sm table-custom align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:70px">Loại chính</th>
+                        <th style="width:170px">Tên loại chính</th>
+                        <th style="width:70px" class="text-center">Chi tiết</th>
+                        <th style="width:180px">Tên loại chi tiết</th>
+                        <th>Loại ảnh chứng minh bắt buộc</th>
+                        <th style="width:70px" class="text-center">Số ảnh</th>
+                        <th style="width:80px" class="text-center">Hiệu lực</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace fw-bold small">@item.TypeCode</td>
+                            <td class="small">@item.TypeName</td>
+                            <td class="text-center font-monospace small">@item.DetailCode</td>
+                            <td class="small">@item.DetailName</td>
+                            <td class="small text-muted">@(string.IsNullOrWhiteSpace(item.PhotoTypeDisplay) ? "—" : item.PhotoTypeDisplay)</td>
+                            <td class="text-center small">@item.PhotoCount</td>
+                            <td class="text-center small">@(item.FlagActive ? "Áp dụng" : "Ngưng")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="border rounded p-3 mb-4 bg-light">
+            <h6 class="fw-bold mb-2 text-danger">
+                <i class="bi bi-shield-exclamation me-1"></i> LƯU Ý VỀ HỒ SƠ ẢNH CHỨNG MINH BẢO HÀNH (HTC WARRANTY PHOTO POLICY):
+            </h6>
+            <ol class="mb-0 ps-3 small text-secondary">
+                <li>Mỗi loại bảo hành RO yêu cầu một bộ ảnh chứng minh bắt buộc tương ứng (VIN, ODO, lỗi, nghiệm thu...).</li>
+                <li>Hồ sơ bảo hành chỉ được gửi Hãng khi đã đính kèm đầy đủ các loại ảnh bắt buộc của loại bảo hành tương ứng.</li>
+                <li>Loại ảnh <strong>KHAC / PXK / MPTC / MPTM</strong> không hiển thị trên cột tóm tắt nhưng vẫn tồn tại trong bảng chi tiết.</li>
+            </ol>
+        </div>
+
+        <div class="row text-center pt-2">
+            <div class="col-6">
+                <div class="text-muted small">NGƯỜI LẬP BIỂU</div>
+                <div class="fw-bold text-dark mb-5">Cố vấn Dịch vụ</div>
+                <div class="text-muted small">(Ký và ghi rõ họ tên)</div>
+            </div>
+            <div class="col-6">
+                <div class="text-muted small">ĐẠI LÝ ỦY QUYỀN HYUNDAI</div>
+                <div class="fw-bold text-dark mb-5">Quản đốc xưởng / Giám đốc Dịch vụ</div>
+                <div class="text-muted small">(Ký, đóng dấu và ghi rõ họ tên)</div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

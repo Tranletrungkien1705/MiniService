@@ -1,0 +1,154 @@
+@model MaintenanceSetting
+@{
+    ViewData["Title"] = $"Chỉnh sửa Mốc Bảo dưỡng {Model.ROMSID} ({Model.Km:N0} km)";
+    var packages = ViewBag.ServicePackages as List<ServicePackage> ?? [];
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-9">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-white py-3 border-0">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="mb-0 fw-bold text-primary">
+                            <i class="bi bi-pencil-square me-2"></i>Hiệu chỉnh Mốc Bảo dưỡng @Model.ROMSID
+                        </h5>
+                        <div class="text-muted small">Cập nhật định mức số Km, cấp độ bảo dưỡng, thời gian và gói combo liên kết</div>
+                    </div>
+                    <div class="btn-group btn-group-sm">
+                        <a href="/MaintenanceSetting/Detail/@Model.Id" class="btn btn-outline-info">
+                            <i class="bi bi-eye me-1"></i> Xem chi tiết
+                        </a>
+                        <a href="/MaintenanceSetting" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i> Danh sách
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" action="/MaintenanceSetting/Edit/@Model.Id">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Mã thiết lập (ROMSID) <span class="text-danger">*</span></label>
+                            <input type="text" name="ROMSID" value="@Model.ROMSID" class="form-control font-monospace fw-bold" required />
+                            <div class="form-text">Mã định danh duy nhất theo tiêu chuẩn Ser_MST_ROMaintanceSetting.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Mốc số Kilomet (Km) <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input type="number" name="Km" value="@Model.Km" class="form-control fw-bold" min="1000" step="1000" required />
+                                <span class="input-group-text">km</span>
+                            </div>
+                            <div class="form-text">Số km tiêu chuẩn bảo dưỡng.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Cấp độ bảo dưỡng <span class="text-danger">*</span></label>
+                            <select name="Level" class="form-select" required>
+                                <option value="@((int)MaintenanceLevel.Initial1K)" selected="@(Model.Level == MaintenanceLevel.Initial1K)">Cấp 0: Bảo dưỡng lần đầu (1.000 km)</option>
+                                <option value="@((int)MaintenanceLevel.Level1Minor)" selected="@(Model.Level == MaintenanceLevel.Level1Minor)">Cấp 1: Bảo dưỡng nhỏ (5.000 km, 15k...)</option>
+                                <option value="@((int)MaintenanceLevel.Level2Medium)" selected="@(Model.Level == MaintenanceLevel.Level2Medium)">Cấp 2: Bảo dưỡng trung bình (10.000 km, 30k...)</option>
+                                <option value="@((int)MaintenanceLevel.Level3Major)" selected="@(Model.Level == MaintenanceLevel.Level3Major)">Cấp 3: Bảo dưỡng trung bình lớn (20.000 km, 60k...)</option>
+                                <option value="@((int)MaintenanceLevel.Level4Comprehensive)" selected="@(Model.Level == MaintenanceLevel.Level4Comprehensive)">Cấp 4: Bảo dưỡng lớn toàn diện (40.000 km, 80k...)</option>
+                            </select>
+                            <div class="form-text">Phân cấp kỹ thuật tiêu chuẩn Hyundai.</div>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Tên mốc bảo dưỡng</label>
+                            <input type="text" name="Name" value="@Model.Name" class="form-control fw-semibold" required />
+                            <div class="form-text">Tên hiển thị trên tư vấn dịch vụ và lệnh sửa chữa RO.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Số thứ tự cấp (Maintances)</label>
+                            <input type="number" name="Maintances" value="@Model.Maintances" class="form-control" min="0" max="4" />
+                            <div class="form-text">Giá trị trường Maintances nguồn: 0, 1, 2, 3, 4.</div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Chu kỳ thời hạn (Tháng)</label>
+                            <div class="input-group">
+                                <input type="number" name="MonthsInterval" value="@Model.MonthsInterval" class="form-control" min="1" max="120" />
+                                <span class="input-group-text">tháng</span>
+                            </div>
+                            <div class="form-text">Thời gian khuyến nghị nếu chưa tới số km.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Định mức giờ công (TakingTime)</label>
+                            <div class="input-group">
+                                <input type="number" name="TakingTimeHours" value="@Model.TakingTimeHours" class="form-control" step="0.1" min="0.1" />
+                                <span class="input-group-text">giờ</span>
+                            </div>
+                            <div class="form-text">Thời gian định mức kỹ thuật viên thao tác.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Chi phí ước tính tham khảo</label>
+                            <div class="input-group">
+                                <input type="number" name="EstimatedCost" value="@Model.EstimatedCost" class="form-control" step="10000" min="0" />
+                                <span class="input-group-text">VNĐ</span>
+                            </div>
+                            <div class="form-text">Tổng chi phí công & phụ tùng combo dự kiến.</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Gói combo dịch vụ liên kết</label>
+                            <select name="ServicePackageId" class="form-select">
+                                <option value="">-- Không liên kết gói combo --</option>
+                                @foreach (var p in packages)
+                                {
+                                    <option value="@p.Id" selected="@(Model.ServicePackageId == p.Id)">
+                                        [@p.PackageNo] @p.Name (@p.TakingTimeHours.ToString("N1")h - @p.SubTotal.ToString("N0")đ)
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text">Tự động nạp phụ tùng & công việc khi chọn mốc bảo dưỡng trên RO.</div>
+                        </div>
+
+                        <div class="col-md-3 d-flex align-items-center">
+                            <div class="form-check form-switch mt-4">
+                                <input class="form-check-input" type="checkbox" name="FlagWarranty" value="true" @(Model.FlagWarranty ? "checked" : "") id="flagWarrantySwitch" />
+                                <label class="form-check-label fw-semibold" for="flagWarrantySwitch">
+                                    Bắt buộc CSBH HTC
+                                </label>
+                                <div class="form-text">Yêu cầu duy trì quyền lợi bảo hành.</div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 d-flex align-items-center">
+                            <div class="form-check form-switch mt-4">
+                                <input class="form-check-input" type="checkbox" name="FlagActive" value="true" @(Model.FlagActive ? "checked" : "") id="flagActiveSwitch" />
+                                <label class="form-check-label fw-semibold" for="flagActiveSwitch">
+                                    Đang có hiệu lực
+                                </label>
+                                <div class="form-text">Áp dụng trong hệ thống dịch vụ.</div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Hạng mục kiểm tra & thay thế bắt buộc (Checklist)</label>
+                            <textarea name="RequiredChecklist" class="form-control" rows="3">@Model.RequiredChecklist</textarea>
+                            <div class="form-text">Các hạng mục kỹ thuật bắt buộc theo cẩm nang bảo dưỡng của hãng Hyundai.</div>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Diễn giải kỹ thuật & Ghi chú tư vấn</label>
+                            <textarea name="Description" class="form-control" rows="2">@Model.Description</textarea>
+                        </div>
+                    </div>
+
+                    <hr class="my-4" />
+
+                    <div class="d-flex justify-content-between">
+                        <a href="/MaintenanceSetting/Detail/@Model.Id" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle me-1"></i> Hủy thay đổi
+                        </a>
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="bi bi-check-circle me-1"></i> Cập nhật mốc bảo dưỡng
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

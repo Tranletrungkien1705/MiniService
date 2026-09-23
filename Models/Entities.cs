@@ -580,6 +580,9 @@ public class RepairOrder : IOrgOwned
     public List<InsuranceDebit> InsuranceDebits { get; set; } = [];
     public List<PartPriceRequest> PartPriceRequests { get; set; } = [];
     public List<CustomerCareBirthday> CustomerCareBirthdays { get; set; } = [];
+    public int? MaintenanceSettingId { get; set; }
+    public MaintenanceSetting? MaintenanceSetting { get; set; }
+    public string? MaintenanceMilestone { get; set; }     // Tên mốc chu kỳ bảo dưỡng (VD: BD-20K (Cấp 3 - 20.000 km))
 
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount - BirthdayDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
@@ -2775,4 +2778,180 @@ public class WarrantyWorkSummaryDto
     public decimal AvgRateHour { get; set; }
     public decimal AvgPrice { get; set; }
     public int TotalClaimsApplied { get; set; }
+}
+
+/// <summary>Phân loại cấp độ bảo dưỡng định kỳ xe — theo Ser_MST_ROMaintanceSetting Maintances trong idn.CarService.</summary>
+public enum MaintenanceLevel
+{
+    Initial1K = 0,            // Cấp 0: Bảo dưỡng lần đầu (1.000 km)
+    Level1Minor = 1,          // Cấp 1: Bảo dưỡng nhỏ (5.000 km, 15k, 25k...)
+    Level2Medium = 2,         // Cấp 2: Bảo dưỡng trung bình (10.000 km, 30k, 50k, 70k, 90k...)
+    Level3Major = 3,          // Cấp 3: Bảo dưỡng trung bình lớn (20.000 km, 60k, 100k...)
+    Level4Comprehensive = 4   // Cấp 4: Bảo dưỡng lớn toàn diện (40.000 km, 80k, 120k...)
+}
+
+/// <summary>Thiết lập chu kỳ & Định mức cấp bảo dưỡng định kỳ xe — Ser_MST_ROMaintanceSetting trong idn.CarService (MNU_QT_DL_THIETLAPBAODUONG).</summary>
+public class MaintenanceSetting : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ROMSID { get; set; } = "";                                    // Mã thiết lập bảo dưỡng (ROMSID chuẩn nguồn: VD ROMS-01K, ROMS-05K, ROMS-10K, ROMS-20K...)
+    public string Name { get; set; } = "";                                       // Tên mốc bảo dưỡng (VD: Bảo dưỡng Cấp 1 - 5.000 km)
+    public int Km { get; set; }                                                  // Mốc số Kilomet tiêu chuẩn (Km chuẩn nguồn: 1000, 5000, 10000, 20000...)
+    public int Maintances { get; set; } = 1;                                     // Số lần / Cấp độ bảo dưỡng thỏa mãn CSBH (Maintances chuẩn nguồn: 0, 1, 2, 3, 4)
+    public MaintenanceLevel Level { get; set; } = MaintenanceLevel.Level1Minor;  // Cấp độ bảo dưỡng
+    public int MonthsInterval { get; set; } = 6;                                 // Thời gian khuyến nghị (tháng)
+    public decimal TakingTimeHours { get; set; } = 1.0m;                         // Định mức thời gian thực hiện (giờ)
+    public decimal EstimatedCost { get; set; } = 650_000m;                       // Chi phí bảo dưỡng ước tính tham khảo (VNĐ)
+    public int? ServicePackageId { get; set; }                                   // Gói dịch vụ bảo dưỡng tương ứng (nếu có)
+    public ServicePackage? ServicePackage { get; set; }
+    public string? RequiredChecklist { get; set; }                               // Hạng mục kiểm tra & thay thế bắt buộc chuẩn HTC
+    public string? Description { get; set; }                                     // Mô tả nội dung kỹ thuật
+    public bool FlagWarranty { get; set; } = true;                               // Yêu cầu bắt buộc để duy trì chính sách bảo hành (CSBH)
+    public bool FlagActive { get; set; } = true;                                 // Cờ hoạt động (FlagActive chuẩn nguồn)
+    public DateTime? LogLuDateTime { get; set; } = DateTime.Now;                 // Thời gian cập nhật cuối (LogLUDateTime chuẩn nguồn)
+    public string? LogLUBy { get; set; } = "web";                                // Người cập nhật cuối (LogLUBy chuẩn nguồn)
+    public string CreatedBy { get; set; } = "Hệ thống HTC";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<RepairOrder> RepairOrders { get; set; } = [];
+
+    public int UsageCount => RepairOrders.Count;
+    public string LevelName => Level switch
+    {
+        MaintenanceLevel.Initial1K => "Lần đầu (1.000 km)",
+        MaintenanceLevel.Level1Minor => "Cấp 1 - Nhỏ (5.000 km)",
+        MaintenanceLevel.Level2Medium => "Cấp 2 - Trung bình (10.000 km)",
+        MaintenanceLevel.Level3Major => "Cấp 3 - Trung bình lớn (20.000 km)",
+        MaintenanceLevel.Level4Comprehensive => "Cấp 4 - Lớn toàn diện (40.000 km)",
+        _ => $"Cấp {Maintances}"
+    };
+    public string LevelBadgeClass => Level switch
+    {
+        MaintenanceLevel.Initial1K => "bg-secondary",
+        MaintenanceLevel.Level1Minor => "bg-info text-dark",
+        MaintenanceLevel.Level2Medium => "bg-primary",
+        MaintenanceLevel.Level3Major => "bg-warning text-dark",
+        MaintenanceLevel.Level4Comprehensive => "bg-danger",
+        _ => "bg-secondary"
+    };
+}
+
+/// <summary>DTO Tổng hợp chỉ số Thiết lập bảo dưỡng — Ser_MST_ROMaintanceSetting.</summary>
+public class MaintenanceSettingSummaryDto
+{
+    public int TotalSettings { get; set; }
+    public int ActiveSettings { get; set; }
+    public int InactiveSettings { get; set; }
+    public int WarrantyRequiredCount { get; set; }
+    public int LinkedPackageCount { get; set; }
+    public decimal AvgLaborHours { get; set; }
+    public decimal AvgEstimatedCost { get; set; }
+    public int MaxKm { get; set; }
+    public int TotalROsApplied { get; set; }
+}
+
+/// <summary>DTO Kết quả gợi ý & tư vấn mốc bảo dưỡng theo số Km thực tế của xe.</summary>
+public class MaintenanceSuggestionDto
+{
+    public int CurrentKm { get; set; }
+    public MaintenanceSetting? MatchedSetting { get; set; }
+    public MaintenanceSetting? NextSetting { get; set; }
+    public int KmDifference { get; set; }
+    public string StatusAdvice { get; set; } = "";        // Đúng hạn / Sắp đến hạn / Quá hạn bảo dưỡng
+    public string LevelBadgeClass { get; set; } = "";
+    public ServicePackage? SuggestedPackage { get; set; }
+    public bool IsWarrantyCompliant { get; set; } = true; // Đánh giá xe tuân thủ chính sách bảo hành
+    public string AdviceNote { get; set; } = "";
+}
+
+/// <summary>Loại bảo hành chính của Lệnh sửa chữa (RO) — theo Ser_MST_ROWarrantyType ROWTypeCode trong idn.CarService.</summary>
+public enum WarrantyTypeCode
+{
+    XM = 0,  // Xe mới / Bảo hành tiêu chuẩn (Standard Warranty)
+    SB = 1,  // Sửa chữa bảo hành (Warranty Repair)
+    PT = 2,  // Phụ tùng bảo hành (Warranty Part)
+    TC = 3,  // Bảo hành thiện chí / Hỗ trợ khách hàng (Goodwill)
+    BT = 4   // Bảo hành bổ sung / Mở rộng (Extended Warranty)
+}
+
+/// <summary>Loại chi tiết của loại bảo hành RO — theo Ser_MST_ROWarrantyType ROWTypeDtlCode trong idn.CarService.</summary>
+public enum WarrantyTypeDetailCode
+{
+    A = 0,  // Loại A — Hư hỏng do lỗi sản xuất
+    B = 1,  // Loại B — Hư hỏng do linh kiện
+    P = 2,  // Loại P — Phụ tùng
+    W = 3,  // Loại W — Công việc bảo hành
+    S = 4,  // Loại S — Sửa chữa
+    R = 5,  // Loại R — Bổ sung / phát sinh
+    C = 6   // Loại C — Chi phí khác
+}
+
+/// <summary>Danh mục Loại bảo hành RO (Loại chính × Loại chi tiết) — Ser_MST_ROWarrantyType trong idn.CarService (FrmMstWarrantyTypeMng).</summary>
+public class WarrantyType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ROWTID { get; set; } = "";                 // Khoá tự tăng nguồn (ROWTID = @@Identity của Ser_MST_ROWarrantyType)
+    public WarrantyTypeCode TypeCode { get; set; } = WarrantyTypeCode.XM;          // Loại chính (ROWTypeCode: XM/SB/PT/TC/BT)
+    public string TypeName { get; set; } = "";               // Tên loại chính (ROWTypeName)
+    public WarrantyTypeDetailCode DetailCode { get; set; } = WarrantyTypeDetailCode.A; // Loại chi tiết (ROWTypeDtlCode: A/B/P/W/S/R/C)
+    public string DetailName { get; set; } = "";             // Tên loại chi tiết (ROWTypeDtlName)
+    public string? PhotoTypeDisplay { get; set; }            // Chuỗi hiển thị loại ảnh (ROWPhotoType) — dựng lại từ bảng chi tiết
+    public bool FlagActive { get; set; } = true;             // Trạng thái hiệu lực (FlagActive)
+    public DateTime? LogLuDateTime { get; set; } = DateTime.Now; // Thời gian cập nhật cuối (LogLUDateTime)
+    public string? LogLUBy { get; set; } = "web";            // Người cập nhật cuối (LogLUBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? UpdatedAt { get; set; }
+    public string? UpdatedBy { get; set; }
+
+    public List<WarrantyTypePhoto> Photos { get; set; } = []; // Danh sách loại ảnh chứng minh bắt buộc (1-n)
+
+    public string TypeCodeText => TypeCode switch
+    {
+        WarrantyTypeCode.XM => "XM — Xe mới",
+        WarrantyTypeCode.SB => "SB — Sửa chữa BH",
+        WarrantyTypeCode.PT => "PT — Phụ tùng BH",
+        WarrantyTypeCode.TC => "TC — Thiện chí",
+        WarrantyTypeCode.BT => "BT — Bổ sung",
+        _ => TypeCode.ToString()
+    };
+    public string DetailCodeText => DetailCode.ToString();
+    public int PhotoCount => Photos.Count;
+}
+
+/// <summary>Loại ảnh chứng minh bắt buộc cho một loại bảo hành RO — Ser_MST_ROWarrantyType_PhotoType trong idn.CarService (1 loại BH đòi NHIỀU loại ảnh).</summary>
+public class WarrantyTypePhoto : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int WarrantyTypeId { get; set; }                  // FK tới WarrantyType (ROWTID)
+    public WarrantyType? WarrantyType { get; set; }
+    public string ROWPTCode { get; set; } = "";              // Mã loại ảnh (ROWPTCode) — tra ở master WarrantyPhotoType
+    public string? ROWPTName { get; set; }                   // Tên loại ảnh (ROWPTName)
+}
+
+/// <summary>Danh mục Loại ảnh bảo hành (master gốc) — Ser_MST_ROWarrantyPhotoType trong idn.CarService (FrmMstWarrantyTypeMng).</summary>
+public class WarrantyPhotoType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string ROWPTCode { get; set; } = "";              // Mã loại ảnh (ROWPTCode)
+    public string ROWPTName { get; set; } = "";              // Tên loại ảnh (ROWPTName)
+    public bool FlagActive { get; set; } = true;             // Trạng thái hiệu lực (FlagActive)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
+/// <summary>DTO Tổng hợp chỉ số Danh mục Loại bảo hành RO — Ser_MST_ROWarrantyType.</summary>
+public class WarrantyTypeSummaryDto
+{
+    public int TotalTypes { get; set; }
+    public int ActiveTypes { get; set; }
+    public int InactiveTypes { get; set; }
+    public int TotalPhotoTypes { get; set; }
+    public int TypesWithPhotos { get; set; }
+    public int DistinctMainCodes { get; set; }
+    public int DistinctDetailCodes { get; set; }
 }

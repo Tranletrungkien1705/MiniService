@@ -77,6 +77,10 @@ public class AppDbContext : DbContext
     public DbSet<CustomerCare72h> CustomerCare72hs => Set<CustomerCare72h>();
     public DbSet<CustomerCareBirthday> CustomerCareBirthdays => Set<CustomerCareBirthday>();
     public DbSet<WarrantyWork> WarrantyWorks => Set<WarrantyWork>();
+    public DbSet<MaintenanceSetting> MaintenanceSettings => Set<MaintenanceSetting>();
+    public DbSet<WarrantyType> WarrantyTypes => Set<WarrantyType>();
+    public DbSet<WarrantyTypePhoto> WarrantyTypePhotos => Set<WarrantyTypePhoto>();
+    public DbSet<WarrantyPhotoType> WarrantyPhotoTypes => Set<WarrantyPhotoType>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -118,6 +122,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Appointment).WithMany().HasForeignKey(x => x.AppointmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.CampaignMarketing).WithMany(x => x.AppliedROs).HasForeignKey(x => x.CampaignMarketingId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Bulletin).WithMany(x => x.AppliedROs).HasForeignKey(x => x.BulletinId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.MaintenanceSetting).WithMany(x => x.RepairOrders).HasForeignKey(x => x.MaintenanceSettingId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.WarrantyReports).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.StockOuts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.CustomerCares).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
@@ -803,6 +808,38 @@ public class AppDbContext : DbContext
             e.Property(x => x.RatePrice).HasPrecision(18, 2);
             e.Property(x => x.Price).HasPrecision(18, 2);
             e.HasMany(x => x.RepairLines).WithOne(x => x.WarrantyWork).HasForeignKey(x => x.WarrantyWorkId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<MaintenanceSetting>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ROMSID }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.Km });
+            e.HasIndex(x => new { x.OrgId, x.Level });
+            e.Ignore(x => x.UsageCount);
+            e.Ignore(x => x.LevelName);
+            e.Ignore(x => x.LevelBadgeClass);
+            e.Property(x => x.TakingTimeHours).HasPrecision(5, 2);
+            e.Property(x => x.EstimatedCost).HasPrecision(18, 2);
+            e.HasOne(x => x.ServicePackage).WithMany().HasForeignKey(x => x.ServicePackageId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.RepairOrders).WithOne(r => r.MaintenanceSetting).HasForeignKey(r => r.MaintenanceSettingId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<WarrantyType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.TypeCode, x.DetailCode }).IsUnique();
+            e.Ignore(x => x.TypeCodeText);
+            e.Ignore(x => x.DetailCodeText);
+            e.Ignore(x => x.PhotoCount);
+            e.HasMany(x => x.Photos).WithOne(p => p.WarrantyType).HasForeignKey(p => p.WarrantyTypeId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<WarrantyTypePhoto>(e =>
+        {
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<WarrantyPhotoType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ROWPTCode }).IsUnique();
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }
