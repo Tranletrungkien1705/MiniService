@@ -294,6 +294,15 @@ public interface IRoService
     Task<(bool ok, string msg)> UpdateBomAsync(Bom bom, List<BomLine> lines);
     Task<(bool ok, string msg)> DeleteBomAsync(int id);
     Task<BomSummaryDto> GetBomSummaryAsync();
+
+    // Dealer Bank Account (Mst_DealerBankAccount)
+    Task<List<DealerBankAccount>> DealerBankAccountsAsync(string? dealerCode, bool? isActive, string? q);
+    Task<DealerBankAccount?> GetDealerBankAccountAsync(int id);
+    Task<int> CreateDealerBankAccountAsync(DealerBankAccount account);
+    Task<(bool ok, string msg)> UpdateDealerBankAccountAsync(DealerBankAccount account);
+    Task<(bool ok, string msg)> DeleteDealerBankAccountAsync(int id);
+    Task<DealerBankAccountSummaryDto> GetDealerBankAccountSummaryAsync();
+    Task<List<string>> GetDistinctDealerCodesAsync();
     // Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment, Ser_SupplierPaymentDtl / MNU_QT_DL_QUANLYPHIEUXUATTRANHACUNGCAP)
     Task<List<Supplier>> SuppliersAsync(string? q);
     Task<Supplier?> GetSupplierAsync(int id);
@@ -5837,6 +5846,112 @@ public class RoService(AppDbContext db) : IRoService
             DistinctParts = lines.Select(l => l.PartCode).Distinct().Count()
         };
     }
+
+    // --- Dealer Bank Account — Tài khoản ngân hàng đại lý (Mst_DealerBankAccount) ---
+    public async Task<List<DealerBankAccount>> DealerBankAccountsAsync(string? dealerCode, bool? isActive, string? q)
+    {
+        var query = db.DealerBankAccounts.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim().ToUpperInvariant();
+            query = query.Where(a => a.DealerCode == dc);
+        }
+        if (isActive.HasValue) query = query.Where(a => a.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(a => a.AccountNo.ToLower().Contains(s)
+                || a.AccountName.ToLower().Contains(s)
+                || a.AccountBankName.ToLower().Contains(s)
+                || a.DealerCode.ToLower().Contains(s)
+                || (a.Remark != null && a.Remark.ToLower().Contains(s)));
+        }
+        return await query.OrderBy(a => a.DealerCode).ThenBy(a => a.Idx).ThenBy(a => a.AccountNo).ToListAsync();
+    }
+
+    public Task<DealerBankAccount?> GetDealerBankAccountAsync(int id) =>
+        db.DealerBankAccounts.FirstOrDefaultAsync(a => a.Id == id);
+
+    public async Task<int> CreateDealerBankAccountAsync(DealerBankAccount account)
+    {
+        if (string.IsNullOrWhiteSpace(account.DealerCode))
+            throw new InvalidOperationException("Vui lòng nhập mã đại lý (DealerCode).");
+        if (string.IsNullOrWhiteSpace(account.AccountNo))
+            throw new InvalidOperationException("Vui lòng nhập số tài khoản (AccountNo).");
+        if (string.IsNullOrWhiteSpace(account.AccountName))
+            throw new InvalidOperationException("Vui lòng nhập tên chủ tài khoản (AccountName).");
+        if (string.IsNullOrWhiteSpace(account.AccountBankName))
+            throw new InvalidOperationException("Vui lòng nhập tên ngân hàng (AccountBankName).");
+
+        account.DealerCode = account.DealerCode.Trim().ToUpperInvariant();
+        account.AccountNo = account.AccountNo.Trim();
+        account.AccountName = account.AccountName.Trim();
+        account.AccountBankName = account.AccountBankName.Trim();
+        account.AccountBankBin = string.IsNullOrWhiteSpace(account.AccountBankBin) ? null : account.AccountBankBin.Trim();
+
+        var exists = await db.DealerBankAccounts.AnyAsync(a => a.DealerCode == account.DealerCode && a.AccountNo == account.AccountNo);
+        if (exists)
+            throw new InvalidOperationException($"Số tài khoản {account.AccountNo} đã tồn tại cho đại lý {account.DealerCode}.");
+
+        account.CreatedAt = DateTime.Now;
+        account.LogLUDateTime = DateTime.Now;
+        account.LogLUBy = account.CreatedBy;
+        db.DealerBankAccounts.Add(account);
+        await db.SaveChangesAsync();
+        return account.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateDealerBankAccountAsync(DealerBankAccount account)
+    {
+        var existing = await db.DealerBankAccounts.FirstOrDefaultAsync(a => a.Id == account.Id);
+        if (existing == null) return (false, "Không tìm thấy tài khoản ngân hàng.");
+
+        if (string.IsNullOrWhiteSpace(account.AccountName))
+            return (false, "Tên chủ tài khoản không được để trống.");
+        if (string.IsNullOrWhiteSpace(account.AccountBankName))
+            return (false, "Tên ngân hàng không được để trống.");
+
+        existing.AccountName = account.AccountName.Trim();
+        existing.AccountBankName = account.AccountBankName.Trim();
+        existing.AccountBankBin = string.IsNullOrWhiteSpace(account.AccountBankBin) ? null : account.AccountBankBin.Trim();
+        existing.Idx = account.Idx;
+        existing.IsActive = account.IsActive;
+        existing.Remark = string.IsNullOrWhiteSpace(account.Remark) ? null : account.Remark.Trim();
+        existing.LogLUBy = account.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật tài khoản {existing.AccountNo} - {existing.AccountBankName}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteDealerBankAccountAsync(int id)
+    {
+        var existing = await db.DealerBankAccounts.FirstOrDefaultAsync(a => a.Id == id);
+        if (existing == null) return (false, "Không tìm thấy tài khoản ngân hàng.");
+
+        db.DealerBankAccounts.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa tài khoản {existing.AccountNo} của đại lý {existing.DealerCode}.");
+    }
+
+    public async Task<DealerBankAccountSummaryDto> GetDealerBankAccountSummaryAsync()
+    {
+        var all = await db.DealerBankAccounts.ToListAsync();
+        return new DealerBankAccountSummaryDto
+        {
+            TotalAccounts = all.Count,
+            ActiveAccounts = all.Count(a => a.IsActive),
+            InactiveAccounts = all.Count(a => !a.IsActive),
+            DealerCount = all.Select(a => a.DealerCode).Distinct().Count(),
+            BankCount = all.Select(a => a.AccountBankName).Distinct().Count()
+        };
+    }
+
+    public Task<List<string>> GetDistinctDealerCodesAsync() =>
+        db.DealerBankAccounts.Select(a => a.DealerCode)
+            .Distinct()
+            .OrderBy(d => d)
+            .ToListAsync();
 
     // --- Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment) ---
     public async Task<List<Supplier>> SuppliersAsync(string? q)

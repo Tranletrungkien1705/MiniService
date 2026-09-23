@@ -90,6 +90,7 @@ public class AppDbContext : DbContext
     public DbSet<CarModel> CarModels => Set<CarModel>();
     public DbSet<Bom> Boms => Set<Bom>();
     public DbSet<BomLine> BomLines => Set<BomLine>();
+    public DbSet<DealerBankAccount> DealerBankAccounts => Set<DealerBankAccount>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -910,6 +911,12 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.BomId });
             e.Property(x => x.QtyMin).HasPrecision(18, 4);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<DealerBankAccount>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.DealerCode, x.AccountNo }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.DealerCode });
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

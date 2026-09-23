@@ -3223,3 +3223,35 @@ public class BomSummaryDto
     public int TotalLines { get; set; }                       // Tổng số dòng phụ tùng trên mọi BOM
     public int DistinctParts { get; set; }                    // Số phụ tùng khác nhau xuất hiện trong các BOM
 }
+
+/// <summary>Tài khoản ngân hàng của đại lý (Dealer Bank Account) — Mst_DealerBankAccount trong idn.CarService.
+/// Danh mục tài khoản ngân hàng nhận thanh toán của đại lý, dùng để in/in ấn trên phiếu thu, báo giá,
+/// hợp đồng và hướng dẫn khách hàng chuyển khoản. Mỗi đại lý (DealerCode) có thể có nhiều tài khoản,
+/// sắp xếp theo thứ tự ưu tiên (Idx). Nguồn lưu ở CSDL TRUNG TÂM (CmCenter).</summary>
+public class DealerBankAccount : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string DealerCode { get; set; } = "";              // Mã đại lý sở hữu tài khoản (DealerCode)
+    public string AccountNo { get; set; } = "";               // Số tài khoản ngân hàng (AccountNo)
+    public int Idx { get; set; }                              // Thứ tự ưu tiên hiển thị (Idx)
+    public string AccountName { get; set; } = "";             // Tên chủ tài khoản (AccountName)
+    public string AccountBankName { get; set; } = "";         // Tên ngân hàng (AccountBankName)
+    public string? AccountBankBin { get; set; }               // Mã BIN ngân hàng — dùng cho VietQR (AccountBankBin)
+    public bool IsActive { get; set; } = true;                // Cờ hiệu lực hoạt động (FlagActive)
+    public string? Remark { get; set; }                       // Ghi chú (Remark)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (LogLUBy lần đầu)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục tài khoản ngân hàng đại lý — phục vụ màn hình quản lý.</summary>
+public class DealerBankAccountSummaryDto
+{
+    public int TotalAccounts { get; set; }
+    public int ActiveAccounts { get; set; }
+    public int InactiveAccounts { get; set; }
+    public int DealerCount { get; set; }                      // Số đại lý khác nhau có tài khoản
+    public int BankCount { get; set; }                        // Số ngân hàng khác nhau
+}
