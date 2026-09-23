@@ -55,6 +55,7 @@ public interface IRoService
     Task RemoveLineAsync(int lineId);
     Task<(bool ok, string msg)> TransitionAsync(int roId, ROStatus to);
     Task<(bool ok, string msg)> DeleteROAsync(int roId);
+    Task<(bool ok, string msg)> UpdateMaintenanceReminderAsync(int roId, DateTime? reminderDate, int? reminderKm, bool workDoneSoon, string? memberNo, string updatedBy);
     Task<SvcDash> DashboardAsync();
     // warranty
     Task<List<WarrantyReport>> WarrantyReportsAsync(WarrantyStatus? status, string? q);
@@ -885,6 +886,32 @@ public class RoService(AppDbContext db) : IRoService
         db.ROs.Remove(ro);
         await db.SaveChangesAsync();
         return (true, "Đã xóa RO.");
+    }
+
+    /// <summary>Cập nhật Nhắc bảo dưỡng định kỳ trên RO — Ser_RO_Update_Maintance_DL trong idn.CarService.
+    /// Chỉ cho phép khi RO chưa ở trạng thái Paid/Finished. Đồng bộ ngày khuyến nghị sang các phiếu
+    /// Nhắc bảo dưỡng (Ser_CustomerCareMace) đang gắn với RO này.</summary>
+    public async Task<(bool ok, string msg)> UpdateMaintenanceReminderAsync(int roId, DateTime? reminderDate, int? reminderKm, bool workDoneSoon, string? memberNo, string updatedBy)
+    {
+        var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == roId);
+        if (ro == null) return (false, "Không tìm thấy RO.");
+        if (ro.Status is ROStatus.Paid or ROStatus.Finished)
+            return (false, "RO đã ở trạng thái Đã thanh toán / Hoàn tất — không cập nhật được nhắc bảo dưỡng.");
+
+        ro.ReminderMaintanceDate = reminderDate;
+        ro.ReminderMaintanceKm = reminderKm;
+        ro.WorkDoneSoon = workDoneSoon;
+        ro.MemberNo = string.IsNullOrWhiteSpace(memberNo) ? null : memberNo.Trim();
+
+        // Đồng bộ ngày khuyến nghị bảo dưỡng sang các phiếu Nhắc bảo dưỡng gắn với RO (Ser_CustomerCareMace)
+        if (reminderDate.HasValue)
+        {
+            var maces = await db.CustomerCareMaces.Where(m => m.ROId == roId).ToListAsync();
+            foreach (var m in maces) m.MaceRecomentDate = reminderDate.Value;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, "Đã cập nhật nhắc bảo dưỡng định kỳ cho RO.");
     }
 
     public async Task<SvcDash> DashboardAsync()

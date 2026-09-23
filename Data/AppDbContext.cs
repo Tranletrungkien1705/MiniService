@@ -129,6 +129,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.Bulletin).WithMany(x => x.AppliedROs).HasForeignKey(x => x.BulletinId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.MaintenanceSetting).WithMany(x => x.RepairOrders).HasForeignKey(x => x.MaintenanceSettingId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.DeliveryDateHistories).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Cascade);
+            e.Property(x => x.ReminderMaintanceKm).HasPrecision(18, 0);
             e.HasMany(x => x.WarrantyReports).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.StockOuts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.CustomerCares).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);

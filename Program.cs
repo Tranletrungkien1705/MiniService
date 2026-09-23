@@ -51,6 +51,13 @@ app.MapGet("/api/ro", async (string? plate, IRoService svc) =>
     }));
 });
 
+// API cập nhật Nhắc bảo dưỡng định kỳ trên RO (Ser_RO_Update_Maintance_DL)
+app.MapPost("/api/ro/{id:int}/maintenance-reminder", async (int id, UpdateMaintenanceReminderDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.UpdateMaintenanceReminderAsync(id, dto.ReminderDate, dto.ReminderKm, dto.WorkDoneSoon, dto.MemberNo, dto.UpdatedBy ?? "api");
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 // API danh mục phụ tùng & tồn kho
 app.MapGet("/api/parts", async (string? q, bool? lowStock, IRoService svc) =>
 {
@@ -5975,6 +5982,7 @@ app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Inde
 app.Run();
 
 record RegisterOrgDto(string Name);
+record UpdateMaintenanceReminderDto(DateTime? ReminderDate, int? ReminderKm, bool WorkDoneSoon, string? MemberNo, string? UpdatedBy);
 record AdjustStockDto(decimal Quantity, string? Mode, string? Note);
 record CreateWarrantyDto(int RoId, string IssueDesc, string DiagResult, string? ErrorCodeCD, string? ErrorCodePN, int? PartIdError, string? CreatedBy);
 record TransitionWarrantyDto(WarrantyStatus ToStatus, decimal? ApprovedAmount, string? Note);

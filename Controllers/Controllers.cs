@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using MiniService.Data;
 using MiniService.Models;
@@ -190,6 +191,14 @@ public class ROController(IRoService svc) : Controller
     public async Task<IActionResult> Transition(int id, ROStatus to)
     {
         var (ok, msg) = await svc.TransitionAsync(id, to);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateMaintenanceReminder(int id, DateTime? reminderDate, int? reminderKm, bool workDoneSoon, string? memberNo)
+    {
+        var (ok, msg) = await svc.UpdateMaintenanceReminderAsync(id, reminderDate, reminderKm, workDoneSoon, memberNo, "web");
         TempData[ok ? "Success" : "Error"] = msg;
         return RedirectToAction(nameof(Detail), new { id });
     }

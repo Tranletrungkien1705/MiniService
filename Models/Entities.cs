@@ -589,6 +589,13 @@ public class RepairOrder : IOrgOwned
     public string? DeliveryDateRemark { get; set; }       // Lý do điều chỉnh ngày hẹn giao xe (Remark)
     public List<RoDeliveryDateHistory> DeliveryDateHistories { get; set; } = [];
 
+    // Nhắc bảo dưỡng định kỳ (Ser_RO.ReminderMaintanceDate / ReminderMaintanceKm / WorkDoneSoon / MemberNo)
+    // Cập nhật qua nghiệp vụ Ser_RO_Update_Maintance_DL — chỉ cho phép khi RO chưa Paid/Finished.
+    public DateTime? ReminderMaintanceDate { get; set; }  // Ngày khuyến nghị bảo dưỡng lần kế tiếp
+    public int? ReminderMaintanceKm { get; set; }         // Mốc km khuyến nghị bảo dưỡng lần kế tiếp
+    public bool WorkDoneSoon { get; set; } = false;       // Cờ khách sắp đến kỳ bảo dưỡng (WorkDoneSoon)
+    public string? MemberNo { get; set; }                 // Số thẻ thành viên / hội viên (MemberNo)
+
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount - BirthdayDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
