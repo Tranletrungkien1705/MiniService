@@ -689,5 +689,20 @@ public static class Ui
         Models.WarrantyCoverageType.ExtendedWarranty => ("Bảo hành gia hạn", "W5", "success"),
         _ => (t.ToString(), "", "secondary")
     };
+
+    public static (string text, string css) CusPersonType(string? personType) => personType switch
+    {
+        "Organization" => ("Tổ chức / Doanh nghiệp", "info"),
+        "Personal" => ("Cá nhân", "secondary"),
+        _ => (personType ?? "Cá nhân", "secondary")
+    };
+
+    /// <summary>Nhãn hệ số giá: < 1 giảm giá, = 1 giá gốc, > 1 tăng giá.</summary>
+    public static (string text, string css) FactorBadge(decimal factor) => factor switch
+    {
+        < 1m => ($"Giảm giá (×{factor:0.####})", "success"),
+        > 1m => ($"Tăng giá (×{factor:0.####})", "warning"),
+        _ => ("Giá gốc (×1)", "secondary")
+    };
 }
 

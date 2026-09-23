@@ -435,6 +435,25 @@ public interface IRoService
     Task<(bool ok, string msg)> ToggleWarrantyTypeActiveAsync(int id);
     Task<(bool ok, string msg)> DeleteWarrantyTypeAsync(int id);
     Task<List<WarrantyPhotoType>> WarrantyPhotoTypesAsync(bool? flagActive);
+    // Dealer Target / KPI (Mst_DealerTarget / Mst_DealerTargetDetail) — MH 168
+    Task<List<DealerTarget>> DealerTargetsAsync(int? year, string? q);
+    Task<DealerTarget?> GetDealerTargetAsync(int id);
+    Task<DealerTargetSummaryDto> GetDealerTargetSummaryAsync();
+    Task<(bool ok, string msg, int id)> SaveDealerTargetAsync(int? id, int year, string? remark, List<DealerTargetDetail> details, string user);
+    Task<(bool ok, string msg)> DeleteDealerTargetAsync(int id);
+    Task<(bool ok, string msg)> DeleteDealerTargetDetailAsync(int detailId);
+    // Customer Service Factor — Hệ số giá dịch vụ theo loại khách hàng (Ser_MST_CustomerType / Ser_Mst_CusServiceFactor)
+    Task<List<CustomerType>> CustomerTypesAsync(bool? isActive, string? q);
+    Task<CustomerType?> GetCustomerTypeAsync(int id);
+    Task<int> CreateCustomerTypeAsync(CustomerType type);
+    Task<(bool ok, string msg)> UpdateCustomerTypeAsync(int id, CustomerType input);
+    Task<(bool ok, string msg)> ToggleCustomerTypeActiveAsync(int id);
+    Task<(bool ok, string msg)> DeleteCustomerTypeAsync(int id);
+    Task<List<CusServiceFactorRowDto>> CusServiceFactorMatrixAsync(int? serviceItemId, int? customerTypeId, string? q);
+    Task<CusServiceFactorSummaryDto> GetCusServiceFactorSummaryAsync();
+    Task<(bool ok, string msg)> SaveCusServiceFactorAsync(int serviceItemId, int customerTypeId, decimal factor, string? dealerCode, string? user);
+    Task<(bool ok, string msg)> ResetCusServiceFactorAsync(int serviceItemId, int customerTypeId);
+    Task<decimal> ResolveServicePriceAsync(int serviceItemId, int? customerTypeId);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -9665,6 +9684,340 @@ public class RoService(AppDbContext db) : IRoService
             .Select(p => p.ROWPTName ?? p.ROWPTCode)
             .ToList();
         return names.Count > 0 ? string.Join(", ", names) : null;
+    }
+
+    // =========================================================================
+    // CHỈ TIÊU KINH DOANH ĐẠI LÝ (Mst_DealerTarget / Mst_DealerTargetDetail) — MH 168
+    // =========================================================================
+    public async Task<List<DealerTarget>> DealerTargetsAsync(int? year, string? q)
+    {
+        var query = db.DealerTargets.Include(t => t.Details).AsQueryable();
+        if (year.HasValue) query = query.Where(t => t.TargetYear == year.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim();
+            query = query.Where(t => t.Details.Any(d => d.DealerCode.Contains(kw) || (d.DealerName != null && d.DealerName.Contains(kw))));
+        }
+        return await query.OrderByDescending(t => t.TargetYear).ToListAsync();
+    }
+
+    public async Task<DealerTarget?> GetDealerTargetAsync(int id)
+    {
+        return await db.DealerTargets
+            .Include(t => t.Details)
+            .FirstOrDefaultAsync(t => t.Id == id);
+    }
+
+    public async Task<DealerTargetSummaryDto> GetDealerTargetSummaryAsync()
+    {
+        var periods = await db.DealerTargets.Include(t => t.Details).ToListAsync();
+        var allDetails = periods.SelectMany(p => p.Details).ToList();
+        var currentYear = DateTime.Today.Year;
+        var currentDetails = allDetails.Where(d => d.TargetYear == currentYear).ToList();
+        return new DealerTargetSummaryDto
+        {
+            TotalPeriods = periods.Count,
+            TotalDetails = allDetails.Count,
+            TotalDealers = allDetails.Select(d => d.DealerCode).Distinct().Count(),
+            TotalTypes = allDetails.Select(d => d.TargetType).Distinct().Count(),
+            TotalTargetValue = allDetails.Sum(d => d.TargetValue),
+            CurrentYear = currentYear,
+            CurrentYearDetails = currentDetails.Count,
+            CurrentYearTargetValue = currentDetails.Sum(d => d.TargetValue)
+        };
+    }
+
+    /// <summary>Lưu kỳ chỉ tiêu (thêm mới hoặc cập nhật) kèm danh sách chi tiết — theo Mst_DealerTarget_Save.</summary>
+    public async Task<(bool ok, string msg, int id)> SaveDealerTargetAsync(int? id, int year, string? remark, List<DealerTargetDetail> details, string user)
+    {
+        // Validate kỳ chỉ tiêu (TargetYear 1900..2100)
+        if (year < 1900 || year > 2100)
+            return (false, "Năm chỉ tiêu không hợp lệ (phải trong khoảng 1900..2100).", 0);
+
+        if (details == null || details.Count == 0)
+            return (false, "Cần ít nhất một dòng chi tiết chỉ tiêu (DealerTargetDetail).", 0);
+
+        // Validate từng dòng chi tiết theo đúng luật nguồn
+        for (var i = 0; i < details.Count; i++)
+        {
+            var d = details[i];
+            var row = i + 1;
+            if (string.IsNullOrWhiteSpace(d.DealerCode))
+                return (false, $"Dòng {row}: Mã đại lý (DealerCode) không được để trống.", 0);
+            if (d.TargetMonth == default)
+                return (false, $"Dòng {row}: Tháng chỉ tiêu (TargetMonth) không được để trống.", 0);
+            if (d.TargetMonth.Year != year)
+                return (false, $"Dòng {row}: Tháng chỉ tiêu {d.TargetMonth:MM/yyyy} không khớp với năm chỉ tiêu {year}.", 0);
+            if (d.TargetValue < 0)
+                return (false, $"Dòng {row}: Giá trị chỉ tiêu (TargetValue) phải >= 0.", 0);
+        }
+
+        DealerTarget target;
+        if (id.HasValue && id.Value > 0)
+        {
+            var existing = await db.DealerTargets.Include(t => t.Details).FirstOrDefaultAsync(t => t.Id == id.Value);
+            if (existing == null) return (false, "Không tìm thấy kỳ chỉ tiêu.", 0);
+
+            var dupYear = await db.DealerTargets.AnyAsync(t => t.Id != id.Value && t.TargetYear == year);
+            if (dupYear) return (false, $"Kỳ chỉ tiêu năm {year} đã tồn tại.", 0);
+
+            target = existing;
+            target.TargetYear = year;
+            target.Remark = remark?.Trim();
+            target.UpdatedBy = user;
+            target.UpdatedAt = DateTime.Now;
+            db.DealerTargetDetails.RemoveRange(target.Details);
+            target.Details = [];
+        }
+        else
+        {
+            var dupYear = await db.DealerTargets.AnyAsync(t => t.TargetYear == year);
+            if (dupYear) return (false, $"Kỳ chỉ tiêu năm {year} đã tồn tại.", 0);
+
+            target = new DealerTarget
+            {
+                TargetYear = year,
+                Remark = remark?.Trim(),
+                CreatedBy = user,
+                CreatedAt = DateTime.Now
+            };
+            db.DealerTargets.Add(target);
+        }
+
+        foreach (var d in details)
+        {
+            target.Details.Add(new DealerTargetDetail
+            {
+                TargetYear = year,
+                DealerCode = d.DealerCode.Trim(),
+                DealerName = d.DealerName?.Trim(),
+                TargetMonth = new DateTime(d.TargetMonth.Year, d.TargetMonth.Month, 1),
+                TargetType = d.TargetType,
+                TargetValue = d.TargetValue,
+                CreatedBy = user,
+                CreatedAt = DateTime.Now
+            });
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu kỳ chỉ tiêu kinh doanh năm {year} ({target.Details.Count} dòng).", target.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeleteDealerTargetAsync(int id)
+    {
+        var target = await db.DealerTargets.Include(t => t.Details).FirstOrDefaultAsync(t => t.Id == id);
+        if (target == null) return (false, "Không tìm thấy kỳ chỉ tiêu.");
+        db.DealerTargetDetails.RemoveRange(target.Details);
+        db.DealerTargets.Remove(target);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xoá kỳ chỉ tiêu năm {target.TargetYear}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteDealerTargetDetailAsync(int detailId)
+    {
+        var detail = await db.DealerTargetDetails.FirstOrDefaultAsync(d => d.Id == detailId);
+        if (detail == null) return (false, "Không tìm thấy dòng chi tiết chỉ tiêu.");
+        db.DealerTargetDetails.Remove(detail);
+        await db.SaveChangesAsync();
+        return (true, "Đã xoá dòng chi tiết chỉ tiêu.");
+    }
+
+    // --- Customer Service Factor — Hệ số giá dịch vụ theo loại khách hàng (Ser_MST_CustomerType / Ser_Mst_CusServiceFactor) ---
+    public async Task<List<CustomerType>> CustomerTypesAsync(bool? isActive, string? q)
+    {
+        var query = db.CustomerTypes.AsQueryable();
+        if (isActive.HasValue) query = query.Where(t => t.IsActive == isActive.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(t => t.CusTypeCode.ToLower().Contains(s) || t.CusTypeName.ToLower().Contains(s));
+        }
+        return await query.OrderBy(t => t.CusTypeCode).ToListAsync();
+    }
+
+    public Task<CustomerType?> GetCustomerTypeAsync(int id) =>
+        db.CustomerTypes.Include(t => t.ServiceFactors).FirstOrDefaultAsync(t => t.Id == id);
+
+    public async Task<int> CreateCustomerTypeAsync(CustomerType type)
+    {
+        if (string.IsNullOrWhiteSpace(type.CusTypeCode))
+            throw new InvalidOperationException("Vui lòng nhập mã loại khách hàng (CusTypeCode).");
+        if (string.IsNullOrWhiteSpace(type.CusTypeName))
+            throw new InvalidOperationException("Vui lòng nhập tên loại khách hàng (CusTypeName).");
+
+        type.CusTypeCode = type.CusTypeCode.Trim().ToUpperInvariant();
+        var exists = await db.CustomerTypes.AnyAsync(t => t.CusTypeCode == type.CusTypeCode);
+        if (exists) throw new InvalidOperationException($"Mã loại khách hàng {type.CusTypeCode} đã tồn tại.");
+        if (type.CusFactor <= 0) type.CusFactor = 1.0m;
+
+        db.CustomerTypes.Add(type);
+        await db.SaveChangesAsync();
+        return type.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateCustomerTypeAsync(int id, CustomerType input)
+    {
+        var existing = await db.CustomerTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (existing == null) return (false, "Không tìm thấy loại khách hàng.");
+        if (string.IsNullOrWhiteSpace(input.CusTypeName)) return (false, "Tên loại khách hàng không được để trống.");
+
+        existing.CusTypeName = input.CusTypeName.Trim();
+        existing.CusFactor = input.CusFactor > 0 ? input.CusFactor : 1.0m;
+        existing.CusPersonType = string.IsNullOrWhiteSpace(input.CusPersonType) ? "Personal" : input.CusPersonType.Trim();
+        existing.IsActive = input.IsActive;
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật loại khách hàng {existing.CusTypeCode} - {existing.CusTypeName}.");
+    }
+
+    public async Task<(bool ok, string msg)> ToggleCustomerTypeActiveAsync(int id)
+    {
+        var existing = await db.CustomerTypes.FirstOrDefaultAsync(t => t.Id == id);
+        if (existing == null) return (false, "Không tìm thấy loại khách hàng.");
+        existing.IsActive = !existing.IsActive;
+        await db.SaveChangesAsync();
+        return (true, $"Loại khách hàng {existing.CusTypeCode} đã {(existing.IsActive ? "kích hoạt" : "tạm dừng")}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCustomerTypeAsync(int id)
+    {
+        var existing = await db.CustomerTypes.Include(t => t.ServiceFactors).FirstOrDefaultAsync(t => t.Id == id);
+        if (existing == null) return (false, "Không tìm thấy loại khách hàng.");
+        if (existing.ServiceFactors.Count > 0)
+        {
+            existing.IsActive = false;
+            await db.SaveChangesAsync();
+            return (true, $"Loại khách hàng {existing.CusTypeCode} đang có {existing.ServiceFactors.Count} cấu hình hệ số giá nên đã chuyển sang trạng thái Tạm dừng.");
+        }
+        db.CustomerTypes.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại khách hàng {existing.CusTypeCode}.");
+    }
+
+    /// <summary>Dựng ma trận hệ số giá dịch vụ × loại khách hàng với giá hiệu lực (3 tầng dự phòng: Factor → CusFactor → 1).</summary>
+    public async Task<List<CusServiceFactorRowDto>> CusServiceFactorMatrixAsync(int? serviceItemId, int? customerTypeId, string? q)
+    {
+        var servicesQuery = db.ServiceItems.Where(s => s.IsActive).AsQueryable();
+        if (serviceItemId.HasValue && serviceItemId.Value > 0)
+            servicesQuery = servicesQuery.Where(s => s.Id == serviceItemId.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            servicesQuery = servicesQuery.Where(x => x.Code.ToLower().Contains(s) || x.Name.ToLower().Contains(s));
+        }
+        var services = await servicesQuery.OrderBy(s => s.Code).ToListAsync();
+
+        var typesQuery = db.CustomerTypes.Where(t => t.IsActive).AsQueryable();
+        if (customerTypeId.HasValue && customerTypeId.Value > 0)
+            typesQuery = typesQuery.Where(t => t.Id == customerTypeId.Value);
+        var types = await typesQuery.OrderBy(t => t.CusTypeCode).ToListAsync();
+
+        var factors = await db.CusServiceFactors.ToListAsync();
+        var lookup = factors.ToDictionary(f => (f.ServiceItemId, f.CustomerTypeId), f => f);
+
+        var rows = new List<CusServiceFactorRowDto>();
+        foreach (var svc in services)
+        {
+            foreach (var ct in types)
+            {
+                var hasCustom = lookup.TryGetValue((svc.Id, ct.Id), out var f);
+                var factor = hasCustom ? f!.Factor : (ct.CusFactor > 0 ? ct.CusFactor : 1.0m);
+                rows.Add(new CusServiceFactorRowDto
+                {
+                    ServiceItemId = svc.Id,
+                    ServiceCode = svc.Code,
+                    ServiceName = svc.Name,
+                    BasePrice = svc.Price,
+                    CustomerTypeId = ct.Id,
+                    CusTypeCode = ct.CusTypeCode,
+                    CusTypeName = ct.CusTypeName,
+                    Factor = factor,
+                    EffectivePrice = Math.Round(svc.Price * factor, 0),
+                    IsCustomized = hasCustom
+                });
+            }
+        }
+        return rows;
+    }
+
+    public async Task<CusServiceFactorSummaryDto> GetCusServiceFactorSummaryAsync()
+    {
+        var serviceCount = await db.ServiceItems.CountAsync(s => s.IsActive);
+        var typeCount = await db.CustomerTypes.CountAsync(t => t.IsActive);
+        var factors = await db.CusServiceFactors.ToListAsync();
+        var customized = factors.Count;
+        var totalCells = serviceCount * typeCount;
+        return new CusServiceFactorSummaryDto
+        {
+            TotalServices = serviceCount,
+            TotalCustomerTypes = typeCount,
+            TotalCells = totalCells,
+            CustomizedCells = customized,
+            AvgFactor = factors.Count > 0 ? Math.Round(factors.Average(f => f.Factor), 4) : 0m,
+            MinFactor = factors.Count > 0 ? factors.Min(f => f.Factor) : 0m,
+            MaxFactor = factors.Count > 0 ? factors.Max(f => f.Factor) : 0m
+        };
+    }
+
+    /// <summary>Lưu (upsert) hệ số giá cho một ô dịch vụ × loại khách — theo Ser_Mst_CusServiceFactor_Update.</summary>
+    public async Task<(bool ok, string msg)> SaveCusServiceFactorAsync(int serviceItemId, int customerTypeId, decimal factor, string? dealerCode, string? user)
+    {
+        if (factor <= 0) return (false, "Hệ số giá phải lớn hơn 0.");
+        var svc = await db.ServiceItems.FirstOrDefaultAsync(s => s.Id == serviceItemId);
+        if (svc == null) return (false, "Không tìm thấy dịch vụ.");
+        var ct = await db.CustomerTypes.FirstOrDefaultAsync(t => t.Id == customerTypeId);
+        if (ct == null) return (false, "Không tìm thấy loại khách hàng.");
+
+        var existing = await db.CusServiceFactors.FirstOrDefaultAsync(f => f.ServiceItemId == serviceItemId && f.CustomerTypeId == customerTypeId);
+        if (existing == null)
+        {
+            db.CusServiceFactors.Add(new CusServiceFactor
+            {
+                ServiceItemId = serviceItemId,
+                CustomerTypeId = customerTypeId,
+                Factor = factor,
+                DealerCode = dealerCode?.Trim(),
+                LogLUBy = user,
+                LogLUDateTime = DateTime.Now
+            });
+        }
+        else
+        {
+            existing.Factor = factor;
+            existing.DealerCode = dealerCode?.Trim();
+            existing.LogLUBy = user;
+            existing.LogLUDateTime = DateTime.Now;
+        }
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu hệ số giá {factor} cho dịch vụ [{svc.Code}] × loại khách [{ct.CusTypeCode}].");
+    }
+
+    /// <summary>Xoá cấu hình hệ số riêng của một ô — quay về dùng hệ số mặc định của loại khách.</summary>
+    public async Task<(bool ok, string msg)> ResetCusServiceFactorAsync(int serviceItemId, int customerTypeId)
+    {
+        var existing = await db.CusServiceFactors.FirstOrDefaultAsync(f => f.ServiceItemId == serviceItemId && f.CustomerTypeId == customerTypeId);
+        if (existing == null) return (false, "Ô này chưa có cấu hình hệ số riêng.");
+        db.CusServiceFactors.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, "Đã xoá cấu hình hệ số riêng — ô này dùng hệ số mặc định của loại khách.");
+    }
+
+    /// <summary>Tra giá hiệu lực của một dịch vụ theo loại khách (Factor → CusFactor → 1).</summary>
+    public async Task<decimal> ResolveServicePriceAsync(int serviceItemId, int? customerTypeId)
+    {
+        var svc = await db.ServiceItems.FirstOrDefaultAsync(s => s.Id == serviceItemId);
+        if (svc == null) return 0m;
+        decimal factor = 1.0m;
+        if (customerTypeId.HasValue && customerTypeId.Value > 0)
+        {
+            var custom = await db.CusServiceFactors.FirstOrDefaultAsync(f => f.ServiceItemId == serviceItemId && f.CustomerTypeId == customerTypeId.Value);
+            if (custom != null) factor = custom.Factor;
+            else
+            {
+                var ct = await db.CustomerTypes.FirstOrDefaultAsync(t => t.Id == customerTypeId.Value);
+                if (ct != null && ct.CusFactor > 0) factor = ct.CusFactor;
+            }
+        }
+        return Math.Round(svc.Price * factor, 0);
     }
 }
 

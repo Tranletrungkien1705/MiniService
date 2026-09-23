@@ -5646,3 +5646,133 @@ public class WarrantyTypeController(IRoService svc) : Controller
         return result;
     }
 }
+
+/// <summary>Quản lý Chỉ tiêu kinh doanh đại lý (KPI) — Mst_DealerTarget / Mst_DealerTargetDetail (MH 168).</summary>
+public class DealerTargetController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? year, string? q)
+    {
+        ViewBag.Year = year;
+        ViewBag.Q = q;
+        ViewBag.Summary = await svc.GetDealerTargetSummaryAsync();
+        var list = await svc.DealerTargetsAsync(year, q);
+        return View(list);
+    }
+
+    public IActionResult Create()
+    {
+        ViewBag.Years = BuildYearOptions();
+        return View(new DealerTarget { TargetYear = DateTime.Today.Year });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int targetYear, string? remark, string? detailJson)
+    {
+        var details = ParseDetails(detailJson);
+        var (ok, msg, id) = await svc.SaveDealerTargetAsync(null, targetYear, remark, details, "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (!ok)
+        {
+            ViewBag.Years = BuildYearOptions();
+            return View(new DealerTarget { TargetYear = targetYear, Remark = remark });
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Edit(int id)
+    {
+        var target = await svc.GetDealerTargetAsync(id);
+        if (target == null) return NotFound();
+        ViewBag.Years = BuildYearOptions();
+        return View(target);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Edit(int id, int targetYear, string? remark, string? detailJson)
+    {
+        var details = ParseDetails(detailJson);
+        var (ok, msg, _) = await svc.SaveDealerTargetAsync(id, targetYear, remark, details, "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (!ok)
+        {
+            var target = await svc.GetDealerTargetAsync(id);
+            ViewBag.Years = BuildYearOptions();
+            return View(target ?? new DealerTarget { TargetYear = targetYear, Remark = remark });
+        }
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var target = await svc.GetDealerTargetAsync(id);
+        if (target == null) return NotFound();
+        return View(target);
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var target = await svc.GetDealerTargetAsync(id);
+        if (target == null) return NotFound();
+        return View(target);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteDealerTargetAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeleteDetail(int detailId, int targetId)
+    {
+        var (ok, msg) = await svc.DeleteDealerTargetDetailAsync(detailId);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id = targetId });
+    }
+
+    private static List<SelectListItem> BuildYearOptions()
+    {
+        var y = DateTime.Today.Year;
+        return Enumerable.Range(y - 3, 6)
+            .Select(v => new SelectListItem(v.ToString(), v.ToString()))
+            .ToList();
+    }
+
+    /// <summary>Phân tích chuỗi JSON dòng chi tiết gửi từ form (mảng {dealerCode,dealerName,targetMonth,targetType,targetValue}).</summary>
+    private static List<DealerTargetDetail> ParseDetails(string? json)
+    {
+        var result = new List<DealerTargetDetail>();
+        if (string.IsNullOrWhiteSpace(json)) return result;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                var code = el.TryGetProperty("dealerCode", out var c) ? c.GetString() : null;
+                if (string.IsNullOrWhiteSpace(code)) continue;
+
+                var name = el.TryGetProperty("dealerName", out var n) ? n.GetString() : null;
+                var monthStr = el.TryGetProperty("targetMonth", out var m) ? m.GetString() : null;
+                var typeStr = el.TryGetProperty("targetType", out var t) ? t.GetString() : null;
+                var valStr = el.TryGetProperty("targetValue", out var v) ? v.GetString() : null;
+
+                if (!DateTime.TryParse(monthStr, out var month)) continue;
+                var type = Enum.TryParse<DealerTargetType>(typeStr, true, out var tt) ? tt : DealerTargetType.Revenue;
+                long.TryParse(valStr, out var value);
+
+                result.Add(new DealerTargetDetail
+                {
+                    DealerCode = code.Trim(),
+                    DealerName = name?.Trim(),
+                    TargetMonth = month,
+                    TargetType = type,
+                    TargetValue = value
+                });
+            }
+        }
+        catch { /* bỏ qua dòng JSON lỗi */ }
+        return result;
+    }
+}

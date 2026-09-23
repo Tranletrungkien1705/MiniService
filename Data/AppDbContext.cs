@@ -81,6 +81,11 @@ public class AppDbContext : DbContext
     public DbSet<WarrantyType> WarrantyTypes => Set<WarrantyType>();
     public DbSet<WarrantyTypePhoto> WarrantyTypePhotos => Set<WarrantyTypePhoto>();
     public DbSet<WarrantyPhotoType> WarrantyPhotoTypes => Set<WarrantyPhotoType>();
+    public DbSet<DealerTarget> DealerTargets => Set<DealerTarget>();
+    public DbSet<DealerTargetDetail> DealerTargetDetails => Set<DealerTargetDetail>();
+    public DbSet<RoDeliveryDateHistory> RoDeliveryDateHistories => Set<RoDeliveryDateHistory>();
+    public DbSet<CustomerType> CustomerTypes => Set<CustomerType>();
+    public DbSet<CusServiceFactor> CusServiceFactors => Set<CusServiceFactor>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -123,6 +128,7 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.CampaignMarketing).WithMany(x => x.AppliedROs).HasForeignKey(x => x.CampaignMarketingId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.Bulletin).WithMany(x => x.AppliedROs).HasForeignKey(x => x.BulletinId).OnDelete(DeleteBehavior.SetNull);
             e.HasOne(x => x.MaintenanceSetting).WithMany(x => x.RepairOrders).HasForeignKey(x => x.MaintenanceSettingId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.DeliveryDateHistories).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(x => x.WarrantyReports).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasMany(x => x.StockOuts).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.CustomerCares).WithOne(x => x.RO).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
@@ -840,6 +846,38 @@ public class AppDbContext : DbContext
         b.Entity<WarrantyPhotoType>(e =>
         {
             e.HasIndex(x => new { x.OrgId, x.ROWPTCode }).IsUnique();
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<DealerTarget>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.TargetYear }).IsUnique();
+            e.Ignore(x => x.DetailCount);
+            e.Ignore(x => x.DealerCount);
+            e.Ignore(x => x.MonthCount);
+            e.Ignore(x => x.TotalTargetValue);
+            e.HasMany(x => x.Details).WithOne(x => x.DealerTarget).HasForeignKey(x => x.DealerTargetId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<DealerTargetDetail>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.TargetYear, x.DealerCode, x.TargetMonth, x.TargetType }).IsUnique();
+            e.Ignore(x => x.TargetMonthNumber);
+            e.Ignore(x => x.TargetMonthText);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CustomerType>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.CusTypeCode }).IsUnique();
+            e.Property(x => x.CusFactor).HasPrecision(9, 4);
+            e.HasMany(x => x.ServiceFactors).WithOne(f => f.CustomerType).HasForeignKey(f => f.CustomerTypeId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CusServiceFactor>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.ServiceItemId, x.CustomerTypeId }).IsUnique();
+            e.Property(x => x.Factor).HasPrecision(9, 4);
+            e.HasOne(x => x.ServiceItem).WithMany().HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.CustomerType).WithMany(t => t.ServiceFactors).HasForeignKey(x => x.CustomerTypeId).OnDelete(DeleteBehavior.Cascade);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

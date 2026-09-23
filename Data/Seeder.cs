@@ -4886,6 +4886,49 @@ public static class Seeder
             db.WarrantyTypes.AddRange(types);
             await db.SaveChangesAsync();
         }
+
+        // Seed Loại khách hàng dịch vụ (Ser_MST_CustomerType) + Hệ số giá dịch vụ theo loại khách (Ser_Mst_CusServiceFactor)
+        if (!await db.CustomerTypes.AnyAsync())
+        {
+            var cusTypes = new List<CustomerType>
+            {
+                new() { CusTypeCode = "CT01", CusTypeName = "Khách hàng cá nhân", CusFactor = 1.0m, CusPersonType = "Personal" },
+                new() { CusTypeCode = "CT02", CusTypeName = "Khách hàng doanh nghiệp", CusFactor = 0.95m, CusPersonType = "Organization" },
+                new() { CusTypeCode = "CT03", CusTypeName = "Khách hàng thân thiết (VIP)", CusFactor = 0.90m, CusPersonType = "Personal" },
+                new() { CusTypeCode = "CT04", CusTypeName = "Khách đoàn / Đội xe", CusFactor = 0.85m, CusPersonType = "Organization" },
+                new() { CusTypeCode = "CT05", CusTypeName = "Khách bảo hiểm", CusFactor = 1.0m, CusPersonType = "Organization" }
+            };
+            db.CustomerTypes.AddRange(cusTypes);
+            await db.SaveChangesAsync();
+
+            // Cấu hình hệ số riêng cho một số dịch vụ (các ô còn lại dùng hệ số mặc định của loại khách)
+            var services = await db.ServiceItems.OrderBy(s => s.Code).Take(6).ToListAsync();
+            var factors = new List<CusServiceFactor>();
+            foreach (var svc in services)
+            {
+                foreach (var ct in cusTypes)
+                {
+                    // Chỉ cấu hình riêng cho khách doanh nghiệp & khách đoàn để minh hoạ ma trận
+                    if (ct.CusTypeCode is "CT02" or "CT04")
+                    {
+                        factors.Add(new CusServiceFactor
+                        {
+                            ServiceItemId = svc.Id,
+                            CustomerTypeId = ct.Id,
+                            Factor = ct.CusTypeCode == "CT04" ? 0.80m : 0.92m,
+                            DealerCode = "VS058",
+                            LogLUBy = "seed",
+                            LogLUDateTime = DateTime.Now
+                        });
+                    }
+                }
+            }
+            if (factors.Count > 0)
+            {
+                db.CusServiceFactors.AddRange(factors);
+                await db.SaveChangesAsync();
+            }
+        }
     }
 
     private readonly record struct WarrantyPhotoType_Seed(string Code, string Name);
@@ -4938,7 +4981,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -6508,7 +6551,32 @@ public static class Seeder
                 ""ROWPTName"" TEXT NULL,
                 FOREIGN KEY (""WarrantyTypeId"") REFERENCES ""WarrantyTypes"" (""Id"") ON DELETE CASCADE
             );",
-            @"CREATE INDEX IF NOT EXISTS ""IX_WarrantyTypePhotos_OrgId_WarrantyTypeId"" ON ""WarrantyTypePhotos"" (""OrgId"", ""WarrantyTypeId"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_WarrantyTypePhotos_OrgId_WarrantyTypeId"" ON ""WarrantyTypePhotos"" (""OrgId"", ""WarrantyTypeId"");",
+            @"CREATE TABLE IF NOT EXISTS ""CustomerTypes"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""CusTypeCode"" TEXT NOT NULL,
+                ""CusTypeName"" TEXT NOT NULL,
+                ""CusFactor"" TEXT NOT NULL DEFAULT '1',
+                ""CusPersonType"" TEXT NOT NULL DEFAULT 'Personal',
+                ""IsActive"" INTEGER NOT NULL DEFAULT 1,
+                ""CreatedAt"" TEXT NOT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerTypes_OrgId_CusTypeCode"" ON ""CustomerTypes"" (""OrgId"", ""CusTypeCode"");",
+            @"CREATE TABLE IF NOT EXISTS ""CusServiceFactors"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""ServiceItemId"" INTEGER NOT NULL,
+                ""CustomerTypeId"" INTEGER NOT NULL,
+                ""Factor"" TEXT NOT NULL DEFAULT '1',
+                ""DealerCode"" TEXT NULL,
+                ""LogLUBy"" TEXT NULL,
+                ""LogLUDateTime"" TEXT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""ServiceItemId"") REFERENCES ""ServiceItems"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""CustomerTypeId"") REFERENCES ""CustomerTypes"" (""Id"") ON DELETE CASCADE
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CusServiceFactors_OrgId_ServiceItemId_CustomerTypeId"" ON ""CusServiceFactors"" (""OrgId"", ""ServiceItemId"", ""CustomerTypeId"");"
         };
 
         foreach (var sql in sqls)

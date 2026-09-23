@@ -584,6 +584,11 @@ public class RepairOrder : IOrgOwned
     public MaintenanceSetting? MaintenanceSetting { get; set; }
     public string? MaintenanceMilestone { get; set; }     // Tên mốc chu kỳ bảo dưỡng (VD: BD-20K (Cấp 3 - 20.000 km))
 
+    // Ngày hẹn giao xe dự kiến cho khách (Ser_RO.PlanedDeliveryDate) — cam kết thời điểm trả xe
+    public DateTime? PlanedDeliveryDate { get; set; }
+    public string? DeliveryDateRemark { get; set; }       // Lý do điều chỉnh ngày hẹn giao xe (Remark)
+    public List<RoDeliveryDateHistory> DeliveryDateHistories { get; set; } = [];
+
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount - CustomerGroupDiscountAmount - BirthdayDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
     public decimal LaborTotal => Lines.Where(l => l.Type == LineType.Labor).Sum(l => l.Amount);
@@ -593,6 +598,22 @@ public class RepairOrder : IOrgOwned
     public decimal InsuranceTotal => Lines.Where(l => l.ExpenseType == ExpenseType.Insurance).Sum(l => l.Amount);
     public decimal PaidAmount => Payments.Where(p => p.Status == PaymentStatus.Completed).Sum(p => p.PaymentAmount);
     public decimal RemainingBalance => Math.Max(0, CustomerTotal - PaidAmount);
+}
+
+/// <summary>Lịch sử điều chỉnh Ngày hẹn giao xe dự kiến — Ser_Ro_PlanedDeliveryDate_His trong idn.CarService.
+/// Mỗi lần đổi ngày hẹn giao xe, dòng cũ bị đánh dấu FlagCurrent = false và ghi thêm 1 dòng mới FlagCurrent = true.</summary>
+public class RoDeliveryDateHistory : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ROId { get; set; }                          // Lệnh sửa chữa (ROID)
+    public DateTime PlanedDeliveryDate { get; set; }       // Ngày hẹn giao xe dự kiến tại thời điểm ghi
+    public string? Remark { get; set; }                    // Lý do điều chỉnh (Remark)
+    public bool FlagCurrent { get; set; } = true;          // true: giá trị đang hiệu lực; false: giá trị cũ
+    public string CreatedBy { get; set; } = "web";         // Người ghi (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now; // Thời điểm ghi (CreatedDate)
+
+    public RepairOrder RO { get; set; } = null!;
 }
 
 public class Part : IOrgOwned
@@ -2954,4 +2975,130 @@ public class WarrantyTypeSummaryDto
     public int TypesWithPhotos { get; set; }
     public int DistinctMainCodes { get; set; }
     public int DistinctDetailCodes { get; set; }
+}
+
+/// <summary>Loại chỉ tiêu kinh doanh đại lý — Mst_DealerTargetType trong idn.CarService (MH 168).</summary>
+public enum DealerTargetType
+{
+    Revenue = 0,        // DT   — Doanh thu dịch vụ
+    RO = 1,             // RO   — Số lệnh sửa chữa
+    Vehicle = 2,        // XE   — Số lượt xe vào xưởng
+    PartRevenue = 3,    // DTPT — Doanh thu phụ tùng
+    LaborRevenue = 4,   // DTGC — Doanh thu giờ công
+    CSI = 5,            // CSI  — Điểm hài lòng khách hàng
+    Other = 6           // KHAC — Chỉ tiêu khác
+}
+
+/// <summary>Kỳ chỉ tiêu kinh doanh đại lý (theo năm) — Mst_DealerTarget trong idn.CarService.</summary>
+public class DealerTarget : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int TargetYear { get; set; }                       // Năm chỉ tiêu (TargetYear, 1900..2100)
+    public string? Remark { get; set; }                       // Ghi chú kỳ chỉ tiêu
+    public string CreatedBy { get; set; } = "web";            // Người lập (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày lập (CreatedDateTime)
+    public string? UpdatedBy { get; set; }                    // Người cập nhật (UpdateBy)
+    public DateTime? UpdatedAt { get; set; }                  // Ngày cập nhật (UpdateDateTime)
+
+    public List<DealerTargetDetail> Details { get; set; } = [];
+
+    public int DetailCount => Details.Count;
+    public int DealerCount => Details.Select(d => d.DealerCode).Distinct().Count();
+    public int MonthCount => Details.Select(d => d.TargetMonth).Distinct().Count();
+    public decimal TotalTargetValue => Details.Sum(d => d.TargetValue);
+}
+
+/// <summary>Chi tiết chỉ tiêu kinh doanh theo đại lý / tháng / loại chỉ tiêu — Mst_DealerTargetDetail trong idn.CarService.</summary>
+public class DealerTargetDetail : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int DealerTargetId { get; set; }                   // FK tới kỳ chỉ tiêu (DealerTarget)
+    public int TargetYear { get; set; }                       // Năm chỉ tiêu (TargetYear)
+    public string DealerCode { get; set; } = "";              // Mã đại lý (DealerCode)
+    public string? DealerName { get; set; }                   // Tên đại lý (DealerName)
+    public DateTime TargetMonth { get; set; }                 // Tháng chỉ tiêu (TargetMonth, chuẩn hoá về ngày 01)
+    public DealerTargetType TargetType { get; set; } = DealerTargetType.Revenue; // Loại chỉ tiêu (TargetTypeCode)
+    public long TargetValue { get; set; }                     // Giá trị chỉ tiêu (TargetValue, >= 0)
+    public string CreatedBy { get; set; } = "web";            // Người lập (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày lập (CreatedDateTime)
+
+    public DealerTarget DealerTarget { get; set; } = null!;
+
+    public int TargetMonthNumber => TargetMonth.Month;        // Số tháng (1..12)
+    public string TargetMonthText => TargetMonth.ToString("MM/yyyy");
+}
+
+/// <summary>DTO Tổng hợp chỉ số Chỉ tiêu kinh doanh đại lý — Mst_DealerTarget / Mst_DealerTargetDetail.</summary>
+public class DealerTargetSummaryDto
+{
+    public int TotalPeriods { get; set; }
+    public int TotalDetails { get; set; }
+    public int TotalDealers { get; set; }
+    public int TotalTypes { get; set; }
+    public long TotalTargetValue { get; set; }
+    public int CurrentYear { get; set; }
+    public int CurrentYearDetails { get; set; }
+    public long CurrentYearTargetValue { get; set; }
+}
+
+/// <summary>Loại khách hàng dịch vụ (danh mục gốc) — Ser_MST_CustomerType trong idn.CarService.
+/// Dùng làm tầng dự phòng hệ số giá khi chưa cấu hình riêng cho từng dịch vụ.</summary>
+public class CustomerType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CusTypeCode { get; set; } = "";             // Mã loại khách hàng (CusTypeID nguồn)
+    public string CusTypeName { get; set; } = "";             // Tên loại khách hàng (CusTypeName)
+    public decimal CusFactor { get; set; } = 1.0m;            // Hệ số giá mặc định của loại khách (CusFactor)
+    public string CusPersonType { get; set; } = "Personal";   // Cá nhân / Tổ chức (CusPersonType)
+    public bool IsActive { get; set; } = true;                // Trạng thái hiệu lực (IsActive)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public List<CusServiceFactor> ServiceFactors { get; set; } = [];
+}
+
+/// <summary>Hệ số giá DỊCH VỤ theo loại khách hàng — Ser_Mst_CusServiceFactor trong idn.CarService.
+/// Nguồn tra bảng này ở CSDL TRUNG TÂM; giá hiệu lực = Service.Price × COALESCE(Factor, CusType.CusFactor, 1).</summary>
+public class CusServiceFactor : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int ServiceItemId { get; set; }                    // Dịch vụ áp dụng (SerID → ServiceItem)
+    public ServiceItem ServiceItem { get; set; } = null!;
+    public int CustomerTypeId { get; set; }                   // Loại khách hàng áp dụng (CusTypeID → CustomerType)
+    public CustomerType CustomerType { get; set; } = null!;
+    public decimal Factor { get; set; } = 1.0m;               // Hệ số giá dịch vụ (Factor)
+    public string? DealerCode { get; set; }                   // Mã đại lý áp dụng (DealerCode)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
+/// <summary>DTO một dòng ma trận hệ số giá dịch vụ × loại khách hàng (kèm giá hiệu lực).</summary>
+public class CusServiceFactorRowDto
+{
+    public int ServiceItemId { get; set; }
+    public string ServiceCode { get; set; } = "";
+    public string ServiceName { get; set; } = "";
+    public decimal BasePrice { get; set; }                    // Giá niêm yết gốc của dịch vụ (Service.Price)
+    public int CustomerTypeId { get; set; }
+    public string CusTypeCode { get; set; } = "";
+    public string CusTypeName { get; set; } = "";
+    public decimal Factor { get; set; }                       // Hệ số hiệu lực (đã áp tầng dự phòng)
+    public decimal EffectivePrice { get; set; }               // Giá hiệu lực = BasePrice × Factor
+    public bool IsCustomized { get; set; }                    // true nếu có cấu hình riêng (không dùng hệ số mặc định)
+}
+
+/// <summary>DTO Tổng hợp chỉ số ma trận hệ số giá dịch vụ — Ser_Mst_CusServiceFactor.</summary>
+public class CusServiceFactorSummaryDto
+{
+    public int TotalServices { get; set; }
+    public int TotalCustomerTypes { get; set; }
+    public int TotalCells { get; set; }                       // Tổng số ô ma trận (dịch vụ × loại khách)
+    public int CustomizedCells { get; set; }                  // Số ô có cấu hình hệ số riêng
+    public decimal AvgFactor { get; set; }
+    public decimal MinFactor { get; set; }
+    public decimal MaxFactor { get; set; }
 }
