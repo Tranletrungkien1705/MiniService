@@ -2602,6 +2602,145 @@ public static class Seeder
 
             await db.SaveChangesAsync();
         }
+
+        if (!await db.StockOutOrders.AnyAsync())
+        {
+            var ro1 = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync(r => r.Code.EndsWith("-001"));
+            var ro2 = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync(r => r.Code.EndsWith("-002"));
+            var ro3 = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync(r => r.Code.EndsWith("-003"));
+            var p1 = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var p2 = await db.Parts.FirstOrDefaultAsync(p => p.Code == "28113-1R100");
+            var p3 = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+            var cav1 = await db.Cavities.FirstOrDefaultAsync(c => c.CavityNo == "BAY-01");
+            var cav2 = await db.Cavities.FirstOrDefaultAsync(c => c.CavityNo == "BAY-02");
+            var cav3 = await db.Cavities.FirstOrDefaultAsync(c => c.CavityNo == "BAY-03");
+            var stockOut1 = await db.StockOuts.FirstOrDefaultAsync();
+
+            if (ro1 != null && p1 != null && p2 != null)
+            {
+                var soo1 = new StockOutOrder
+                {
+                    OrderNo = $"SOO{DateTime.Today:yyMMdd}-001",
+                    OrderDate = DateTime.Today.AddDays(-1),
+                    RequestDeliveryTime = DateTime.Today.AddDays(-1).AddHours(9),
+                    Priority = StockOutOrderPriority.Emergency,
+                    Status = StockOutOrderStatus.Completed,
+                    ROId = ro1.Id,
+                    CustomerId = ro1.CustomerId,
+                    CarId = ro1.CarId,
+                    CavityId = cav1?.Id,
+                    StockOutId = stockOut1?.Id,
+                    RequesterName = "KTV Nguyễn Văn Toàn",
+                    Description = "Yêu cầu phụ tùng khẩn cấp bảo dưỡng cấp 40,000km xe Hyundai Tucson",
+                    CreatedBy = "KTV Toàn",
+                    CreatedAt = DateTime.Now.AddDays(-1).AddHours(-4),
+                    ApprovedBy = "Thủ kho Hùng",
+                    ApprovedAt = DateTime.Now.AddDays(-1).AddHours(-3),
+                    Items = [
+                        new StockOutOrderDetail
+                        {
+                            PartId = p1.Id,
+                            PartCode = p1.Code,
+                            PartName = p1.Name,
+                            Unit = p1.Unit,
+                            RequestQuantity = 1,
+                            IssuedQuantity = 1,
+                            UnitPrice = p1.SalePrice > 0 ? p1.SalePrice : 150000,
+                            VatPercent = 8,
+                            Note = "Lọc dầu động cơ máy xăng chính hãng"
+                        },
+                        new StockOutOrderDetail
+                        {
+                            PartId = p2.Id,
+                            PartCode = p2.Code,
+                            PartName = p2.Name,
+                            Unit = p2.Unit,
+                            RequestQuantity = 1,
+                            IssuedQuantity = 1,
+                            UnitPrice = p2.SalePrice > 0 ? p2.SalePrice : 220000,
+                            VatPercent = 8,
+                            Note = "Lọc gió động cơ định kỳ"
+                        }
+                    ]
+                };
+                db.StockOutOrders.Add(soo1);
+                if (stockOut1 != null) stockOut1.StockOutOrderId = soo1.Id;
+            }
+
+            if (ro2 != null && p3 != null)
+            {
+                var soo2 = new StockOutOrder
+                {
+                    OrderNo = $"SOO{DateTime.Today:yyMMdd}-002",
+                    OrderDate = DateTime.Today,
+                    RequestDeliveryTime = DateTime.Today.AddHours(14),
+                    Priority = StockOutOrderPriority.Urgent,
+                    Status = StockOutOrderStatus.Approved,
+                    ROId = ro2.Id,
+                    CustomerId = ro2.CustomerId,
+                    CarId = ro2.CarId,
+                    CavityId = cav2?.Id,
+                    RequesterName = "CVDV Trần Văn Long",
+                    Description = "Yêu cầu lĩnh má phanh đĩa trước thay thế theo phản ánh mòn đĩa phanh của khách",
+                    CreatedBy = "CVDV Long",
+                    CreatedAt = DateTime.Now.AddHours(-3),
+                    ApprovedBy = "Quản đốc xưởng Tuấn",
+                    ApprovedAt = DateTime.Now.AddHours(-2),
+                    Items = [
+                        new StockOutOrderDetail
+                        {
+                            PartId = p3.Id,
+                            PartCode = p3.Code,
+                            PartName = p3.Name,
+                            Unit = p3.Unit,
+                            RequestQuantity = 1,
+                            IssuedQuantity = 0,
+                            UnitPrice = p3.SalePrice > 0 ? p3.SalePrice : 1250000,
+                            VatPercent = 8,
+                            Note = "Má phanh đĩa trước chuẩn Hyundai SantaFe"
+                        }
+                    ]
+                };
+                db.StockOutOrders.Add(soo2);
+            }
+
+            if (ro3 != null && p1 != null)
+            {
+                var soo3 = new StockOutOrder
+                {
+                    OrderNo = $"SOO{DateTime.Today:yyMMdd}-003",
+                    OrderDate = DateTime.Today,
+                    RequestDeliveryTime = DateTime.Today.AddHours(16),
+                    Priority = StockOutOrderPriority.Normal,
+                    Status = StockOutOrderStatus.Pending,
+                    ROId = ro3.Id,
+                    CustomerId = ro3.CustomerId,
+                    CarId = ro3.CarId,
+                    CavityId = cav3?.Id,
+                    RequesterName = "KTV Lê Minh Đức",
+                    Description = "Yêu cầu chuẩn bị vật tư lọc nhớt cho ca bảo dưỡng buổi chiều",
+                    CreatedBy = "KTV Đức",
+                    CreatedAt = DateTime.Now.AddHours(-1),
+                    Items = [
+                        new StockOutOrderDetail
+                        {
+                            PartId = p1.Id,
+                            PartCode = p1.Code,
+                            PartName = p1.Name,
+                            Unit = p1.Unit,
+                            RequestQuantity = 1,
+                            IssuedQuantity = 0,
+                            UnitPrice = p1.SalePrice > 0 ? p1.SalePrice : 150000,
+                            VatPercent = 8,
+                            Note = "Phục vụ thay nhớt máy"
+                        }
+                    ]
+                };
+                db.StockOutOrders.Add(soo3);
+            }
+
+            await db.SaveChangesAsync();
+        }
     }
 
     private static List<PdiChecklistItem> CreateDefaultChecklist() =>
@@ -2641,7 +2780,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -2657,6 +2796,7 @@ public static class Seeder
             "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"ReceptionSheetId\" integer NULL",
             "ALTER TABLE miniservice.\"Appointments\" ADD COLUMN IF NOT EXISTS \"CustomerCareMaceId\" integer NULL",
             "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"QuoteId\" integer NULL",
+            "ALTER TABLE miniservice.\"StockOuts\" ADD COLUMN IF NOT EXISTS \"StockOutOrderId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartId\" integer NULL",
             "ALTER TABLE miniservice.\"StockIns\" ADD COLUMN IF NOT EXISTS \"OrderPartNo\" text NULL",
             "ALTER TABLE miniservice.\"Lines\" ADD COLUMN IF NOT EXISTS \"ServiceItemId\" integer NULL",
@@ -2670,6 +2810,10 @@ public static class Seeder
             "CREATE TABLE IF NOT EXISTS miniservice.\"SupplierPayments\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"SupplierPaymentNo\" text NOT NULL, \"SupplierId\" integer NULL, \"SupplierName\" text NOT NULL, \"Address\" text NULL, \"PaymentDate\" timestamp NOT NULL, \"PaymentType\" integer NOT NULL, \"Status\" integer NOT NULL, \"OrderPartId\" integer NULL, \"OrderPartNo\" text NULL, \"TSTRequestNo\" text NULL, \"Description\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ApprovedBy\" text NULL, \"ApprovedAt\" timestamp NULL)",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SupplierPayments_OrgId_SupplierPaymentNo\" ON miniservice.\"SupplierPayments\" (\"OrgId\", \"SupplierPaymentNo\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"SupplierPaymentDetails\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"SupplierPaymentId\" integer NOT NULL, \"PartId\" integer NOT NULL, \"StockInId\" integer NULL, \"StockInNo\" text NULL, \"QtyPay\" numeric(18,2) NOT NULL, \"Price\" numeric(18,2) NOT NULL, \"VatPercent\" numeric(5,2) NOT NULL, \"QtyInventory\" numeric(18,2) NOT NULL, \"LocationCode\" text NULL, \"Reason\" text NULL)",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"StockOutOrders\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"OrderNo\" text NOT NULL, \"OrderDate\" timestamp NOT NULL, \"RequestDeliveryTime\" timestamp NULL, \"Priority\" integer NOT NULL, \"Status\" integer NOT NULL, \"ROId\" integer NULL, \"CustomerId\" integer NULL, \"CarId\" integer NULL, \"CavityId\" integer NULL, \"StockOutId\" integer NULL, \"RequesterName\" text NULL, \"Description\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ApprovedBy\" text NULL, \"ApprovedAt\" timestamp NULL, \"RejectReason\" text NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_StockOutOrders_OrgId_OrderNo\" ON miniservice.\"StockOutOrders\" (\"OrgId\", \"OrderNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"StockOutOrderDetails\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"StockOutOrderId\" integer NOT NULL, \"PartId\" integer NOT NULL, \"PartCode\" text NOT NULL, \"PartName\" text NOT NULL, \"Unit\" text NOT NULL, \"RequestQuantity\" numeric(18,2) NOT NULL, \"IssuedQuantity\" numeric(18,2) NOT NULL, \"UnitPrice\" numeric(18,2) NOT NULL, \"VatPercent\" numeric(5,2) NOT NULL, \"Note\" text NULL)",
+            "CREATE INDEX IF NOT EXISTS \"IX_StockOutOrderDetails_OrgId_StockOutOrderId\" ON miniservice.\"StockOutOrderDetails\" (\"OrgId\", \"StockOutOrderId\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -3565,7 +3709,52 @@ public static class Seeder
                 FOREIGN KEY (""SupplierPaymentId"") REFERENCES ""SupplierPayments"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
             );",
-            @"CREATE INDEX IF NOT EXISTS ""IX_SupplierPaymentDetails_OrgId_SupplierPaymentId"" ON ""SupplierPaymentDetails"" (""OrgId"", ""SupplierPaymentId"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_SupplierPaymentDetails_OrgId_SupplierPaymentId"" ON ""SupplierPaymentDetails"" (""OrgId"", ""SupplierPaymentId"");",
+            @"ALTER TABLE ""StockOuts"" ADD COLUMN ""StockOutOrderId"" INTEGER NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""StockOutOrders"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""OrderNo"" TEXT NOT NULL,
+                ""OrderDate"" TEXT NOT NULL,
+                ""RequestDeliveryTime"" TEXT NULL,
+                ""Priority"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""ROId"" INTEGER NULL,
+                ""CustomerId"" INTEGER NULL,
+                ""CarId"" INTEGER NULL,
+                ""CavityId"" INTEGER NULL,
+                ""StockOutId"" INTEGER NULL,
+                ""RequesterName"" TEXT NULL,
+                ""Description"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ApprovedBy"" TEXT NULL,
+                ""ApprovedAt"" TEXT NULL,
+                ""RejectReason"" TEXT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""CavityId"") REFERENCES ""Cavities"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""StockOutId"") REFERENCES ""StockOuts"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_StockOutOrders_OrgId_OrderNo"" ON ""StockOutOrders"" (""OrgId"", ""OrderNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""StockOutOrderDetails"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""StockOutOrderId"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""PartCode"" TEXT NOT NULL,
+                ""PartName"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""RequestQuantity"" TEXT NOT NULL,
+                ""IssuedQuantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""VatPercent"" TEXT NOT NULL,
+                ""Note"" TEXT NULL,
+                FOREIGN KEY (""StockOutOrderId"") REFERENCES ""StockOutOrders"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE INDEX IF NOT EXISTS ""IX_StockOutOrderDetails_OrgId_StockOutOrderId"" ON ""StockOutOrderDetails"" (""OrgId"", ""StockOutOrderId"");"
         };
 
         foreach (var sql in sqls)

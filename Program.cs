@@ -3570,6 +3570,162 @@ app.MapPost("/api/supplier-payments/{id:int}/cancel", async (int id, IRoService 
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Yêu cầu xuất kho phụ tùng / vật tư dịch vụ (Ser_Inv_StockOutOrder - MH 125)
+app.MapGet("/api/stockoutorders", async (StockOutOrderStatus? status, StockOutOrderPriority? priority, string? q, DateTime? fromDate, DateTime? toDate, int? roId, IRoService svc) =>
+{
+    var list = await svc.StockOutOrdersAsync(status, priority, q, fromDate, toDate, roId);
+    return Results.Ok(list.Select(o => new
+    {
+        o.Id,
+        o.OrderNo,
+        o.OrderDate,
+        o.RequestDeliveryTime,
+        priority = Ui.StockOutOrderPriority(o.Priority).text,
+        priorityCode = (int)o.Priority,
+        status = Ui.StockOutOrderStatus(o.Status).text,
+        statusCode = Ui.StockOutOrderStatus(o.Status).code,
+        statusValue = (int)o.Status,
+        roId = o.ROId,
+        roCode = o.RO?.Code,
+        plate = o.Car?.Plate,
+        carModel = o.Car?.Model,
+        customerName = o.Customer?.Name,
+        cavityName = o.Cavity?.CavityName,
+        o.RequesterName,
+        o.Description,
+        o.ItemCount,
+        o.TotalRequestQuantity,
+        o.TotalIssuedQuantity,
+        o.TotalAmount,
+        stockOutId = o.StockOutId,
+        stockOutNo = o.StockOut?.StockOutNo
+    }));
+});
+
+app.MapGet("/api/stockoutorders/{id:int}", async (int id, IRoService svc) =>
+{
+    var o = await svc.GetStockOutOrderAsync(id);
+    if (o == null) return Results.NotFound(new { error = "Không tìm thấy phiếu yêu cầu xuất kho phụ tùng." });
+
+    return Results.Ok(new
+    {
+        o.Id,
+        o.OrderNo,
+        o.OrderDate,
+        o.RequestDeliveryTime,
+        priority = Ui.StockOutOrderPriority(o.Priority).text,
+        priorityCode = (int)o.Priority,
+        status = Ui.StockOutOrderStatus(o.Status).text,
+        statusCode = Ui.StockOutOrderStatus(o.Status).code,
+        statusValue = (int)o.Status,
+        roId = o.ROId,
+        roCode = o.RO?.Code,
+        plate = o.Car?.Plate,
+        carModel = o.Car?.Model,
+        customerName = o.Customer?.Name,
+        customerPhone = o.Customer?.Phone,
+        cavityName = o.Cavity?.CavityName,
+        o.RequesterName,
+        o.Description,
+        o.CreatedBy,
+        o.CreatedAt,
+        o.ApprovedBy,
+        o.ApprovedAt,
+        o.RejectReason,
+        o.ItemCount,
+        o.TotalRequestQuantity,
+        o.TotalIssuedQuantity,
+        o.SubTotal,
+        o.TotalVat,
+        o.TotalAmount,
+        stockOutId = o.StockOutId,
+        stockOutNo = o.StockOut?.StockOutNo,
+        canApprove = o.CanApprove,
+        canIssue = o.CanIssue,
+        canReject = o.CanReject,
+        canDelete = o.CanDelete,
+        items = o.Items.Select(i => new
+        {
+            i.Id,
+            i.PartId,
+            i.PartCode,
+            i.PartName,
+            i.Unit,
+            i.RequestQuantity,
+            i.IssuedQuantity,
+            i.UnitPrice,
+            i.VatPercent,
+            i.SubTotal,
+            i.VatAmount,
+            i.Amount,
+            i.Note,
+            inStock = i.Part?.InStock ?? 0
+        })
+    });
+});
+
+app.MapPost("/api/stockoutorders", async (CreateStockOutOrderDto dto, IRoService svc) =>
+{
+    if (dto.Items == null || dto.Items.Count == 0)
+        return Results.BadRequest(new { error = "Phiếu yêu cầu cần ít nhất một phụ tùng." });
+
+    try
+    {
+        var order = new StockOutOrder
+        {
+            OrderNo = dto.OrderNo?.Trim() ?? "",
+            ROId = dto.RoId,
+            OrderDate = dto.OrderDate ?? DateTime.Today,
+            RequestDeliveryTime = dto.RequestDeliveryTime,
+            Priority = dto.Priority,
+            CavityId = dto.CavityId,
+            RequesterName = dto.RequesterName?.Trim(),
+            Description = dto.Description?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+
+        var items = dto.Items.Select(i => new StockOutOrderDetail
+        {
+            PartId = i.PartId,
+            RequestQuantity = i.RequestQuantity <= 0 ? 1 : i.RequestQuantity,
+            UnitPrice = i.UnitPrice ?? 0,
+            VatPercent = i.VatPercent ?? 8,
+            Note = i.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateStockOutOrderAsync(order, items);
+        return Results.Created($"/api/stockoutorders/{id}", new { id, order.OrderNo, message = "Đã lập phiếu yêu cầu xuất kho thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/stockoutorders/{id:int}/approve", async (int id, ApproveStockOutOrderDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ApproveStockOutOrderAsync(id, dto?.ApprovedBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/stockoutorders/{id:int}/reject", async (int id, RejectStockOutOrderDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.RejectStockOutOrderAsync(id, dto.Reason);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/stockoutorders/{id:int}/issue", async (int id, IssueStockOutOrderDto? dto, IRoService svc) =>
+{
+    var (ok, msg, stockOutId) = await svc.IssueStockOutFromOrderAsync(id, dto?.IssuedBy);
+    return ok ? Results.Ok(new { message = msg, stockOutId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/stockoutorders/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteStockOutOrderAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -3670,3 +3826,8 @@ record CreateSupplierDto(string Code, string Name, string? Address, string? Phon
 record CreateSupplierPaymentDto(string? SupplierPaymentNo, int? SupplierId, string? SupplierName, string? Address, DateTime? PaymentDate, SupplierPaymentType PaymentType, int? OrderPartId, string? OrderPartNo, string? TSTRequestNo, string? Description, string? CreatedBy, List<CreateSupplierPaymentItemDto> Items);
 record CreateSupplierPaymentItemDto(int PartId, decimal QtyPay, decimal? Price, decimal? VatPercent, string? StockInNo, string? LocationCode, string? Reason);
 record ApproveSupplierPaymentDto(string? ApprovedBy);
+record CreateStockOutOrderDto(string? OrderNo, int? RoId, DateTime? OrderDate, DateTime? RequestDeliveryTime, StockOutOrderPriority Priority, int? CavityId, string? RequesterName, string? Description, string? CreatedBy, List<CreateStockOutOrderItemDto> Items);
+record CreateStockOutOrderItemDto(int PartId, decimal RequestQuantity, decimal? UnitPrice, decimal? VatPercent, string? Note);
+record ApproveStockOutOrderDto(string? ApprovedBy);
+record RejectStockOutOrderDto(string Reason);
+record IssueStockOutOrderDto(string? IssuedBy);

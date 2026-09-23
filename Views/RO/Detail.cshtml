@@ -345,6 +345,33 @@
 
         <div class="card mb-3"><div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="fw-bold mb-0"><i class="bi bi-file-earmark-arrow-up text-info me-1"></i>Yêu cầu xuất kho (SOO)</h6>
+                <a href="/StockOutOrder/Create?roId=@Model.Id" class="btn btn-sm btn-outline-info"><i class="bi bi-plus-lg me-1"></i>Lập yêu cầu</a>
+            </div>
+            @if (Model.StockOutOrders.Count > 0)
+            {
+                <div class="list-group list-group-flush small">
+                    @foreach (var o in Model.StockOutOrders)
+                    {
+                        var (otxt, ocode, ocss) = Ui.StockOutOrderStatus(o.Status);
+                        <a href="/StockOutOrder/Detail/@o.Id" class="list-group-item list-group-item-action px-0 d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold">@o.OrderNo</div>
+                                <div class="text-muted" style="font-size:11px">@o.ItemCount món (@o.TotalRequestQuantity.ToString("N0") cái) · @o.OrderDate.ToString("dd/MM/yyyy")</div>
+                            </div>
+                            <span class="badge bg-@ocss">@ocode</span>
+                        </a>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="text-muted small">Chưa có yêu cầu xuất kho phụ tùng. Nhấn "Lập yêu cầu" để KTV đề nghị cấp vật tư từ kho.</div>
+            }
+        </div></div>
+
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
                 <h6 class="fw-bold mb-0"><i class="bi bi-box-arrow-up-right text-primary me-1"></i>Xuất kho phụ tùng</h6>
                 <a href="/StockOut/Create?roId=@Model.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>Xuất kho</a>
             </div>

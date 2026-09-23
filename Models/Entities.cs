@@ -391,6 +391,23 @@ public enum SupplierPaymentType
     ConsignmentReturn = 3  // "3" — Trả hàng ký gửi / Tồn kho thỏa thuận hợp đồng
 }
 
+/// <summary>Trạng thái Phiếu yêu cầu xuất kho phụ tùng dịch vụ — theo Ser_Inv_StockOutOrder Status (Pending, Accept, Finish, Rejected) idn.CarService.</summary>
+public enum StockOutOrderStatus
+{
+    Pending = 0,   // Mới tạo / Chờ xuất (FlagPending)
+    Approved = 1,  // Đã duyệt / Sẵn sàng xuất (FlagAccept)
+    Completed = 2, // Đã xuất kho hoàn tất / Đã tạo phiếu xuất (FlagFinish)
+    Rejected = 3   // Đã từ chối / Hủy yêu cầu (FlagRejected)
+}
+
+/// <summary>Mức độ ưu tiên yêu cầu xuất phụ tùng — theo Priority trong Ser_Inv_StockOutOrder idn.CarService.</summary>
+public enum StockOutOrderPriority
+{
+    Normal = 0,    // Bình thường / Tiêu chuẩn
+    Urgent = 1,    // Ưu tiên / Khẩn cấp
+    Emergency = 2  // Hỏa tốc / Dừng xe (VOR)
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -461,6 +478,7 @@ public class RepairOrder : IOrgOwned
     public List<CustomerCareMace> CustomerCareMaces { get; set; } = [];
     public List<PdiRequestItem> PdiRequestItems { get; set; } = [];
     public List<TechnicalLibrary> TechnicalLibraries { get; set; } = [];
+    public List<StockOutOrder> StockOutOrders { get; set; } = [];
 
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
@@ -674,6 +692,8 @@ public class StockOut : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.Now; // Thời điểm lập phiếu
     public DateTime? FinishedAt { get; set; }               // Ngày hoàn tất xuất kho (trừ tồn)
     public string? ApprovedBy { get; set; }                 // Thủ kho duyệt xuất
+    public int? StockOutOrderId { get; set; }               // Yêu cầu xuất kho phụ tùng gốc nếu xuất theo yêu cầu
+    public StockOutOrder? StockOutOrder { get; set; }
 
     public RepairOrder? RO { get; set; }
     public Customer? Customer { get; set; }
@@ -1722,5 +1742,73 @@ public class SupplierPaymentDetail : IOrgOwned
     public decimal VatAmount => Math.Round(SubTotal * (VatPercent / 100m), 2);
     public decimal Amount => SubTotal + VatAmount;
 }
+
+/// <summary>Phiếu Yêu cầu xuất kho phụ tùng / vật tư dịch vụ — Ser_Inv_StockOutOrder trong idn.CarService (MH 125).</summary>
+public class StockOutOrder : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string OrderNo { get; set; } = "";                     // Số phiếu yêu cầu (VD: SOO-260427-001)
+    public DateTime OrderDate { get; set; } = DateTime.Today;     // Ngày yêu cầu xuất kho (StockOutOrderTime)
+    public DateTime? RequestDeliveryTime { get; set; }            // Thời gian yêu cầu giao vật tư (RequestDeliveryTime)
+    public StockOutOrderPriority Priority { get; set; } = StockOutOrderPriority.Normal; // Độ ưu tiên
+    public StockOutOrderStatus Status { get; set; } = StockOutOrderStatus.Pending;     // Trạng thái phiếu (P/A/F/R)
+    public int? ROId { get; set; }                                // Lệnh sửa chữa RO liên kết (ROID)
+    public int? CustomerId { get; set; }                          // Chủ xe / Khách hàng (CusID)
+    public int? CarId { get; set; }                               // Xe đang sửa chữa
+    public int? CavityId { get; set; }                            // Khoang sửa chữa nhận vật tư
+    public int? StockOutId { get; set; }                          // Phiếu xuất kho sau khi kho cấp phát (StockOutID)
+    public string? RequesterName { get; set; }                    // Kỹ thuật viên / CVDV lập yêu cầu (UserCode)
+    public string? Description { get; set; }                      // Lý do yêu cầu / Diễn giải kỹ thuật (Description)
+    public string CreatedBy { get; set; } = "web";                // Người lập phiếu
+    public DateTime CreatedAt { get; set; } = DateTime.Now;       // Thời gian lập
+    public string? ApprovedBy { get; set; }                       // Thủ kho / Quản đốc duyệt tiếp nhận
+    public DateTime? ApprovedAt { get; set; }                     // Thời gian duyệt
+    public string? RejectReason { get; set; }                     // Lý do từ chối nếu bị hủy
+
+    public RepairOrder? RO { get; set; }
+    public Customer? Customer { get; set; }
+    public Car? Car { get; set; }
+    public Cavity? Cavity { get; set; }
+    public StockOut? StockOut { get; set; }
+    public List<StockOutOrderDetail> Items { get; set; } = [];
+
+    public int ItemCount => Items.Count;
+    public decimal TotalRequestQuantity => Items.Sum(x => x.RequestQuantity);
+    public decimal TotalIssuedQuantity => Items.Sum(x => x.IssuedQuantity);
+    public decimal SubTotal => Items.Sum(x => x.SubTotal);
+    public decimal TotalVat => Items.Sum(x => x.VatAmount);
+    public decimal TotalAmount => Items.Sum(x => x.Amount);
+
+    public bool CanApprove => Status == StockOutOrderStatus.Pending;
+    public bool CanIssue => Status == StockOutOrderStatus.Approved || Status == StockOutOrderStatus.Pending;
+    public bool CanReject => Status == StockOutOrderStatus.Pending || Status == StockOutOrderStatus.Approved;
+    public bool CanDelete => Status == StockOutOrderStatus.Pending || Status == StockOutOrderStatus.Rejected;
+}
+
+/// <summary>Chi tiết phụ tùng yêu cầu xuất kho — Ser_Inv_StockOutOrderDetail trong idn.CarService.</summary>
+public class StockOutOrderDetail : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int StockOutOrderId { get; set; }
+    public int PartId { get; set; }                               // ID phụ tùng trong kho
+    public string PartCode { get; set; } = "";                    // Mã phụ tùng (PartCode)
+    public string PartName { get; set; } = "";                    // Tên phụ tùng (VieName)
+    public string Unit { get; set; } = "Cái";                     // Đơn vị tính (Unit)
+    public decimal RequestQuantity { get; set; } = 1;             // Số lượng yêu cầu xuất (OrderQuantity / SOOQuantity)
+    public decimal IssuedQuantity { get; set; } = 0;              // Số lượng đã thực xuất kho (SOQuantity)
+    public decimal UnitPrice { get; set; }                        // Đơn giá tham chiếu (Price)
+    public decimal VatPercent { get; set; } = 8;                  // VAT (%)
+    public string? Note { get; set; }                             // Ghi chú dòng yêu cầu (Description)
+
+    public StockOutOrder StockOutOrder { get; set; } = null!;
+    public Part Part { get; set; } = null!;
+
+    public decimal SubTotal => Math.Round(RequestQuantity * UnitPrice, 2);
+    public decimal VatAmount => Math.Round(SubTotal * (VatPercent / 100m), 2);
+    public decimal Amount => SubTotal + VatAmount;
+}
+
 
 

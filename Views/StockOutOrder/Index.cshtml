@@ -1,0 +1,198 @@
+@model List<StockOutOrder>
+@{
+    ViewData["Title"] = "Quản lý Yêu cầu xuất kho phụ tùng / vật tư dịch vụ";
+    var curStatus = (StockOutOrderStatus?)ViewBag.Status;
+    var curPriority = (StockOutOrderPriority?)ViewBag.Priority;
+    var totalCount = Model.Count;
+    var pendingCount = Model.Count(x => x.Status == StockOutOrderStatus.Pending);
+    var approvedCount = Model.Count(x => x.Status == StockOutOrderStatus.Approved);
+    var completedCount = Model.Count(x => x.Status == StockOutOrderStatus.Completed);
+    var emergencyCount = Model.Count(x => x.Priority == StockOutOrderPriority.Emergency && x.Status != StockOutOrderStatus.Completed);
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng phiếu yêu cầu (SOO)</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ xuất kho</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã duyệt / Chờ giao</div>
+            <div class="stat-num text-info">@approvedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Hỏa tốc xe trên cầu (VOR)</div>
+            <div class="stat-num text-danger">@emergencyCount</div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã phiếu / Lệnh RO / Biển số / KTV / Phụ tùng..." style="max-width:280px" />
+                <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" title="Từ ngày" style="max-width:140px" />
+                <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" title="Đến ngày" style="max-width:140px" />
+                <select name="priority" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:170px">
+                    <option value="">— Độ ưu tiên —</option>
+                    @foreach (StockOutOrderPriority p in Enum.GetValues(typeof(StockOutOrderPriority)))
+                    {
+                        var (pName, _, _) = Ui.StockOutOrderPriority(p);
+                        <option value="@((int)p)" selected="@(curPriority == p)">@pName</option>
+                    }
+                </select>
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:170px">
+                    <option value="">— Trạng thái —</option>
+                    @foreach (StockOutOrderStatus s in Enum.GetValues(typeof(StockOutOrderStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.StockOutOrderStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary"><i class="bi bi-funnel me-1"></i>Lọc</button>
+                @if (curStatus.HasValue || curPriority.HasValue || !string.IsNullOrEmpty(ViewBag.Q) || !string.IsNullOrEmpty(ViewBag.FromDate) || !string.IsNullOrEmpty(ViewBag.ToDate) || ViewBag.ROId != null)
+                {
+                    <a href="/StockOutOrder" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/StockOut" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-arrow-up-right me-1"></i>Sổ xuất kho</a>
+                <a href="/StockOutOrder/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập yêu cầu xuất kho</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Mã yêu cầu</th>
+                        <th>Độ ưu tiên</th>
+                        <th>Lệnh RO / Xe</th>
+                        <th>Khoang</th>
+                        <th>Người yêu cầu</th>
+                        <th class="text-center">Số món</th>
+                        <th class="text-end">SL yêu cầu</th>
+                        <th class="text-end">Tổng tiền (tạm tính)</th>
+                        <th>Trạng thái</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                Không tìm thấy phiếu yêu cầu xuất kho nào phù hợp.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var o in Model)
+                    {
+                        var (stxt, scode, scss) = Ui.StockOutOrderStatus(o.Status);
+                        var (ptxt, picon, pcss) = Ui.StockOutOrderPriority(o.Priority);
+                        <tr>
+                            <td>
+                                <a href="/StockOutOrder/Detail/@o.Id" class="fw-bold text-decoration-none">@o.OrderNo</a>
+                                <div class="text-muted small" style="font-size:11px">
+                                    <i class="bi bi-calendar3 me-1"></i>@o.OrderDate.ToString("dd/MM/yyyy")
+                                    @if (o.RequestDeliveryTime.HasValue)
+                                    {
+                                        <span class="text-info ms-1"><i class="bi bi-clock me-1"></i>Cần: @o.RequestDeliveryTime.Value.ToString("HH:mm dd/MM")</span>
+                                    }
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-@pcss"><i class="bi @picon me-1"></i>@ptxt</span>
+                            </td>
+                            <td>
+                                @if (o.RO != null)
+                                {
+                                    <a href="/RO/Detail/@o.RO.Id" class="badge bg-light text-dark border text-decoration-none">
+                                        <i class="bi bi-clipboard2-pulse me-1 text-primary"></i>@o.RO.Code
+                                    </a>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">—</span>
+                                }
+                                @if (o.Car != null)
+                                {
+                                    <div class="small fw-semibold mt-1">@o.Car.Plate <span class="text-muted fw-normal">(@o.Car.Model)</span></div>
+                                }
+                                @if (o.Customer != null)
+                                {
+                                    <div class="text-muted small" style="font-size:11px">@o.Customer.Name</div>
+                                }
+                            </td>
+                            <td>
+                                @if (o.Cavity != null)
+                                {
+                                    <span class="badge bg-secondary"><i class="bi bi-grid-3x3-gap me-1"></i>@o.Cavity.CavityName</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Xuất chung</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-semibold small">@(o.RequesterName ?? "Kỹ thuật viên")</div>
+                                @if (!string.IsNullOrWhiteSpace(o.Description))
+                                {
+                                    <div class="text-muted small text-truncate" style="max-width:180px;font-size:11px" title="@o.Description">
+                                        @o.Description
+                                    </div>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-light text-dark border">@o.ItemCount</span>
+                            </td>
+                            <td class="text-end fw-semibold">
+                                @o.TotalRequestQuantity.ToString("N0")
+                                @if (o.Status == StockOutOrderStatus.Completed)
+                                {
+                                    <div class="text-success small" style="font-size:11px">Đã xuất: @o.TotalIssuedQuantity.ToString("N0")</div>
+                                }
+                            </td>
+                            <td class="text-end fw-semibold text-primary">
+                                @o.TotalAmount.ToString("N0") đ
+                            </td>
+                            <td>
+                                <span class="badge bg-@scss">@stxt</span>
+                                @if (o.StockOut != null)
+                                {
+                                    <div class="mt-1">
+                                        <a href="/StockOut/Detail/@o.StockOut.Id" class="badge bg-success-subtle text-success border border-success text-decoration-none" style="font-size:10px">
+                                            <i class="bi bi-check-circle me-1"></i>@o.StockOut.StockOutNo
+                                        </a>
+                                    </div>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="/StockOutOrder/Detail/@o.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="/StockOutOrder/Print/@o.Id" target="_blank" class="btn btn-outline-secondary" title="In phiếu lĩnh vật tư">
+                                        <i class="bi bi-printer"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

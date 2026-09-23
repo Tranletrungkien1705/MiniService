@@ -3330,6 +3330,150 @@ public class SupplierPaymentController(IRoService svc) : Controller
     }
 }
 
+public class StockOutOrderController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(StockOutOrderStatus? status, StockOutOrderPriority? priority, string? q, DateTime? fromDate, DateTime? toDate, int? roId)
+    {
+        ViewBag.Status = status;
+        ViewBag.Priority = priority;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+        ViewBag.ROId = roId;
+        var list = await svc.StockOutOrdersAsync(status, priority, q, fromDate, toDate, roId);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.ROs = await svc.ROsForStockOutOrderAsync();
+        ViewBag.Cavities = await svc.CavitiesForSelectAsync();
+        ViewBag.SelectedROId = roId;
+
+        if (roId.HasValue && roId.Value > 0)
+        {
+            var ro = await svc.GetROAsync(roId.Value);
+            ViewBag.PreloadedRO = ro;
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int? roId, DateTime? orderDate, DateTime? requestDeliveryTime, StockOutOrderPriority priority,
+        int? cavityId, string? requesterName, string? description,
+        int[] partIds, decimal[] quantities, decimal[] unitPrices, decimal[] vatPercents, string[]? notes)
+    {
+        if (partIds == null || partIds.Length == 0)
+        {
+            TempData["Error"] = "Vui lòng chọn ít nhất một phụ tùng cần yêu cầu xuất kho.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.ROs = await svc.ROsForStockOutOrderAsync();
+            ViewBag.Cavities = await svc.CavitiesForSelectAsync();
+            ViewBag.SelectedROId = roId;
+            return View();
+        }
+
+        try
+        {
+            var order = new StockOutOrder
+            {
+                ROId = (roId.HasValue && roId.Value > 0) ? roId.Value : null,
+                OrderDate = orderDate ?? DateTime.Today,
+                RequestDeliveryTime = requestDeliveryTime,
+                Priority = priority,
+                CavityId = (cavityId.HasValue && cavityId.Value > 0) ? cavityId.Value : null,
+                RequesterName = requesterName?.Trim(),
+                Description = description?.Trim(),
+                CreatedBy = "web"
+            };
+
+            var items = new List<StockOutOrderDetail>();
+            for (int i = 0; i < partIds.Length; i++)
+            {
+                var pid = partIds[i];
+                if (pid <= 0) continue;
+
+                var qty = (quantities != null && quantities.Length > i) ? quantities[i] : 1;
+                var price = (unitPrices != null && unitPrices.Length > i) ? unitPrices[i] : 0;
+                var vat = (vatPercents != null && vatPercents.Length > i) ? vatPercents[i] : 8;
+                var note = (notes != null && notes.Length > i) ? notes[i]?.Trim() : null;
+
+                items.Add(new StockOutOrderDetail
+                {
+                    PartId = pid,
+                    RequestQuantity = qty <= 0 ? 1 : qty,
+                    UnitPrice = price,
+                    VatPercent = vat < 0 ? 0 : vat,
+                    Note = note
+                });
+            }
+
+            if (items.Count == 0)
+            {
+                TempData["Error"] = "Vui lòng nhập số lượng hợp lệ cho các phụ tùng yêu cầu.";
+                return RedirectToAction(nameof(Create), new { roId });
+            }
+
+            var id = await svc.CreateStockOutOrderAsync(order, items);
+            TempData["Success"] = $"Đã lập phiếu yêu cầu xuất kho {order.OrderNo} thành công ({items.Count} mặt hàng)!";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { roId });
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var item = await svc.GetStockOutOrderAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id, string? approvedBy)
+    {
+        var (ok, msg) = await svc.ApproveStockOutOrderAsync(id, approvedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Issue(int id, string? issuedBy)
+    {
+        var (ok, msg, stockOutId) = await svc.IssueStockOutFromOrderAsync(id, issuedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Reject(int id, string reason)
+    {
+        var (ok, msg) = await svc.RejectStockOutOrderAsync(id, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteStockOutOrderAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var item = await svc.GetStockOutOrderAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

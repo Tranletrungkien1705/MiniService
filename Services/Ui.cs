@@ -479,4 +479,21 @@ public static class Ui
         Models.SupplierPaymentType.ConsignmentReturn => ("Trả hàng ký gửi / Tồn chậm", "bi-arrow-left-right", "info"),
         _ => (t.ToString(), "bi-box-seam", "secondary")
     };
+
+    public static (string text, string code, string css) StockOutOrderStatus(StockOutOrderStatus s) => s switch
+    {
+        Models.StockOutOrderStatus.Pending => ("Chờ xuất kho", "PEND", "warning"),
+        Models.StockOutOrderStatus.Approved => ("Đã duyệt / Sẵn sàng", "APPR", "info"),
+        Models.StockOutOrderStatus.Completed => ("Đã xuất hoàn tất", "FNS", "success"),
+        Models.StockOutOrderStatus.Rejected => ("Đã từ chối / Hủy", "REJ", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) StockOutOrderPriority(StockOutOrderPriority p) => p switch
+    {
+        Models.StockOutOrderPriority.Normal => ("Bình thường", "bi-check2", "secondary"),
+        Models.StockOutOrderPriority.Urgent => ("Khẩn cấp", "bi-exclamation-circle", "warning"),
+        Models.StockOutOrderPriority.Emergency => ("Hỏa tốc (VOR)", "bi-lightning-fill", "danger"),
+        _ => (p.ToString(), "bi-info-circle", "secondary")
+    };
 }

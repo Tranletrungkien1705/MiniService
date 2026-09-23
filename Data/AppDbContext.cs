@@ -58,6 +58,8 @@ public class AppDbContext : DbContext
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<SupplierPayment> SupplierPayments => Set<SupplierPayment>();
     public DbSet<SupplierPaymentDetail> SupplierPaymentDetails => Set<SupplierPaymentDetail>();
+    public DbSet<StockOutOrder> StockOutOrders => Set<StockOutOrder>();
+    public DbSet<StockOutOrderDetail> StockOutOrderDetails => Set<StockOutOrderDetail>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -542,6 +544,39 @@ public class AppDbContext : DbContext
             e.Property(x => x.Price).HasPrecision(18, 2);
             e.Property(x => x.VatPercent).HasPrecision(5, 2);
             e.Property(x => x.QtyInventory).HasPrecision(18, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StockOutOrder>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.OrderNo }).IsUnique();
+            e.Ignore(x => x.ItemCount);
+            e.Ignore(x => x.TotalRequestQuantity);
+            e.Ignore(x => x.TotalIssuedQuantity);
+            e.Ignore(x => x.SubTotal);
+            e.Ignore(x => x.TotalVat);
+            e.Ignore(x => x.TotalAmount);
+            e.Ignore(x => x.CanApprove);
+            e.Ignore(x => x.CanIssue);
+            e.Ignore(x => x.CanReject);
+            e.Ignore(x => x.CanDelete);
+            e.HasOne(x => x.RO).WithMany(x => x.StockOutOrders).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Cavity).WithMany().HasForeignKey(x => x.CavityId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.StockOut).WithOne(x => x.StockOutOrder).HasForeignKey<StockOutOrder>(x => x.StockOutId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Items).WithOne(x => x.StockOutOrder).HasForeignKey(x => x.StockOutOrderId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<StockOutOrderDetail>(e =>
+        {
+            e.Ignore(x => x.SubTotal);
+            e.Ignore(x => x.VatAmount);
+            e.Ignore(x => x.Amount);
+            e.Property(x => x.RequestQuantity).HasPrecision(18, 2);
+            e.Property(x => x.IssuedQuantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.Property(x => x.VatPercent).HasPrecision(5, 2);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
