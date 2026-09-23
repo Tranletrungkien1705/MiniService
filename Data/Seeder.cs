@@ -2741,6 +2741,86 @@ public static class Seeder
 
             await db.SaveChangesAsync();
         }
+
+        if (!await db.PartOOs.AnyAsync())
+        {
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+            var pFilter = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pAir = await db.Parts.FirstOrDefaultAsync(p => p.Code == "28113-1R100");
+            var ro1 = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync();
+
+            var partOOs = new List<PartOO>
+            {
+                // 1. Xe Santa Fe (30G-889.21): Đang nợ khách 1 bộ má phanh (Chờ hàng về kho)
+                new PartOO
+                {
+                    OONo = $"OO{DateTime.Today:yyMMdd}-001",
+                    PartId = pBrake?.Id ?? 4,
+                    PartCode = pBrake?.Code ?? "58101-C1A00",
+                    PartName = pBrake?.Name ?? "Bộ má phanh đĩa trước Hyundai Santa Fe",
+                    OOPlateNo = "30G-889.21",
+                    Model = "Hyundai Santa Fe 2.2D",
+                    SoLuongNo = 1,
+                    SoLuongTra = 0,
+                    CVDV = "CVDV Tuấn",
+                    NgayDatHang = DateTime.Today.AddDays(-2),
+                    NgayVeDuKien = DateTime.Today.AddDays(2),
+                    NgayHenTra = DateTime.Today.AddDays(3),
+                    GhiChu = "Phụ tùng đang chuyển từ kho tổng Mobis Bắc Giang. Đã liên hệ khách thông báo thời gian.",
+                    Status = PartOOStatus.Owed,
+                    CreatedBy = "CVDV Tuấn",
+                    CreatedAt = DateTime.Now.AddDays(-2)
+                },
+                // 2. Xe Accent (29A-123.45): Nợ 2 lọc gió động cơ Accent, hàng đã về kho (InStock > 0), sẵn sàng hẹn khách đến lắp
+                new PartOO
+                {
+                    OONo = $"OO{DateTime.Today:yyMMdd}-002",
+                    PartId = pAir?.Id ?? 2,
+                    PartCode = pAir?.Code ?? "28113-1R100",
+                    PartName = pAir?.Name ?? "Lọc gió động cơ Hyundai Accent",
+                    OOPlateNo = "29A-123.45",
+                    Model = "Hyundai Accent 1.4 AT",
+                    SoLuongNo = 2,
+                    SoLuongTra = 0,
+                    CVDV = "CVDV Hương",
+                    NgayDatHang = DateTime.Today.AddDays(-4),
+                    NgayVeDuKien = DateTime.Today.AddDays(-1),
+                    NgayHenTra = DateTime.Today.AddDays(1),
+                    GhiChu = "Phụ tùng đã về tới kho dịch vụ. Đã gọi điện nhắc khách mang xe đến lắp ráp miễn phí tiền công.",
+                    Status = PartOOStatus.Arrived,
+                    ROId = ro1?.Id,
+                    CarId = ro1?.CarId,
+                    CustomerId = ro1?.CustomerId,
+                    CreatedBy = "CVDV Hương",
+                    CreatedAt = DateTime.Now.AddDays(-4)
+                },
+                // 3. Xe Tucson (51F-678.90): Nợ 1 lọc dầu động cơ, đã trả và lắp hoàn tất cho khách
+                new PartOO
+                {
+                    OONo = $"OO{DateTime.Today:yyMMdd}-003",
+                    PartId = pFilter?.Id ?? 1,
+                    PartCode = pFilter?.Code ?? "26300-35505",
+                    PartName = pFilter?.Name ?? "Lọc dầu động cơ Hyundai chính hãng",
+                    OOPlateNo = "51F-678.90",
+                    Model = "Hyundai Tucson 2.0 AT",
+                    SoLuongNo = 1,
+                    SoLuongTra = 1,
+                    CVDV = "CVDV Tuấn",
+                    NgayDatHang = DateTime.Today.AddDays(-7),
+                    NgayVeDuKien = DateTime.Today.AddDays(-3),
+                    NgayHenTra = DateTime.Today.AddDays(-1),
+                    GhiChu = "Khách đã mang xe vào xưởng và KTV Hùng đã hoàn tất lắp đặt bàn giao.",
+                    Status = PartOOStatus.Completed,
+                    CreatedBy = "CVDV Tuấn",
+                    CreatedAt = DateTime.Now.AddDays(-7),
+                    FinishedAt = DateTime.Now.AddDays(-1),
+                    ReturnedBy = "KTV Hùng"
+                }
+            };
+
+            db.PartOOs.AddRange(partOOs);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static List<PdiChecklistItem> CreateDefaultChecklist() =>
@@ -2780,7 +2860,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -2814,6 +2894,9 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_StockOutOrders_OrgId_OrderNo\" ON miniservice.\"StockOutOrders\" (\"OrgId\", \"OrderNo\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"StockOutOrderDetails\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"StockOutOrderId\" integer NOT NULL, \"PartId\" integer NOT NULL, \"PartCode\" text NOT NULL, \"PartName\" text NOT NULL, \"Unit\" text NOT NULL, \"RequestQuantity\" numeric(18,2) NOT NULL, \"IssuedQuantity\" numeric(18,2) NOT NULL, \"UnitPrice\" numeric(18,2) NOT NULL, \"VatPercent\" numeric(5,2) NOT NULL, \"Note\" text NULL)",
             "CREATE INDEX IF NOT EXISTS \"IX_StockOutOrderDetails_OrgId_StockOutOrderId\" ON miniservice.\"StockOutOrderDetails\" (\"OrgId\", \"StockOutOrderId\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"PartOOs\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"OONo\" text NOT NULL, \"PartId\" integer NOT NULL, \"PartCode\" text NOT NULL, \"PartName\" text NOT NULL, \"OOPlateNo\" text NOT NULL, \"Model\" text NULL, \"SoLuongNo\" numeric(18,2) NOT NULL, \"SoLuongTra\" numeric(18,2) NOT NULL DEFAULT 0, \"CVDV\" text NULL, \"NgayDatHang\" timestamp NULL, \"NgayVeDuKien\" timestamp NULL, \"NgayHenTra\" timestamp NULL, \"GhiChu\" text NULL, \"Status\" integer NOT NULL DEFAULT 0, \"ROId\" integer NULL, \"CarId\" integer NULL, \"CustomerId\" integer NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"FinishedAt\" timestamp NULL, \"ReturnedBy\" text NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_PartOOs_OrgId_OONo\" ON miniservice.\"PartOOs\" (\"OrgId\", \"OONo\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_PartOOs_OrgId_OOPlateNo\" ON miniservice.\"PartOOs\" (\"OrgId\", \"OOPlateNo\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -3754,7 +3837,38 @@ public static class Seeder
                 FOREIGN KEY (""StockOutOrderId"") REFERENCES ""StockOutOrders"" (""Id"") ON DELETE CASCADE,
                 FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
             );",
-            @"CREATE INDEX IF NOT EXISTS ""IX_StockOutOrderDetails_OrgId_StockOutOrderId"" ON ""StockOutOrderDetails"" (""OrgId"", ""StockOutOrderId"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_StockOutOrderDetails_OrgId_StockOutOrderId"" ON ""StockOutOrderDetails"" (""OrgId"", ""StockOutOrderId"");",
+            @"CREATE TABLE IF NOT EXISTS ""PartOOs"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""OONo"" TEXT NOT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""PartCode"" TEXT NOT NULL,
+                ""PartName"" TEXT NOT NULL,
+                ""OOPlateNo"" TEXT NOT NULL,
+                ""Model"" TEXT NULL,
+                ""SoLuongNo"" TEXT NOT NULL,
+                ""SoLuongTra"" TEXT NOT NULL DEFAULT '0',
+                ""CVDV"" TEXT NULL,
+                ""NgayDatHang"" TEXT NULL,
+                ""NgayVeDuKien"" TEXT NULL,
+                ""NgayHenTra"" TEXT NULL,
+                ""GhiChu"" TEXT NULL,
+                ""Status"" INTEGER NOT NULL DEFAULT 0,
+                ""ROId"" INTEGER NULL,
+                ""CarId"" INTEGER NULL,
+                ""CustomerId"" INTEGER NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""FinishedAt"" TEXT NULL,
+                ""ReturnedBy"" TEXT NULL,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""CustomerId"") REFERENCES ""Customers"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PartOOs_OrgId_OONo"" ON ""PartOOs"" (""OrgId"", ""OONo"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_PartOOs_OrgId_OOPlateNo"" ON ""PartOOs"" (""OrgId"", ""OOPlateNo"");"
         };
 
         foreach (var sql in sqls)

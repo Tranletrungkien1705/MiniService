@@ -496,4 +496,13 @@ public static class Ui
         Models.StockOutOrderPriority.Emergency => ("Hỏa tốc (VOR)", "bi-lightning-fill", "danger"),
         _ => (p.ToString(), "bi-info-circle", "secondary")
     };
+
+    public static (string text, string code, string css) PartOOStatus(PartOOStatus s) => s switch
+    {
+        Models.PartOOStatus.Owed => ("Còn nợ khách", "OWED", "warning"),
+        Models.PartOOStatus.Arrived => ("Hàng đã về kho", "ARRV", "info"),
+        Models.PartOOStatus.Completed => ("Đã trả đủ", "FNS", "success"),
+        Models.PartOOStatus.Cancelled => ("Đã hủy", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
 }

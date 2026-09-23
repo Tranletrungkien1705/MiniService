@@ -1,0 +1,111 @@
+@model List<PartOO>
+@{
+    ViewData["Title"] = "Phụ tùng nợ đã có hàng trong kho (Sẵn sàng hẹn khách)";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h4 class="mb-0 fw-bold text-success"><i class="bi bi-bell-fill me-2"></i>Phụ tùng nợ đã có hàng trong kho</h4>
+        <div class="text-muted small">
+            Danh sách các phụ tùng đang nợ khách đã có hàng trong kho đủ số lượng để trả/lắp ráp. CVDV cần chủ động liên hệ hẹn khách đưa xe tới xưởng.
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/PartOO" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Về danh sách tổng</a>
+        <a href="/PartOO/Create" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Lập phiếu nợ mới</a>
+    </div>
+</div>
+
+<div class="card border-success">
+    <div class="card-header bg-success-subtle text-success-emphasis py-3 fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-check2-circle me-2"></i>Có <strong>@Model.Count</strong> phiếu nợ đã sẵn sàng phụ tùng để lắp ráp</span>
+        <span class="badge bg-success">Tồn kho đủ trả</span>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã phiếu</th>
+                        <th>Biển số &amp; Xe</th>
+                        <th>Chủ xe / SĐT</th>
+                        <th>Phụ tùng</th>
+                        <th class="text-center">Tồn kho</th>
+                        <th class="text-center">Cần trả</th>
+                        <th>CVDV phụ trách</th>
+                        <th>Ngày hẹn trả</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        var part = item.Part;
+                        <tr>
+                            <td>
+                                <a href="/PartOO/Detail/@item.Id" class="fw-bold text-decoration-none">@item.OONo</a>
+                                @if (item.ROId.HasValue)
+                                {
+                                    <div class="small text-muted">Lệnh: @item.RO?.Code</div>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border fs-6 fw-bold">@item.OOPlateNo</span>
+                                @if (!string.IsNullOrWhiteSpace(item.Model))
+                                {
+                                    <div class="small text-muted">@item.Model</div>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-semibold">@(item.Customer?.Name ?? "—")</div>
+                                @if (!string.IsNullOrWhiteSpace(item.Customer?.Phone))
+                                {
+                                    <div class="small text-muted"><i class="bi bi-telephone me-1"></i>@item.Customer.Phone</div>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-medium">@item.PartName</div>
+                                <div class="small text-muted"><code>@item.PartCode</code></div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-success fs-6">@(part?.InStock.ToString("N0") ?? "0")</span>
+                                <div class="small text-muted">@(part?.Unit ?? "cái")</div>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-warning-subtle text-warning-emphasis fs-6 fw-bold">@item.SoLuongConNo.ToString("N0")</span>
+                                <div class="small text-muted">@(part?.Unit ?? "cái")</div>
+                            </td>
+                            <td>
+                                <div>@(item.CVDV ?? "—")</div>
+                            </td>
+                            <td>
+                                @if (item.NgayHenTra.HasValue)
+                                {
+                                    <span class="fw-semibold">@item.NgayHenTra.Value.ToString("dd/MM/yyyy")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">Chưa có ngày</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <a href="/PartOO/Detail/@item.Id" class="btn btn-sm btn-success">
+                                    <i class="bi bi-wrench-adjustable me-1"></i>Lắp / Trả hàng
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-5">
+                                <i class="bi bi-check-all fs-1 text-success d-block mb-2"></i>
+                                Tuyệt vời! Hiện tại không có phụ tùng nợ nào đang tồn kho mà chưa được lắp trả cho khách.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

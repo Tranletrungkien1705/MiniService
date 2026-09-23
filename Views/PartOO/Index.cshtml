@@ -1,0 +1,200 @@
+@model List<PartOO>
+@{
+    ViewData["Title"] = "Quản lý Phụ tùng nợ khách (Part Out of Stock / Backorder)";
+    var curStatus = (PartOOStatus?)ViewBag.Status;
+    var curIsConNo = (bool?)ViewBag.IsConNo;
+    var totalCount = (int)(ViewBag.TotalCount ?? Model.Count);
+    var owedCount = (int)(ViewBag.OwedCount ?? Model.Count(x => x.IsConNoKhach));
+    var stockAvailableCount = (int)(ViewBag.StockAvailableCount ?? Model.Count(x => x.IsStockAvailable));
+    var completedCount = (int)(ViewBag.CompletedCount ?? Model.Count(x => x.Status == PartOOStatus.Completed));
+    var totalOwedValue = (decimal)(ViewBag.TotalOwedValue ?? Model.Where(x => x.IsConNoKhach).Sum(x => x.RemainingAmount));
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số phiếu nợ</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đang nợ khách hàng</div>
+            <div class="stat-num text-warning">@owedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Có sẵn trong kho (Sẵn sàng lắp)</div>
+            <div class="stat-num text-success">
+                @stockAvailableCount
+                @if (stockAvailableCount > 0)
+                {
+                    <span class="badge bg-success-subtle text-success fs-6 ms-1">Đã có hàng</span>
+                }
+            </div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng giá trị phụ tùng đang nợ</div>
+            <div class="stat-num text-danger">@totalOwedValue.ToString("N0") <span style="font-size:14px;font-weight:normal">đ</span></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã phiếu / Biển số / Mã PT / CVDV..." style="max-width:260px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (PartOOStatus s in Enum.GetValues(typeof(PartOOStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.PartOOStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <select name="isConNo" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:180px">
+                    <option value="">— Tình trạng nợ —</option>
+                    <option value="true" selected="@(curIsConNo == true)">Còn nợ khách hàng</option>
+                    <option value="false" selected="@(curIsConNo == false)">Đã trả đủ / Đã hủy</option>
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curStatus.HasValue || curIsConNo.HasValue || !string.IsNullOrEmpty(ViewBag.Q))
+                {
+                    <a href="/PartOO" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/PartOO/StockAlerts" class="btn btn-sm btn-outline-info">
+                    <i class="bi bi-bell me-1"></i>Hàng về kho sẵn sàng hẹn khách
+                    @if (stockAvailableCount > 0)
+                    {
+                        <span class="badge bg-danger ms-1">@stockAvailableCount</span>
+                    }
+                </a>
+                <a href="/PartOO/Create" class="btn btn-sm btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Lập phiếu nợ khách
+                </a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã phiếu</th>
+                        <th>Biển số xe</th>
+                        <th>Phụ tùng nợ</th>
+                        <th class="text-center">Tồn kho hiện tại</th>
+                        <th class="text-center">Nợ / Đã trả</th>
+                        <th class="text-center">Còn nợ</th>
+                        <th>CVDV</th>
+                        <th>Hẹn trả khách</th>
+                        <th>Trạng thái</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in Model)
+                    {
+                        var (stText, stCode, stCss) = Ui.PartOOStatus(item.Status);
+                        var isDueSoon = item.NgayHenTra.HasValue && item.NgayHenTra.Value.Date <= DateTime.Today.AddDays(2) && item.IsConNoKhach;
+                        var isOverdue = item.NgayHenTra.HasValue && item.NgayHenTra.Value.Date < DateTime.Today && item.IsConNoKhach;
+
+                        <tr>
+                            <td>
+                                <a href="/PartOO/Detail/@item.Id" class="fw-semibold text-decoration-none">@item.OONo</a>
+                                @if (item.ROId.HasValue)
+                                {
+                                    <div class="small text-muted"><a href="/RO/Detail/@item.ROId" class="text-secondary text-decoration-none"><i class="bi bi-clipboard2 me-1"></i>@item.RO?.Code</a></div>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-light text-dark border fw-bold fs-6">@item.OOPlateNo</span>
+                                @if (!string.IsNullOrWhiteSpace(item.Model))
+                                {
+                                    <div class="small text-muted">@item.Model</div>
+                                }
+                            </td>
+                            <td>
+                                <div class="fw-medium">@item.PartName</div>
+                                <div class="small text-muted"><code>@item.PartCode</code> · ĐVT: @(item.Part?.Unit ?? "Cái")</div>
+                            </td>
+                            <td class="text-center">
+                                @if (item.Part != null)
+                                {
+                                    <span class="fw-semibold @(item.Part.InStock > 0 ? "text-success" : "text-danger")">
+                                        @item.Part.InStock.ToString("N0")
+                                    </span>
+                                    @if (item.IsStockAvailable)
+                                    {
+                                        <div><span class="badge bg-success-subtle text-success border border-success" style="font-size:10px"><i class="bi bi-check-circle me-1"></i>Đủ trả</span></div>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                <span class="fw-bold">@item.SoLuongNo.ToString("N0")</span>
+                                <span class="text-muted mx-1">/</span>
+                                <span class="text-success fw-medium">@item.SoLuongTra.ToString("N0")</span>
+                            </td>
+                            <td class="text-center">
+                                @if (item.SoLuongConNo > 0)
+                                {
+                                    <span class="badge bg-warning-subtle text-warning-emphasis fw-bold fs-6">@item.SoLuongConNo.ToString("N0")</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success-subtle text-success">0</span>
+                                }
+                            </td>
+                            <td>
+                                <div>@(item.CVDV ?? "—")</div>
+                            </td>
+                            <td>
+                                @if (item.NgayHenTra.HasValue)
+                                {
+                                    <span class="@(isOverdue ? "text-danger fw-bold" : (isDueSoon ? "text-warning-emphasis fw-semibold" : ""))">
+                                        @item.NgayHenTra.Value.ToString("dd/MM/yyyy")
+                                    </span>
+                                    @if (isOverdue)
+                                    {
+                                        <div class="badge bg-danger-subtle text-danger" style="font-size:10px">Quá hạn hẹn</div>
+                                    }
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-@stCss">@stText</span>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="/PartOO/Detail/@item.Id" class="btn btn-outline-primary" title="Xem chi tiết"><i class="bi bi-eye"></i></a>
+                                    <a href="/PartOO/Print/@item.Id" target="_blank" class="btn btn-outline-secondary" title="In phiếu hẹn trả"><i class="bi bi-printer"></i></a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="10" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-2 d-block mb-2 text-secondary"></i>
+                                Không tìm thấy phiếu nợ phụ tùng nào phù hợp.
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

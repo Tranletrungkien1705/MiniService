@@ -1,0 +1,319 @@
+@model PartOO
+@{
+    ViewData["Title"] = $"Phiếu nợ phụ tùng: {Model.OONo}";
+    var (stText, stCode, stCss) = Ui.PartOOStatus(Model.Status);
+    var part = Model.Part;
+    var isStockEnough = part != null && part.InStock >= Model.SoLuongConNo;
+    var returnPercent = Model.SoLuongNo > 0 ? Math.Round(Model.SoLuongTra * 100m / Model.SoLuongNo, 1) : 0;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="mb-0 fw-bold">@Model.OONo</h4>
+            <span class="badge bg-@stCss fs-6">[@stCode] @stText</span>
+            @if (Model.IsConNoKhach)
+            {
+                <span class="badge bg-warning-subtle text-warning-emphasis border border-warning fs-6">Còn nợ @Model.SoLuongConNo.ToString("N0") @(part?.Unit ?? "cái")</span>
+            }
+            else if (Model.Status == PartOOStatus.Completed)
+            {
+                <span class="badge bg-success-subtle text-success border border-success fs-6"><i class="bi bi-check2-circle me-1"></i>Đã trả đủ 100%</span>
+            }
+        </div>
+        <div class="text-muted small mt-1">
+            Biển số xe: <strong class="text-dark">@Model.OOPlateNo</strong>
+            @if (!string.IsNullOrWhiteSpace(Model.Model)) { <span class="ms-1">(@Model.Model)</span> }
+            · Lập ngày: @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm") bởi @Model.CreatedBy
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/PartOO/Print/@Model.Id" target="_blank" class="btn btn-outline-secondary">
+            <i class="bi bi-printer me-1"></i>In phiếu hẹn trả
+        </a>
+        <a href="/PartOO" class="btn btn-outline-primary">
+            <i class="bi bi-list me-1"></i>Danh sách
+        </a>
+    </div>
+</div>
+
+<!-- Process Stepper -->
+<div class="card mb-3">
+    <div class="card-body py-3">
+        <div class="row text-center g-2">
+            <div class="col-3">
+                <div class="fw-bold text-success"><i class="bi bi-check-circle-fill me-1"></i>1. Lập phiếu nợ</div>
+                <div class="small text-muted">@Model.CreatedAt.ToString("dd/MM/yyyy")</div>
+            </div>
+            <div class="col-3">
+                <div class="fw-bold @(Model.NgayDatHang.HasValue ? "text-success" : "text-secondary")">
+                    <i class="bi @(Model.NgayDatHang.HasValue ? "bi-check-circle-fill" : "bi-circle") me-1"></i>2. Đặt hàng NCC
+                </div>
+                <div class="small text-muted">@(Model.NgayDatHang.HasValue ? Model.NgayDatHang.Value.ToString("dd/MM/yyyy") : "Chưa đặt")</div>
+            </div>
+            <div class="col-3">
+                <div class="fw-bold @(Model.Status == PartOOStatus.Arrived || Model.Status == PartOOStatus.Completed || isStockEnough ? "text-success" : "text-secondary")">
+                    <i class="bi @(Model.Status == PartOOStatus.Arrived || Model.Status == PartOOStatus.Completed || isStockEnough ? "bi-check-circle-fill" : "bi-circle") me-1"></i>3. Hàng về kho
+                </div>
+                <div class="small text-muted">@(Model.NgayVeDuKien.HasValue ? $"Dự kiến: {Model.NgayVeDuKien.Value:dd/MM/yyyy}" : "Chưa có ngày")</div>
+            </div>
+            <div class="col-3">
+                <div class="fw-bold @(Model.Status == PartOOStatus.Completed ? "text-success" : (Model.Status == PartOOStatus.Cancelled ? "text-danger" : "text-secondary"))">
+                    <i class="bi @(Model.Status == PartOOStatus.Completed ? "bi-check-circle-fill" : (Model.Status == PartOOStatus.Cancelled ? "bi-x-circle-fill" : "bi-circle")) me-1"></i>4. Lắp trả khách
+                </div>
+                <div class="small text-muted">@(Model.FinishedAt.HasValue ? Model.FinishedAt.Value.ToString("dd/MM/yyyy") : (Model.NgayHenTra.HasValue ? $"Hẹn: {Model.NgayHenTra.Value:dd/MM/yyyy}" : "Chờ hẹn"))</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.IsConNoKhach && isStockEnough)
+{
+    <div class="alert alert-success d-flex align-items-center mb-3">
+        <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+        <div>
+            <div class="fw-bold">Phụ tùng đã có sẵn trong kho dịch vụ!</div>
+            <div class="small">Tồn kho hiện tại: <strong>@part!.InStock.ToString("N0") @part.Unit</strong> (cần trả cho khách: <strong>@Model.SoLuongConNo.ToString("N0") @part.Unit</strong>). CVDV vui lòng liên hệ khách hàng để hẹn mang xe đến lắp đặt phụ tùng bù.</div>
+        </div>
+    </div>
+}
+else if (Model.IsConNoKhach && !isStockEnough)
+{
+    <div class="alert alert-warning d-flex align-items-center mb-3">
+        <i class="bi bi-hourglass-split fs-4 me-3"></i>
+        <div>
+            <div class="fw-bold">Phụ tùng đang chờ hàng về kho từ Nhà cung cấp</div>
+            <div class="small">Tồn kho hiện tại: <strong>@(part?.InStock.ToString("N0") ?? "0") @(part?.Unit ?? "cái")</strong> (vẫn thiếu @((Model.SoLuongConNo - (part?.InStock ?? 0)).ToString("N0")) @(part?.Unit ?? "cái")). Kế hoạch giao hàng dự kiến: <strong>@(Model.NgayVeDuKien?.ToString("dd/MM/yyyy") ?? "Đang cập nhật")</strong>.</div>
+        </div>
+    </div>
+}
+
+<div class="row g-3 mb-3">
+    <!-- Cột trái: Thông tin phụ tùng & Tiến độ nợ -->
+    <div class="col-lg-7">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3 fw-bold text-primary">
+                <i class="bi bi-box-seam me-2"></i>Thông tin Phụ tùng nợ &amp; Tồn kho
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="text-muted small">Tên phụ tùng</div>
+                        <div class="fw-bold fs-6">@Model.PartName</div>
+                        <div class="small text-muted">Mã: <code>@Model.PartCode</code></div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-muted small">Đơn vị tính</div>
+                        <div class="fw-semibold">@(part?.Unit ?? "Cái")</div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="text-muted small">Giá bán niêm yết</div>
+                        <div class="fw-semibold text-primary">@(part?.SalePrice.ToString("N0") ?? "0") đ</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">Tồn kho thực tế</div>
+                        <div class="fs-5 fw-bold @(part != null && part.InStock > 0 ? "text-success" : "text-danger")">
+                            @(part?.InStock.ToString("N0") ?? "0") @(part?.Unit ?? "Cái")
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-muted small">Vị trí kệ kho</div>
+                        <div class="fw-semibold">@(part?.Location ?? "Kho chính")</div>
+                    </div>
+                </div>
+
+                <div class="border-top pt-3 mt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small fw-semibold">Tiến độ trả phụ tùng cho khách:</span>
+                        <span class="small fw-bold">@Model.SoLuongTra.ToString("N0") / @Model.SoLuongNo.ToString("N0") (@returnPercent%)</span>
+                    </div>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar @(returnPercent >= 100 ? "bg-success" : "bg-warning")" style="width: @returnPercent%"></div>
+                    </div>
+                    <div class="row text-center mt-3 g-2">
+                        <div class="col-4">
+                            <div class="border rounded p-2">
+                                <div class="text-muted small">Số lượng nợ</div>
+                                <div class="fs-5 fw-bold">@Model.SoLuongNo.ToString("N0")</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded p-2 bg-light">
+                                <div class="text-muted small">Đã trả / Lắp</div>
+                                <div class="fs-5 fw-bold text-success">@Model.SoLuongTra.ToString("N0")</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="border rounded p-2 @(Model.SoLuongConNo > 0 ? "bg-warning-subtle" : "bg-light")">
+                                <div class="text-muted small">Còn nợ khách</div>
+                                <div class="fs-5 fw-bold text-danger">@Model.SoLuongConNo.ToString("N0")</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Trả phụ tùng / Lắp bù cho khách -->
+        @if (Model.IsConNoKhach)
+        {
+            <div class="card border-primary">
+                <div class="card-header bg-primary text-white py-3 fw-bold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-check2-square me-2"></i>Thực hiện Trả phụ tùng / Lắp bù cho khách</span>
+                    <span class="badge bg-white text-primary">Còn nợ: @Model.SoLuongConNo.ToString("N0") @(part?.Unit ?? "cái")</span>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="/PartOO/ReturnPart">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Số lượng trả lần này <span class="text-danger">*</span></label>
+                                <input type="number" step="1" min="1" max="@Model.SoLuongConNo" name="returnQty" class="form-control fw-bold text-success" value="@Math.Min(Model.SoLuongConNo, part?.InStock > 0 ? part.InStock : Model.SoLuongConNo)" required />
+                                <div class="form-text">Tối đa trả: @Model.SoLuongConNo @(part?.Unit ?? "cái").</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">KTV lắp ráp / Người bàn giao</label>
+                                <input type="text" name="returnedBy" class="form-control" value="Kỹ thuật viên xưởng" placeholder="Họ tên KTV lắp ráp" />
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="deductStockCheck" name="deductStock" value="true" checked />
+                                <label class="form-check-label fw-semibold" for="deductStockCheck">
+                                    Tự động trừ số lượng xuất khỏi tồn kho phụ tùng (Part.InStock)
+                                </label>
+                            </div>
+                            <div class="form-text">Nếu tích chọn, hệ thống sẽ kiểm tra tồn kho hiện tại và trừ trực tiếp khỏi kho phụ tùng.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Ghi chú bàn giao / lắp ráp</label>
+                            <input type="text" name="note" class="form-control" placeholder="Ghi chú chi tiết lần trả này (VD: Đã lắp ráp hoàn thiện, kiểm tra xe hoạt động tốt...)" />
+                        </div>
+                        <button type="submit" class="btn btn-success px-4 fw-bold">
+                            <i class="bi bi-check-circle me-1"></i>Xác nhận đã trả / Lắp bù phụ tùng
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Cột phải: Thông tin xe, Khách hàng & Kế hoạch -->
+    <div class="col-lg-5">
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3 fw-bold text-primary">
+                <i class="bi bi-car-front me-2"></i>Xe &amp; Khách hàng
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <span class="text-muted small d-block">Biển số xe:</span>
+                    <span class="badge bg-light text-dark border fs-5 fw-bold">@Model.OOPlateNo</span>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted small d-block">Dòng xe:</span>
+                    <span class="fw-semibold">@(Model.Model ?? "—")</span>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted small d-block">Chủ xe / Khách hàng:</span>
+                    @if (Model.Customer != null)
+                    {
+                        <div class="fw-semibold">@Model.Customer.Name</div>
+                        @if (!string.IsNullOrWhiteSpace(Model.Customer.Phone))
+                        {
+                            <div class="small text-muted"><i class="bi bi-telephone me-1"></i>@Model.Customer.Phone</div>
+                        }
+                    }
+                    else
+                    {
+                        <span class="text-muted">Chưa liên kết hồ sơ khách hàng</span>
+                    }
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted small d-block">Lệnh sửa chữa liên quan (RO):</span>
+                    @if (Model.ROId.HasValue)
+                    {
+                        <a href="/RO/Detail/@Model.ROId" class="badge bg-primary-subtle text-primary border border-primary text-decoration-none fs-6">
+                            <i class="bi bi-clipboard2-pulse me-1"></i>@Model.RO?.Code
+                        </a>
+                    }
+                    else
+                    {
+                        <span class="text-muted">Nợ trực tiếp tại quầy / Không qua RO</span>
+                    }
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted small d-block">Cố vấn dịch vụ phụ trách:</span>
+                    <span class="fw-semibold">@(Model.CVDV ?? "Chưa chỉ định")</span>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.ReturnedBy))
+                {
+                    <div class="mb-2">
+                        <span class="text-muted small d-block">Người lắp / Bàn giao gần nhất:</span>
+                        <span class="fw-semibold text-success"><i class="bi bi-person-check me-1"></i>@Model.ReturnedBy</span>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header bg-white py-3 fw-bold text-primary">
+                <i class="bi bi-calendar3 me-2"></i>Kế hoạch &amp; Cập nhật tiến độ
+            </div>
+            <div class="card-body">
+                <form method="post" action="/PartOO/Update">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <input type="hidden" name="soLuongNo" value="@Model.SoLuongNo" />
+                    <input type="hidden" name="soLuongTra" value="@Model.SoLuongTra" />
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Dòng xe</label>
+                        <input type="text" name="model" class="form-control form-control-sm" value="@Model.Model" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">CVDV phụ trách</label>
+                        <input type="text" name="cvdv" class="form-control form-control-sm" value="@Model.CVDV" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Ngày đặt hàng NCC</label>
+                        <input type="date" name="ngayDatHang" class="form-control form-control-sm" value="@(Model.NgayDatHang?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Ngày dự kiến hàng về kho</label>
+                        <input type="date" name="ngayVeDuKien" class="form-control form-control-sm" value="@(Model.NgayVeDuKien?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold text-danger">Ngày hẹn khách mang xe tới lắp</label>
+                        <input type="date" name="ngayHenTra" class="form-control form-control-sm border-danger" value="@(Model.NgayHenTra?.ToString("yyyy-MM-dd"))" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small text-muted">Ghi chú &amp; Lịch sử trao đổi</label>
+                        <textarea name="ghiChu" class="form-control form-control-sm" rows="3">@Model.GhiChu</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-outline-primary w-100">
+                        <i class="bi bi-save me-1"></i>Lưu thông tin cập nhật
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        @if (Model.Status != PartOOStatus.Cancelled && Model.Status != PartOOStatus.Completed && Model.SoLuongTra == 0)
+        {
+            <div class="card border-danger">
+                <div class="card-body">
+                    <h6 class="fw-bold text-danger mb-2"><i class="bi bi-x-circle me-1"></i>Hủy phiếu nợ phụ tùng</h6>
+                    <form method="post" action="/PartOO/Cancel" onsubmit="return confirm('Bạn có chắc chắn muốn hủy phiếu nợ này không?');">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@Model.Id" />
+                        <div class="mb-2">
+                            <input type="text" name="reason" class="form-control form-control-sm" placeholder="Nhập lý do hủy (VD: Khách không chờ được, đã ra gara ngoài mua...)" required />
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                            Xác nhận hủy phiếu nợ
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+</div>

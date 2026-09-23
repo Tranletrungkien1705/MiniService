@@ -3474,6 +3474,151 @@ public class StockOutOrderController(IRoService svc) : Controller
     }
 }
 
+public class PartOOController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? isConNo, PartOOStatus? status)
+    {
+        ViewBag.Q = q;
+        ViewBag.IsConNo = isConNo;
+        ViewBag.Status = status;
+
+        var list = await svc.PartOOsAsync(q, isConNo, status);
+        var allList = (q == null && isConNo == null && status == null) ? list : await svc.PartOOsAsync(null, null, null);
+
+        ViewBag.TotalCount = allList.Count;
+        ViewBag.OwedCount = allList.Count(x => x.IsConNoKhach);
+        ViewBag.StockAvailableCount = allList.Count(x => x.IsStockAvailable);
+        ViewBag.CompletedCount = allList.Count(x => x.Status == PartOOStatus.Completed);
+        ViewBag.TotalOwedValue = allList.Where(x => x.IsConNoKhach).Sum(x => x.RemainingAmount);
+
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? partId, string? plate, int? roId)
+    {
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.Cars = await svc.CarsForSelectAsync();
+        ViewBag.PartId = partId;
+        ViewBag.Plate = plate;
+        ViewBag.ROId = roId;
+
+        if (roId.HasValue && roId.Value > 0)
+        {
+            var ro = await svc.GetROAsync(roId.Value);
+            if (ro != null)
+            {
+                ViewBag.Plate = ro.Car?.Plate;
+                ViewBag.Model = ro.Car?.Model;
+                ViewBag.Advisor = ro.Technician ?? "CVDV";
+            }
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int partId, string plateNo, string? model, decimal soLuongNo, string? cvdv, DateTime? ngayDatHang, DateTime? ngayVeDuKien, DateTime? ngayHenTra, string? ghiChu, int? roId)
+    {
+        if (string.IsNullOrWhiteSpace(plateNo))
+        {
+            TempData["Error"] = "Vui lòng nhập biển số xe.";
+            return RedirectToAction(nameof(Create), new { partId, plate = plateNo, roId });
+        }
+
+        if (partId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn phụ tùng nợ.";
+            return RedirectToAction(nameof(Create), new { partId, plate = plateNo, roId });
+        }
+
+        if (soLuongNo <= 0)
+        {
+            TempData["Error"] = "Số lượng nợ phải lớn hơn 0.";
+            return RedirectToAction(nameof(Create), new { partId, plate = plateNo, roId });
+        }
+
+        try
+        {
+            var item = new PartOO
+            {
+                PartId = partId,
+                OOPlateNo = plateNo.Trim(),
+                Model = model?.Trim(),
+                SoLuongNo = soLuongNo,
+                SoLuongTra = 0,
+                CVDV = cvdv?.Trim(),
+                NgayDatHang = ngayDatHang,
+                NgayVeDuKien = ngayVeDuKien,
+                NgayHenTra = ngayHenTra,
+                GhiChu = ghiChu?.Trim(),
+                ROId = roId,
+                CreatedBy = cvdv ?? "CVDV"
+            };
+
+            var id = await svc.CreatePartOOAsync(item);
+            TempData["Success"] = $"Đã lập phiếu nợ phụ tùng {item.OONo} cho xe {item.OOPlateNo}.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { partId, plate = plateNo, roId });
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var item = await svc.GetPartOOAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string? model, decimal soLuongNo, decimal soLuongTra, string? cvdv, DateTime? ngayDatHang, DateTime? ngayVeDuKien, DateTime? ngayHenTra, string? ghiChu)
+    {
+        var (ok, msg) = await svc.UpdatePartOOAsync(id, model, soLuongNo, soLuongTra, cvdv, ngayDatHang, ngayVeDuKien, ngayHenTra, ghiChu);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> ReturnPart(int id, decimal returnQty, bool deductStock, string? returnedBy, string? note)
+    {
+        var (ok, msg) = await svc.ReturnPartOOAsync(id, returnQty, deductStock, returnedBy, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id, string reason)
+    {
+        var (ok, msg) = await svc.CancelPartOOAsync(id, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeletePartOOAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var item = await svc.GetPartOOAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+
+    public async Task<IActionResult> StockAlerts()
+    {
+        var alerts = await svc.GetPartOOStockAlertsAsync();
+        return View(alerts);
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

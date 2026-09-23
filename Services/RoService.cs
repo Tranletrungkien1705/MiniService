@@ -24,7 +24,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     int PendingStockAdjs = 0, int DiscrepancyStockAdjs = 0,
     int ActiveBulletins = 0, int PendingBulletinVins = 0,
     int PendingPdiRequests = 0, int CompletedPdiVehicles = 0,
-    int PendingOrderComplains = 0, int ApprovedOrderComplains = 0);
+    int PendingOrderComplains = 0, int ApprovedOrderComplains = 0,
+    int PendingPartOOs = 0, int StockAvailablePartOOs = 0);
 
 public interface IRoService
 {
@@ -272,6 +273,17 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteStockOutOrderAsync(int id);
     Task<List<RepairOrder>> ROsForStockOutOrderAsync();
     Task<List<Cavity>> CavitiesForSelectAsync();
+    // Part Out of Stock / Backorder (Ser_Part_OO - Quản lý Phụ tùng nợ khách)
+    Task<List<PartOO>> PartOOsAsync(string? q, bool? isConNo, PartOOStatus? status);
+    Task<PartOO?> GetPartOOAsync(int id);
+    Task<PartOO?> GetPartOOByNoAsync(string ooNo);
+    Task<int> CreatePartOOAsync(PartOO item);
+    Task<(bool ok, string msg)> UpdatePartOOAsync(int id, string? model, decimal soLuongNo, decimal soLuongTra, string? cvdv, DateTime? ngayDatHang, DateTime? ngayVeDuKien, DateTime? ngayHenTra, string? ghiChu);
+    Task<(bool ok, string msg)> ReturnPartOOAsync(int id, decimal returnQty, bool deductStock, string? returnedBy, string? note);
+    Task<(bool ok, string msg)> CancelPartOOAsync(int id, string reason);
+    Task<(bool ok, string msg)> DeletePartOOAsync(int id);
+    Task<List<PartOO>> GetPartOOStockAlertsAsync();
+    Task<List<PartOO>> GetPartOOsByPlateAsync(string plate);
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -503,7 +515,7 @@ public class RoService(AppDbContext db) : IRoService
           .Include(r => r.Lines).ThenInclude(l => l.Part)
           .Include(r => r.Lines).ThenInclude(l => l.ServiceItem)
           .Include(r => r.Appointment)
-          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.StockOutOrders).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet)
+          .Include(r => r.WarrantyReports).Include(r => r.StockOuts).Include(r => r.StockOutOrders).Include(r => r.CustomerCares).Include(r => r.Payments).Include(r => r.OrderParts).Include(r => r.ReceptionSheet).Include(r => r.PartOOs)
           .Include(r => r.AssignmentWorks).ThenInclude(a => a.Engineers).ThenInclude(e => e.Engineer)
           .Include(r => r.InsuranceClaims).ThenInclude(c => c.InsuranceCompany)
           .Include(r => r.Bulletin).ThenInclude(b => b!.Items)
@@ -756,6 +768,9 @@ public class RoService(AppDbContext db) : IRoService
         var pendingOrderComplains = await db.OrderComplains.CountAsync(c => c.DMSStatus == DMSOrderComplainStatus.Pending || c.DMSStatus == DMSOrderComplainStatus.Sent);
         var approvedOrderComplains = await db.OrderComplains.CountAsync(c => c.TSTStatus == TSTOrderComplainStatus.Approved);
 
+        var pendingPartOOs = await db.PartOOs.CountAsync(o => o.Status != PartOOStatus.Cancelled && o.Status != PartOOStatus.Completed && o.SoLuongNo > o.SoLuongTra);
+        var stockAvailablePartOOs = await db.PartOOs.Include(o => o.Part).CountAsync(o => o.Status != PartOOStatus.Cancelled && o.Status != PartOOStatus.Completed && o.SoLuongNo > o.SoLuongTra && o.Part.InStock >= (o.SoLuongNo - o.SoLuongTra));
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -804,7 +819,9 @@ public class RoService(AppDbContext db) : IRoService
             pendingPdiRequests,
             completedPdiVehicles,
             pendingOrderComplains,
-            approvedOrderComplains);
+            approvedOrderComplains,
+            pendingPartOOs,
+            stockAvailablePartOOs);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -5473,4 +5490,299 @@ public class RoService(AppDbContext db) : IRoService
 
     public Task<List<Cavity>> CavitiesForSelectAsync() =>
         db.Cavities.Where(c => c.IsActive).OrderBy(c => c.CavityNo).ToListAsync();
+
+    // --- Part Out of Stock / Backorder (Ser_Part_OO - Quản lý Phụ tùng nợ khách) ---
+    public async Task<List<PartOO>> PartOOsAsync(string? q, bool? isConNo, PartOOStatus? status)
+    {
+        var query = db.PartOOs
+            .Include(o => o.Part)
+            .Include(o => o.RO).ThenInclude(r => r!.Car)
+            .Include(o => o.Car)
+            .Include(o => o.Customer)
+            .AsQueryable();
+
+        if (status.HasValue)
+            query = query.Where(o => o.Status == status.Value);
+
+        if (isConNo.HasValue)
+        {
+            if (isConNo.Value)
+                query = query.Where(o => o.SoLuongNo > o.SoLuongTra && o.Status != PartOOStatus.Cancelled);
+            else
+                query = query.Where(o => o.SoLuongNo <= o.SoLuongTra || o.Status == PartOOStatus.Cancelled);
+        }
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(o =>
+                o.OONo.ToLower().Contains(kw) ||
+                o.OOPlateNo.ToLower().Contains(kw) ||
+                o.PartCode.ToLower().Contains(kw) ||
+                o.PartName.ToLower().Contains(kw) ||
+                (o.Model != null && o.Model.ToLower().Contains(kw)) ||
+                (o.CVDV != null && o.CVDV.ToLower().Contains(kw)) ||
+                (o.GhiChu != null && o.GhiChu.ToLower().Contains(kw)));
+        }
+
+        return await query.OrderByDescending(o => o.CreatedAt).ToListAsync();
+    }
+
+    public Task<PartOO?> GetPartOOAsync(int id) =>
+        db.PartOOs
+            .Include(o => o.Part)
+            .Include(o => o.RO).ThenInclude(r => r!.Car)
+            .Include(o => o.RO).ThenInclude(r => r!.Customer)
+            .Include(o => o.Car)
+            .Include(o => o.Customer)
+            .FirstOrDefaultAsync(o => o.Id == id);
+
+    public Task<PartOO?> GetPartOOByNoAsync(string ooNo) =>
+        db.PartOOs
+            .Include(o => o.Part)
+            .Include(o => o.RO).ThenInclude(r => r!.Car)
+            .Include(o => o.Car)
+            .Include(o => o.Customer)
+            .FirstOrDefaultAsync(o => o.OONo == ooNo);
+
+    public async Task<int> CreatePartOOAsync(PartOO item)
+    {
+        if (string.IsNullOrWhiteSpace(item.OOPlateNo))
+            throw new ArgumentException("Biển số xe nợ phụ tùng là bắt buộc.");
+
+        item.OOPlateNo = item.OOPlateNo.Trim().ToUpperInvariant();
+        if (item.OOPlateNo.Length < 7 || item.OOPlateNo.Length > 12)
+            throw new ArgumentException("Biển số xe phải từ 7 đến 12 ký tự hợp lệ.");
+
+        if (item.PartId <= 0)
+            throw new ArgumentException("Vui lòng chọn phụ tùng nợ.");
+
+        var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == item.PartId);
+        if (part == null)
+            throw new ArgumentException("Không tìm thấy phụ tùng trong danh mục.");
+
+        if (item.SoLuongNo <= 0)
+            throw new ArgumentException("Số lượng nợ phải lớn hơn 0.");
+
+        if (item.SoLuongTra < 0 || item.SoLuongTra > item.SoLuongNo)
+            throw new ArgumentException("Số lượng đã trả không hợp lệ.");
+
+        // Kiểm tra trùng: Không được tạo thêm phiếu nợ cùng phụ tùng cho cùng 1 xe nếu phiếu trước vẫn chưa trả xong
+        var existsUnfinished = await db.PartOOs.AnyAsync(o =>
+            o.PartId == item.PartId &&
+            o.OOPlateNo == item.OOPlateNo &&
+            o.Status != PartOOStatus.Cancelled &&
+            o.Status != PartOOStatus.Completed &&
+            o.SoLuongNo > o.SoLuongTra);
+
+        if (existsUnfinished)
+            throw new InvalidOperationException($"Xe {item.OOPlateNo} hiện đã có phiếu nợ phụ tùng {part.Code} chưa giải quyết xong.");
+
+        item.PartCode = part.Code;
+        item.PartName = part.Name;
+
+        // Sinh mã phiếu OONo
+        if (string.IsNullOrWhiteSpace(item.OONo))
+        {
+            var prefix = $"OO{DateTime.Today:yyMMdd}-";
+            var countToday = await db.PartOOs.CountAsync(o => o.OONo.StartsWith(prefix));
+            item.OONo = $"{prefix}{countToday + 1:D3}";
+        }
+
+        // Tự động liên kết Xe và Khách hàng nếu có sẵn trong hệ thống
+        if (!item.CarId.HasValue || item.CarId.Value <= 0)
+        {
+            var car = await db.Cars.Include(c => c.Customer).FirstOrDefaultAsync(c => c.Plate == item.OOPlateNo);
+            if (car != null)
+            {
+                item.CarId = car.Id;
+                item.CustomerId = car.CustomerId;
+                if (string.IsNullOrWhiteSpace(item.Model)) item.Model = car.Model;
+            }
+        }
+
+        // Nếu có ROId liên kết
+        if (item.ROId.HasValue && item.ROId.Value > 0)
+        {
+            var ro = await db.ROs.Include(r => r.Car).FirstOrDefaultAsync(r => r.Id == item.ROId.Value);
+            if (ro != null)
+            {
+                if (!item.CarId.HasValue) item.CarId = ro.CarId;
+                if (!item.CustomerId.HasValue) item.CustomerId = ro.CustomerId;
+                if (string.IsNullOrWhiteSpace(item.Model) && ro.Car != null) item.Model = ro.Car.Model;
+            }
+        }
+
+        // Xác định trạng thái ban đầu
+        if (item.SoLuongTra >= item.SoLuongNo)
+        {
+            item.Status = PartOOStatus.Completed;
+            item.FinishedAt = DateTime.Now;
+        }
+        else if (part.InStock >= item.SoLuongConNo)
+        {
+            item.Status = PartOOStatus.Arrived;
+        }
+        else
+        {
+            item.Status = PartOOStatus.Owed;
+        }
+
+        item.CreatedAt = DateTime.Now;
+        db.PartOOs.Add(item);
+        await db.SaveChangesAsync();
+        return item.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdatePartOOAsync(int id, string? model, decimal soLuongNo, decimal soLuongTra, string? cvdv, DateTime? ngayDatHang, DateTime? ngayVeDuKien, DateTime? ngayHenTra, string? ghiChu)
+    {
+        var item = await db.PartOOs.Include(o => o.Part).FirstOrDefaultAsync(o => o.Id == id);
+        if (item == null) return (false, "Không tìm thấy phiếu nợ phụ tùng.");
+
+        if (item.Status == PartOOStatus.Cancelled)
+            return (false, "Không thể cập nhật phiếu đã hủy.");
+
+        if (soLuongNo <= 0)
+            return (false, "Số lượng nợ phải lớn hơn 0.");
+
+        if (soLuongTra < 0 || soLuongTra > soLuongNo)
+            return (false, "Số lượng đã trả không thể nhỏ hơn 0 hoặc lớn hơn số lượng nợ.");
+
+        item.Model = model?.Trim() ?? item.Model;
+        item.SoLuongNo = soLuongNo;
+        item.SoLuongTra = soLuongTra;
+        item.CVDV = cvdv?.Trim();
+        item.NgayDatHang = ngayDatHang;
+        item.NgayVeDuKien = ngayVeDuKien;
+        item.NgayHenTra = ngayHenTra;
+        item.GhiChu = ghiChu?.Trim();
+
+        // Cập nhật trạng thái
+        if (item.SoLuongTra >= item.SoLuongNo)
+        {
+            item.Status = PartOOStatus.Completed;
+            if (!item.FinishedAt.HasValue) item.FinishedAt = DateTime.Now;
+        }
+        else
+        {
+            item.FinishedAt = null;
+            if (item.Part != null && item.Part.InStock >= item.SoLuongConNo)
+                item.Status = PartOOStatus.Arrived;
+            else
+                item.Status = PartOOStatus.Owed;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật phiếu nợ {item.OONo}.");
+    }
+
+    public async Task<(bool ok, string msg)> ReturnPartOOAsync(int id, decimal returnQty, bool deductStock, string? returnedBy, string? note)
+    {
+        var item = await db.PartOOs.Include(o => o.Part).FirstOrDefaultAsync(o => o.Id == id);
+        if (item == null) return (false, "Không tìm thấy phiếu nợ phụ tùng.");
+
+        if (item.Status == PartOOStatus.Cancelled)
+            return (false, "Không thể trả phụ tùng cho phiếu đã hủy.");
+
+        if (item.Status == PartOOStatus.Completed)
+            return (false, "Phiếu nợ này đã hoàn tất trả đủ phụ tùng.");
+
+        if (returnQty <= 0)
+            return (false, "Số lượng trả phải lớn hơn 0.");
+
+        if (item.SoLuongTra + returnQty > item.SoLuongNo)
+            return (false, $"Số lượng trả vượt quá số lượng còn nợ (còn nợ: {item.SoLuongConNo}).");
+
+        if (deductStock)
+        {
+            if (item.Part == null)
+                return (false, "Không tìm thấy dữ liệu phụ tùng để trừ kho.");
+
+            if (item.Part.InStock < returnQty)
+                return (false, $"Tồn kho hiện tại ({item.Part.InStock}) không đủ để xuất {returnQty} {item.Part.Unit}.");
+
+            item.Part.InStock -= returnQty;
+        }
+
+        item.SoLuongTra += returnQty;
+        item.ReturnedBy = string.IsNullOrWhiteSpace(returnedBy) ? "Kỹ thuật viên xưởng" : returnedBy.Trim();
+
+        if (!string.IsNullOrWhiteSpace(note))
+        {
+            var timeStamp = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+            item.GhiChu = string.IsNullOrWhiteSpace(item.GhiChu)
+                ? $"[{timeStamp}] Đã trả {returnQty} {item.Part?.Unit ?? "cái"}: {note.Trim()}"
+                : $"{item.GhiChu}\n[{timeStamp}] Đã trả {returnQty} {item.Part?.Unit ?? "cái"}: {note.Trim()}";
+        }
+
+        if (item.SoLuongTra >= item.SoLuongNo)
+        {
+            item.Status = PartOOStatus.Completed;
+            item.FinishedAt = DateTime.Now;
+        }
+        else
+        {
+            if (item.Part != null && item.Part.InStock >= item.SoLuongConNo)
+                item.Status = PartOOStatus.Arrived;
+            else
+                item.Status = PartOOStatus.Owed;
+        }
+
+        await db.SaveChangesAsync();
+        var remainText = item.SoLuongConNo > 0 ? $" (Còn nợ: {item.SoLuongConNo})" : " (Đã trả đủ 100%)";
+        return (true, $"Đã ghi nhận trả {returnQty} {item.Part?.Unit ?? "cái"} cho xe {item.OOPlateNo}{remainText}.");
+    }
+
+    public async Task<(bool ok, string msg)> CancelPartOOAsync(int id, string reason)
+    {
+        var item = await db.PartOOs.FirstOrDefaultAsync(o => o.Id == id);
+        if (item == null) return (false, "Không tìm thấy phiếu nợ phụ tùng.");
+
+        if (item.Status == PartOOStatus.Completed)
+            return (false, "Không thể hủy phiếu nợ đã hoàn tất trả đủ.");
+
+        if (item.SoLuongTra > 0)
+            return (false, $"Phiếu nợ đã trả {item.SoLuongTra} sản phẩm, không thể hủy hoàn toàn. Hãy cập nhật lại số lượng nợ.");
+
+        item.Status = PartOOStatus.Cancelled;
+        var timeStamp = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+        item.GhiChu = string.IsNullOrWhiteSpace(item.GhiChu)
+            ? $"[Hủy {timeStamp}] {reason.Trim()}"
+            : $"{item.GhiChu}\n[Hủy {timeStamp}] {reason.Trim()}";
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy phiếu nợ {item.OONo}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeletePartOOAsync(int id)
+    {
+        var item = await db.PartOOs.FirstOrDefaultAsync(o => o.Id == id);
+        if (item == null) return (false, "Không tìm thấy phiếu nợ phụ tùng.");
+
+        if (item.SoLuongTra > 0)
+            return (false, "Không thể xóa phiếu đã có phát sinh trả phụ tùng.");
+
+        db.PartOOs.Remove(item);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu nợ phụ tùng {item.OONo}.");
+    }
+
+    public Task<List<PartOO>> GetPartOOStockAlertsAsync() =>
+        db.PartOOs
+            .Include(o => o.Part)
+            .Include(o => o.Car)
+            .Include(o => o.Customer)
+            .Where(o => o.Status != PartOOStatus.Cancelled && o.Status != PartOOStatus.Completed && o.SoLuongNo > o.SoLuongTra && o.Part.InStock >= (o.SoLuongNo - o.SoLuongTra))
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
+
+    public Task<List<PartOO>> GetPartOOsByPlateAsync(string plate)
+    {
+        var p = plate.Trim().ToUpperInvariant();
+        return db.PartOOs
+            .Include(o => o.Part)
+            .Where(o => o.OOPlateNo == p)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
+    }
 }

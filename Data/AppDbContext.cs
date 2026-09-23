@@ -60,6 +60,7 @@ public class AppDbContext : DbContext
     public DbSet<SupplierPaymentDetail> SupplierPaymentDetails => Set<SupplierPaymentDetail>();
     public DbSet<StockOutOrder> StockOutOrders => Set<StockOutOrder>();
     public DbSet<StockOutOrderDetail> StockOutOrderDetails => Set<StockOutOrderDetail>();
+    public DbSet<PartOO> PartOOs => Set<PartOO>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -578,6 +579,23 @@ public class AppDbContext : DbContext
             e.Property(x => x.UnitPrice).HasPrecision(18, 2);
             e.Property(x => x.VatPercent).HasPrecision(5, 2);
             e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<PartOO>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.OONo }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.OOPlateNo });
+            e.Property(x => x.SoLuongNo).HasPrecision(18, 2);
+            e.Property(x => x.SoLuongTra).HasPrecision(18, 2);
+            e.Ignore(x => x.SoLuongConNo);
+            e.Ignore(x => x.IsConNoKhach);
+            e.Ignore(x => x.IsStockAvailable);
+            e.Ignore(x => x.TotalOwedAmount);
+            e.Ignore(x => x.RemainingAmount);
+            e.HasOne(x => x.Part).WithMany(x => x.PartOOs).HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.RO).WithMany(x => x.PartOOs).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

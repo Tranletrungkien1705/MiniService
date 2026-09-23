@@ -50,6 +50,12 @@
     </div>
     <div class="col-6 col-lg">
         <div class="card"><div class="card-body">
+            <div class="text-muted small">Phụ tùng nợ khách (Part OO)</div>
+            <div class="stat-num" style="font-size:18px;color:#d97706"><a href="/PartOO" class="text-decoration-none" style="color:#d97706">@d.PendingPartOOs đang nợ</a> @if(d.StockAvailablePartOOs > 0){<span class="text-success" style="font-size:13px;font-weight:normal">(@d.StockAvailablePartOOs có hàng)</span>}</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg">
+        <div class="card"><div class="card-body">
             <div class="text-muted small">Khiếu nại phụ tùng NCC</div>
             <div class="stat-num" style="font-size:18px;color:#ea580c"><a href="/OrderComplain" class="text-decoration-none" style="color:#ea580c">@d.PendingOrderComplains đang xử lý</a> @if(d.ApprovedOrderComplains > 0){<span class="text-success" style="font-size:13px;font-weight:normal">(@d.ApprovedOrderComplains đã duyệt)</span>}</div>
         </div></div>

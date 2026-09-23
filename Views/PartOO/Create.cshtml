@@ -1,0 +1,121 @@
+@{
+    ViewData["Title"] = "Lập Phiếu Nợ Phụ Tùng Khách Hàng (Part Out of Stock)";
+    var parts = (List<Part>)(ViewBag.Parts ?? new List<Part>());
+    var cars = (List<Car>)(ViewBag.Cars ?? new List<Car>());
+    var selectedPartId = (int?)ViewBag.PartId;
+    var initPlate = (string?)ViewBag.Plate;
+    var initModel = (string?)ViewBag.Model;
+    var initAdvisor = (string?)ViewBag.Advisor ?? "CVDV";
+    var initRoId = (int?)ViewBag.ROId;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h4 class="mb-0 fw-bold"><i class="bi bi-clock-history me-2 text-warning"></i>Lập Phiếu Nợ Phụ Tùng (Ser_Part_OO)</h4>
+            <a href="/PartOO" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Quay lại danh sách</a>
+        </div>
+
+        <div class="card shadow-sm border-0">
+            <div class="card-body p-4">
+                <form method="post" action="/PartOO/Create">
+                    @Html.AntiForgeryToken()
+                    @if (initRoId.HasValue && initRoId.Value > 0)
+                    {
+                        <input type="hidden" name="roId" value="@initRoId.Value" />
+                        <div class="alert alert-info py-2 small mb-3">
+                            <i class="bi bi-info-circle me-1"></i>Phiếu nợ phụ tùng liên kết với Lệnh sửa chữa <strong>#@initRoId</strong>.
+                        </div>
+                    }
+
+                    <h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-box-seam me-2"></i>1. Chọn phụ tùng nợ khách</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-8">
+                            <label class="form-label fw-semibold">Phụ tùng hết hàng / nợ khách <span class="text-danger">*</span></label>
+                            <select name="partId" id="partSelect" class="form-select" required onchange="onPartChange(this)">
+                                <option value="">-- Chọn phụ tùng từ danh mục kho --</option>
+                                @foreach (var p in parts)
+                                {
+                                    <option value="@p.Id" selected="@(selectedPartId == p.Id)" data-code="@p.Code" data-unit="@p.Unit" data-stock="@p.InStock" data-price="@p.SalePrice">
+                                        @p.Code - @p.Name (Tồn: @p.InStock.ToString("N0") @p.Unit · Giá: @p.SalePrice.ToString("N0") đ)
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text">Chọn phụ tùng đang tạm hết hoặc thiếu số lượng cần hẹn khách lắp sau.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Số lượng nợ khách <span class="text-danger">*</span></label>
+                            <input type="number" step="1" min="1" name="soLuongNo" class="form-control fw-bold text-primary" value="1" required />
+                            <div class="form-text" id="partStockHint">Số lượng phụ tùng cam kết bù cho khách.</div>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-car-front me-2"></i>2. Thông tin xe &amp; Khách hàng</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Biển số xe <span class="text-danger">*</span></label>
+                            <input type="text" name="plateNo" class="form-control text-uppercase fw-bold" value="@initPlate" placeholder="Ví dụ: 30G-889.21" required list="carsList" />
+                            <datalist id="carsList">
+                                @foreach (var c in cars)
+                                {
+                                    <option value="@c.Plate">@c.Plate - @c.Model (@c.Customer?.Name)</option>
+                                }
+                            </datalist>
+                            <div class="form-text">Biển số xe nhận phụ tùng (tự động khớp hồ sơ xe).</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Dòng xe / Model</label>
+                            <input type="text" name="model" class="form-control" value="@initModel" placeholder="Ví dụ: Hyundai Santa Fe, Accent..." />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Cố vấn dịch vụ (CVDV)</label>
+                            <input type="text" name="cvdv" class="form-control" value="@initAdvisor" placeholder="Tên CVDV lập phiếu" />
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-calendar-event me-2"></i>3. Kế hoạch đặt hàng &amp; Hẹn khách</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-4">
+                            <label class="form-label">Ngày đặt hàng NCC (Mobis/HTC)</label>
+                            <input type="date" name="ngayDatHang" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Ngày dự kiến hàng về kho</label>
+                            <input type="date" name="ngayVeDuKien" class="form-control" value="@DateTime.Today.AddDays(2).ToString("yyyy-MM-dd")" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold text-danger">Ngày hẹn khách đến lắp/nhận</label>
+                            <input type="date" name="ngayHenTra" class="form-control border-danger" value="@DateTime.Today.AddDays(3).ToString("yyyy-MM-dd")" />
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-primary border-bottom pb-2 mb-3"><i class="bi bi-chat-left-text me-2"></i>4. Ghi chú lý do nợ &amp; Thỏa thuận</h6>
+                    <div class="mb-4">
+                        <label class="form-label">Ghi chú cam kết với khách hàng</label>
+                        <textarea name="ghiChu" class="form-control" rows="3" placeholder="Ghi nhận thỏa thuận với khách (VD: Phụ tùng chính hãng đang về kho, hỗ trợ miễn phí công thợ khi lắp bù...)"></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+                        <a href="/PartOO" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary px-4 fw-bold">
+                            <i class="bi bi-check2-circle me-1"></i>Lập phiếu nợ khách
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function onPartChange(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.dataset.stock) return;
+    const stock = opt.dataset.stock;
+    const unit = opt.dataset.unit || 'cái';
+    const hint = document.getElementById('partStockHint');
+    if (hint) {
+        hint.innerHTML = `Tồn kho hiện tại: <strong class="${stock > 0 ? 'text-success' : 'text-danger'}">${stock} ${unit}</strong>`;
+    }
+}
+</script>

@@ -3726,6 +3726,168 @@ app.MapDelete("/api/stockoutorders/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Quản lý Phụ tùng nợ khách (Ser_Part_OO)
+app.MapGet("/api/part-oos", async (string? q, bool? isConNo, PartOOStatus? status, IRoService svc) =>
+{
+    var list = await svc.PartOOsAsync(q, isConNo, status);
+    return Results.Ok(list.Select(o => new
+    {
+        o.Id,
+        o.OONo,
+        o.PartId,
+        o.PartCode,
+        o.PartName,
+        o.OOPlateNo,
+        o.Model,
+        o.SoLuongNo,
+        o.SoLuongTra,
+        o.SoLuongConNo,
+        o.IsConNoKhach,
+        o.IsStockAvailable,
+        currentInStock = o.Part?.InStock ?? 0,
+        o.CVDV,
+        o.NgayDatHang,
+        o.NgayVeDuKien,
+        o.NgayHenTra,
+        o.GhiChu,
+        status = Ui.PartOOStatus(o.Status).text,
+        statusCode = Ui.PartOOStatus(o.Status).code,
+        o.ROId,
+        roCode = o.RO?.Code,
+        o.CreatedAt,
+        o.FinishedAt,
+        o.ReturnedBy
+    }));
+});
+
+app.MapGet("/api/part-oos/{id:int}", async (int id, IRoService svc) =>
+{
+    var o = await svc.GetPartOOAsync(id);
+    if (o == null) return Results.NotFound(new { error = "Không tìm thấy phiếu nợ phụ tùng." });
+    return Results.Ok(new
+    {
+        o.Id,
+        o.OONo,
+        o.PartId,
+        o.PartCode,
+        o.PartName,
+        o.OOPlateNo,
+        o.Model,
+        o.SoLuongNo,
+        o.SoLuongTra,
+        o.SoLuongConNo,
+        o.IsConNoKhach,
+        o.IsStockAvailable,
+        currentInStock = o.Part?.InStock ?? 0,
+        salePrice = o.Part?.SalePrice ?? 0,
+        totalOwedAmount = o.TotalOwedAmount,
+        remainingAmount = o.RemainingAmount,
+        o.CVDV,
+        o.NgayDatHang,
+        o.NgayVeDuKien,
+        o.NgayHenTra,
+        o.GhiChu,
+        status = Ui.PartOOStatus(o.Status).text,
+        statusCode = Ui.PartOOStatus(o.Status).code,
+        o.ROId,
+        roCode = o.RO?.Code,
+        o.CarId,
+        o.CustomerId,
+        customerName = o.Customer?.Name,
+        o.CreatedBy,
+        o.CreatedAt,
+        o.FinishedAt,
+        o.ReturnedBy
+    });
+});
+
+app.MapGet("/api/part-oos/stock-alerts", async (IRoService svc) =>
+{
+    var list = await svc.GetPartOOStockAlertsAsync();
+    return Results.Ok(list.Select(o => new
+    {
+        o.Id,
+        o.OONo,
+        o.PartCode,
+        o.PartName,
+        o.OOPlateNo,
+        o.Model,
+        o.SoLuongConNo,
+        currentInStock = o.Part?.InStock ?? 0,
+        o.CVDV,
+        o.NgayHenTra,
+        customerName = o.Customer?.Name
+    }));
+});
+
+app.MapGet("/api/part-oos/by-plate/{plate}", async (string plate, IRoService svc) =>
+{
+    var list = await svc.GetPartOOsByPlateAsync(plate);
+    return Results.Ok(list.Select(o => new
+    {
+        o.Id,
+        o.OONo,
+        o.PartCode,
+        o.PartName,
+        o.OOPlateNo,
+        o.SoLuongNo,
+        o.SoLuongTra,
+        o.SoLuongConNo,
+        status = Ui.PartOOStatus(o.Status).text
+    }));
+});
+
+app.MapPost("/api/part-oos", async (CreatePartOODto dto, IRoService svc) =>
+{
+    try
+    {
+        var item = new PartOO
+        {
+            PartId = dto.PartId,
+            OOPlateNo = dto.OOPlateNo,
+            Model = dto.Model,
+            SoLuongNo = dto.SoLuongNo,
+            CVDV = dto.CVDV,
+            NgayDatHang = dto.NgayDatHang,
+            NgayVeDuKien = dto.NgayVeDuKien,
+            NgayHenTra = dto.NgayHenTra,
+            GhiChu = dto.GhiChu,
+            ROId = dto.ROId,
+            CreatedBy = dto.CVDV ?? "api"
+        };
+        var id = await svc.CreatePartOOAsync(item);
+        return Results.Created($"/api/part-oos/{id}", new { id, item.OONo, message = "Đã lập phiếu nợ phụ tùng thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/part-oos/{id:int}", async (int id, UpdatePartOODto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.UpdatePartOOAsync(id, dto.Model, dto.SoLuongNo, dto.SoLuongTra, dto.CVDV, dto.NgayDatHang, dto.NgayVeDuKien, dto.NgayHenTra, dto.GhiChu);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/part-oos/{id:int}/return", async (int id, ReturnPartOODto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ReturnPartOOAsync(id, dto.ReturnQty, dto.DeductStock ?? true, dto.ReturnedBy, dto.Note);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/part-oos/{id:int}/cancel", async (int id, CancelPartOODto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.CancelPartOOAsync(id, dto.Reason);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/part-oos/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeletePartOOAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -3831,3 +3993,7 @@ record CreateStockOutOrderItemDto(int PartId, decimal RequestQuantity, decimal? 
 record ApproveStockOutOrderDto(string? ApprovedBy);
 record RejectStockOutOrderDto(string Reason);
 record IssueStockOutOrderDto(string? IssuedBy);
+record CreatePartOODto(int PartId, string OOPlateNo, string? Model, decimal SoLuongNo, string? CVDV, DateTime? NgayDatHang, DateTime? NgayVeDuKien, DateTime? NgayHenTra, string? GhiChu, int? ROId);
+record UpdatePartOODto(string? Model, decimal SoLuongNo, decimal SoLuongTra, string? CVDV, DateTime? NgayDatHang, DateTime? NgayVeDuKien, DateTime? NgayHenTra, string? GhiChu);
+record ReturnPartOODto(decimal ReturnQty, bool? DeductStock, string? ReturnedBy, string? Note);
+record CancelPartOODto(string Reason);

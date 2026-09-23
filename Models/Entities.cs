@@ -408,6 +408,15 @@ public enum StockOutOrderPriority
     Emergency = 2  // Hỏa tốc / Dừng xe (VOR)
 }
 
+/// <summary>Trạng thái Phiếu nợ phụ tùng khách hàng — theo Ser_Part_OO trong idn.CarService.</summary>
+public enum PartOOStatus
+{
+    Owed = 0,       // 0: Còn nợ khách / Đang chờ hàng về kho
+    Arrived = 1,    // 1: Hàng đã về kho / Sẵn sàng hẹn khách đến lắp
+    Completed = 2,  // 2: Đã trả đủ / Đã lắp bù hoàn tất cho khách
+    Cancelled = 3   // 3: Đã hủy nợ / Khách từ chối hoặc bồi hoàn tiền
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -479,6 +488,7 @@ public class RepairOrder : IOrgOwned
     public List<PdiRequestItem> PdiRequestItems { get; set; } = [];
     public List<TechnicalLibrary> TechnicalLibraries { get; set; } = [];
     public List<StockOutOrder> StockOutOrders { get; set; } = [];
+    public List<PartOO> PartOOs { get; set; } = [];
 
     public decimal Total => Math.Max(0, Lines.Sum(l => l.Amount) - CampaignDiscountAmount);
     public decimal GrossTotal => Lines.Sum(l => l.Amount);
@@ -506,6 +516,8 @@ public class Part : IOrgOwned
     public string? Model { get; set; }              // Dòng xe tương thích
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public List<PartOO> PartOOs { get; set; } = [];
 
     public bool IsLowStock => InStock <= MinStock;
 }
@@ -1808,6 +1820,45 @@ public class StockOutOrderDetail : IOrgOwned
     public decimal SubTotal => Math.Round(RequestQuantity * UnitPrice, 2);
     public decimal VatAmount => Math.Round(SubTotal * (VatPercent / 100m), 2);
     public decimal Amount => SubTotal + VatAmount;
+}
+
+/// <summary>Phiếu theo dõi Phụ tùng nợ khách hàng (Part Out of Stock / Backorder) — Ser_Part_OO trong idn.CarService.</summary>
+public class PartOO : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string OONo { get; set; } = "";             // Mã phiếu nợ phụ tùng (VD: OO260427-001)
+    public int PartId { get; set; }                    // Phụ tùng nợ (PartID)
+    public string PartCode { get; set; } = "";         // Mã phụ tùng (PartCode)
+    public string PartName { get; set; } = "";         // Tên phụ tùng (VieName)
+    public string OOPlateNo { get; set; } = "";        // Biển số xe nợ phụ tùng (OOPlateNo)
+    public string? Model { get; set; }                 // Dòng xe / Loại xe (LoaiXe)
+    public decimal SoLuongNo { get; set; } = 1;        // Số lượng nợ khách (SoLuongNo, bắt buộc > 0)
+    public decimal SoLuongTra { get; set; } = 0;       // Số lượng đã trả (SoLuongTra, 0 <= SoLuongTra <= SoLuongNo)
+    public string? CVDV { get; set; }                  // Cố vấn dịch vụ phụ trách (CVDV)
+    public DateTime? NgayDatHang { get; set; }         // Ngày đặt hàng NCC (NgayDatHang)
+    public DateTime? NgayVeDuKien { get; set; }        // Ngày dự kiến hàng về kho (NgayVeDuKien)
+    public DateTime? NgayHenTra { get; set; }          // Ngày hẹn khách đến lắp/nhận (NgayHenTra)
+    public string? GhiChu { get; set; }                // Ghi chú lý do nợ / thỏa thuận với khách (GhiChu)
+    public PartOOStatus Status { get; set; } = PartOOStatus.Owed; // Trạng thái phiếu
+    public int? ROId { get; set; }                     // Lệnh sửa chữa phát sinh nợ phụ tùng nếu có
+    public int? CarId { get; set; }                    // Xe trong hệ thống nếu có
+    public int? CustomerId { get; set; }               // Khách hàng trong hệ thống nếu có
+    public string CreatedBy { get; set; } = "CVDV";    // Người lập phiếu
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? FinishedAt { get; set; }          // Ngày hoàn tất trả phụ tùng
+    public string? ReturnedBy { get; set; }            // Kỹ thuật viên lắp ráp / Người bàn giao phụ tùng
+
+    public Part Part { get; set; } = null!;
+    public RepairOrder? RO { get; set; }
+    public Car? Car { get; set; }
+    public Customer? Customer { get; set; }
+
+    public decimal SoLuongConNo => Math.Max(0, SoLuongNo - SoLuongTra); // Số lượng còn nợ khách (SoLuongConNoKhach)
+    public bool IsConNoKhach => SoLuongConNo > 0 && Status != PartOOStatus.Cancelled; // Cờ còn nợ khách
+    public bool IsStockAvailable => Part != null && Part.InStock >= SoLuongConNo && IsConNoKhach; // Phụ tùng đã về kho đủ số lượng để trả
+    public decimal TotalOwedAmount => Part != null ? SoLuongNo * Part.SalePrice : 0;
+    public decimal RemainingAmount => Part != null ? SoLuongConNo * Part.SalePrice : 0;
 }
 
 
