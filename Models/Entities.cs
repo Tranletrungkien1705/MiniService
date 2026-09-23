@@ -3297,3 +3297,38 @@ public class WarehouseLocationSummaryDto
     public int DealerCount { get; set; }                      // Số đại lý khác nhau có vị trí
     public int StockCount { get; set; }                       // Số kho (StockNo) khác nhau
 }
+
+/// <summary>Lịch làm việc của đại lý (Working Calendar) — Mst_Calendar trong idn.CarService.
+/// Mỗi dòng là một NGÀY trong năm với trạng thái làm việc (StatusValue) theo từng loại lịch
+/// (CalendarType). Nguồn dùng để tính ngày hẹn giao xe / ngày nhắc bảo dưỡng theo số ngày
+/// làm việc thực tế (bỏ qua ngày nghỉ, lễ, chủ nhật).</summary>
+public class WorkingCalendar : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string CalendarType { get; set; } = "WORKINGDAY";  // Loại lịch (CalendarType) — mặc định WORKINGDAY
+    public DateTime Date { get; set; }                        // Ngày (Date)
+    public int StatusValue { get; set; } = 0;                 // Trạng thái ngày (StatusValue): 0 = Ngày làm việc, 1 = Ngày nghỉ
+    public string? DealerCode { get; set; }                   // Mã đại lý sở hữu lịch (DealerCode)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+
+    public bool IsWorkingDay => StatusValue == 0;
+}
+
+/// <summary>Trạng thái một ngày trong lịch làm việc — theo Mst_Calendar.StatusValue idn.CarService.</summary>
+public enum CalendarDayStatus
+{
+    WorkingDay = 0,  // 0: Ngày làm việc (WorkingDay)
+    DayOff = 1       // 1: Ngày nghỉ / Lễ (DayOff)
+}
+
+/// <summary>DTO tổng hợp chỉ số lịch làm việc — phục vụ màn hình quản lý lịch.</summary>
+public class WorkingCalendarSummaryDto
+{
+    public int TotalDays { get; set; }                        // Tổng số ngày đã khai báo
+    public int WorkingDays { get; set; }                      // Số ngày làm việc
+    public int DayOffs { get; set; }                          // Số ngày nghỉ
+    public int YearCount { get; set; }                        // Số năm khác nhau có khai báo
+    public int DealerCount { get; set; }                      // Số đại lý khác nhau có khai báo
+}

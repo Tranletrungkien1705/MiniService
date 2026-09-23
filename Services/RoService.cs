@@ -311,6 +311,13 @@ public interface IRoService
     Task<(bool ok, string msg)> UpdateWarehouseLocationAsync(WarehouseLocation location);
     Task<(bool ok, string msg)> DeleteWarehouseLocationAsync(int id);
     Task<WarehouseLocationSummaryDto> GetWarehouseLocationSummaryAsync();
+    // Working Calendar — Lịch làm việc của đại lý (Mst_Calendar)
+    Task<List<WorkingCalendar>> WorkingCalendarsAsync(string? dealerCode, int? year, int? month, CalendarDayStatus? status);
+    Task<WorkingCalendar?> GetWorkingCalendarAsync(int id);
+    Task<WorkingCalendarSummaryDto> GetWorkingCalendarSummaryAsync();
+    Task<(bool ok, string msg)> UpdateWorkingCalendarStatusAsync(int id, CalendarDayStatus status, string? updatedBy);
+    Task<(bool ok, string msg, int count)> ResetWorkingCalendarYearAsync(string calendarType, int year, CalendarDayStatus monday, CalendarDayStatus tuesday, CalendarDayStatus wednesday, CalendarDayStatus thursday, CalendarDayStatus friday, CalendarDayStatus saturday, CalendarDayStatus sunday, string? dealerCode, string? updatedBy);
+    Task<(bool ok, string msg, DateTime? resultDate)> GetWorkingDateToCheckAsync(DateTime fromDate, int workingDaysAhead, string? dealerCode);
     // Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment, Ser_SupplierPaymentDtl / MNU_QT_DL_QUANLYPHIEUXUATTRANHACUNGCAP)
     Task<List<Supplier>> SuppliersAsync(string? q);
     Task<Supplier?> GetSupplierAsync(int id);
@@ -6100,6 +6107,135 @@ public class RoService(AppDbContext db) : IRoService
             DealerCount = all.Select(l => l.DealerCode).Distinct().Count(),
             StockCount = all.Where(l => !string.IsNullOrWhiteSpace(l.StockNo)).Select(l => l.StockNo!).Distinct().Count()
         };
+    }
+
+    // --- Working Calendar — Lịch làm việc của đại lý (Mst_Calendar) ---
+    public async Task<List<WorkingCalendar>> WorkingCalendarsAsync(string? dealerCode, int? year, int? month, CalendarDayStatus? status)
+    {
+        var query = db.WorkingCalendars.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim();
+            query = query.Where(c => c.DealerCode == dc);
+        }
+        if (year.HasValue)
+        {
+            var from = new DateTime(year.Value, 1, 1);
+            var to = from.AddYears(1);
+            query = query.Where(c => c.Date >= from && c.Date < to);
+        }
+        if (month.HasValue && year.HasValue)
+        {
+            var from = new DateTime(year.Value, month.Value, 1);
+            var to = from.AddMonths(1);
+            query = query.Where(c => c.Date >= from && c.Date < to);
+        }
+        if (status.HasValue) query = query.Where(c => c.StatusValue == (int)status.Value);
+        return await query.OrderBy(c => c.Date).ToListAsync();
+    }
+
+    public Task<WorkingCalendar?> GetWorkingCalendarAsync(int id) =>
+        db.WorkingCalendars.FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<WorkingCalendarSummaryDto> GetWorkingCalendarSummaryAsync()
+    {
+        var all = await db.WorkingCalendars.ToListAsync();
+        return new WorkingCalendarSummaryDto
+        {
+            TotalDays = all.Count,
+            WorkingDays = all.Count(c => c.StatusValue == (int)CalendarDayStatus.WorkingDay),
+            DayOffs = all.Count(c => c.StatusValue == (int)CalendarDayStatus.DayOff),
+            YearCount = all.Select(c => c.Date.Year).Distinct().Count(),
+            DealerCount = all.Where(c => !string.IsNullOrWhiteSpace(c.DealerCode)).Select(c => c.DealerCode!).Distinct().Count()
+        };
+    }
+
+    public async Task<(bool ok, string msg)> UpdateWorkingCalendarStatusAsync(int id, CalendarDayStatus status, string? updatedBy)
+    {
+        var existing = await db.WorkingCalendars.FirstOrDefaultAsync(c => c.Id == id);
+        if (existing == null) return (false, "Không tìm thấy ngày trong lịch làm việc.");
+
+        // Nguồn: Mst_Calendar_UpdateStatusValue — chỉ cập nhật StatusValue + LogLUDateTime + LogLUBy.
+        existing.StatusValue = (int)status;
+        existing.LogLUBy = updatedBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+        await db.SaveChangesAsync();
+        var label = status == CalendarDayStatus.WorkingDay ? "Ngày làm việc" : "Ngày nghỉ";
+        return (true, $"Đã cập nhật {existing.Date:dd/MM/yyyy} thành [{label}].");
+    }
+
+    public async Task<(bool ok, string msg, int count)> ResetWorkingCalendarYearAsync(
+        string calendarType, int year, CalendarDayStatus monday, CalendarDayStatus tuesday, CalendarDayStatus wednesday,
+        CalendarDayStatus thursday, CalendarDayStatus friday, CalendarDayStatus saturday, CalendarDayStatus sunday,
+        string? dealerCode, string? updatedBy)
+    {
+        // Nguồn: Mst_Calendar_ResetYear — kiểm tra CalendarType và Year (1900..2100).
+        if (string.IsNullOrWhiteSpace(calendarType))
+            return (false, "Vui lòng chọn loại lịch (CalendarType).", 0);
+        if (year < 1900 || year > 2100)
+            return (false, "Năm không hợp lệ (phải trong khoảng 1900..2100).", 0);
+
+        var type = calendarType.Trim().ToUpperInvariant();
+        var dc = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim();
+        var from = new DateTime(year, 1, 1);
+        var to = from.AddYears(1);
+
+        // Nguồn: xóa toàn bộ ngày trong năm của loại lịch này trước khi sinh lại.
+        var olds = await db.WorkingCalendars
+            .Where(c => c.CalendarType == type && c.Date >= from && c.Date < to && c.DealerCode == dc)
+            .ToListAsync();
+        if (olds.Count > 0) db.WorkingCalendars.RemoveRange(olds);
+
+        // Nguồn: gán StatusValue theo thứ trong tuần cho từng ngày của năm.
+        var byDow = new Dictionary<DayOfWeek, CalendarDayStatus>
+        {
+            [DayOfWeek.Monday] = monday,
+            [DayOfWeek.Tuesday] = tuesday,
+            [DayOfWeek.Wednesday] = wednesday,
+            [DayOfWeek.Thursday] = thursday,
+            [DayOfWeek.Friday] = friday,
+            [DayOfWeek.Saturday] = saturday,
+            [DayOfWeek.Sunday] = sunday
+        };
+        var now = DateTime.Now;
+        var created = 0;
+        for (var d = from; d < to; d = d.AddDays(1))
+        {
+            db.WorkingCalendars.Add(new WorkingCalendar
+            {
+                CalendarType = type,
+                Date = d,
+                StatusValue = (int)byDow[d.DayOfWeek],
+                DealerCode = dc,
+                LogLUBy = updatedBy ?? "web",
+                LogLUDateTime = now
+            });
+            created++;
+        }
+        await db.SaveChangesAsync();
+        return (true, $"Đã khởi tạo lại lịch làm việc năm {year} ({created} ngày).", created);
+    }
+
+    public async Task<(bool ok, string msg, DateTime? resultDate)> GetWorkingDateToCheckAsync(DateTime fromDate, int workingDaysAhead, string? dealerCode)
+    {
+        // Nguồn: Mst_Calendar_GetDateToCheck — lấy ngày làm việc thứ n kể từ ngày bắt đầu,
+        // chỉ đếm các ngày có StatusValue = 0 (WorkingDay) trong loại lịch WORKINGDAY.
+        if (workingDaysAhead < 0)
+            return (false, "Số ngày làm việc cần cộng (nDayT) không được âm.", null);
+
+        var dc = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim();
+        var workingDays = await db.WorkingCalendars
+            .Where(c => c.CalendarType == "WORKINGDAY" && c.StatusValue == 0 && c.Date >= fromDate.Date && c.DealerCode == dc)
+            .OrderBy(c => c.Date)
+            .Select(c => c.Date)
+            .ToListAsync();
+
+        if (workingDays.Count == 0)
+            return (false, "Không có ngày làm việc nào trong lịch kể từ ngày bắt đầu.", null);
+        if (workingDaysAhead >= workingDays.Count)
+            return (false, $"Lịch chưa khai báo đủ {workingDaysAhead + 1} ngày làm việc kể từ {fromDate:dd/MM/yyyy}.", null);
+
+        return (true, $"Ngày làm việc thứ {workingDaysAhead + 1} kể từ {fromDate:dd/MM/yyyy}.", workingDays[workingDaysAhead]);
     }
 
     // --- Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment) ---

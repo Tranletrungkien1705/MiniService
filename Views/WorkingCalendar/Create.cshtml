@@ -1,0 +1,71 @@
+@{
+    ViewData["Title"] = "Khởi tạo lịch làm việc năm";
+    var years = ViewBag.Years as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new();
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/WorkingCalendar" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Lịch làm việc</a>
+        <h5 class="mb-0 fw-bold mt-1"><i class="bi bi-calendar-plus me-2 text-primary"></i>Khởi tạo lịch làm việc năm</h5>
+    </div>
+</div>
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin lịch</div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Loại lịch (CalendarType) <span class="text-danger">*</span></label>
+                    <input name="calendarType" class="form-control font-monospace" value="WORKINGDAY" required />
+                    <div class="form-text">Mặc định WORKINGDAY — lịch ngày làm việc của xưởng.</div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Năm (Year) <span class="text-danger">*</span></label>
+                    <select name="year" class="form-select">
+                        @foreach (var y in years)
+                        {
+                            <option value="@y.Value" selected="@(y.Value == DateTime.Today.Year.ToString())">@y.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Đại lý (DealerCode)</label>
+                    <input name="dealerCode" class="form-control font-monospace" placeholder="VD: VS058 (để trống = dùng chung)" />
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card shadow-sm border-0 mb-3">
+        <div class="card-header bg-white fw-semibold"><i class="bi bi-calendar-week me-1 text-primary"></i>Trạng thái mặc định theo thứ trong tuần</div>
+        <div class="card-body">
+            <div class="row g-3">
+                @{
+                    var days = new (string name, string label)[]
+                    {
+                        ("monday", "Thứ Hai"), ("tuesday", "Thứ Ba"), ("wednesday", "Thứ Tư"),
+                        ("thursday", "Thứ Năm"), ("friday", "Thứ Sáu"), ("saturday", "Thứ Bảy"), ("sunday", "Chủ Nhật")
+                    };
+                }
+                @foreach (var d in days)
+                {
+                    var isWeekend = d.name == "sunday";
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">@d.label</label>
+                        <select name="@d.name" class="form-select">
+                            <option value="WorkingDay" selected="@(!isWeekend)">Ngày làm việc</option>
+                            <option value="DayOff" selected="@isWeekend">Ngày nghỉ / Lễ</option>
+                        </select>
+                    </div>
+                }
+            </div>
+            <div class="alert alert-warning small mt-3 mb-0">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Khởi tạo sẽ <strong>xóa toàn bộ lịch cũ của năm</strong> (cùng loại lịch &amp; đại lý) và sinh lại 365/366 ngày theo cấu hình trên.
+            </div>
+        </div>
+    </div>
+    <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Khởi tạo lịch</button>
+        <a href="/WorkingCalendar" class="btn btn-secondary">Hủy</a>
+    </div>
+</form>

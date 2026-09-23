@@ -1,0 +1,71 @@
+@model WorkingCalendar
+@{
+    ViewData["Title"] = $"Chi tiết ngày lịch làm việc {Model.Date:dd/MM/yyyy}";
+    var info = Ui.CalendarDayStatus((CalendarDayStatus)Model.StatusValue);
+}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/WorkingCalendar?year=@Model.Date.Year" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Lịch làm việc</a>
+        <h5 class="mb-0 fw-bold mt-1">
+            <i class="bi bi-calendar-event me-2 text-primary"></i>@Model.Date.ToString("dddd, dd/MM/yyyy")
+            <span class="badge bg-@info.css ms-2">@info.text</span>
+        </h5>
+    </div>
+</div>
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Thông tin ngày</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Loại lịch (CalendarType)</dt>
+                    <dd class="col-sm-7 font-monospace">@Model.CalendarType</dd>
+                    <dt class="col-sm-5 text-muted small">Ngày (Date)</dt>
+                    <dd class="col-sm-7 fw-bold">@Model.Date.ToString("dd/MM/yyyy")</dd>
+                    <dt class="col-sm-5 text-muted small">Thứ trong tuần</dt>
+                    <dd class="col-sm-7">@Model.Date.ToString("dddd")</dd>
+                    <dt class="col-sm-5 text-muted small">Trạng thái (StatusValue)</dt>
+                    <dd class="col-sm-7"><span class="badge bg-@info.css">@info.text</span> <span class="text-muted small">(@Model.StatusValue)</span></dd>
+                    <dt class="col-sm-5 text-muted small">Đại lý (DealerCode)</dt>
+                    <dd class="col-sm-7 font-monospace">@(string.IsNullOrEmpty(Model.DealerCode) ? "Dùng chung" : Model.DealerCode)</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-clock-history me-1 text-secondary"></i>Lịch sử cập nhật</div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5 text-muted small">Người cập nhật cuối (LogLUBy)</dt>
+                    <dd class="col-sm-7">@(string.IsNullOrEmpty(Model.LogLUBy) ? "-" : Model.LogLUBy)</dd>
+                    <dt class="col-sm-5 text-muted small">Cập nhật cuối (LogLUDateTime)</dt>
+                    <dd class="col-sm-7">@(Model.LogLUDateTime?.ToString("dd/MM/yyyy HH:mm") ?? "-")</dd>
+                </dl>
+                <hr />
+                <form asp-action="UpdateStatus" asp-route-id="@Model.Id" method="post" class="d-flex align-items-end gap-2">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="returnUrl" value="/WorkingCalendar/Detail/@Model.Id" />
+                    <div class="flex-fill">
+                        <label class="form-label small fw-semibold">Đổi trạng thái ngày</label>
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="WorkingDay" selected="@(Model.StatusValue == 0)">Ngày làm việc</option>
+                            <option value="DayOff" selected="@(Model.StatusValue == 1)">Ngày nghỉ / Lễ</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white fw-semibold"><i class="bi bi-info-circle me-1 text-primary"></i>Quy tắc nghiệp vụ lịch làm việc</div>
+    <div class="card-body">
+        <ul class="mb-0 small text-muted">
+            <li>Mỗi ngày trong năm có trạng thái <strong>Ngày làm việc (0)</strong> hoặc <strong>Ngày nghỉ / Lễ (1)</strong>.</li>
+            <li>Khởi tạo lịch năm sẽ xóa toàn bộ lịch cũ của năm (cùng loại lịch &amp; đại lý) rồi sinh lại theo thứ trong tuần.</li>
+            <li>Nghiệp vụ tính ngày hẹn giao xe / nhắc bảo dưỡng chỉ đếm các ngày có trạng thái <strong>Ngày làm việc</strong>.</li>
+        </ul>
+    </div>
+</div>

@@ -490,6 +490,13 @@ public static class Ui
         _ => ("Khác", "secondary")
     };
 
+    public static (string text, string code, string css, string icon) CalendarDayStatus(CalendarDayStatus s) => s switch
+    {
+        Models.CalendarDayStatus.WorkingDay => ("Ngày làm việc", "WORK", "success", "bi-briefcase"),
+        Models.CalendarDayStatus.DayOff => ("Ngày nghỉ / Lễ", "OFF", "danger", "bi-cup-hot"),
+        _ => (s.ToString(), "", "secondary", "bi-question-circle")
+    };
+
     public static (string text, string code, string css) SupplierPaymentStatus(SupplierPaymentStatus s) => s switch
     {
         Models.SupplierPaymentStatus.Pending => ("Chờ duyệt xuất", "PEND", "warning"),

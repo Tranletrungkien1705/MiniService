@@ -3873,6 +3873,79 @@ app.MapDelete("/api/warehouse-locations/{id:int}", async (int id, IRoService svc
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// Working Calendar — Lịch làm việc của đại lý (Mst_Calendar)
+app.MapGet("/api/working-calendars", async (string? dealerCode, int? year, int? month, CalendarDayStatus? status, IRoService svc) =>
+{
+    var list = await svc.WorkingCalendarsAsync(dealerCode, year, month, status);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.CalendarType,
+        date = c.Date,
+        c.StatusValue,
+        status = Ui.CalendarDayStatus((CalendarDayStatus)c.StatusValue).text,
+        statusCode = Ui.CalendarDayStatus((CalendarDayStatus)c.StatusValue).code,
+        dayOfWeek = c.Date.DayOfWeek.ToString(),
+        c.DealerCode,
+        c.LogLUBy,
+        c.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/working-calendars/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetWorkingCalendarSummaryAsync();
+    return Results.Ok(new
+    {
+        s.TotalDays,
+        s.WorkingDays,
+        s.DayOffs,
+        s.YearCount,
+        s.DealerCount
+    });
+});
+
+app.MapGet("/api/working-calendars/{id:int}", async (int id, IRoService svc) =>
+{
+    var c = await svc.GetWorkingCalendarAsync(id);
+    if (c == null) return Results.NotFound(new { error = "Không tìm thấy ngày trong lịch làm việc." });
+    return Results.Ok(new
+    {
+        c.Id,
+        c.CalendarType,
+        date = c.Date,
+        c.StatusValue,
+        status = Ui.CalendarDayStatus((CalendarDayStatus)c.StatusValue).text,
+        statusCode = Ui.CalendarDayStatus((CalendarDayStatus)c.StatusValue).code,
+        dayOfWeek = c.Date.DayOfWeek.ToString(),
+        c.DealerCode,
+        c.LogLUBy,
+        c.LogLUDateTime
+    });
+});
+
+app.MapPost("/api/working-calendars/{id:int}/status", async (int id, UpdateCalendarStatusDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.UpdateWorkingCalendarStatusAsync(id, dto.Status, dto.UpdatedBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/working-calendars/reset-year", async (ResetCalendarYearDto dto, IRoService svc) =>
+{
+    var (ok, msg, count) = await svc.ResetWorkingCalendarYearAsync(
+        dto.CalendarType ?? "WORKINGDAY", dto.Year,
+        dto.Monday, dto.Tuesday, dto.Wednesday, dto.Thursday, dto.Friday, dto.Saturday, dto.Sunday,
+        dto.DealerCode, dto.UpdatedBy);
+    return ok ? Results.Ok(new { message = msg, count }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapGet("/api/working-calendars/date-to-check", async (DateTime? fromDate, int? workingDaysAhead, string? dealerCode, IRoService svc) =>
+{
+    var (ok, msg, resultDate) = await svc.GetWorkingDateToCheckAsync(
+        fromDate ?? DateTime.Today, workingDaysAhead ?? 0, dealerCode);
+    return ok ? Results.Ok(new { message = msg, resultDate }) : Results.BadRequest(new { error = msg });
+});
+
 // --- Suppliers & Return to Supplier Minimal APIs (Ser_Mst_Supplier, Ser_SupplierPayment) ---
 app.MapGet("/api/suppliers", async (string? q, IRoService svc) =>
 {
@@ -6555,6 +6628,8 @@ record UpdateBomDto(string BomDesc, string? Remark, bool? IsActive, string? Upda
 record CreateBomLineDto(string PartCode, string? PartName, string? Unit, decimal QtyMin);
 record CreateWarehouseLocationDto(string LocationCode, string LocationName, string DealerCode, string? StockNo, LocationType? Type, string? Surface, string? Height, bool? IsActive, string? CreatedBy);
 record UpdateWarehouseLocationDto(string LocationCode, string LocationName, string DealerCode, string? StockNo, LocationType? Type, string? Surface, string? Height, bool? IsActive, string? UpdatedBy);
+record UpdateCalendarStatusDto(CalendarDayStatus Status, string? UpdatedBy);
+record ResetCalendarYearDto(string? CalendarType, int Year, CalendarDayStatus Monday, CalendarDayStatus Tuesday, CalendarDayStatus Wednesday, CalendarDayStatus Thursday, CalendarDayStatus Friday, CalendarDayStatus Saturday, CalendarDayStatus Sunday, string? DealerCode, string? UpdatedBy);
 record CreateSupplierDto(string Code, string Name, string? Address, string? Phone, string? Email, string? ContactName, string? ContactPhone, string? TaxCode);
 record CreateSupplierPaymentDto(string? SupplierPaymentNo, int? SupplierId, string? SupplierName, string? Address, DateTime? PaymentDate, SupplierPaymentType PaymentType, int? OrderPartId, string? OrderPartNo, string? TSTRequestNo, string? Description, string? CreatedBy, List<CreateSupplierPaymentItemDto> Items);
 record CreateSupplierPaymentItemDto(int PartId, decimal QtyPay, decimal? Price, decimal? VatPercent, string? StockInNo, string? LocationCode, string? Reason);

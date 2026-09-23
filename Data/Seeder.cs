@@ -2601,6 +2601,32 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Lịch làm việc của đại lý (Mst_Calendar) — sinh lịch năm hiện tại cho đại lý VS058
+        if (!await db.WorkingCalendars.AnyAsync())
+        {
+            var calYear = DateTime.Today.Year;
+            var calFrom = new DateTime(calYear, 1, 1);
+            var calTo = calFrom.AddYears(1);
+            var calNow = DateTime.Now;
+            var calDays = new List<WorkingCalendar>();
+            for (var d = calFrom; d < calTo; d = d.AddDays(1))
+            {
+                // Chủ nhật nghỉ, các ngày còn lại làm việc (mặc định chuẩn đại lý Hyundai).
+                var isOff = d.DayOfWeek == DayOfWeek.Sunday;
+                calDays.Add(new WorkingCalendar
+                {
+                    CalendarType = "WORKINGDAY",
+                    Date = d,
+                    StatusValue = isOff ? (int)CalendarDayStatus.DayOff : (int)CalendarDayStatus.WorkingDay,
+                    DealerCode = "VS058",
+                    LogLUBy = "Hệ thống HTC",
+                    LogLUDateTime = calNow
+                });
+            }
+            db.WorkingCalendars.AddRange(calDays);
+            await db.SaveChangesAsync();
+        }
+
         if (!await db.Suppliers.AnyAsync())
         {
             var s1 = new Supplier { Code = "HTC", Name = "Công ty Cổ phần Liên doanh Ô tô Hyundai Thành Công Việt Nam", Address = "Tòa nhà Epic Tower, Nam Từ Liêm, Hà Nội", Phone = "024.3826.2614", Email = "parts@hyundai-thanhcong.vn", ContactName = "Nguyễn Hoàng Minh", ContactPhone = "0912.345.678", TaxCode = "0102872391", BankAccount = "0011004568899", BankName = "Vietcombank - CN Sở Giao Dịch Hà Nội", IsActive = true };
@@ -5104,7 +5130,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "Boms", "BomLines", "WarehouseLocations" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "Boms", "BomLines", "WarehouseLocations", "WorkingCalendars" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -5237,6 +5263,9 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_DealerCode_LocationCode\" ON miniservice.\"WarehouseLocations\" (\"OrgId\", \"DealerCode\", \"LocationCode\")",
             "CREATE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_DealerCode\" ON miniservice.\"WarehouseLocations\" (\"OrgId\", \"DealerCode\")",
             "CREATE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_StockNo\" ON miniservice.\"WarehouseLocations\" (\"OrgId\", \"StockNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"WorkingCalendars\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"CalendarType\" text NOT NULL DEFAULT 'WORKINGDAY', \"Date\" timestamp NOT NULL, \"StatusValue\" integer NOT NULL DEFAULT 0, \"DealerCode\" text NULL, \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WorkingCalendars_OrgId_CalendarType_Date_DealerCode\" ON miniservice.\"WorkingCalendars\" (\"OrgId\", \"CalendarType\", \"Date\", \"DealerCode\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_WorkingCalendars_OrgId_CalendarType_Date\" ON miniservice.\"WorkingCalendars\" (\"OrgId\", \"CalendarType\", \"Date\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -6777,6 +6806,17 @@ public static class Seeder
                     "CREATE INDEX IF NOT EXISTS \"IX_WarehouseLocations_OrgId_StockNo\" ON \"WarehouseLocations\" (\"OrgId\", \"StockNo\");"
                 };
                 foreach (var sql in locSqls)
+                {
+                    try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
+                }
+                // Lịch làm việc của đại lý (Mst_Calendar) — SQLite
+                var calSqls = new[]
+                {
+                    "CREATE TABLE IF NOT EXISTS \"WorkingCalendars\" (\"Id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, \"OrgId\" TEXT NOT NULL, \"CalendarType\" TEXT NOT NULL DEFAULT 'WORKINGDAY', \"Date\" TEXT NOT NULL, \"StatusValue\" INTEGER NOT NULL DEFAULT 0, \"DealerCode\" TEXT NULL, \"LogLUBy\" TEXT NULL, \"LogLUDateTime\" TEXT NULL);",
+                    "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_WorkingCalendars_OrgId_CalendarType_Date_DealerCode\" ON \"WorkingCalendars\" (\"OrgId\", \"CalendarType\", \"Date\", \"DealerCode\");",
+                    "CREATE INDEX IF NOT EXISTS \"IX_WorkingCalendars_OrgId_CalendarType_Date\" ON \"WorkingCalendars\" (\"OrgId\", \"CalendarType\", \"Date\");"
+                };
+                foreach (var sql in calSqls)
                 {
                     try { await db.Database.ExecuteSqlRawAsync(sql); } catch { }
                 }

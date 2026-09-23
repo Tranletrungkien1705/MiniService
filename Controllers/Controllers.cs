@@ -3406,6 +3406,66 @@ public class WarehouseLocationController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+public class WorkingCalendarController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? dealerCode, int? year, int? month, CalendarDayStatus? status)
+    {
+        year ??= DateTime.Today.Year;
+        ViewBag.DealerCode = dealerCode;
+        ViewBag.Year = year;
+        ViewBag.Month = month;
+        ViewBag.Status = status;
+        ViewBag.Summary = await svc.GetWorkingCalendarSummaryAsync();
+        var list = await svc.WorkingCalendarsAsync(dealerCode, year, month, status);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var day = await svc.GetWorkingCalendarAsync(id);
+        if (day == null) return NotFound();
+        return View(day);
+    }
+
+    public IActionResult Create()
+    {
+        ViewBag.Years = BuildYearOptions();
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string calendarType, int year, string? dealerCode,
+        CalendarDayStatus monday, CalendarDayStatus tuesday, CalendarDayStatus wednesday,
+        CalendarDayStatus thursday, CalendarDayStatus friday, CalendarDayStatus saturday, CalendarDayStatus sunday)
+    {
+        var (ok, msg, _) = await svc.ResetWorkingCalendarYearAsync(
+            calendarType, year, monday, tuesday, wednesday, thursday, friday, saturday, sunday, dealerCode, "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (!ok)
+        {
+            ViewBag.Years = BuildYearOptions();
+            return View();
+        }
+        return RedirectToAction(nameof(Index), new { year, dealerCode });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateStatus(int id, CalendarDayStatus status, string? returnUrl)
+    {
+        var (ok, msg) = await svc.UpdateWorkingCalendarStatusAsync(id, status, "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (!string.IsNullOrWhiteSpace(returnUrl) && Url.IsLocalUrl(returnUrl)) return Redirect(returnUrl);
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    private static List<SelectListItem> BuildYearOptions()
+    {
+        var y = DateTime.Today.Year;
+        return Enumerable.Range(y - 3, 6)
+            .Select(v => new SelectListItem(v.ToString(), v.ToString()))
+            .ToList();
+    }
+}
 public class SupplierPaymentController(IRoService svc) : Controller
 {
     public async Task<IActionResult> Index(SupplierPaymentStatus? status, SupplierPaymentType? type, string? q, DateTime? fromDate, DateTime? toDate)
