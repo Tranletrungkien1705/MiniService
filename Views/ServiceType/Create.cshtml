@@ -1,0 +1,32 @@
+@{
+    ViewData["Title"] = "Thêm Loại công việc dịch vụ (Service Type)";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/ServiceType" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Danh mục loại công việc</a>
+        <h5 class="mb-0 fw-bold mt-1"><i class="bi bi-tags-fill me-2 text-primary"></i>Thêm Loại công việc Mới (Ser_MST_ServiceType)</h5>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0" style="max-width:640px">
+    <div class="card-body">
+        <form asp-action="Create" method="post">
+            @Html.AntiForgeryToken()
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Tên loại công việc (TypeName) <span class="text-danger">*</span></label>
+                    <input name="typeName" class="form-control" placeholder="VD: Bảo dưỡng định kỳ, Sửa chữa chung, Đồng sơn..." required />
+                </div>
+                <div class="col-12">
+                    <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                    <input name="dealerCode" class="form-control font-monospace" placeholder="VD: VS058 (bỏ trống = tất cả đại lý)" style="text-transform:uppercase" />
+                </div>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu loại công việc</button>
+                <a href="/ServiceType" class="btn btn-outline-secondary">Hủy</a>
+            </div>
+        </form>
+    </div>
+</div>

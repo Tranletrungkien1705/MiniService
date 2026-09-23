@@ -1856,11 +1856,43 @@ public class ServiceItem : IOrgOwned
     public bool IsActive { get; set; } = true;                // Cờ hiệu lực hoạt động (IsActive)
     public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo
 
+    public int? ServiceTypeId { get; set; }                   // Loại công việc (SerTypeID → ServiceType)
+    public ServiceType? ServiceType { get; set; }
+
     public List<RepairLine> RepairLines { get; set; } = [];
 
     public decimal TotalWithVat => Math.Round(Price * (1 + VatPercent / 100m), 2);
     public decimal GrossProfit => Price - Cost;
     public decimal GrossMargin => Price > 0 ? Math.Round((Price - Cost) / Price * 100m, 1) : 0;
+}
+
+/// <summary>Danh mục Loại công việc dịch vụ — Ser_MST_ServiceType trong idn.CarService.
+/// Phân loại công việc dịch vụ theo đại lý (DealerCode), dùng làm danh mục cha cho
+/// các công việc dịch vụ (Ser_MST_Service.SerTypeID). Nguồn lưu ở CSDL TRUNG TÂM (CmCenter)
+/// và đồng bộ sang kho (WH) / đại lý (Dealer).</summary>
+public class ServiceType : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string TypeName { get; set; } = "";                // Tên loại công việc (TypeName)
+    public string? DealerCode { get; set; }                   // Mã đại lý áp dụng (DealerCode)
+    public string CreatedBy { get; set; } = "web";            // Người tạo (CreatedBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo (CreatedDate)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+
+    public List<ServiceItem> ServiceItems { get; set; } = [];
+
+    public int ServiceItemCount => ServiceItems.Count;        // Số công việc dịch vụ đang dùng loại này
+}
+
+/// <summary>DTO tổng hợp chỉ số danh mục Loại công việc — phục vụ màn hình quản lý ServiceType.</summary>
+public class ServiceTypeSummaryDto
+{
+    public int TotalTypes { get; set; }
+    public int DealerCount { get; set; }                      // Số đại lý khác nhau
+    public int UsedTypes { get; set; }                        // Số loại đang được công việc dịch vụ sử dụng
+    public int UnusedTypes { get; set; }                      // Số loại chưa gắn công việc dịch vụ nào
 }
 
 /// <summary>Danh mục Nhà cung cấp Phụ tùng & Dịch vụ ngoài — Ser_Mst_Supplier trong idn.CarService.</summary>

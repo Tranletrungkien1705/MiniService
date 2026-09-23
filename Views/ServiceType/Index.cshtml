@@ -1,0 +1,170 @@
+@model List<ServiceType>
+@{
+    ViewData["Title"] = "Danh mục Loại công việc dịch vụ (Service Type)";
+    var summary = ViewBag.Summary as ServiceTypeSummaryDto ?? new ServiceTypeSummaryDto();
+    var dealers = ViewBag.Dealers as List<string> ?? [];
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Tổng số loại công việc</div>
+                <div class="stat-num text-primary">@summary.TotalTypes</div>
+                <div class="text-muted" style="font-size:11.5px">Danh mục loại công việc (Ser_MST_ServiceType)</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đang được sử dụng</div>
+                <div class="stat-num text-success">@summary.UsedTypes</div>
+                <div class="text-muted" style="font-size:11.5px">Loại đã gắn công việc dịch vụ</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Chưa sử dụng</div>
+                <div class="stat-num text-warning">@summary.UnusedTypes</div>
+                <div class="text-muted" style="font-size:11.5px">Loại chưa gắn công việc nào</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Đại lý áp dụng</div>
+                <div class="stat-num text-info">@summary.DealerCount</div>
+                <div class="text-muted" style="font-size:11.5px">Số đại lý (DealerCode)</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:280px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Tên loại công việc, đại lý..." />
+                </div>
+                <select name="dealerCode" class="form-select form-select-sm" style="width:180px" onchange="this.form.submit()">
+                    <option value="">-- Đại lý --</option>
+                    @foreach (var dc in dealers)
+                    {
+                        <option value="@dc" selected="@(ViewBag.DealerCode == dc)">@dc</option>
+                    }
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || !string.IsNullOrEmpty(ViewBag.DealerCode as string))
+                {
+                    <a href="/ServiceType" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/ServiceItem" class="btn btn-sm btn-outline-secondary"><i class="bi bi-wrench-adjustable me-1"></i>Danh mục công việc</a>
+                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#createTypeModal">
+                    <i class="bi bi-plus-lg me-1"></i>Thêm loại công việc
+                </button>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:80px">ID</th>
+                        <th>Tên loại công việc</th>
+                        <th style="width:150px">Đại lý</th>
+                        <th class="text-center" style="width:150px">Công việc dùng</th>
+                        <th class="text-end" style="width:120px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy loại công việc nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var t in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace text-secondary">@t.Id</td>
+                            <td>
+                                <a asp-action="Detail" asp-route-id="@t.Id" class="fw-semibold text-dark text-decoration-none">
+                                    @t.TypeName
+                                </a>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(t.DealerCode))
+                                {
+                                    <span class="badge bg-light text-dark border font-monospace">@t.DealerCode</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Tất cả đại lý</span>
+                                }
+                            </td>
+                            <td class="text-center">
+                                @if (t.ServiceItemCount > 0)
+                                {
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle">@t.ServiceItemCount công việc</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border">Chưa dùng</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a asp-action="Detail" asp-route-id="@t.Id" class="btn btn-outline-secondary" title="Xem chi tiết">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Thêm loại công việc mới -->
+<div class="modal fade" id="createTypeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-tags-fill me-2 text-primary"></i>Thêm Loại công việc Mới (Ser_MST_ServiceType)</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Tên loại công việc (TypeName) <span class="text-danger">*</span></label>
+                            <input name="typeName" class="form-control" placeholder="VD: Bảo dưỡng định kỳ, Sửa chữa chung..." required />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Mã đại lý (DealerCode)</label>
+                            <input name="dealerCode" class="form-control font-monospace" placeholder="VD: VS058 (bỏ trống = tất cả đại lý)" style="text-transform:uppercase" />
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Hủy</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu loại công việc</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

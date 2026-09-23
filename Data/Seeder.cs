@@ -2534,6 +2534,22 @@ public static class Seeder
             await db.SaveChangesAsync();
         }
 
+        // Seed Danh mục Loại công việc dịch vụ (Ser_MST_ServiceType)
+        if (!await db.ServiceTypes.AnyAsync())
+        {
+            var serviceTypes = new List<ServiceType>
+            {
+                new() { TypeName = "Bảo dưỡng định kỳ", DealerCode = "VS058", CreatedBy = "Hệ thống HTC" },
+                new() { TypeName = "Sửa chữa chung (Máy - Gầm - Điện)", DealerCode = "VS058", CreatedBy = "Hệ thống HTC" },
+                new() { TypeName = "Đồng sơn & Sơn sấy thân vỏ", DealerCode = "VS058", CreatedBy = "Hệ thống HTC" },
+                new() { TypeName = "Sửa chữa nhanh (Express Service)", DealerCode = "VS058", CreatedBy = "Hệ thống HTC" },
+                new() { TypeName = "Kiểm tra & Bảo hành hãng", DealerCode = "VS058", CreatedBy = "Hệ thống HTC" },
+                new() { TypeName = "Chăm sóc & Phụ kiện xe", DealerCode = "VS058", CreatedBy = "Hệ thống HTC" }
+            };
+            db.ServiceTypes.AddRange(serviceTypes);
+            await db.SaveChangesAsync();
+        }
+
         // Seed Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
         if (!await db.Boms.AnyAsync())
         {
@@ -5192,7 +5208,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "Boms", "BomLines", "WarehouseLocations", "WorkingCalendars", "ShareParts", "SharePartLines" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "ServiceTypes", "Boms", "BomLines", "WarehouseLocations", "WorkingCalendars", "ShareParts", "SharePartLines" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -5221,6 +5237,8 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TechnicalLibraries_OrgId_TechnicalLibraryCode\" ON miniservice.\"TechnicalLibraries\" (\"OrgId\", \"TechnicalLibraryCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"ServiceItems\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"ROType\" integer NOT NULL, \"StdManHour\" numeric(5,2) NOT NULL, \"Price\" numeric(18,2) NOT NULL, \"Cost\" numeric(18,2) NOT NULL, \"VatPercent\" numeric(5,2) NOT NULL, \"Model\" text NULL, \"FlagWarranty\" boolean NOT NULL DEFAULT false, \"Note\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ServiceItems_OrgId_Code\" ON miniservice.\"ServiceItems\" (\"OrgId\", \"Code\")",
+            "ALTER TABLE miniservice.\"ServiceItems\" ADD COLUMN IF NOT EXISTS \"ServiceTypeId\" integer NULL",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"ServiceTypes\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"TypeName\" text NOT NULL, \"DealerCode\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"LogLUBy\" text NULL, \"LogLUDateTime\" timestamp NULL)",
             "CREATE TABLE IF NOT EXISTS miniservice.\"Suppliers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Address\" text NULL, \"Phone\" text NULL, \"Email\" text NULL, \"ContactName\" text NULL, \"ContactPhone\" text NULL, \"TaxCode\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankAccount\" text NULL",
             "ALTER TABLE miniservice.\"Suppliers\" ADD COLUMN IF NOT EXISTS \"BankName\" text NULL",

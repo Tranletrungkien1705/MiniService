@@ -286,6 +286,14 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteCarModelAsync(int id);
     Task<CarModelSummaryDto> GetCarModelSummaryAsync();
     Task<List<string>> GetDistinctTradeMarksAsync();
+    // Service Type Master — Danh mục Loại công việc dịch vụ (Ser_MST_ServiceType)
+    Task<List<ServiceType>> ServiceTypesAsync(string? dealerCode, string? q);
+    Task<ServiceType?> GetServiceTypeAsync(int id);
+    Task<int> CreateServiceTypeAsync(ServiceType type);
+    Task<(bool ok, string msg)> UpdateServiceTypeAsync(ServiceType type);
+    Task<(bool ok, string msg)> DeleteServiceTypeAsync(int id);
+    Task<ServiceTypeSummaryDto> GetServiceTypeSummaryAsync();
+    Task<List<string>> GetDistinctServiceTypeDealersAsync();
     // Bill of Materials — Định mức vật tư tối thiểu (Mst_BOM / Mst_BOMDtl)
     Task<List<Bom>> BomsAsync(bool? isActive, string? q);
     Task<Bom?> GetBomAsync(int id);
@@ -5761,6 +5769,102 @@ public class RoService(AppDbContext db) : IRoService
 
     public Task<List<string>> GetDistinctTradeMarksAsync() =>
         db.CarModels.Select(m => m.TradeMarkCode)
+            .Distinct()
+            .OrderBy(t => t)
+            .ToListAsync();
+
+    // --- Service Type Master — Danh mục Loại công việc dịch vụ (Ser_MST_ServiceType) ---
+    public async Task<List<ServiceType>> ServiceTypesAsync(string? dealerCode, string? q)
+    {
+        var query = db.ServiceTypes.Include(t => t.ServiceItems).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(dealerCode))
+        {
+            var dc = dealerCode.Trim().ToUpperInvariant();
+            query = query.Where(t => t.DealerCode == dc);
+        }
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(t => t.TypeName.ToLower().Contains(s)
+                || (t.DealerCode != null && t.DealerCode.ToLower().Contains(s)));
+        }
+        return await query.OrderBy(t => t.TypeName).ToListAsync();
+    }
+
+    public Task<ServiceType?> GetServiceTypeAsync(int id) =>
+        db.ServiceTypes.Include(t => t.ServiceItems).FirstOrDefaultAsync(t => t.Id == id);
+
+    public async Task<int> CreateServiceTypeAsync(ServiceType type)
+    {
+        if (string.IsNullOrWhiteSpace(type.TypeName))
+            throw new InvalidOperationException("Vui lòng nhập tên loại công việc (TypeName).");
+
+        type.TypeName = type.TypeName.Trim();
+        type.DealerCode = string.IsNullOrWhiteSpace(type.DealerCode) ? null : type.DealerCode.Trim().ToUpperInvariant();
+
+        var exists = await db.ServiceTypes.AnyAsync(t => t.TypeName == type.TypeName && t.DealerCode == type.DealerCode);
+        if (exists)
+            throw new InvalidOperationException($"Loại công việc '{type.TypeName}' đã tồn tại trong danh mục.");
+
+        type.CreatedAt = DateTime.Now;
+        type.LogLUDateTime = DateTime.Now;
+        type.LogLUBy = type.CreatedBy;
+        db.ServiceTypes.Add(type);
+        await db.SaveChangesAsync();
+        return type.Id;
+    }
+
+    public async Task<(bool ok, string msg)> UpdateServiceTypeAsync(ServiceType type)
+    {
+        var existing = await db.ServiceTypes.FirstOrDefaultAsync(t => t.Id == type.Id);
+        if (existing == null) return (false, "Không tìm thấy loại công việc.");
+
+        if (string.IsNullOrWhiteSpace(type.TypeName))
+            return (false, "Tên loại công việc không được để trống.");
+
+        var newName = type.TypeName.Trim();
+        var newDealer = string.IsNullOrWhiteSpace(type.DealerCode) ? null : type.DealerCode.Trim().ToUpperInvariant();
+        var dup = await db.ServiceTypes.AnyAsync(t => t.Id != type.Id && t.TypeName == newName && t.DealerCode == newDealer);
+        if (dup) return (false, $"Loại công việc '{newName}' đã tồn tại trong danh mục.");
+
+        existing.TypeName = newName;
+        existing.DealerCode = newDealer;
+        existing.LogLUBy = type.LogLUBy ?? "web";
+        existing.LogLUDateTime = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật loại công việc [{existing.Id}] {existing.TypeName}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteServiceTypeAsync(int id)
+    {
+        var existing = await db.ServiceTypes.Include(t => t.ServiceItems).FirstOrDefaultAsync(t => t.Id == id);
+        if (existing == null) return (false, "Không tìm thấy loại công việc.");
+
+        // Chặn xóa khi còn công việc dịch vụ (Ser_MST_Service.SerTypeID) đang dùng loại này.
+        if (existing.ServiceItems.Count > 0)
+            return (false, $"Loại công việc '{existing.TypeName}' đang được {existing.ServiceItems.Count} công việc dịch vụ sử dụng nên không thể xóa.");
+
+        db.ServiceTypes.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa loại công việc [{id}] {existing.TypeName}.");
+    }
+
+    public async Task<ServiceTypeSummaryDto> GetServiceTypeSummaryAsync()
+    {
+        var all = await db.ServiceTypes.Include(t => t.ServiceItems).ToListAsync();
+        return new ServiceTypeSummaryDto
+        {
+            TotalTypes = all.Count,
+            DealerCount = all.Where(t => !string.IsNullOrWhiteSpace(t.DealerCode)).Select(t => t.DealerCode).Distinct().Count(),
+            UsedTypes = all.Count(t => t.ServiceItems.Count > 0),
+            UnusedTypes = all.Count(t => t.ServiceItems.Count == 0)
+        };
+    }
+
+    public Task<List<string>> GetDistinctServiceTypeDealersAsync() =>
+        db.ServiceTypes.Where(t => t.DealerCode != null)
+            .Select(t => t.DealerCode!)
             .Distinct()
             .OrderBy(t => t)
             .ToListAsync();

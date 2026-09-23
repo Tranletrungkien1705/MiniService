@@ -6626,6 +6626,85 @@ app.MapDelete("/api/share-parts/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Danh mục Loại công việc dịch vụ (Ser_MST_ServiceType)
+app.MapGet("/api/service-types", async (string? dealerCode, string? q, IRoService svc) =>
+{
+    var list = await svc.ServiceTypesAsync(dealerCode, q);
+    return Results.Ok(list.Select(t => new
+    {
+        t.Id,
+        t.TypeName,
+        t.DealerCode,
+        serviceItemCount = t.ServiceItemCount,
+        t.CreatedBy,
+        t.CreatedAt,
+        t.LogLUBy,
+        t.LogLUDateTime
+    }));
+});
+
+app.MapGet("/api/service-types/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetServiceTypeSummaryAsync();
+    return Results.Ok(new { s.TotalTypes, s.DealerCount, s.UsedTypes, s.UnusedTypes });
+});
+
+app.MapGet("/api/service-types/{id:int}", async (int id, IRoService svc) =>
+{
+    var t = await svc.GetServiceTypeAsync(id);
+    if (t == null) return Results.NotFound(new { error = "Không tìm thấy loại công việc." });
+    return Results.Ok(new
+    {
+        t.Id,
+        t.TypeName,
+        t.DealerCode,
+        serviceItemCount = t.ServiceItemCount,
+        serviceItems = t.ServiceItems.Select(s => new { s.Id, s.Code, s.Name, s.Price }),
+        t.CreatedBy,
+        t.CreatedAt,
+        t.LogLUBy,
+        t.LogLUDateTime
+    });
+});
+
+app.MapPost("/api/service-types", async (CreateServiceTypeDto dto, IRoService svc) =>
+{
+    try
+    {
+        var type = new ServiceType
+        {
+            TypeName = dto.TypeName?.Trim() ?? "",
+            DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? null : dto.DealerCode.Trim().ToUpperInvariant(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreateServiceTypeAsync(type);
+        return Results.Ok(new { serviceTypeId = id, message = "Đã thêm loại công việc vào danh mục." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPut("/api/service-types/{id:int}", async (int id, UpdateServiceTypeDto dto, IRoService svc) =>
+{
+    var type = new ServiceType
+    {
+        Id = id,
+        TypeName = dto.TypeName?.Trim() ?? "",
+        DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? null : dto.DealerCode.Trim().ToUpperInvariant(),
+        LogLUBy = dto.UpdatedBy ?? "api"
+    };
+    var (ok, msg) = await svc.UpdateServiceTypeAsync(type);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/service-types/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteServiceTypeAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -6801,6 +6880,10 @@ record UpdateWarrantyTypeDto(WarrantyTypeCode TypeCode, string? TypeName, Warran
 // Chia sẻ phụ tùng giữa các đại lý (SP_SharePart / SP_SharePart_Detail)
 record CreateSharePartDto(string DealerCode, string? DealerName, string? Remark, string? CreatedBy, List<CreateSharePartLineDto> Lines);
 record CreateSharePartLineDto(int PartId, decimal QuantityShare, string? DealerCode, string? Remark);
+
+// Danh mục Loại công việc dịch vụ (Ser_MST_ServiceType)
+record CreateServiceTypeDto(string TypeName, string? DealerCode, string? CreatedBy);
+record UpdateServiceTypeDto(string TypeName, string? DealerCode, string? UpdatedBy);
 
 
 

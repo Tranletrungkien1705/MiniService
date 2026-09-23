@@ -3212,6 +3212,86 @@ public class CarModelController(IRoService svc) : Controller
     }
 }
 
+public class ServiceTypeController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? dealerCode, string? q)
+    {
+        ViewBag.DealerCode = dealerCode;
+        ViewBag.Q = q;
+        ViewBag.Dealers = await svc.GetDistinctServiceTypeDealersAsync();
+        ViewBag.Summary = await svc.GetServiceTypeSummaryAsync();
+        var list = await svc.ServiceTypesAsync(dealerCode, q);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var type = await svc.GetServiceTypeAsync(id);
+        if (type == null) return NotFound();
+        return View(type);
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string typeName, string? dealerCode)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            TempData["Error"] = "Vui lòng nhập Tên loại công việc (TypeName).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        try
+        {
+            var type = new ServiceType
+            {
+                TypeName = typeName.Trim(),
+                DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim().ToUpperInvariant(),
+                CreatedBy = "web"
+            };
+            var id = await svc.CreateServiceTypeAsync(type);
+            TempData["Success"] = $"Đã thêm loại công việc [{id}] {type.TypeName} vào danh mục.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Update(int id, string typeName, string? dealerCode)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            TempData["Error"] = "Tên loại công việc không được để trống.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+
+        var type = new ServiceType
+        {
+            Id = id,
+            TypeName = typeName.Trim(),
+            DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.Trim().ToUpperInvariant(),
+            LogLUBy = "web"
+        };
+
+        var (ok, msg) = await svc.UpdateServiceTypeAsync(type);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteServiceTypeAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class BomController(IRoService svc) : Controller
 {
     public async Task<IActionResult> Index(bool? isActive, string? q)

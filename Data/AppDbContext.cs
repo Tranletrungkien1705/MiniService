@@ -55,6 +55,7 @@ public class AppDbContext : DbContext
     public DbSet<OrderComplainAttachFile> OrderComplainAttachFiles => Set<OrderComplainAttachFile>();
     public DbSet<TechnicalLibrary> TechnicalLibraries => Set<TechnicalLibrary>();
     public DbSet<ServiceItem> ServiceItems => Set<ServiceItem>();
+    public DbSet<ServiceType> ServiceTypes => Set<ServiceType>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<SupplierPayment> SupplierPayments => Set<SupplierPayment>();
     public DbSet<SupplierPaymentDetail> SupplierPaymentDetails => Set<SupplierPaymentDetail>();
@@ -570,7 +571,14 @@ public class AppDbContext : DbContext
             e.Property(x => x.Price).HasPrecision(18, 2);
             e.Property(x => x.Cost).HasPrecision(18, 2);
             e.Property(x => x.VatPercent).HasPrecision(5, 2);
+            e.HasOne(x => x.ServiceType).WithMany(t => t.ServiceItems).HasForeignKey(x => x.ServiceTypeId).OnDelete(DeleteBehavior.SetNull);
             e.HasMany(x => x.RepairLines).WithOne(x => x.ServiceItem).HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<ServiceType>(e =>
+        {
+            e.Ignore(x => x.ServiceItemCount);
+            e.HasMany(x => x.ServiceItems).WithOne(x => x.ServiceType).HasForeignKey(x => x.ServiceTypeId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Supplier>(e =>
