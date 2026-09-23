@@ -1,0 +1,205 @@
+@model List<CustomerCare72h>
+@{
+    ViewData["Title"] = "Chăm sóc khách hàng sau dịch vụ 72h & Kiểm soát phản tu (Care 72h)";
+    var curStatus = (CustomerCare72hStatus?)ViewBag.Status;
+    var summary = (CustomerCare72hSummaryDto?)ViewBag.Summary ?? new CustomerCare72hSummaryDto();
+    bool needFeedbackOnly = ViewBag.NeedFeedbackOnly ?? false;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Tổng số phiếu 72h</div>
+            <div class="stat-num text-primary">@summary.TotalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Chờ liên hệ 72h</div>
+            <div class="stat-num text-warning">@summary.PendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Xe ổn định (CIFB)</div>
+            <div class="stat-num text-success">@summary.SatisfiedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm border-danger"><div class="card-body">
+            <div class="text-muted small text-danger fw-bold"><i class="bi bi-exclamation-octagon me-1"></i>Báo động phản tu</div>
+            <div class="stat-num text-danger">@summary.ReRepairAlertCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Sửa đúng lần đầu (FIRFT)</div>
+            <div class="stat-num text-info">@summary.FirftRate<span style="font-size:13px">%</span></div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card shadow-sm"><div class="card-body">
+            <div class="text-muted small">Điểm CSI 72h TB</div>
+            <div class="stat-num text-dark">@summary.AverageSatisfaction <span style="font-size:13px;color:#f59e0b">★</span></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Mã CSKH / Biển số / Khách / Lỗi..." style="max-width:240px" />
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:210px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (CustomerCare72hStatus s in Enum.GetValues(typeof(CustomerCare72hStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.CustomerCare72hStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <div class="form-check form-check-inline mb-0 ms-1">
+                    <input class="form-check-input" type="checkbox" id="needFeedbackOnly" name="needFeedbackOnly" value="true" @(needFeedbackOnly ? "checked" : "") onchange="this.form.submit()" />
+                    <label class="form-check-label small fw-semibold text-danger" for="needFeedbackOnly"><i class="bi bi-exclamation-triangle-fill me-1"></i>Chỉ xe có cảnh báo Phản tu (Re-Repair)</label>
+                </div>
+                <button class="btn btn-sm btn-primary"><i class="bi bi-filter me-1"></i>Lọc</button>
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/CustomerCare72h/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập phiếu CSKH 72h</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Mã CSKH 72h</th>
+                        <th>Lệnh SC gốc</th>
+                        <th>Biển số xe</th>
+                        <th>Khách hàng</th>
+                        <th>Thời hạn 72h</th>
+                        <th>Trạng thái</th>
+                        <th>Chất lượng (FIRFT)</th>
+                        <th>Đánh giá CSI</th>
+                        <th>Báo động phản tu</th>
+                        <th class="text-end">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (Model.Count == 0)
+                {
+                    <tr>
+                        <td colspan="10" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-3 d-block mb-1"></i>
+                            Không có phiếu CSKH 72h nào phù hợp điều kiện lọc.
+                        </td>
+                    </tr>
+                }
+                @foreach (var c in Model)
+                {
+                    var (stName, stCode, stCss) = Ui.CustomerCare72hStatus(c.Status);
+                    var isOverdue = c.Status == CustomerCare72hStatus.Pending && c.ScheduledDate < DateTime.Today;
+                    var hasAlert = c.IsReRepairAlert || c.HasTechnicalProblem || c.Status == CustomerCare72hStatus.NeedFeedback;
+
+                    <tr class="@(hasAlert ? "table-danger" : "")">
+                        <td>
+                            <a href="/CustomerCare72h/Detail/@c.Id" class="fw-bold text-decoration-none">@c.Care72No</a>
+                        </td>
+                        <td>
+                            <a href="/RO/Detail/@c.ROId" class="badge bg-light text-dark border text-decoration-none">
+                                <i class="bi bi-wrench me-1"></i>@(c.RO?.Code ?? $"RO #{c.ROId}")
+                            </a>
+                        </td>
+                        <td>
+                            <span class="badge bg-dark">@c.Car.Plate</span>
+                            <div class="text-muted small">@c.Car.Model</div>
+                        </td>
+                        <td>
+                            <div class="fw-semibold">@c.Customer.Name</div>
+                            <div class="text-muted small">@(c.Customer.Phone ?? "—")</div>
+                        </td>
+                        <td>
+                            <div class="small fw-semibold @(isOverdue ? "text-danger" : "")">
+                                <i class="bi bi-calendar-event me-1"></i>@c.ScheduledDate.ToString("dd/MM/yyyy")
+                            </div>
+                            @if (isOverdue)
+                            {
+                                <span class="badge bg-danger">Quá hạn gọi</span>
+                            }
+                            else if (c.Status == CustomerCare72hStatus.Pending)
+                            {
+                                <span class="badge bg-warning text-dark">Đến hạn gọi</span>
+                            }
+                            else if (c.ContactedDate.HasValue)
+                            {
+                                <div class="text-muted" style="font-size:11px">Gọi lúc @c.ContactedDate.Value.ToString("dd/MM HH:mm")</div>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge bg-@stCss">@stCode — @stName</span>
+                        </td>
+                        <td>
+                            @if (c.Status == CustomerCare72hStatus.Pending)
+                            {
+                                <span class="text-muted small">Chờ khảo sát</span>
+                            }
+                            else
+                            {
+                                var (fText, fCss) = Ui.FirftBadge(c.FixedRightFirstTime);
+                                <span class="badge bg-@fCss">@fText</span>
+                            }
+                        </td>
+                        <td>
+                            @if (c.SatisfactionRating.HasValue && c.SatisfactionRating.Value > 0)
+                            {
+                                <div class="text-warning small fw-bold">
+                                    @for (int i = 0; i < c.SatisfactionRating.Value; i++) { <span>★</span> }
+                                    <span class="text-dark ms-1">(@c.SatisfactionRating/5)</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">—</span>
+                            }
+                        </td>
+                        <td>
+                            @if (hasAlert)
+                            {
+                                <span class="badge bg-danger mb-1 d-inline-block">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>Phản tu
+                                </span>
+                                @if (c.ReRepairROId.HasValue)
+                                {
+                                    <div>
+                                        <a href="/RO/Detail/@c.ReRepairROId.Value" class="badge bg-primary text-decoration-none">
+                                            <i class="bi bi-arrow-repeat me-1"></i>@(c.ReRepairRO?.Code ?? $"RO #{c.ReRepairROId.Value}")
+                                        </a>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div><a href="/CustomerCare72h/Detail/@c.Id" class="badge bg-outline-danger border border-danger text-danger text-decoration-none">Chưa tạo RO sửa lại</a></div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                    <i class="bi bi-check2 me-1"></i>Bình thường
+                                </span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            <a href="/CustomerCare72h/Detail/@c.Id" class="btn btn-sm btn-outline-primary" title="Xem chi tiết & Khảo sát 72h">
+                                <i class="bi bi-pencil-square me-1"></i>Khảo sát
+                            </a>
+                            <a href="/CustomerCare72h/Print/@c.Id" class="btn btn-sm btn-outline-secondary" title="In phiếu khảo sát 72h">
+                                <i class="bi bi-printer"></i>
+                            </a>
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

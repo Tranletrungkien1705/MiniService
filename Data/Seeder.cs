@@ -4056,6 +4056,105 @@ public static class Seeder
             db.ComplaintDiagnosticErrors.AddRange(errors);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.CustomerCare72hs.AnyAsync())
+        {
+            var finishedROs = await db.ROs.Include(r => r.Car).Include(r => r.Customer).Where(r => r.Status == ROStatus.Finished || r.Status == ROStatus.Paid || r.Status == ROStatus.Repaired || r.Status == ROStatus.InGarage).ToListAsync();
+            var car1 = await db.Cars.Include(c => c.Customer).FirstOrDefaultAsync(c => c.Plate == "30A-123.45") ?? await db.Cars.Include(c => c.Customer).FirstAsync();
+            var car2 = await db.Cars.Include(c => c.Customer).FirstOrDefaultAsync(c => c.Plate == "51G-678.90") ?? await db.Cars.Include(c => c.Customer).LastAsync();
+
+            var ro1 = finishedROs.FirstOrDefault(r => r.CarId == car1.Id) ?? finishedROs.FirstOrDefault();
+            var ro2 = finishedROs.FirstOrDefault(r => r.CarId == car2.Id) ?? (finishedROs.Count > 1 ? finishedROs[1] : ro1);
+
+            if (ro1 != null)
+            {
+                // 1. Khảo sát 72h hài lòng (CIFB) - Đạt chuẩn FIRFT
+                var care1 = new CustomerCare72h
+                {
+                    Care72No = "CC72-260424-001",
+                    ROId = ro1.Id,
+                    CarId = ro1.CarId,
+                    CustomerId = ro1.CustomerId,
+                    Status = CustomerCare72hStatus.ContactedSatisfied,
+                    ROFinishedDate = DateTime.Today.AddDays(-4),
+                    ScheduledDate = DateTime.Today.AddDays(-1),
+                    ContactedDate = DateTime.Today.AddDays(-1).AddHours(10),
+                    ContactedBy = "CSKH - Thanh Hằng",
+                    ServiceExplained = true,
+                    BasicNeedsMet = true,
+                    HasTechnicalProblem = false,
+                    FixedRightFirstTime = true,
+                    SatisfactionRating = 5,
+                    CustomerFeedback = "Xe chạy rất bốc và êm, CVDV giải thích tận tình. Rất tin tưởng xưởng dịch vụ Hyundai.",
+                    ReRepairAction = "Đã gửi tin nhắn cảm ơn và tặng mã voucher rửa xe miễn phí lần tới.",
+                    InternalNote = "Khách hàng thân thiết đánh giá rất tốt. Đã ghi nhận điểm CSI 5/5.",
+                    CreatedBy = "system"
+                };
+                db.CustomerCare72hs.Add(care1);
+            }
+
+            if (ro2 != null)
+            {
+                // 2. Báo động phản tu (CINFB / Re-Repair Alert) - Xe phát sinh lỗi sau 72h lăn bánh
+                var care2 = new CustomerCare72h
+                {
+                    Care72No = "CC72-260425-002",
+                    ROId = ro2.Id,
+                    CarId = ro2.CarId,
+                    CustomerId = ro2.CustomerId,
+                    Status = CustomerCare72hStatus.NeedFeedback,
+                    ROFinishedDate = DateTime.Today.AddDays(-3),
+                    ScheduledDate = DateTime.Today,
+                    ContactedDate = DateTime.Today.AddHours(-2),
+                    ContactedBy = "CSKH - Minh Thư",
+                    ServiceExplained = true,
+                    BasicNeedsMet = true,
+                    HasTechnicalProblem = true,
+                    ProblemDetails = "Khi đánh lái cua sang phải ở dải tốc độ 20-30 km/h nghe tiếng kêu 'lục cục' bất thường phía trước gầm phụ.",
+                    FixedRightFirstTime = false,
+                    SatisfactionRating = 2,
+                    CustomerFeedback = "Hôm trước lấy xe về đi làm việc bận chưa thử hết, nay đi qua gờ giảm tốc và cua phải thấy kêu rõ. Mong xưởng kiểm tra lại giúp.",
+                    IsReRepairAlert = true,
+                    ReRepairAction = "Đã thông báo Quản đốc xưởng và Cố vấn dịch vụ. Hẹn đón xe vào khoang kiểm tra ưu tiên miễn phí 100%.",
+                    InternalNote = "CẢNH BÁO PHẢN TU: Kiểm tra lại bạc cân bằng và rotuyn lái phụ đã thay trên RO gốc.",
+                    CreatedBy = "system"
+                };
+                db.CustomerCare72hs.Add(care2);
+
+                // Cập nhật cờ phản tu trên RO gốc
+                ro2.IsReRepair = true;
+            }
+
+            // 3. Phiếu CSKH 72h đang chờ liên hệ (PEND)
+            var otherRO = await db.ROs.Include(r => r.Car).Include(r => r.Customer).OrderByDescending(r => r.Id).FirstOrDefaultAsync(r => (ro1 == null || r.Id != ro1.Id) && (ro2 == null || r.Id != ro2.Id));
+            if (otherRO != null)
+            {
+                var care3 = new CustomerCare72h
+                {
+                    Care72No = "CC72-260427-003",
+                    ROId = otherRO.Id,
+                    CarId = otherRO.CarId,
+                    CustomerId = otherRO.CustomerId,
+                    Status = CustomerCare72hStatus.Pending,
+                    ROFinishedDate = DateTime.Today.AddDays(-1),
+                    ScheduledDate = DateTime.Today.AddDays(2),
+                    ContactedDate = null,
+                    ContactedBy = null,
+                    ServiceExplained = null,
+                    BasicNeedsMet = null,
+                    HasTechnicalProblem = false,
+                    FixedRightFirstTime = null,
+                    SatisfactionRating = null,
+                    CustomerFeedback = null,
+                    IsReRepairAlert = false,
+                    InternalNote = "Xe vừa rời xưởng ngày hôm qua. Dự kiến thực hiện cuộc gọi khảo sát sau 2 ngày tới.",
+                    CreatedBy = "system"
+                };
+                db.CustomerCare72hs.Add(care3);
+            }
+
+            await db.SaveChangesAsync();
+        }
     }
 
 
@@ -4096,7 +4195,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -4163,6 +4262,14 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ComplaintDiagnosticErrors_OrgId_ErrorCode\" ON miniservice.\"ComplaintDiagnosticErrors\" (\"OrgId\", \"ErrorCode\")",
             "CREATE INDEX IF NOT EXISTS \"IX_ComplaintDiagnosticErrors_OrgId_ErrorType\" ON miniservice.\"ComplaintDiagnosticErrors\" (\"OrgId\", \"ErrorType\")",
             "CREATE INDEX IF NOT EXISTS \"IX_ComplaintDiagnosticErrors_OrgId_SystemGroup\" ON miniservice.\"ComplaintDiagnosticErrors\" (\"OrgId\", \"SystemGroup\")",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"IsReRepair\" boolean NOT NULL DEFAULT false",
+            "ALTER TABLE miniservice.\"ROs\" ADD COLUMN IF NOT EXISTS \"ReRepairParentROId\" integer NULL",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"CustomerCare72hs\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Care72No\" text NOT NULL, \"ROId\" integer NOT NULL, \"CarId\" integer NOT NULL, \"CustomerId\" integer NOT NULL, \"Status\" integer NOT NULL, \"ROFinishedDate\" timestamp NOT NULL, \"ScheduledDate\" timestamp NOT NULL, \"ContactedDate\" timestamp NULL, \"ContactedBy\" text NULL, \"ServiceExplained\" boolean NULL, \"BasicNeedsMet\" boolean NULL, \"HasTechnicalProblem\" boolean NOT NULL DEFAULT false, \"ProblemDetails\" text NULL, \"FixedRightFirstTime\" boolean NULL, \"SatisfactionRating\" integer NULL, \"CustomerFeedback\" text NULL, \"IsReRepairAlert\" boolean NOT NULL DEFAULT false, \"ReRepairAction\" text NULL, \"ReRepairROId\" integer NULL, \"ReRepairAppointmentId\" integer NULL, \"InternalNote\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_CustomerCare72hs_OrgId_Care72No\" ON miniservice.\"CustomerCare72hs\" (\"OrgId\", \"Care72No\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerCare72hs_OrgId_ROId\" ON miniservice.\"CustomerCare72hs\" (\"OrgId\", \"ROId\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerCare72hs_OrgId_CarId\" ON miniservice.\"CustomerCare72hs\" (\"OrgId\", \"CarId\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerCare72hs_OrgId_CustomerId\" ON miniservice.\"CustomerCare72hs\" (\"OrgId\", \"CustomerId\")",
+            "CREATE INDEX IF NOT EXISTS \"IX_CustomerCare72hs_OrgId_Status\" ON miniservice.\"CustomerCare72hs\" (\"OrgId\", \"Status\")",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -5360,7 +5467,46 @@ public static class Seeder
             @"CREATE INDEX IF NOT EXISTS ""IX_ComplaintDiagnosticErrors_OrgId_SystemGroup"" ON ""ComplaintDiagnosticErrors"" (""OrgId"", ""SystemGroup"");",
             @"ALTER TABLE ""ROs"" ADD COLUMN ""ErrorCodePN"" TEXT NULL;",
             @"ALTER TABLE ""ROs"" ADD COLUMN ""ErrorCodeCD"" TEXT NULL;",
-            @"ALTER TABLE ""ROs"" ADD COLUMN ""DiagnosticResult"" TEXT NULL;"
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""DiagnosticResult"" TEXT NULL;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""IsReRepair"" INTEGER NOT NULL DEFAULT 0;",
+            @"ALTER TABLE ""ROs"" ADD COLUMN ""ReRepairParentROId"" INTEGER NULL;",
+            @"CREATE TABLE IF NOT EXISTS ""CustomerCare72hs"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""Care72No"" TEXT NOT NULL,
+                ""ROId"" INTEGER NOT NULL,
+                ""CarId"" INTEGER NOT NULL,
+                ""CustomerId"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""ROFinishedDate"" TEXT NOT NULL,
+                ""ScheduledDate"" TEXT NOT NULL,
+                ""ContactedDate"" TEXT NULL,
+                ""ContactedBy"" TEXT NULL,
+                ""ServiceExplained"" INTEGER NULL,
+                ""BasicNeedsMet"" INTEGER NULL,
+                ""HasTechnicalProblem"" INTEGER NOT NULL DEFAULT 0,
+                ""ProblemDetails"" TEXT NULL,
+                ""FixedRightFirstTime"" INTEGER NULL,
+                ""SatisfactionRating"" INTEGER NULL,
+                ""CustomerFeedback"" TEXT NULL,
+                ""IsReRepairAlert"" INTEGER NOT NULL DEFAULT 0,
+                ""ReRepairAction"" TEXT NULL,
+                ""ReRepairROId"" INTEGER NULL,
+                ""ReRepairAppointmentId"" INTEGER NULL,
+                ""InternalNote"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""ROId"") REFERENCES ""ROs"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CarId"") REFERENCES ""Cars"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""CustomerId"" ) REFERENCES ""Customers"" (""Id"") ON DELETE RESTRICT,
+                FOREIGN KEY (""ReRepairROId"") REFERENCES ""ROs"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""ReRepairAppointmentId"") REFERENCES ""Appointments"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_Care72No"" ON ""CustomerCare72hs"" (""OrgId"", ""Care72No"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_ROId"" ON ""CustomerCare72hs"" (""OrgId"", ""ROId"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_CarId"" ON ""CustomerCare72hs"" (""OrgId"", ""CarId"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_CustomerId"" ON ""CustomerCare72hs"" (""OrgId"", ""CustomerId"");",
+            @"CREATE INDEX IF NOT EXISTS ""IX_CustomerCare72hs_OrgId_Status"" ON ""CustomerCare72hs"" (""OrgId"", ""Status"");"
         };
 
         foreach (var sql in sqls)

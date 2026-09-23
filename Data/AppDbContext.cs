@@ -74,6 +74,7 @@ public class AppDbContext : DbContext
     public DbSet<PartPriceRequest> PartPriceRequests => Set<PartPriceRequest>();
     public DbSet<PartPriceRequestLine> PartPriceRequestLines => Set<PartPriceRequestLine>();
     public DbSet<ComplaintDiagnosticError> ComplaintDiagnosticErrors => Set<ComplaintDiagnosticError>();
+    public DbSet<CustomerCare72h> CustomerCare72hs => Set<CustomerCare72h>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -211,6 +212,16 @@ public class AppDbContext : DbContext
             e.HasOne(x => x.RO).WithMany(x => x.CustomerCares).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CustomerCare72h>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Care72No }).IsUnique();
+            e.HasOne(x => x.RO).WithMany(x => x.CustomerCare72hs).HasForeignKey(x => x.ROId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Car).WithMany().HasForeignKey(x => x.CarId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.ReRepairRO).WithMany().HasForeignKey(x => x.ReRepairROId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.ReRepairAppointment).WithMany().HasForeignKey(x => x.ReRepairAppointmentId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<Payment>(e =>

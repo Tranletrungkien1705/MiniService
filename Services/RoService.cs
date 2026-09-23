@@ -87,6 +87,16 @@ public interface IRoService
     Task<(bool ok, string msg)> UpdateCustomerCareSurveyAsync(int id, CustomerCareStatus status, bool hasCarProblem, int? qualityRating, int? staffRating, bool? willingToReturn, int? facilityRating, string? feedback, string? internalNote, string? contactedBy);
     Task<(bool ok, string msg)> DeleteCustomerCareAsync(int id);
     Task<List<RepairOrder>> ROsEligibleForCustomerCareAsync();
+    // customer care 72h & re-repair control (Ser_CustomerCare72h)
+    Task<List<CustomerCare72h>> CustomerCare72hsAsync(CustomerCare72hStatus? status, string? q, bool? needFeedbackOnly = null, DateTime? fromDate = null, DateTime? toDate = null);
+    Task<CustomerCare72h?> GetCustomerCare72hAsync(int id);
+    Task<CustomerCare72hSummaryDto> GetCustomerCare72hSummaryAsync();
+    Task<int> CreateCustomerCare72hAsync(CustomerCare72h care);
+    Task<int> GenerateCustomerCare72hFromROAsync(int roId, string? createdBy = null);
+    Task<List<RepairOrder>> ROsEligibleForCustomerCare72hAsync();
+    Task<(bool ok, string msg)> UpdateCustomerCare72hSurveyAsync(int id, CustomerCare72hStatus status, bool? serviceExplained, bool? basicNeedsMet, bool hasTechnicalProblem, string? problemDetails, bool? fixedRightFirstTime, int? satisfactionRating, string? customerFeedback, string? reRepairAction, string? internalNote, string? contactedBy);
+    Task<(bool ok, string msg, int? roId)> CreateReRepairFromCare72hAsync(int id, string? technician = null, string? note = null);
+    Task<(bool ok, string msg)> DeleteCustomerCare72hAsync(int id);
     // payment (Ser_Payment)
     Task<List<Payment>> PaymentsAsync(PaymentStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId = null);
     Task<Payment?> GetPaymentAsync(int id);
@@ -740,6 +750,23 @@ public class RoService(AppDbContext db) : IRoService
                     CreatedBy = "system"
                 };
                 db.CustomerCareMaces.Add(mace);
+            }
+            // Tự động kích hoạt quy trình CSKH 72h & Kiểm soát pan tái phát Ser_CustomerCare72h idn.CarService
+            var hasCare72 = await db.CustomerCare72hs.AnyAsync(c => c.ROId == roId);
+            if (!hasCare72)
+            {
+                var care72 = new CustomerCare72h
+                {
+                    Care72No = $"CC72-{DateTime.Now:yyMMdd}-{await db.CustomerCare72hs.CountAsync() + 1:D3}",
+                    ROId = ro.Id,
+                    CarId = ro.CarId,
+                    CustomerId = ro.CustomerId,
+                    ROFinishedDate = ro.FinishedAt ?? DateTime.Now,
+                    ScheduledDate = (ro.FinishedAt ?? DateTime.Now).AddDays(3),
+                    Status = CustomerCare72hStatus.Pending,
+                    CreatedBy = "system"
+                };
+                db.CustomerCare72hs.Add(care72);
             }
             // Tự động hoàn tất Bản tin kỹ thuật / Triệu hồi xe nếu có liên kết số VIN
             var car = await db.Cars.FirstOrDefaultAsync(c => c.Id == ro.CarId);
@@ -1645,6 +1672,222 @@ public class RoService(AppDbContext db) : IRoService
             .Where(r => (r.Status == ROStatus.Finished || r.Status == ROStatus.Paid) && !r.CustomerCares.Any())
             .OrderByDescending(r => r.FinishedAt ?? r.CreatedAt)
             .ToListAsync();
+
+    // --- Customer Care 72h & Re-Repair Control Management (Ser_CustomerCare72h idn.CarService) ---
+    public async Task<List<CustomerCare72h>> CustomerCare72hsAsync(CustomerCare72hStatus? status, string? q, bool? needFeedbackOnly = null, DateTime? fromDate = null, DateTime? toDate = null)
+    {
+        var query = db.CustomerCare72hs
+            .Include(c => c.RO).ThenInclude(r => r.Lines)
+            .Include(c => c.Car)
+            .Include(c => c.Customer)
+            .Include(c => c.ReRepairRO)
+            .Include(c => c.ReRepairAppointment)
+            .AsQueryable();
+
+        if (status.HasValue) query = query.Where(c => c.Status == status.Value);
+        if (needFeedbackOnly == true) query = query.Where(c => c.Status == CustomerCare72hStatus.NeedFeedback || c.IsReRepairAlert || c.HasTechnicalProblem);
+        if (fromDate.HasValue) query = query.Where(c => c.ScheduledDate.Date >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(c => c.ScheduledDate.Date <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var kw = q.Trim().ToLower();
+            query = query.Where(c => c.Care72No.ToLower().Contains(kw)
+                || c.Car.Plate.ToLower().Contains(kw)
+                || c.Car.Model.ToLower().Contains(kw)
+                || c.Customer.Name.ToLower().Contains(kw)
+                || (c.Customer.Phone != null && c.Customer.Phone.ToLower().Contains(kw))
+                || (c.RO != null && c.RO.Code.ToLower().Contains(kw))
+                || (c.ProblemDetails != null && c.ProblemDetails.ToLower().Contains(kw))
+                || (c.CustomerFeedback != null && c.CustomerFeedback.ToLower().Contains(kw)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(c => c.ScheduledDate).ThenByDescending(c => c.CreatedAt).ToList();
+    }
+
+    public Task<CustomerCare72h?> GetCustomerCare72hAsync(int id) =>
+        db.CustomerCare72hs
+            .Include(c => c.RO).ThenInclude(r => r.Lines).ThenInclude(l => l.Part)
+            .Include(c => c.Car)
+            .Include(c => c.Customer)
+            .Include(c => c.ReRepairRO).ThenInclude(r => r!.Lines)
+            .Include(c => c.ReRepairAppointment)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<CustomerCare72hSummaryDto> GetCustomerCare72hSummaryAsync()
+    {
+        var all = await db.CustomerCare72hs.ToListAsync();
+        var contacted = all.Where(x => x.Status != CustomerCare72hStatus.Pending).ToList();
+        var satisfied = all.Count(x => x.Status == CustomerCare72hStatus.ContactedSatisfied);
+        var firftCount = contacted.Count(x => x.FixedRightFirstTime == true);
+        var rated = contacted.Where(x => x.SatisfactionRating.HasValue && x.SatisfactionRating.Value > 0).ToList();
+
+        return new CustomerCare72hSummaryDto
+        {
+            TotalCount = all.Count,
+            PendingCount = all.Count(x => x.Status == CustomerCare72hStatus.Pending),
+            SatisfiedCount = satisfied,
+            NeedFeedbackCount = all.Count(x => x.Status == CustomerCare72hStatus.NeedFeedback),
+            RejectedCount = all.Count(x => x.Status == CustomerCare72hStatus.Rejected),
+            FirftRate = contacted.Count > 0 ? Math.Round((decimal)firftCount / contacted.Count * 100, 1) : 100m,
+            AverageSatisfaction = rated.Count > 0 ? Math.Round((decimal)rated.Average(x => x.SatisfactionRating!.Value), 2) : 5.0m,
+            ReRepairAlertCount = all.Count(x => x.IsReRepairAlert || x.HasTechnicalProblem || x.Status == CustomerCare72hStatus.NeedFeedback)
+        };
+    }
+
+    public async Task<int> CreateCustomerCare72hAsync(CustomerCare72h care)
+    {
+        var ro = await db.ROs.Include(r => r.Car).Include(r => r.Customer).FirstOrDefaultAsync(r => r.Id == care.ROId)
+            ?? throw new InvalidOperationException("Không tìm thấy Lệnh sửa chữa gốc.");
+
+        care.CarId = ro.CarId;
+        care.CustomerId = ro.CustomerId;
+        care.ROFinishedDate = ro.FinishedAt ?? ro.CreatedAt;
+        care.ScheduledDate = care.ROFinishedDate.AddDays(3);
+        care.Care72No = $"CC72-{DateTime.Now:yyMMdd}-{await db.CustomerCare72hs.CountAsync() + 1:D3}";
+        care.CreatedAt = DateTime.Now;
+
+        db.CustomerCare72hs.Add(care);
+        await db.SaveChangesAsync();
+        return care.Id;
+    }
+
+    public async Task<int> GenerateCustomerCare72hFromROAsync(int roId, string? createdBy = null)
+    {
+        var exists = await db.CustomerCare72hs.AnyAsync(c => c.ROId == roId);
+        if (exists)
+        {
+            var existing = await db.CustomerCare72hs.FirstAsync(c => c.ROId == roId);
+            return existing.Id;
+        }
+
+        var ro = await db.ROs.FirstOrDefaultAsync(r => r.Id == roId)
+            ?? throw new InvalidOperationException("Không tìm thấy Lệnh sửa chữa.");
+
+        var care = new CustomerCare72h
+        {
+            ROId = ro.Id,
+            CarId = ro.CarId,
+            CustomerId = ro.CustomerId,
+            ROFinishedDate = ro.FinishedAt ?? ro.CreatedAt,
+            ScheduledDate = (ro.FinishedAt ?? ro.CreatedAt).AddDays(3),
+            Status = CustomerCare72hStatus.Pending,
+            CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "system" : createdBy.Trim()
+        };
+
+        return await CreateCustomerCare72hAsync(care);
+    }
+
+    public Task<List<RepairOrder>> ROsEligibleForCustomerCare72hAsync() =>
+        db.ROs
+            .Include(r => r.Car)
+            .Include(r => r.Customer)
+            .Include(r => r.CustomerCare72hs)
+            .Where(r => (r.Status == ROStatus.Finished || r.Status == ROStatus.Paid) && !r.CustomerCare72hs.Any())
+            .OrderByDescending(r => r.FinishedAt ?? r.CreatedAt)
+            .ToListAsync();
+
+    public async Task<(bool ok, string msg)> UpdateCustomerCare72hSurveyAsync(int id, CustomerCare72hStatus status,
+        bool? serviceExplained, bool? basicNeedsMet, bool hasTechnicalProblem, string? problemDetails,
+        bool? fixedRightFirstTime, int? satisfactionRating, string? customerFeedback, string? reRepairAction,
+        string? internalNote, string? contactedBy)
+    {
+        var care = await db.CustomerCare72hs.Include(c => c.RO).FirstOrDefaultAsync(c => c.Id == id);
+        if (care == null) return (false, "Không tìm thấy phiếu CSKH 72h.");
+
+        care.Status = status;
+        care.ServiceExplained = serviceExplained;
+        care.BasicNeedsMet = basicNeedsMet;
+        care.HasTechnicalProblem = hasTechnicalProblem;
+        care.ProblemDetails = problemDetails?.Trim();
+        care.FixedRightFirstTime = fixedRightFirstTime;
+        care.SatisfactionRating = satisfactionRating;
+        care.CustomerFeedback = customerFeedback?.Trim();
+        care.ReRepairAction = reRepairAction?.Trim();
+        care.InternalNote = internalNote?.Trim();
+        care.ContactedBy = string.IsNullOrWhiteSpace(contactedBy) ? "CSKH" : contactedBy.Trim();
+        care.ContactedDate = DateTime.Now;
+
+        // Tự động phân luồng Re-Repair Alert khi có lỗi kỹ thuật hoặc cần phản hồi
+        if (hasTechnicalProblem || status == CustomerCare72hStatus.NeedFeedback)
+        {
+            care.IsReRepairAlert = true;
+            care.Status = CustomerCare72hStatus.NeedFeedback;
+            if (care.RO != null)
+            {
+                care.RO.IsReRepair = true;
+            }
+        }
+        else if (status == CustomerCare72hStatus.ContactedSatisfied)
+        {
+            care.IsReRepairAlert = false;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật kết quả khảo sát CSKH 72h ({Ui.CustomerCare72hStatus(care.Status).text}).");
+    }
+
+    public async Task<(bool ok, string msg, int? roId)> CreateReRepairFromCare72hAsync(int id, string? technician = null, string? note = null)
+    {
+        var care = await db.CustomerCare72hs
+            .Include(c => c.RO)
+            .Include(c => c.Car)
+            .Include(c => c.Customer)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        if (care == null) return (false, "Không tìm thấy phiếu CSKH 72h.", null);
+        if (care.ReRepairROId.HasValue) return (false, $"Phiếu CSKH này đã được lập Lệnh phản tu (mã RO #{care.ReRepairROId.Value}).", care.ReRepairROId);
+
+        // Tạo Lệnh sửa chữa phản tu (Re-Repair RO) gắn cờ IsReRepair = true
+        var count = await db.ROs.CountAsync();
+        var reRepairRO = new RepairOrder
+        {
+            Code = $"RO-RR{DateTime.Now:yyMMdd}-{count + 1:D3}",
+            CarId = care.CarId,
+            CustomerId = care.CustomerId,
+            Status = ROStatus.HasRO,
+            Technician = string.IsNullOrWhiteSpace(technician) ? care.RO?.Technician ?? "KTV Trưởng" : technician.Trim(),
+            CreatedBy = "CSKH-72h",
+            CreatedAt = DateTime.Now,
+            IsReRepair = true,
+            ReRepairParentROId = care.ROId,
+            Lines = new List<RepairLine>
+            {
+                new RepairLine
+                {
+                    Type = LineType.Labor,
+                    Name = $"[TÁI KHÁM / PHẢN TU 72H] Kiểm tra & khắc phục: {(string.IsNullOrWhiteSpace(care.ProblemDetails) ? "Khách báo xe có tiếng kêu / lỗi sau 72h" : care.ProblemDetails)}",
+                    Quantity = 1.0m,
+                    UnitPrice = 0m, // Miễn phí chi phí cho khách vì đây là bảo hành dịch vụ phản tu
+                    ExpenseType = ExpenseType.Internal
+                }
+            }
+        };
+
+        db.ROs.Add(reRepairRO);
+        await db.SaveChangesAsync();
+
+        care.ReRepairROId = reRepairRO.Id;
+        care.ReRepairAction = $"Đã lập Lệnh phản tu {reRepairRO.Code} tiếp nhận kiểm tra miễn phí cho khách.";
+        if (!string.IsNullOrWhiteSpace(note))
+        {
+            care.InternalNote = string.IsNullOrWhiteSpace(care.InternalNote) ? note.Trim() : $"{care.InternalNote} | {note.Trim()}";
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã tạo thành công Lệnh phản tu {reRepairRO.Code} tiếp nhận xử lý xe {care.Car.Plate}!", reRepairRO.Id);
+    }
+
+    public async Task<(bool ok, string msg)> DeleteCustomerCare72hAsync(int id)
+    {
+        var care = await db.CustomerCare72hs.FirstOrDefaultAsync(c => c.Id == id);
+        if (care == null) return (false, "Không tìm thấy phiếu CSKH 72h.");
+
+        db.CustomerCare72hs.Remove(care);
+        await db.SaveChangesAsync();
+        return (true, "Đã xóa phiếu CSKH 72h.");
+    }
 
     // --- Payment & Cashier Management (Ser_Payment & Ser_PaymentDetail) ---
     public async Task<List<Payment>> PaymentsAsync(PaymentStatus? status, string? q, DateTime? fromDate, DateTime? toDate, int? roId = null)

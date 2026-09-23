@@ -624,5 +624,31 @@ public static class Ui
         Models.ReqPartPriceLineStatus.Rejected => ("Hết hàng / Từ chối", "REJ", "danger"),
         _ => (s.ToString(), "", "secondary")
     };
+
+    public static (string text, string code, string css) CustomerCare72hStatus(CustomerCare72hStatus s) => s switch
+    {
+        Models.CustomerCare72hStatus.Pending => ("Chờ liên hệ 72h", "PEND", "warning"),
+        Models.CustomerCare72hStatus.ContactedSatisfied => ("Đã liên hệ - Hài lòng", "CIFB", "success"),
+        Models.CustomerCare72hStatus.NeedFeedback => ("Cần phản hồi - Phản tu", "CINFB", "danger"),
+        Models.CustomerCare72hStatus.Rejected => ("Khách từ chối / Bận", "REJ", "secondary"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string css) FirftBadge(bool? isFirft) => isFirft switch
+    {
+        true => ("Đúng ngay lần đầu (FIRFT)", "success"),
+        false => ("Có sự cố tái phát", "danger"),
+        _ => ("Chưa xác định", "secondary")
+    };
+
+    public static string SatisfactionStars(int? stars) => stars switch
+    {
+        5 => "★★★★★ (Rất hài lòng)",
+        4 => "★★★★☆ (Hài lòng)",
+        3 => "★★★☆☆ (Bình thường)",
+        2 => "★★☆☆☆ (Không hài lòng)",
+        1 => "★☆☆☆☆ (Rất thất vọng)",
+        _ => "Chưa đánh giá"
+    };
 }
 

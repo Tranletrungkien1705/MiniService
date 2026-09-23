@@ -5050,4 +5050,106 @@ public class ComplaintDiagnosticController(IRoService svc) : Controller
     }
 }
 
+public class CustomerCare72hController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(CustomerCare72hStatus? status, string? q, bool? needFeedbackOnly, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Status = status;
+        ViewBag.Q = q;
+        ViewBag.NeedFeedbackOnly = needFeedbackOnly ?? false;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+
+        var summary = await svc.GetCustomerCare72hSummaryAsync();
+        ViewBag.Summary = summary;
+
+        var list = await svc.CustomerCare72hsAsync(status, q, needFeedbackOnly, fromDate, toDate);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? roId)
+    {
+        ViewBag.ROs = await svc.ROsEligibleForCustomerCare72hAsync();
+        ViewBag.SelectedROId = roId;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int roId, string? internalNote)
+    {
+        if (roId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn Lệnh sửa chữa hoàn tất cần khảo sát 72h.";
+            ViewBag.ROs = await svc.ROsEligibleForCustomerCare72hAsync();
+            return View();
+        }
+
+        try
+        {
+            var care = new CustomerCare72h
+            {
+                ROId = roId,
+                Status = CustomerCare72hStatus.Pending,
+                InternalNote = internalNote?.Trim(),
+                CreatedBy = "web"
+            };
+
+            var id = await svc.CreateCustomerCare72hAsync(care);
+            TempData["Success"] = $"Đã lập phiếu CSKH 72h {care.Care72No} thành công (Lịch gọi sau 72h: {care.ScheduledDate:dd/MM/yyyy}).";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.ROs = await svc.ROsEligibleForCustomerCare72hAsync();
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var care = await svc.GetCustomerCare72hAsync(id);
+        if (care == null) return NotFound();
+        return View(care);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SubmitSurvey(int id, CustomerCare72hStatus status,
+        bool? serviceExplained, bool? basicNeedsMet, bool hasTechnicalProblem, string? problemDetails,
+        bool? fixedRightFirstTime, int? satisfactionRating, string? customerFeedback, string? reRepairAction,
+        string? internalNote, string? contactedBy)
+    {
+        var (ok, msg) = await svc.UpdateCustomerCare72hSurveyAsync(id, status,
+            serviceExplained, basicNeedsMet, hasTechnicalProblem, problemDetails,
+            fixedRightFirstTime, satisfactionRating, customerFeedback, reRepairAction,
+            internalNote, contactedBy);
+
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateReRepair(int id, string? technician, string? note)
+    {
+        var (ok, msg, roId) = await svc.CreateReRepairFromCare72hAsync(id, technician, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var care = await svc.GetCustomerCare72hAsync(id);
+        if (care == null) return NotFound();
+        return View(care);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteCustomerCare72hAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Index)) : RedirectToAction(nameof(Detail), new { id });
+    }
+}
+
 

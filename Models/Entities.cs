@@ -112,6 +112,15 @@ public enum CustomerCareStatus
     Rejected = 3            // REJ   — Không liên hệ được / Khách bận hoặc từ chối
 }
 
+/// <summary>Trạng thái Chăm sóc khách hàng sau dịch vụ 72h — theo Ser_CustomerCare72h idn.CarService.</summary>
+public enum CustomerCare72hStatus
+{
+    Pending = 0,            // PEND  — Chưa liên hệ / Chờ khảo sát kỹ thuật 72h
+    ContactedSatisfied = 1, // CIFB  — Đã liên hệ - Hài lòng (Xe chạy tốt, kỹ thuật ổn định)
+    NeedFeedback = 2,       // CINFB — Đã liên hệ - Cần phản hồi (Xe có sự cố kỹ thuật / Pan tái phát Re-Repair)
+    Rejected = 3            // REJ   — Không liên hệ được / Khách bận từ chối tiếp chuyện
+}
+
 /// <summary>Trạng thái Phiếu thu / Quyết toán thanh toán — theo Ser_Payment idn.CarService.</summary>
 public enum PaymentStatus
 {
@@ -553,6 +562,9 @@ public class RepairOrder : IOrgOwned
     public List<AssignmentWork> AssignmentWorks { get; set; } = [];
     public List<InsuranceClaim> InsuranceClaims { get; set; } = [];
     public List<CustomerCareMace> CustomerCareMaces { get; set; } = [];
+    public List<CustomerCare72h> CustomerCare72hs { get; set; } = [];
+    public bool IsReRepair { get; set; } = false;         // Cờ phản tu / sửa chữa lại do khách phản ánh lỗi 72h
+    public int? ReRepairParentROId { get; set; }          // Lệnh sửa chữa gốc bị phản tu
     public List<PdiRequestItem> PdiRequestItems { get; set; } = [];
     public List<TechnicalLibrary> TechnicalLibraries { get; set; } = [];
     public List<StockOutOrder> StockOutOrders { get; set; } = [];
@@ -844,6 +856,59 @@ public class CustomerCare : IOrgOwned
     public RepairOrder RO { get; set; } = null!;
     public Car Car { get; set; } = null!;
     public Customer Customer { get; set; } = null!;
+}
+
+/// <summary>Phiếu chăm sóc khách hàng 72h sau dịch vụ & Kiểm soát pan tái phát Re-Repair — Ser_CustomerCare72h trong idn.CarService.</summary>
+public class CustomerCare72h : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Care72No { get; set; } = "";           // Số phiếu CSKH 72h (VD: CC72-260427-001)
+    public int ROId { get; set; }                        // Lệnh sửa chữa gốc cần khảo sát 72h
+    public int CarId { get; set; }                       // Xe làm dịch vụ
+    public int CustomerId { get; set; }                  // Khách hàng / Chủ xe
+    public CustomerCare72hStatus Status { get; set; } = CustomerCare72hStatus.Pending;
+
+    public DateTime ROFinishedDate { get; set; } = DateTime.Today; // Thời điểm xe xuất xưởng
+    public DateTime ScheduledDate { get; set; } = DateTime.Today.AddDays(3); // Hẹn gọi sau 72h (3 ngày)
+    public DateTime? ContactedDate { get; set; }         // Thời điểm liên hệ thực tế
+    public string? ContactedBy { get; set; }             // Nhân viên CSKH thực hiện cuộc gọi
+
+    // Bộ 6 câu hỏi khảo sát kỹ thuật tiêu chuẩn Hyundai CSI 72h (Ser_CustomerCare72h idn.CarService)
+    public bool? ServiceExplained { get; set; } = true;  // FyourCSSH: CVDV có giải thích chi tiết nội dung và chi phí không?
+    public bool? BasicNeedsMet { get; set; } = true;     // WFBasicNeeds: Xưởng có giải quyết triệt để yêu cầu tiếp nhận ban đầu không?
+    public bool HasTechnicalProblem { get; set; } = false; // YourCarProblem: Sau 72h xe có phát sinh lỗi/tiếng kêu bất thường không?
+    public string? ProblemDetails { get; set; }          // Mô tả sự cố kỹ thuật hoặc pan bệnh tái phát
+    public bool? FixedRightFirstTime { get; set; } = true; // YourRIWN: Sửa chữa dứt điểm ngay lần đầu tiên (FIRFT)?
+    public int? SatisfactionRating { get; set; } = 5;    // YourSatisfyQSv: Mức độ hài lòng kỹ thuật (1-5 sao)
+    public string? CustomerFeedback { get; set; }        // YourHopeOfOur: Góp ý / Kỳ vọng của khách hàng
+
+    // Nghiệp vụ Xử lý Pan tái phát / Phản tu (Re-Repair Handling)
+    public bool IsReRepairAlert { get; set; } = false;   // Báo động phản tu: xe cần kiểm tra sửa lại khẩn cấp
+    public string? ReRepairAction { get; set; }          // Biện pháp xử lý của xưởng (Hẹn tái khám, Bảo hành dịch vụ 0đ)
+    public int? ReRepairROId { get; set; }               // Lệnh sửa chữa phản tu (Re-Repair RO) được sinh ra
+    public int? ReRepairAppointmentId { get; set; }      // Cuộc hẹn đón tiếp xe quay lại xử lý
+    public string? InternalNote { get; set; }            // Ghi chú nội bộ xử lý phản hồi
+    public string CreatedBy { get; set; } = "system";    // Tự động tạo khi RO hoàn tất hoặc tạo thủ công
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public RepairOrder RO { get; set; } = null!;
+    public Car Car { get; set; } = null!;
+    public Customer Customer { get; set; } = null!;
+    public RepairOrder? ReRepairRO { get; set; }
+    public Appointment? ReRepairAppointment { get; set; }
+}
+
+public class CustomerCare72hSummaryDto
+{
+    public int TotalCount { get; set; }
+    public int PendingCount { get; set; }
+    public int SatisfiedCount { get; set; }
+    public int NeedFeedbackCount { get; set; }
+    public int RejectedCount { get; set; }
+    public decimal FirftRate { get; set; }             // Tỷ lệ Sửa đúng lần đầu (FIRFT %)
+    public decimal AverageSatisfaction { get; set; }    // Điểm đánh giá CSI 72h trung bình (thang 5)
+    public int ReRepairAlertCount { get; set; }        // Số xe bị sự cố cần đón tiếp phản tu
 }
 
 /// <summary>Phiếu thu tiền & Quyết toán thanh toán dịch vụ — Ser_Payment trong idn.CarService.</summary>

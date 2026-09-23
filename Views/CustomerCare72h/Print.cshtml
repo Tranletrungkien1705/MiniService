@@ -1,0 +1,180 @@
+@model CustomerCare72h
+@{
+    Layout = null;
+    var (stText, stCode, _) = Ui.CustomerCare72hStatus(Model.Status);
+    var hasAlert = Model.IsReRepairAlert || Model.HasTechnicalProblem || Model.Status == CustomerCare72hStatus.NeedFeedback;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <title>Biên bản khảo sát chất lượng 72h — @Model.Care72No</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" />
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 13px; color: #212529; }
+        .print-container { max-width: 850px; margin: 20px auto; padding: 25px; border: 1px solid #ddd; background: #fff; }
+        .border-double { border-bottom: 3px double #000; }
+        @@media print {
+            body { margin: 0; padding: 0; }
+            .print-container { border: none; padding: 0; margin: 0; max-width: 100%; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="no-print text-center py-2 bg-dark text-white mb-3">
+        <span>Xem trước bản in phiếu khảo sát CSKH 72h — @Model.Care72No</span>
+        <button class="btn btn-sm btn-light ms-3 px-3 fw-bold" onclick="window.print()"><i class="bi bi-printer me-1"></i>In biên bản</button>
+        <button class="btn btn-sm btn-outline-light ms-1" onclick="window.close()"><i class="bi bi-x-lg me-1"></i>Đóng</button>
+    </div>
+
+    <div class="print-container shadow-sm bg-white">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center pb-3 mb-3 border-double">
+            <div>
+                <h5 class="fw-bold mb-1 text-uppercase text-primary">TRUNG TÂM DỊCH VỤ Ô TÔ TIÊU CHUẨN HYUNDAI</h5>
+                <div class="small text-muted">Hệ thống Đại lý Dịch vụ Ủy quyền &amp; Bảo hành Toàn quốc</div>
+                <div class="small text-muted">Hotline CSKH: 1900 6868 · Bộ phận Kỹ thuật: 0988 123 456</div>
+            </div>
+            <div class="text-end">
+                <div class="fw-bold fs-5 text-dark">PHIẾU CSKH 72H</div>
+                <div class="badge bg-secondary">Mã: @Model.Care72No</div>
+                <div class="small text-muted mt-1">Trạng thái: <b>[@stCode] @stText</b></div>
+            </div>
+        </div>
+
+        <!-- Title -->
+        <div class="text-center my-3">
+            <h4 class="fw-bold text-uppercase mb-1">BIÊN BẢN KHẢO SÁT CHẤT LƯỢNG KỸ THUẬT SAU 72H</h4>
+            <div class="fst-italic small text-muted">(Theo tiêu chuẩn quy trình chăm sóc khách hàng Ser_CustomerCare72h)</div>
+        </div>
+
+        <!-- Thông tin xe & khách hàng -->
+        <div class="card mb-3 border">
+            <div class="card-header bg-light py-1 fw-bold small text-uppercase">1. Thông tin Khách hàng &amp; Phương tiện</div>
+            <div class="card-body p-2">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div>Khách hàng: <b>@Model.Customer.Name</b></div>
+                        <div>Số điện thoại: <b>@(Model.Customer.Phone ?? "—")</b></div>
+                        <div>Lệnh SC gốc: <b>@(Model.RO?.Code ?? $"RO #{Model.ROId}")</b></div>
+                    </div>
+                    <div class="col-6">
+                        <div>Biển số xe: <b class="fs-6">@Model.Car.Plate</b></div>
+                        <div>Dòng xe (Model): <b>@Model.Car.Model</b></div>
+                        <div>Số khung (VIN): <b>@(Model.Car.Vin ?? "—")</b></div>
+                        <div>Ngày xuất xưởng (FNS): <b>@Model.ROFinishedDate.ToString("dd/MM/yyyy")</b></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Kết quả khảo sát 6 câu hỏi -->
+        <div class="card mb-3 border">
+            <div class="card-header bg-light py-1 fw-bold small text-uppercase">2. Kết quả Khảo sát Kỹ thuật &amp; Chất lượng Dịch vụ (Hyundai CSI 72h)</div>
+            <table class="table table-bordered mb-0 small">
+                <thead>
+                    <tr class="table-light">
+                        <th style="width:40px">STT</th>
+                        <th>Hạng mục khảo sát chất lượng 72h</th>
+                        <th style="width:240px" class="text-center">Kết quả ghi nhận</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">1</td>
+                        <td>Cố vấn dịch vụ có giải thích rõ ràng các hạng mục công việc và chi phí lúc giao xe không? (FyourCSSH)</td>
+                        <td class="text-center fw-bold @(Model.ServiceExplained == true ? "text-success" : "text-danger")">
+                            @(Model.ServiceExplained == true ? "Đã giải thích chi tiết" : "Chưa giải thích rõ")
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">2</td>
+                        <td>Xưởng có đáp ứng đầy đủ các yêu cầu sửa chữa cơ bản của Quý khách khi tiếp nhận không? (WFBasicNeeds)</td>
+                        <td class="text-center fw-bold @(Model.BasicNeedsMet == true ? "text-success" : "text-danger")">
+                            @(Model.BasicNeedsMet == true ? "Đáp ứng đầy đủ yêu cầu" : "Còn thiếu sót hạng mục")
+                        </td>
+                    </tr>
+                    <tr class="@(Model.HasTechnicalProblem ? "table-danger" : "")">
+                        <td class="text-center fw-bold">3</td>
+                        <td>
+                            <b>Sau 72h vận hành trên đường, xe có gặp sự cố kỹ thuật, tiếng kêu lạ hoặc báo đèn lỗi không? (YourCarProblem)</b>
+                            @if (!string.IsNullOrWhiteSpace(Model.ProblemDetails))
+                            {
+                                <div class="text-danger mt-1"><b>Mô tả lỗi:</b> @Model.ProblemDetails</div>
+                            }
+                        </td>
+                        <td class="text-center fw-bold @(Model.HasTechnicalProblem ? "text-danger" : "text-success")">
+                            @(Model.HasTechnicalProblem ? "CÓ SỰ CỐ / LỖI TÁI PHÁT" : "Xe hoạt động êm ái, bình thường")
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">4</td>
+                        <td>Đánh giá khắc phục dứt điểm ngay lần đầu tiên (FIRFT — Fix It Right First Time)? (YourRIWN)</td>
+                        <td class="text-center fw-bold @(Model.FixedRightFirstTime == true ? "text-success" : "text-danger")">
+                            @(Model.FixedRightFirstTime == true ? "Dứt điểm lần đầu (FIRFT Đạt)" : "Chưa dứt điểm / Cần sửa lại")
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">5</td>
+                        <td>Điểm đánh giá độ hài lòng chung của Quý khách về chất lượng dịch vụ xưởng (YourSatisfyQSv)</td>
+                        <td class="text-center fw-bold text-warning">
+                            @Ui.SatisfactionStars(Model.SatisfactionRating)
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">6</td>
+                        <td>Ý kiến đóng góp / Kỳ vọng của khách hàng đối với dịch vụ đại lý (YourHopeOfOur)</td>
+                        <td class="fst-italic text-muted">
+                            @(string.IsNullOrWhiteSpace(Model.CustomerFeedback) ? "Không có ý kiến thêm" : Model.CustomerFeedback)
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Biện pháp xử lý & Phản tu -->
+        @if (hasAlert)
+        {
+            <div class="alert alert-danger p-2 mb-3">
+                <div class="fw-bold text-uppercase"><i class="bi bi-exclamation-triangle-fill me-1"></i>Hồ sơ xử lý phản tu (Re-Repair Action):</div>
+                <div class="mt-1">
+                    Trạng thái: <b>CẢNH BÁO PHẢN TU KỸ THUẬT</b> ·
+                    Lệnh sửa chữa lại: <b>@(Model.ReRepairROId.HasValue ? Model.ReRepairRO?.Code ?? $"RO #{Model.ReRepairROId}" : "Chưa tạo lệnh phản tu")</b>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Model.ReRepairAction))
+                {
+                    <div class="mt-1">Biện pháp khắc phục: @Model.ReRepairAction</div>
+                }
+            </div>
+        }
+
+        <!-- Chữ ký các bên -->
+        <div class="row text-center mt-4 pt-2">
+            <div class="col-4">
+                <div class="fw-bold">NHÂN VIÊN KHẢO SÁT 72H</div>
+                <div class="text-muted small fst-italic">(Ký &amp; ghi rõ họ tên)</div>
+                <div style="height:65px"></div>
+                <div class="fw-semibold">@(Model.ContactedBy ?? "Nhân viên CSKH")</div>
+            </div>
+            <div class="col-4">
+                <div class="fw-bold">CỐ VẤN DỊCH VỤ</div>
+                <div class="text-muted small fst-italic">(Ký &amp; ghi rõ họ tên)</div>
+                <div style="height:65px"></div>
+                <div class="fw-semibold">CVDV phụ trách</div>
+            </div>
+            <div class="col-4">
+                <div class="fw-bold">QUẢN ĐỐC XƯỞNG</div>
+                <div class="text-muted small fst-italic">(Ký &amp; xác nhận kỹ thuật)</div>
+                <div style="height:65px"></div>
+                <div class="fw-semibold">Quản đốc xưởng dịch vụ</div>
+            </div>
+        </div>
+
+        <div class="text-center text-muted small mt-4 pt-2 border-top">
+            Thời điểm in biên bản: @DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss") · Bản quyền hệ thống Hyundai Car Services MiniService
+        </div>
+    </div>
+</body>
+</html>

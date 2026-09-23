@@ -5261,6 +5261,169 @@ app.MapPost("/api/complaint-diagnostic-errors/apply-to-ro", async (ApplyErrorToR
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// =========================================================================
+// MINIMAL APIS — CHĂM SÓC KHÁCH HÀNG 72H & KIỂM SOÁT PHẢN TU RE-REPAIR
+// (Ser_CustomerCare72h - MNU_QT_DL_QUANLYCHAMSOCKHACHHANG72H)
+// =========================================================================
+
+app.MapGet("/api/customercare72h", async (CustomerCare72hStatus? status, string? q, bool? needFeedbackOnly, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.CustomerCare72hsAsync(status, q, needFeedbackOnly, fromDate, toDate);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.Care72No,
+        c.ROId,
+        roCode = c.RO?.Code,
+        c.CarId,
+        plate = c.Car?.Plate,
+        model = c.Car?.Model,
+        c.CustomerId,
+        customerName = c.Customer?.Name,
+        customerPhone = c.Customer?.Phone,
+        status = Ui.CustomerCare72hStatus(c.Status).text,
+        statusCode = Ui.CustomerCare72hStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.ROFinishedDate,
+        c.ScheduledDate,
+        c.ContactedDate,
+        c.ContactedBy,
+        c.ServiceExplained,
+        c.BasicNeedsMet,
+        c.HasTechnicalProblem,
+        c.ProblemDetails,
+        c.FixedRightFirstTime,
+        firftStatus = Ui.FirftBadge(c.FixedRightFirstTime).text,
+        c.SatisfactionRating,
+        satisfactionText = Ui.SatisfactionStars(c.SatisfactionRating),
+        c.CustomerFeedback,
+        c.IsReRepairAlert,
+        c.ReRepairAction,
+        c.ReRepairROId,
+        reRepairRoCode = c.ReRepairRO?.Code,
+        c.InternalNote,
+        c.CreatedAt,
+        c.CreatedBy
+    }));
+});
+
+app.MapGet("/api/customercare72h/summary", async (IRoService svc) =>
+{
+    var summary = await svc.GetCustomerCare72hSummaryAsync();
+    return Results.Ok(summary);
+});
+
+app.MapGet("/api/customercare72h/{id:int}", async (int id, IRoService svc) =>
+{
+    var c = await svc.GetCustomerCare72hAsync(id);
+    if (c == null) return Results.NotFound(new { error = "Không tìm thấy phiếu CSKH 72h." });
+    return Results.Ok(new
+    {
+        c.Id,
+        c.Care72No,
+        c.ROId,
+        roCode = c.RO?.Code,
+        roFinishedAt = c.RO?.FinishedAt,
+        roTotal = c.RO?.Total,
+        c.CarId,
+        plate = c.Car?.Plate,
+        model = c.Car?.Model,
+        vin = c.Car?.Vin,
+        c.CustomerId,
+        customerName = c.Customer?.Name,
+        customerPhone = c.Customer?.Phone,
+        customerEmail = c.Customer?.Email,
+        status = Ui.CustomerCare72hStatus(c.Status).text,
+        statusCode = Ui.CustomerCare72hStatus(c.Status).code,
+        statusValue = (int)c.Status,
+        c.ROFinishedDate,
+        c.ScheduledDate,
+        c.ContactedDate,
+        c.ContactedBy,
+        c.ServiceExplained,
+        c.BasicNeedsMet,
+        c.HasTechnicalProblem,
+        c.ProblemDetails,
+        c.FixedRightFirstTime,
+        firftStatus = Ui.FirftBadge(c.FixedRightFirstTime).text,
+        c.SatisfactionRating,
+        satisfactionText = Ui.SatisfactionStars(c.SatisfactionRating),
+        c.CustomerFeedback,
+        c.IsReRepairAlert,
+        c.ReRepairAction,
+        c.ReRepairROId,
+        reRepairRoCode = c.ReRepairRO?.Code,
+        c.ReRepairAppointmentId,
+        c.InternalNote,
+        c.CreatedAt,
+        c.CreatedBy,
+        lines = c.RO?.Lines.Select(l => new
+        {
+            l.Id,
+            type = l.Type.ToString(),
+            l.Name,
+            l.Quantity,
+            l.UnitPrice,
+            l.Amount,
+            partCode = l.Part?.Code
+        })
+    });
+});
+
+app.MapPost("/api/customercare72h", async (CreateCustomerCare72hDto dto, IRoService svc) =>
+{
+    try
+    {
+        var care = new CustomerCare72h
+        {
+            ROId = dto.RoId,
+            InternalNote = dto.InternalNote?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "api"
+        };
+        var id = await svc.CreateCustomerCare72hAsync(care);
+        return Results.Created($"/api/customercare72h/{id}", new { id, care.Care72No, message = "Đã lập phiếu CSKH 72h thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/customercare72h/generate-from-ro/{roId:int}", async (int roId, IRoService svc) =>
+{
+    try
+    {
+        var id = await svc.GenerateCustomerCare72hFromROAsync(roId, "api");
+        return Results.Ok(new { id, message = "Đã kích hoạt phiếu CSKH 72h từ Lệnh sửa chữa hoàn tất." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/customercare72h/{id:int}/survey", async (int id, SubmitCare72hSurveyDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.UpdateCustomerCare72hSurveyAsync(id, dto.Status,
+        dto.ServiceExplained, dto.BasicNeedsMet, dto.HasTechnicalProblem, dto.ProblemDetails,
+        dto.FixedRightFirstTime, dto.SatisfactionRating, dto.CustomerFeedback, dto.ReRepairAction,
+        dto.InternalNote, dto.ContactedBy);
+
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/customercare72h/{id:int}/re-repair", async (int id, CreateReRepairFromCare72hDto dto, IRoService svc) =>
+{
+    var (ok, msg, roId) = await svc.CreateReRepairFromCare72hAsync(id, dto.Technician, dto.Note);
+    return ok ? Results.Ok(new { message = msg, roId }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/customercare72h/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteCustomerCare72hAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -5402,6 +5565,10 @@ record CancelPartPriceRequestDto(string? Reason);
 record CreateComplaintDiagnosticErrorDto(string ErrorCode, string ErrorName, ComplaintErrorType ErrorType, VehicleSystemGroup SystemGroup, string? ErrorDesc, string? Remark, bool? FlagActive, string? CreatedBy);
 record UpdateComplaintDiagnosticErrorDto(string ErrorCode, string ErrorName, ComplaintErrorType ErrorType, VehicleSystemGroup SystemGroup, string? ErrorDesc, string? Remark, bool FlagActive);
 record ApplyErrorToRoDto(int RoId, int ErrorId, string? Target);
+
+record CreateCustomerCare72hDto(int RoId, string? InternalNote, string? CreatedBy);
+record SubmitCare72hSurveyDto(CustomerCare72hStatus Status, bool? ServiceExplained, bool? BasicNeedsMet, bool HasTechnicalProblem, string? ProblemDetails, bool? FixedRightFirstTime, int? SatisfactionRating, string? CustomerFeedback, string? ReRepairAction, string? InternalNote, string? ContactedBy);
+record CreateReRepairFromCare72hDto(string? Technician, string? Note);
 
 
 
