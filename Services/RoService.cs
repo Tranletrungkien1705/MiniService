@@ -553,6 +553,12 @@ public interface IRoService
     Task<(bool ok, string msg)> SaveCusServiceFactorAsync(int serviceItemId, int customerTypeId, decimal factor, string? dealerCode, string? user);
     Task<(bool ok, string msg)> ResetCusServiceFactorAsync(int serviceItemId, int customerTypeId);
     Task<decimal> ResolveServicePriceAsync(int serviceItemId, int? customerTypeId);
+    // Customer Part Factor — Hệ số giá phụ tùng theo loại khách hàng (Ser_Mst_CusPartFactor)
+    Task<List<CusPartFactorRowDto>> CusPartFactorMatrixAsync(int? partId, int? customerTypeId, string? q);
+    Task<CusPartFactorSummaryDto> GetCusPartFactorSummaryAsync();
+    Task<(bool ok, string msg)> SaveCusPartFactorAsync(int partId, int customerTypeId, decimal factor, string? dealerCode, string? user);
+    Task<(bool ok, string msg)> ResetCusPartFactorAsync(int partId, int customerTypeId);
+    Task<decimal> ResolvePartPriceAsync(int partId, int? customerTypeId);
     // RO History — Nhật ký thao tác Lệnh sửa chữa (Ser_ROHistory)
     Task<List<RoHistory>> RoHistoriesAsync(int? roId, ROStatus? status, string? q);
     Task<RoHistory?> GetRoHistoryAsync(int id);
@@ -11424,6 +11430,134 @@ public class RoService(AppDbContext db) : IRoService
             }
         }
         return Math.Round(svc.Price * factor, 0);
+    }
+
+    // --- Customer Part Factor — Hệ số giá phụ tùng theo loại khách hàng (Ser_Mst_CusPartFactor) ---
+    /// <summary>Dựng ma trận hệ số giá phụ tùng × loại khách hàng với giá hiệu lực (3 tầng dự phòng: Factor → CusFactor → 1).</summary>
+    public async Task<List<CusPartFactorRowDto>> CusPartFactorMatrixAsync(int? partId, int? customerTypeId, string? q)
+    {
+        var partsQuery = db.Parts.Where(p => p.IsActive).AsQueryable();
+        if (partId.HasValue && partId.Value > 0)
+            partsQuery = partsQuery.Where(p => p.Id == partId.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            partsQuery = partsQuery.Where(x => x.Code.ToLower().Contains(s) || x.Name.ToLower().Contains(s));
+        }
+        var parts = await partsQuery.OrderBy(p => p.Code).ToListAsync();
+
+        var typesQuery = db.CustomerTypes.Where(t => t.IsActive).AsQueryable();
+        if (customerTypeId.HasValue && customerTypeId.Value > 0)
+            typesQuery = typesQuery.Where(t => t.Id == customerTypeId.Value);
+        var types = await typesQuery.OrderBy(t => t.CusTypeCode).ToListAsync();
+
+        var factors = await db.CusPartFactors.ToListAsync();
+        var lookup = factors.ToDictionary(f => (f.PartId, f.CustomerTypeId), f => f);
+
+        var rows = new List<CusPartFactorRowDto>();
+        foreach (var part in parts)
+        {
+            foreach (var ct in types)
+            {
+                var hasCustom = lookup.TryGetValue((part.Id, ct.Id), out var f);
+                var factor = hasCustom ? f!.Factor : (ct.CusFactor > 0 ? ct.CusFactor : 1.0m);
+                rows.Add(new CusPartFactorRowDto
+                {
+                    PartId = part.Id,
+                    PartCode = part.Code,
+                    PartName = part.Name,
+                    BasePrice = part.SalePrice,
+                    CustomerTypeId = ct.Id,
+                    CusTypeCode = ct.CusTypeCode,
+                    CusTypeName = ct.CusTypeName,
+                    Factor = factor,
+                    EffectivePrice = Math.Round(part.SalePrice * factor, 0),
+                    IsCustomized = hasCustom
+                });
+            }
+        }
+        return rows;
+    }
+
+    public async Task<CusPartFactorSummaryDto> GetCusPartFactorSummaryAsync()
+    {
+        var partCount = await db.Parts.CountAsync(p => p.IsActive);
+        var typeCount = await db.CustomerTypes.CountAsync(t => t.IsActive);
+        var factors = await db.CusPartFactors.ToListAsync();
+        var customized = factors.Count;
+        var totalCells = partCount * typeCount;
+        return new CusPartFactorSummaryDto
+        {
+            TotalParts = partCount,
+            TotalCustomerTypes = typeCount,
+            TotalCells = totalCells,
+            CustomizedCells = customized,
+            AvgFactor = factors.Count > 0 ? Math.Round(factors.Average(f => f.Factor), 4) : 0m,
+            MinFactor = factors.Count > 0 ? factors.Min(f => f.Factor) : 0m,
+            MaxFactor = factors.Count > 0 ? factors.Max(f => f.Factor) : 0m
+        };
+    }
+
+    /// <summary>Lưu (upsert) hệ số giá cho một ô phụ tùng × loại khách — theo Ser_Mst_CusPartFactor_Update.</summary>
+    public async Task<(bool ok, string msg)> SaveCusPartFactorAsync(int partId, int customerTypeId, decimal factor, string? dealerCode, string? user)
+    {
+        if (factor <= 0) return (false, "Hệ số giá phải lớn hơn 0.");
+        var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == partId);
+        if (part == null) return (false, "Không tìm thấy phụ tùng.");
+        var ct = await db.CustomerTypes.FirstOrDefaultAsync(t => t.Id == customerTypeId);
+        if (ct == null) return (false, "Không tìm thấy loại khách hàng.");
+
+        var existing = await db.CusPartFactors.FirstOrDefaultAsync(f => f.PartId == partId && f.CustomerTypeId == customerTypeId);
+        if (existing == null)
+        {
+            db.CusPartFactors.Add(new CusPartFactor
+            {
+                PartId = partId,
+                CustomerTypeId = customerTypeId,
+                Factor = factor,
+                DealerCode = dealerCode?.Trim(),
+                LogLUBy = user,
+                LogLUDateTime = DateTime.Now
+            });
+        }
+        else
+        {
+            existing.Factor = factor;
+            existing.DealerCode = dealerCode?.Trim();
+            existing.LogLUBy = user;
+            existing.LogLUDateTime = DateTime.Now;
+        }
+        await db.SaveChangesAsync();
+        return (true, $"Đã lưu hệ số giá {factor} cho phụ tùng [{part.Code}] × loại khách [{ct.CusTypeCode}].");
+    }
+
+    /// <summary>Xoá cấu hình hệ số riêng của một ô — quay về dùng hệ số mặc định của loại khách.</summary>
+    public async Task<(bool ok, string msg)> ResetCusPartFactorAsync(int partId, int customerTypeId)
+    {
+        var existing = await db.CusPartFactors.FirstOrDefaultAsync(f => f.PartId == partId && f.CustomerTypeId == customerTypeId);
+        if (existing == null) return (false, "Ô này chưa có cấu hình hệ số riêng.");
+        db.CusPartFactors.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, "Đã xoá cấu hình hệ số riêng — ô này dùng hệ số mặc định của loại khách.");
+    }
+
+    /// <summary>Tra giá hiệu lực của một phụ tùng theo loại khách (Factor → CusFactor → 1).</summary>
+    public async Task<decimal> ResolvePartPriceAsync(int partId, int? customerTypeId)
+    {
+        var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == partId);
+        if (part == null) return 0m;
+        decimal factor = 1.0m;
+        if (customerTypeId.HasValue && customerTypeId.Value > 0)
+        {
+            var custom = await db.CusPartFactors.FirstOrDefaultAsync(f => f.PartId == partId && f.CustomerTypeId == customerTypeId.Value);
+            if (custom != null) factor = custom.Factor;
+            else
+            {
+                var ct = await db.CustomerTypes.FirstOrDefaultAsync(t => t.Id == customerTypeId.Value);
+                if (ct != null && ct.CusFactor > 0) factor = ct.CusFactor;
+            }
+        }
+        return Math.Round(part.SalePrice * factor, 0);
     }
 
     // --- RO History — Nhật ký thao tác Lệnh sửa chữa (Ser_ROHistory) ---

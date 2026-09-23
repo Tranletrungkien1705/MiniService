@@ -87,6 +87,7 @@ public class AppDbContext : DbContext
     public DbSet<RoDeliveryDateHistory> RoDeliveryDateHistories => Set<RoDeliveryDateHistory>();
     public DbSet<CustomerType> CustomerTypes => Set<CustomerType>();
     public DbSet<CusServiceFactor> CusServiceFactors => Set<CusServiceFactor>();
+    public DbSet<CusPartFactor> CusPartFactors => Set<CusPartFactor>();
     public DbSet<RoHistory> RoHistories => Set<RoHistory>();
     public DbSet<CarModel> CarModels => Set<CarModel>();
     public DbSet<Bom> Boms => Set<Bom>();
@@ -904,6 +905,14 @@ public class AppDbContext : DbContext
             e.Property(x => x.Factor).HasPrecision(9, 4);
             e.HasOne(x => x.ServiceItem).WithMany().HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne(x => x.CustomerType).WithMany(t => t.ServiceFactors).HasForeignKey(x => x.CustomerTypeId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<CusPartFactor>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PartId, x.CustomerTypeId }).IsUnique();
+            e.Property(x => x.Factor).HasPrecision(9, 4);
+            e.HasOne(x => x.Part).WithMany(p => p.PartFactors).HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne(x => x.CustomerType).WithMany(t => t.PartFactors).HasForeignKey(x => x.CustomerTypeId).OnDelete(DeleteBehavior.Cascade);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<RoHistory>(e =>

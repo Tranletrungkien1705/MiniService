@@ -6910,3 +6910,46 @@ public class ModelAuditImageController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+/// <summary>Hệ số giá phụ tùng theo loại khách hàng (Customer Part Factor) — Ser_Mst_CusPartFactor trong idn.CarService.
+/// Nguồn: Ser_Mst_CusPartFactor_Get_HQ / _Get_DL / _Update (BizCarSv.Master.cs).
+/// Giá hiệu lực = Part.SalePrice × COALESCE(Factor, CusType.CusFactor, 1).</summary>
+public class CusPartFactorController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(int? partId, int? customerTypeId, string? q)
+    {
+        ViewBag.PartId = partId;
+        ViewBag.CustomerTypeId = customerTypeId;
+        ViewBag.Q = q;
+        ViewBag.Parts = await svc.PartsAsync(null, null);
+        ViewBag.CustomerTypes = await svc.CustomerTypesAsync(true, null);
+        ViewBag.Summary = await svc.GetCusPartFactorSummaryAsync();
+        var rows = await svc.CusPartFactorMatrixAsync(partId, customerTypeId, q);
+        return View(rows);
+    }
+
+    public async Task<IActionResult> Detail(int partId)
+    {
+        var part = (await svc.PartsAsync(null, null)).FirstOrDefault(p => p.Id == partId);
+        if (part == null) return NotFound();
+        ViewBag.Part = part;
+        ViewBag.CustomerTypes = await svc.CustomerTypesAsync(true, null);
+        var rows = await svc.CusPartFactorMatrixAsync(partId, null, null);
+        return View(rows);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Save(int partId, int customerTypeId, decimal factor, string? dealerCode)
+    {
+        var (ok, msg) = await svc.SaveCusPartFactorAsync(partId, customerTypeId, factor, dealerCode, "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { partId });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Reset(int partId, int customerTypeId)
+    {
+        var (ok, msg) = await svc.ResetCusPartFactorAsync(partId, customerTypeId);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { partId });
+    }
+}

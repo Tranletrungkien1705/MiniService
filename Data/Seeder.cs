@@ -5245,6 +5245,38 @@ public static class Seeder
             }
         }
 
+        // Seed Hệ số giá phụ tùng theo loại khách (Ser_Mst_CusPartFactor) — bản "phụ tùng" song song với hệ số giá dịch vụ
+        if (!await db.CusPartFactors.AnyAsync())
+        {
+            var cusTypes = await db.CustomerTypes.OrderBy(t => t.CusTypeCode).ToListAsync();
+            var parts = await db.Parts.OrderBy(p => p.Code).Take(6).ToListAsync();
+            var partFactors = new List<CusPartFactor>();
+            foreach (var part in parts)
+            {
+                foreach (var ct in cusTypes)
+                {
+                    // Chỉ cấu hình riêng cho khách doanh nghiệp & khách đoàn để minh hoạ ma trận
+                    if (ct.CusTypeCode is "CT02" or "CT04")
+                    {
+                        partFactors.Add(new CusPartFactor
+                        {
+                            PartId = part.Id,
+                            CustomerTypeId = ct.Id,
+                            Factor = ct.CusTypeCode == "CT04" ? 0.82m : 0.94m,
+                            DealerCode = "VS058",
+                            LogLUBy = "seed",
+                            LogLUDateTime = DateTime.Now
+                        });
+                    }
+                }
+            }
+            if (partFactors.Count > 0)
+            {
+                db.CusPartFactors.AddRange(partFactors);
+                await db.SaveChangesAsync();
+            }
+        }
+
         // Nhật ký thao tác RO (Ser_ROHistory) — sinh lịch sử mẫu cho các RO đang có
         if (!await db.RoHistories.AnyAsync())
         {
@@ -5333,7 +5365,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "RoHistories", "CarModels", "ServiceTypes", "Boms", "BomLines", "WarehouseLocations", "WorkingCalendars", "ShareParts", "SharePartLines", "ModelAuditImages" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails", "StockOutOrders", "StockOutOrderDetails", "PartOOs", "CusDebits", "CusDebitPayments", "SupplierDebits", "SupplierDebitPayments", "DealerHistoryRecords", "DealerHistoryItems", "InsuranceDebits", "InsuranceDebitPayments", "CustomerGroups", "CustomerGroupMembers", "PartPriceRequests", "PartPriceRequestLines", "ComplaintDiagnosticErrors", "CustomerCare72hs", "CustomerCareBirthdays", "WarrantyWorks", "MaintenanceSettings", "CustomerTypes", "CusServiceFactors", "CusPartFactors", "RoHistories", "CarModels", "ServiceTypes", "Boms", "BomLines", "WarehouseLocations", "WorkingCalendars", "ShareParts", "SharePartLines", "ModelAuditImages" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -6977,6 +7009,20 @@ public static class Seeder
                 FOREIGN KEY (""CustomerTypeId"") REFERENCES ""CustomerTypes"" (""Id"") ON DELETE CASCADE
             );",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CusServiceFactors_OrgId_ServiceItemId_CustomerTypeId"" ON ""CusServiceFactors"" (""OrgId"", ""ServiceItemId"", ""CustomerTypeId"");",
+            @"CREATE TABLE IF NOT EXISTS ""CusPartFactors"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""CustomerTypeId"" INTEGER NOT NULL,
+                ""Factor"" TEXT NOT NULL DEFAULT '1',
+                ""DealerCode"" TEXT NULL,
+                ""LogLUBy"" TEXT NULL,
+                ""LogLUDateTime"" TEXT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""CustomerTypeId"") REFERENCES ""CustomerTypes"" (""Id"") ON DELETE CASCADE
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_CusPartFactors_OrgId_PartId_CustomerTypeId"" ON ""CusPartFactors"" (""OrgId"", ""PartId"", ""CustomerTypeId"");",
             @"CREATE TABLE IF NOT EXISTS ""RoHistories"" (
                 ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
                 ""OrgId"" TEXT NOT NULL,

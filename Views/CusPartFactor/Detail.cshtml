@@ -1,0 +1,90 @@
+@model List<CusPartFactorRowDto>
+@{
+    var part = ViewBag.Part as Part;
+    ViewData["Title"] = $"Hệ số giá phụ tùng [{part?.Code}] theo loại khách";
+    var types = ViewBag.CustomerTypes as List<CustomerType> ?? [];
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <a href="/CusPartFactor" class="text-decoration-none small text-muted"><i class="bi bi-arrow-left me-1"></i>Hệ số giá phụ tùng theo loại khách</a>
+        <h5 class="mb-0 fw-bold mt-1">
+            <span class="font-monospace text-primary">@part?.Code</span> - @part?.Name
+        </h5>
+    </div>
+    <div class="text-end">
+        <div class="text-muted small">Giá bán niêm yết (Part.SalePrice)</div>
+        <div class="fw-bold text-success fs-5">@(part?.SalePrice.ToString("N0")) VNĐ</div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-white fw-semibold">
+        <i class="bi bi-grid-3x3-gap me-1 text-primary"></i>Ma trận hệ số giá theo loại khách hàng (Ser_Mst_CusPartFactor)
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:200px">Loại khách hàng</th>
+                        <th class="text-center" style="width:120px">Hệ số mặc định</th>
+                        <th class="text-center" style="width:120px">Hệ số hiệu lực</th>
+                        <th class="text-end" style="width:150px">Giá hiệu lực</th>
+                        <th style="width:120px">Nguồn</th>
+                        <th style="width:340px">Cấu hình hệ số riêng</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in Model)
+                    {
+                        <tr>
+                            <td>
+                                <span class="font-monospace small text-muted">@r.CusTypeCode</span> - @r.CusTypeName
+                            </td>
+                            <td class="text-center text-muted">@(types.FirstOrDefault(t => t.Id == r.CustomerTypeId)?.CusFactor)</td>
+                            <td class="text-center fw-semibold">@r.Factor</td>
+                            <td class="text-end fw-bold text-success">@r.EffectivePrice.ToString("N0")</td>
+                            <td>
+                                @if (r.IsCustomized)
+                                {
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Riêng</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border">Mặc định</span>
+                                }
+                            </td>
+                            <td>
+                                <div class="d-flex gap-2">
+                                    <form asp-action="Save" method="post" class="d-flex gap-1 align-items-center">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="partId" value="@r.PartId" />
+                                        <input type="hidden" name="customerTypeId" value="@r.CustomerTypeId" />
+                                        <input name="factor" type="number" step="0.01" min="0.01" class="form-control form-control-sm" style="width:90px" value="@r.Factor" required />
+                                        <button type="submit" class="btn btn-sm btn-primary" title="Lưu hệ số riêng"><i class="bi bi-check-lg"></i></button>
+                                    </form>
+                                    @if (r.IsCustomized)
+                                    {
+                                        <form asp-action="Reset" method="post" onsubmit="return confirm('Xoá hệ số riêng, quay về hệ số mặc định của loại khách?');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="partId" value="@r.PartId" />
+                                            <input type="hidden" name="customerTypeId" value="@r.CustomerTypeId" />
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="Xoá hệ số riêng"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                        </form>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="alert alert-light border mt-3 small text-muted">
+    <i class="bi bi-info-circle me-1"></i>
+    Giá hiệu lực = <strong>Giá bán niêm yết × Hệ số</strong>. Hệ số hiệu lực lấy theo thứ tự dự phòng:
+    cấu hình riêng (Ser_Mst_CusPartFactor) → hệ số mặc định của loại khách (CusFactor) → 1.
+</div>

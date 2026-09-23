@@ -6980,6 +6980,49 @@ app.MapDelete("/api/part-prices/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Hệ số giá phụ tùng theo loại khách hàng (Ser_Mst_CusPartFactor)
+app.MapGet("/api/cuspartfactors", async (int? partId, int? customerTypeId, string? q, IRoService svc) =>
+{
+    var rows = await svc.CusPartFactorMatrixAsync(partId, customerTypeId, q);
+    return Results.Ok(rows.Select(r => new
+    {
+        r.PartId,
+        r.PartCode,
+        r.PartName,
+        r.BasePrice,
+        r.CustomerTypeId,
+        r.CusTypeCode,
+        r.CusTypeName,
+        r.Factor,
+        r.EffectivePrice,
+        r.IsCustomized
+    }));
+});
+
+app.MapGet("/api/cuspartfactors/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetCusPartFactorSummaryAsync();
+    return Results.Ok(new { s.TotalParts, s.TotalCustomerTypes, s.TotalCells, s.CustomizedCells, s.AvgFactor, s.MinFactor, s.MaxFactor });
+});
+
+app.MapGet("/api/cuspartfactors/resolve", async (int partId, int? customerTypeId, IRoService svc) =>
+{
+    var price = await svc.ResolvePartPriceAsync(partId, customerTypeId);
+    return Results.Ok(new { partId, customerTypeId, effectivePrice = price });
+});
+
+app.MapPost("/api/cuspartfactors", async (SaveCusPartFactorDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.SaveCusPartFactorAsync(dto.PartId, dto.CustomerTypeId, dto.Factor, dto.DealerCode, dto.UpdatedBy ?? "api");
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/cuspartfactors", async (int partId, int customerTypeId, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ResetCusPartFactorAsync(partId, customerTypeId);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 // API Thiết lập nguồn gốc model xe theo số khung (Mst_VINModelOrginal)
 app.MapGet("/api/vin-model-origins", async (string? q, bool? isActive, string? modelCode, string? orginalCode, IRoService svc) =>
 {
@@ -7449,6 +7492,9 @@ record UpdatePartTypeDto(string TypeName, string? DealerCode, string? TypeCodeTS
 // Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
 record CreatePartPriceDto(int PartId, decimal Price, DateTime? DateEffect, string? Remark, string? CreatedBy);
 record UpdatePartPriceDto(int PartId, decimal Price, DateTime? DateEffect, string? Remark, bool? IsActive, string? UpdatedBy);
+
+// Hệ số giá phụ tùng theo loại khách hàng (Ser_Mst_CusPartFactor)
+record SaveCusPartFactorDto(int PartId, int CustomerTypeId, decimal Factor, string? DealerCode, string? UpdatedBy);
 
 // Thiết lập nguồn gốc model xe theo số khung (Mst_VINModelOrginal)
 record CreateVinModelOriginDto(string VINCode, string ModelCode, string OrginalCode, string? Remark, string? CreatedBy);

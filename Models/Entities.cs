@@ -643,6 +643,7 @@ public class Part : IOrgOwned
 
     public List<PartOO> PartOOs { get; set; } = [];
     public List<PartPriceRequestLine> PartPriceRequestLines { get; set; } = [];
+    public List<CusPartFactor> PartFactors { get; set; } = [];
 
     public bool IsLowStock => InStock <= MinStock;
 }
@@ -3098,6 +3099,7 @@ public class CustomerType : IOrgOwned
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public List<CusServiceFactor> ServiceFactors { get; set; } = [];
+    public List<CusPartFactor> PartFactors { get; set; } = [];
 }
 
 /// <summary>Hệ số giá DỊCH VỤ theo loại khách hàng — Ser_Mst_CusServiceFactor trong idn.CarService.
@@ -3138,6 +3140,52 @@ public class CusServiceFactorSummaryDto
     public int TotalServices { get; set; }
     public int TotalCustomerTypes { get; set; }
     public int TotalCells { get; set; }                       // Tổng số ô ma trận (dịch vụ × loại khách)
+    public int CustomizedCells { get; set; }                  // Số ô có cấu hình hệ số riêng
+    public decimal AvgFactor { get; set; }
+    public decimal MinFactor { get; set; }
+    public decimal MaxFactor { get; set; }
+}
+
+/// <summary>Hệ số giá PHỤ TÙNG theo loại khách hàng — Ser_Mst_CusPartFactor trong idn.CarService.
+/// Là bản "phụ tùng" song song với CusServiceFactor (hệ số giá dịch vụ).
+/// Giá hiệu lực = Part.SalePrice × COALESCE(Factor, CusType.CusFactor, 1) — ba tầng dự phòng.
+/// Nghiệp vụ: Ser_Mst_CusPartFactor_Get_HQ / _Get_DL / _Update (xoá cũ theo PartID+DealerCode rồi chèn mới).</summary>
+public class CusPartFactor : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int PartId { get; set; }                           // Phụ tùng áp dụng (PartID → Part)
+    public Part Part { get; set; } = null!;
+    public int CustomerTypeId { get; set; }                   // Loại khách hàng áp dụng (CusTypeID → CustomerType)
+    public CustomerType CustomerType { get; set; } = null!;
+    public decimal Factor { get; set; } = 1.0m;               // Hệ số giá phụ tùng (Factor)
+    public string? DealerCode { get; set; }                   // Mã đại lý áp dụng (DealerCode)
+    public string? LogLUBy { get; set; }                      // Người cập nhật cuối (LogLUBy)
+    public DateTime? LogLUDateTime { get; set; }              // Thời gian cập nhật cuối (LogLUDateTime)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+}
+
+/// <summary>DTO một dòng ma trận hệ số giá phụ tùng × loại khách hàng (kèm giá hiệu lực).</summary>
+public class CusPartFactorRowDto
+{
+    public int PartId { get; set; }
+    public string PartCode { get; set; } = "";
+    public string PartName { get; set; } = "";
+    public decimal BasePrice { get; set; }                    // Giá bán niêm yết gốc của phụ tùng (Part.SalePrice)
+    public int CustomerTypeId { get; set; }
+    public string CusTypeCode { get; set; } = "";
+    public string CusTypeName { get; set; } = "";
+    public decimal Factor { get; set; }                       // Hệ số hiệu lực (đã áp tầng dự phòng)
+    public decimal EffectivePrice { get; set; }               // Giá hiệu lực = BasePrice × Factor
+    public bool IsCustomized { get; set; }                    // true nếu có cấu hình riêng (không dùng hệ số mặc định)
+}
+
+/// <summary>DTO Tổng hợp chỉ số ma trận hệ số giá phụ tùng — Ser_Mst_CusPartFactor.</summary>
+public class CusPartFactorSummaryDto
+{
+    public int TotalParts { get; set; }
+    public int TotalCustomerTypes { get; set; }
+    public int TotalCells { get; set; }                       // Tổng số ô ma trận (phụ tùng × loại khách)
     public int CustomizedCells { get; set; }                  // Số ô có cấu hình hệ số riêng
     public decimal AvgFactor { get; set; }
     public decimal MinFactor { get; set; }

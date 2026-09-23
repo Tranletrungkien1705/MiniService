@@ -1,0 +1,139 @@
+@model List<CusPartFactorRowDto>
+@{
+    ViewData["Title"] = "Hệ số giá phụ tùng theo loại khách (Part Factor)";
+    var summary = ViewBag.Summary as CusPartFactorSummaryDto ?? new CusPartFactorSummaryDto();
+    var parts = ViewBag.Parts as List<Part> ?? [];
+    var types = ViewBag.CustomerTypes as List<CustomerType> ?? [];
+    var partId = ViewBag.PartId as int?;
+    var customerTypeId = ViewBag.CustomerTypeId as int?;
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Phụ tùng đang hoạt động</div>
+                <div class="stat-num text-primary">@summary.TotalParts</div>
+                <div class="text-muted" style="font-size:11.5px">Danh mục Ser_Mst_Part</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Loại khách hàng</div>
+                <div class="stat-num text-info">@summary.TotalCustomerTypes</div>
+                <div class="text-muted" style="font-size:11.5px">Ser_MST_CustomerType</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Ô có hệ số riêng</div>
+                <div class="stat-num text-success">@summary.CustomizedCells <span class="fs-6 text-muted">/ @summary.TotalCells</span></div>
+                <div class="text-muted" style="font-size:11.5px">Cấu hình Ser_Mst_CusPartFactor</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm border-0">
+            <div class="card-body">
+                <div class="text-muted small fw-semibold">Hệ số (Min / TB / Max)</div>
+                <div class="stat-num text-warning" style="font-size:20px">@summary.MinFactor / @summary.AvgFactor / @summary.MaxFactor</div>
+                <div class="text-muted" style="font-size:11.5px">Giá hiệu lực = Giá bán × Hệ số</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <form method="get" class="d-flex align-items-center gap-2 flex-wrap">
+                <div class="input-group input-group-sm" style="max-width:260px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input name="q" value="@ViewBag.Q" class="form-control" placeholder="Mã / tên phụ tùng..." />
+                </div>
+                <select name="partId" class="form-select form-select-sm" style="width:240px" onchange="this.form.submit()">
+                    <option value="">-- Phụ tùng --</option>
+                    @foreach (var p in parts)
+                    {
+                        <option value="@p.Id" selected="@(partId == p.Id)">@p.Code - @p.Name</option>
+                    }
+                </select>
+                <select name="customerTypeId" class="form-select form-select-sm" style="width:200px" onchange="this.form.submit()">
+                    <option value="">-- Loại khách hàng --</option>
+                    @foreach (var t in types)
+                    {
+                        <option value="@t.Id" selected="@(customerTypeId == t.Id)">@t.CusTypeCode - @t.CusTypeName</option>
+                    }
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Lọc</button>
+                @if (!string.IsNullOrEmpty(ViewBag.Q as string) || partId.HasValue || customerTypeId.HasValue)
+                {
+                    <a href="/CusPartFactor" class="btn btn-sm btn-link text-decoration-none">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex align-items-center gap-2">
+                <a href="/Part" class="btn btn-sm btn-outline-secondary"><i class="bi bi-box-seam me-1"></i>Danh mục phụ tùng</a>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:150px">Mã phụ tùng</th>
+                        <th>Tên phụ tùng</th>
+                        <th class="text-end" style="width:130px">Giá bán gốc</th>
+                        <th style="width:180px">Loại khách hàng</th>
+                        <th class="text-center" style="width:110px">Hệ số</th>
+                        <th class="text-end" style="width:140px">Giá hiệu lực</th>
+                        <th class="text-center" style="width:120px">Nguồn hệ số</th>
+                        <th class="text-end" style="width:90px">Thao tác</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-1 text-secondary"></i>
+                                Không tìm thấy dòng hệ số giá phụ tùng nào phù hợp điều kiện lọc.
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var r in Model)
+                    {
+                        <tr>
+                            <td class="font-monospace fw-semibold">@r.PartCode</td>
+                            <td>@r.PartName</td>
+                            <td class="text-end">@r.BasePrice.ToString("N0")</td>
+                            <td>
+                                <span class="font-monospace small text-muted">@r.CusTypeCode</span> - @r.CusTypeName
+                            </td>
+                            <td class="text-center fw-semibold">@r.Factor</td>
+                            <td class="text-end fw-bold text-success">@r.EffectivePrice.ToString("N0")</td>
+                            <td class="text-center">
+                                @if (r.IsCustomized)
+                                {
+                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Riêng</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border">Mặc định</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                <a asp-action="Detail" asp-route-partId="@r.PartId" class="btn btn-sm btn-outline-secondary" title="Xem chi tiết">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
