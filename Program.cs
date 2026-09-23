@@ -4123,6 +4123,218 @@ app.MapDelete("/api/cusdebits/payments/{paymentId:int}", async (int paymentId, I
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// =========================================================================
+// API Quản lý Công nợ Nhà Cung Cấp & Thanh toán nợ NCC (Ser_SupplierDebit, Ser_SupplierDebitPayment / MH 56)
+// =========================================================================
+
+app.MapGet("/api/supplierdebits", async (int? supplierId, SupplierDebitStatus? status, SupplierDebitType? type, string? q, bool? isOverdue, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var debits = await svc.SupplierDebitsAsync(supplierId, status, type, q, isOverdue, fromDate, toDate);
+    return Results.Ok(debits.Select(d => new
+    {
+        d.Id,
+        d.DebitNo,
+        supplier = new { d.Supplier.Id, d.Supplier.Code, d.Supplier.Name, d.Supplier.Phone, d.Supplier.BankAccount, d.Supplier.BankName },
+        stockIn = d.StockIn != null ? new { d.StockIn.Id, d.StockIn.StockInNo, d.StockIn.BillNo, d.StockIn.Total } : null,
+        orderPart = d.OrderPart != null ? new { d.OrderPart.Id, d.OrderPart.OrderPartNo } : null,
+        debitType = Ui.SupplierDebitType(d.DebitType).text,
+        type = (int)d.DebitType,
+        status = Ui.SupplierDebitStatus(d.Status).text,
+        statusCode = Ui.SupplierDebitStatus(d.Status).code,
+        statusValue = (int)d.Status,
+        d.DebitDate,
+        d.DueDate,
+        d.DebitAmount,
+        d.PaidAmount,
+        d.RemainAmount,
+        d.IsOverdue,
+        d.CanPay,
+        d.Description,
+        d.CreatedBy,
+        d.CreatedAt,
+        paymentCount = d.Payments.Count
+    }));
+});
+
+app.MapGet("/api/supplierdebits/summaries", async (string? q, bool? onlyHasDebit, IRoService svc) =>
+{
+    var summaries = await svc.SupplierDebitSummariesAsync(q, onlyHasDebit);
+    return Results.Ok(summaries);
+});
+
+app.MapGet("/api/supplierdebits/supplier/{supplierId:int}", async (int supplierId, IRoService svc) =>
+{
+    try
+    {
+        var (supplier, debits, payments, totalDebit, totalPaid, remainingDebit) = await svc.GetSupplierDebitProfileAsync(supplierId);
+        return Results.Ok(new
+        {
+            supplier = new { supplier.Id, supplier.Code, supplier.Name, supplier.Phone, supplier.Email, supplier.Address, supplier.ContactName, supplier.ContactPhone, supplier.TaxCode, supplier.BankAccount, supplier.BankName },
+            summary = new
+            {
+                totalDebit,
+                totalPaid,
+                remainingDebit,
+                hasDebit = remainingDebit > 0,
+                debitCount = debits.Count,
+                paymentCount = payments.Count,
+                overdueCount = debits.Count(d => d.IsOverdue)
+            },
+            debits = debits.Select(d => new
+            {
+                d.Id, d.DebitNo, d.DebitAmount, d.PaidAmount, d.RemainAmount,
+                status = Ui.SupplierDebitStatus(d.Status).text,
+                statusCode = Ui.SupplierDebitStatus(d.Status).code,
+                d.DebitDate, d.DueDate, d.IsOverdue,
+                stockInNo = d.StockIn?.StockInNo,
+                orderPartNo = d.OrderPart?.OrderPartNo,
+                d.Description
+            }),
+            payments = payments.Select(p => new
+            {
+                p.Id, p.PaymentNo, p.PaymentAmount, p.PaymentDate,
+                method = Ui.PaymentMethod(p.Method).text,
+                p.PayPersonName, p.BankAccount, p.BankName, p.TransactionRef, p.Cashier, p.Note,
+                debitNo = p.SupplierDebit?.DebitNo
+            })
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.NotFound(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/supplierdebits/{id:int}", async (int id, IRoService svc) =>
+{
+    var d = await svc.GetSupplierDebitAsync(id);
+    if (d == null) return Results.NotFound(new { error = "Không tìm thấy khoản nợ NCC." });
+    return Results.Ok(new
+    {
+        d.Id,
+        d.DebitNo,
+        supplier = new { d.Supplier.Id, d.Supplier.Code, d.Supplier.Name, d.Supplier.Phone, d.Supplier.Address, d.Supplier.BankAccount, d.Supplier.BankName },
+        stockIn = d.StockIn != null ? new { d.StockIn.Id, d.StockIn.StockInNo, d.StockIn.BillNo, d.StockIn.Total, d.StockIn.StockInDate, itemCount = d.StockIn.Items.Count } : null,
+        orderPart = d.OrderPart != null ? new { d.OrderPart.Id, d.OrderPart.OrderPartNo } : null,
+        debitType = Ui.SupplierDebitType(d.DebitType).text,
+        status = Ui.SupplierDebitStatus(d.Status).text,
+        statusCode = Ui.SupplierDebitStatus(d.Status).code,
+        d.DebitDate,
+        d.DueDate,
+        d.DebitAmount,
+        d.PaidAmount,
+        d.RemainAmount,
+        d.IsOverdue,
+        d.CanPay,
+        d.Description,
+        d.CreatedBy,
+        d.CreatedAt,
+        payments = d.Payments.Select(p => new
+        {
+            p.Id, p.PaymentNo, p.PaymentAmount, p.PaymentDate,
+            method = Ui.PaymentMethod(p.Method).text,
+            p.PayPersonName, p.BankAccount, p.BankName, p.TransactionRef, p.Note, p.Cashier
+        })
+    });
+});
+
+app.MapPost("/api/supplierdebits", async (CreateSupplierDebitDto dto, IRoService svc) =>
+{
+    try
+    {
+        var debit = new SupplierDebit
+        {
+            SupplierId = dto.SupplierId,
+            StockInId = dto.StockInId,
+            OrderPartId = dto.OrderPartId,
+            DebitType = dto.DebitType ?? SupplierDebitType.StockIn,
+            DebitAmount = dto.DebitAmount,
+            DebitDate = dto.DebitDate ?? DateTime.Today,
+            DueDate = dto.DueDate ?? DateTime.Today.AddDays(30),
+            Description = dto.Description,
+            CreatedBy = string.IsNullOrWhiteSpace(dto.CreatedBy) ? "Kế toán kho" : dto.CreatedBy
+        };
+        var id = await svc.CreateSupplierDebitAsync(debit);
+        return Results.Created($"/api/supplierdebits/{id}", new { id, debit.DebitNo, message = "Đã ghi nhận công nợ NCC thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/supplierdebits/from-stockin", async (CreateSupplierDebitFromStockInDto dto, IRoService svc) =>
+{
+    var (ok, msg, debitId) = await svc.CreateSupplierDebitFromStockInAsync(dto.StockInId, dto.SupplierId, dto.DueDate, dto.Note);
+    return ok ? Results.Ok(new { debitId, message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/supplierdebits/{id:int}/cancel", async (int id, CancelSupplierDebitDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.CancelSupplierDebitAsync(id, dto?.Reason);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/supplierdebits/payments", async (CreateSupplierDebitPaymentDto dto, IRoService svc) =>
+{
+    try
+    {
+        var payment = new SupplierDebitPayment
+        {
+            SupplierId = dto.SupplierId,
+            SupplierDebitId = dto.SupplierDebitId,
+            PaymentAmount = dto.PaymentAmount,
+            PaymentDate = dto.PaymentDate ?? DateTime.Today,
+            Method = dto.Method ?? PaymentMethod.BankTransfer,
+            PayPersonName = dto.PayPersonName ?? "",
+            PayPersonIdCard = dto.PayPersonIdCard,
+            PayPersonPhone = dto.PayPersonPhone,
+            BankAccount = dto.BankAccount,
+            BankName = dto.BankName,
+            TransactionRef = dto.TransactionRef,
+            Note = dto.Note,
+            Cashier = string.IsNullOrWhiteSpace(dto.Cashier) ? "Thủ quỹ" : dto.Cashier
+        };
+        var id = await svc.CreateSupplierDebitPaymentAsync(payment, allocateFifoIfNoDebit: true);
+        return Results.Created($"/api/supplierdebits/payments/{id}", new { id, payment.PaymentNo, message = "Đã lập phiếu chi nợ NCC thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/supplierdebits/payments/{paymentId:int}", async (int paymentId, IRoService svc) =>
+{
+    var p = await svc.GetSupplierDebitPaymentAsync(paymentId);
+    if (p == null) return Results.NotFound(new { error = "Không tìm thấy phiếu chi." });
+    return Results.Ok(new
+    {
+        p.Id,
+        p.PaymentNo,
+        p.PaymentAmount,
+        p.PaymentDate,
+        method = Ui.PaymentMethod(p.Method).text,
+        p.PayPersonName,
+        p.PayPersonIdCard,
+        p.PayPersonPhone,
+        p.BankAccount,
+        p.BankName,
+        p.TransactionRef,
+        p.Note,
+        p.Cashier,
+        p.CreatedAt,
+        supplier = new { p.Supplier.Id, p.Supplier.Code, p.Supplier.Name, p.Supplier.Phone },
+        debit = p.SupplierDebit != null ? new { p.SupplierDebit.Id, p.SupplierDebit.DebitNo, p.SupplierDebit.DebitAmount, p.SupplierDebit.RemainAmount } : null
+    });
+});
+
+app.MapDelete("/api/supplierdebits/payments/{paymentId:int}", async (int paymentId, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteSupplierDebitPaymentAsync(paymentId);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -4236,3 +4448,7 @@ record CreateCusDebitDto(int CustomerId, int? CarId, int? ROId, CusDebitType? De
 record CreateDebitFromRoDto(int ROId, decimal? Amount, DateTime? DueDate, string? Note);
 record CancelCusDebitDto(string? Reason);
 record CreateCusDebitPaymentDto(int CustomerId, int? CusDebitId, decimal PaymentAmount, DateTime? PaymentDate, PaymentMethod? Method, string? PayPersonName, string? PayPersonIdCard, string? PayPersonPhone, string? TransactionRef, string? Note, string? Collector);
+record CreateSupplierDebitDto(int SupplierId, int? StockInId, int? OrderPartId, SupplierDebitType? DebitType, decimal DebitAmount, DateTime? DebitDate, DateTime? DueDate, string? Description, string? CreatedBy);
+record CreateSupplierDebitFromStockInDto(int StockInId, int? SupplierId, DateTime? DueDate, string? Note);
+record CancelSupplierDebitDto(string? Reason);
+record CreateSupplierDebitPaymentDto(int SupplierId, int? SupplierDebitId, decimal PaymentAmount, DateTime? PaymentDate, PaymentMethod? Method, string? PayPersonName, string? PayPersonIdCard, string? PayPersonPhone, string? BankAccount, string? BankName, string? TransactionRef, string? Note, string? Cashier);

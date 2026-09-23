@@ -63,6 +63,8 @@ public class AppDbContext : DbContext
     public DbSet<PartOO> PartOOs => Set<PartOO>();
     public DbSet<CusDebit> CusDebits => Set<CusDebit>();
     public DbSet<CusDebitPayment> CusDebitPayments => Set<CusDebitPayment>();
+    public DbSet<SupplierDebit> SupplierDebits => Set<SupplierDebit>();
+    public DbSet<SupplierDebitPayment> SupplierDebitPayments => Set<SupplierDebitPayment>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -621,6 +623,28 @@ public class AppDbContext : DbContext
             e.Property(x => x.PaymentAmount).HasPrecision(18, 2);
             e.HasOne(x => x.Customer).WithMany(x => x.CusDebitPayments).HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.CusDebit).WithMany(x => x.Payments).HasForeignKey(x => x.CusDebitId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SupplierDebit>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.DebitNo }).IsUnique();
+            e.Property(x => x.DebitAmount).HasPrecision(18, 2);
+            e.Property(x => x.PaidAmount).HasPrecision(18, 2);
+            e.Ignore(x => x.RemainAmount);
+            e.Ignore(x => x.IsOverdue);
+            e.Ignore(x => x.CanPay);
+            e.HasOne(x => x.Supplier).WithMany(x => x.SupplierDebits).HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.StockIn).WithMany(x => x.SupplierDebits).HasForeignKey(x => x.StockInId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.OrderPart).WithMany().HasForeignKey(x => x.OrderPartId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Payments).WithOne(x => x.SupplierDebit).HasForeignKey(x => x.SupplierDebitId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SupplierDebitPayment>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.PaymentNo }).IsUnique();
+            e.Property(x => x.PaymentAmount).HasPrecision(18, 2);
+            e.HasOne(x => x.Supplier).WithMany(x => x.SupplierDebitPayments).HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.SupplierDebit).WithMany(x => x.Payments).HasForeignKey(x => x.SupplierDebitId).OnDelete(DeleteBehavior.SetNull);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

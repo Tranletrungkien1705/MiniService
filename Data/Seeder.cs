@@ -2517,10 +2517,10 @@ public static class Seeder
 
         if (!await db.Suppliers.AnyAsync())
         {
-            var s1 = new Supplier { Code = "HTC", Name = "Công ty Cổ phần Liên doanh Ô tô Hyundai Thành Công Việt Nam", Address = "Tòa nhà Epic Tower, Nam Từ Liêm, Hà Nội", Phone = "024.3826.2614", Email = "parts@hyundai-thanhcong.vn", ContactName = "Nguyễn Hoàng Minh", ContactPhone = "0912.345.678", TaxCode = "0102872391", IsActive = true };
-            var s2 = new Supplier { Code = "MOBIS", Name = "Công ty TNHH Phụ tùng Hyundai Mobis Việt Nam", Address = "KCN Đình Trám, Việt Yên, Bắc Giang", Phone = "0204.387.9999", Email = "order@mobis.co.kr", ContactName = "Kim Jung Wook", ContactPhone = "0988.777.666", TaxCode = "2400589123", IsActive = true };
-            var s3 = new Supplier { Code = "CASTROL", Name = "Công ty TNHH Castrol BP Petco Việt Nam", Address = "Quận 1, TP. Hồ Chí Minh", Phone = "028.3821.9153", Email = "dauthuongmai@castrol.com", ContactName = "Lê Quang Vinh", ContactPhone = "0903.888.999", TaxCode = "0300628284", IsActive = true };
-            var s4 = new Supplier { Code = "DENSO", Name = "Công ty TNHH Denso Việt Nam", Address = "KCN Thăng Long, Đông Anh, Hà Nội", Phone = "024.3881.1601", Email = "sales@denso.com.vn", ContactName = "Phạm Tuấn Anh", ContactPhone = "0915.222.333", TaxCode = "0101183569", IsActive = true };
+            var s1 = new Supplier { Code = "HTC", Name = "Công ty Cổ phần Liên doanh Ô tô Hyundai Thành Công Việt Nam", Address = "Tòa nhà Epic Tower, Nam Từ Liêm, Hà Nội", Phone = "024.3826.2614", Email = "parts@hyundai-thanhcong.vn", ContactName = "Nguyễn Hoàng Minh", ContactPhone = "0912.345.678", TaxCode = "0102872391", BankAccount = "0011004568899", BankName = "Vietcombank - CN Sở Giao Dịch Hà Nội", IsActive = true };
+            var s2 = new Supplier { Code = "MOBIS", Name = "Công ty TNHH Phụ tùng Hyundai Mobis Việt Nam", Address = "KCN Đình Trám, Việt Yên, Bắc Giang", Phone = "0204.387.9999", Email = "order@mobis.co.kr", ContactName = "Kim Jung Wook", ContactPhone = "0988.777.666", TaxCode = "2400589123", BankAccount = "118002678999", BankName = "VietinBank - CN Bắc Giang", IsActive = true };
+            var s3 = new Supplier { Code = "CASTROL", Name = "Công ty TNHH Castrol BP Petco Việt Nam", Address = "Quận 1, TP. Hồ Chí Minh", Phone = "028.3821.9153", Email = "dauthuongmai@castrol.com", ContactName = "Lê Quang Vinh", ContactPhone = "0903.888.999", TaxCode = "0300628284", BankAccount = "0071008989899", BankName = "Vietcombank - CN TP.HCM", IsActive = true };
+            var s4 = new Supplier { Code = "DENSO", Name = "Công ty TNHH Denso Việt Nam", Address = "KCN Thăng Long, Đông Anh, Hà Nội", Phone = "024.3881.1601", Email = "sales@denso.com.vn", ContactName = "Phạm Tuấn Anh", ContactPhone = "0915.222.333", TaxCode = "0101183569", BankAccount = "19033456789012", BankName = "Techcombank - CN Thăng Long", IsActive = true };
             db.Suppliers.AddRange(s1, s2, s3, s4);
             await db.SaveChangesAsync();
         }
@@ -2949,6 +2949,132 @@ public static class Seeder
             };
 
             db.CusDebitPayments.AddRange(payments);
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.SupplierDebits.AnyAsync())
+        {
+            var supHtc = await db.Suppliers.FirstOrDefaultAsync(s => s.Code == "HTC");
+            var supMobis = await db.Suppliers.FirstOrDefaultAsync(s => s.Code == "MOBIS");
+            var supCastrol = await db.Suppliers.FirstOrDefaultAsync(s => s.Code == "CASTROL");
+            var supDenso = await db.Suppliers.FirstOrDefaultAsync(s => s.Code == "DENSO");
+            var stockIn1 = await db.StockIns.FirstOrDefaultAsync(s => s.StockInNo == "NK260427-001");
+
+            var debits = new List<SupplierDebit>();
+
+            // 1. Khoản nợ phụ tùng gầm & má phanh MOBIS (đã trả 1 phần)
+            var deb1 = new SupplierDebit
+            {
+                DebitNo = $"SDB{DateTime.Today:yyMMdd}-001",
+                SupplierId = supMobis?.Id ?? 2,
+                StockInId = stockIn1?.Id,
+                DebitType = SupplierDebitType.StockIn,
+                Status = SupplierDebitStatus.Active,
+                DebitDate = DateTime.Today.AddDays(-14),
+                DueDate = DateTime.Today.AddDays(16),
+                DebitAmount = 18500000,
+                PaidAmount = 8500000,
+                Description = "Công nợ phụ tùng gầm và má phanh chính hãng nhập kho theo phiếu NK260427-001.",
+                CreatedBy = "Kế toán kho",
+                CreatedAt = DateTime.Now.AddDays(-14)
+            };
+            debits.Add(deb1);
+
+            // 2. Khoản nợ linh kiện điện tử HTC (Quá hạn 10 ngày)
+            var deb2 = new SupplierDebit
+            {
+                DebitNo = $"SDB{DateTime.Today:yyMMdd}-002",
+                SupplierId = supHtc?.Id ?? 1,
+                DebitType = SupplierDebitType.StockIn,
+                Status = SupplierDebitStatus.Active,
+                DebitDate = DateTime.Today.AddDays(-40),
+                DueDate = DateTime.Today.AddDays(-10),
+                DebitAmount = 32000000,
+                PaidAmount = 0,
+                Description = "Lô linh kiện điện tử cảm biến và cụm điều khiển ABS động cơ xe Tucson & SantaFe. Quá hạn thanh toán 10 ngày.",
+                CreatedBy = "Kế toán kho",
+                CreatedAt = DateTime.Now.AddDays(-40)
+            };
+            debits.Add(deb2);
+
+            // 3. Khoản nợ dầu nhớt Castrol (Còn trong hạn)
+            var deb3 = new SupplierDebit
+            {
+                DebitNo = $"SDB{DateTime.Today:yyMMdd}-003",
+                SupplierId = supCastrol?.Id ?? 3,
+                DebitType = SupplierDebitType.StockIn,
+                Status = SupplierDebitStatus.Active,
+                DebitDate = DateTime.Today.AddDays(-5),
+                DueDate = DateTime.Today.AddDays(25),
+                DebitAmount = 12600000,
+                PaidAmount = 0,
+                Description = "Nhập 5 phuy dầu động cơ tổng hợp Castrol Magnatec 5W-30 và 20 can dầu hộp số tự động ATF.",
+                CreatedBy = "Thủ kho Hùng",
+                CreatedAt = DateTime.Now.AddDays(-5)
+            };
+            debits.Add(deb3);
+
+            // 4. Khoản nợ bugi Denso đã tất toán 100% (Cleared)
+            var deb4 = new SupplierDebit
+            {
+                DebitNo = $"SDB{DateTime.Today:yyMMdd}-004",
+                SupplierId = supDenso?.Id ?? 4,
+                DebitType = SupplierDebitType.StockIn,
+                Status = SupplierDebitStatus.Cleared,
+                DebitDate = DateTime.Today.AddDays(-25),
+                DueDate = DateTime.Today.AddDays(5),
+                DebitAmount = 7400000,
+                PaidAmount = 7400000,
+                ClearedAt = DateTime.Now.AddDays(-7),
+                Description = "Lô bugi đánh lửa Denso Iridium Tough và lọc gió cabin xe Creta. Đã thanh toán đầy đủ qua UNC Techcombank.",
+                CreatedBy = "Kế toán kho",
+                CreatedAt = DateTime.Now.AddDays(-25)
+            };
+            debits.Add(deb4);
+
+            db.SupplierDebits.AddRange(debits);
+            await db.SaveChangesAsync();
+
+            // Seed Supplier Payments
+            var pmtList = new List<SupplierDebitPayment>
+            {
+                new SupplierDebitPayment
+                {
+                    PaymentNo = $"SDP{DateTime.Today:yyMMdd}-001",
+                    SupplierId = supMobis?.Id ?? 2,
+                    SupplierDebitId = deb1.Id,
+                    PaymentDate = DateTime.Today.AddDays(-7),
+                    PaymentAmount = 8500000,
+                    Method = PaymentMethod.BankTransfer,
+                    PayPersonName = supMobis?.ContactName ?? "Kim Jung Wook",
+                    PayPersonPhone = supMobis?.ContactPhone ?? "0988.777.666",
+                    BankAccount = supMobis?.BankAccount ?? "118002678999",
+                    BankName = supMobis?.BankName ?? "VietinBank - CN Bắc Giang",
+                    TransactionRef = "UNC-VIB-2026-0418",
+                    Note = "Thanh toán đợt 1 tiền hàng phụ tùng gầm và má phanh theo UNC ngân hàng.",
+                    Cashier = "Thủ quỹ Minh",
+                    CreatedAt = DateTime.Now.AddDays(-7)
+                },
+                new SupplierDebitPayment
+                {
+                    PaymentNo = $"SDP{DateTime.Today:yyMMdd}-002",
+                    SupplierId = supDenso?.Id ?? 4,
+                    SupplierDebitId = deb4.Id,
+                    PaymentDate = DateTime.Today.AddDays(-7),
+                    PaymentAmount = 7400000,
+                    Method = PaymentMethod.BankTransfer,
+                    PayPersonName = supDenso?.ContactName ?? "Phạm Tuấn Anh",
+                    PayPersonPhone = supDenso?.ContactPhone ?? "0915.222.333",
+                    BankAccount = supDenso?.BankAccount ?? "19033456789012",
+                    BankName = supDenso?.BankName ?? "Techcombank - CN Thăng Long",
+                    TransactionRef = "UNC-TCB-2026-0922",
+                    Note = "Tất toán toàn bộ công nợ lô bugi đánh lửa Denso theo UNC Techcombank.",
+                    Cashier = "Thủ quỹ Minh",
+                    CreatedAt = DateTime.Now.AddDays(-7)
+                }
+            };
+
+            db.SupplierDebitPayments.AddRange(pmtList);
             await db.SaveChangesAsync();
         }
     }

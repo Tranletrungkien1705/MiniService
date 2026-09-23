@@ -298,6 +298,19 @@ public interface IRoService
     Task<(bool ok, string msg, int? debitId)> CreateDebitFromROAsync(int roId, decimal? amount, DateTime? dueDate, string? note);
     Task<List<Customer>> CustomersForDebitSelectAsync();
     Task<List<RepairOrder>> ROsWithUnpaidBalanceAsync();
+    // Supplier Debit Management (Ser_SupplierDebit, Ser_SupplierDebitPayment / MH 56)
+    Task<List<SupplierDebit>> SupplierDebitsAsync(int? supplierId, SupplierDebitStatus? status, SupplierDebitType? type, string? q, bool? isOverdue, DateTime? fromDate, DateTime? toDate);
+    Task<List<SupplierDebitSummaryDto>> SupplierDebitSummariesAsync(string? q, bool? onlyHasDebit);
+    Task<(Supplier supplier, List<SupplierDebit> debits, List<SupplierDebitPayment> payments, decimal totalDebit, decimal totalPaid, decimal remainingDebit)> GetSupplierDebitProfileAsync(int supplierId);
+    Task<SupplierDebit?> GetSupplierDebitAsync(int id);
+    Task<SupplierDebitPayment?> GetSupplierDebitPaymentAsync(int paymentId);
+    Task<int> CreateSupplierDebitAsync(SupplierDebit debit);
+    Task<int> CreateSupplierDebitPaymentAsync(SupplierDebitPayment payment, bool allocateFifoIfNoDebit = true);
+    Task<(bool ok, string msg)> CancelSupplierDebitAsync(int id, string? reason);
+    Task<(bool ok, string msg)> DeleteSupplierDebitPaymentAsync(int paymentId);
+    Task<(bool ok, string msg, int? debitId)> CreateSupplierDebitFromStockInAsync(int stockInId, int? supplierId, DateTime? dueDate, string? note);
+    Task<List<Supplier>> SuppliersForDebitSelectAsync();
+    Task<List<StockIn>> StockInsForDebitSelectAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -1208,6 +1221,34 @@ public class RoService(AppDbContext db) : IRoService
             stockIn.ApprovedBy = string.IsNullOrWhiteSpace(approvedBy) ? "Kế toán kho" : approvedBy.Trim();
             if (!string.IsNullOrWhiteSpace(note))
                 stockIn.Description = string.IsNullOrWhiteSpace(stockIn.Description) ? note.Trim() : $"{stockIn.Description} | {note.Trim()}";
+
+            // Tự động ghi nhận công nợ Nhà Cung Cấp theo Ser_SupplierDebit idn.CarService
+            var existingDebit = await db.SupplierDebits.FirstOrDefaultAsync(d => d.StockInId == stockIn.Id);
+            if (existingDebit == null && stockIn.Total > 0)
+            {
+                var supplier = await db.Suppliers.FirstOrDefaultAsync(s => s.Name == stockIn.SupplierName || s.Code == stockIn.SupplierName);
+                if (supplier != null)
+                {
+                    var count = await db.SupplierDebits.CountAsync() + 1;
+                    var newDebit = new SupplierDebit
+                    {
+                        DebitNo = $"SDB{DateTime.Today:yyMMdd}-{count:D3}",
+                        SupplierId = supplier.Id,
+                        StockInId = stockIn.Id,
+                        OrderPartId = stockIn.OrderPartId,
+                        DebitType = SupplierDebitType.StockIn,
+                        Status = SupplierDebitStatus.Active,
+                        DebitDate = stockIn.StockInDate,
+                        DueDate = stockIn.StockInDate.AddDays(30),
+                        DebitAmount = stockIn.Total,
+                        PaidAmount = 0,
+                        Description = $"Công nợ tiền hàng nhập kho {stockIn.StockInNo}" + (!string.IsNullOrWhiteSpace(stockIn.BillNo) ? $" (HĐ: {stockIn.BillNo})" : ""),
+                        CreatedBy = stockIn.ApprovedBy ?? "Kế toán kho",
+                        CreatedAt = DateTime.Now
+                    };
+                    db.SupplierDebits.Add(newDebit);
+                }
+            }
 
             await db.SaveChangesAsync();
             return (true, $"Đã duyệt nhập kho {stockIn.StockInNo}! Tồn kho và giá vốn phụ tùng đã được cập nhật thành công.");
@@ -2236,6 +2277,29 @@ public class RoService(AppDbContext db) : IRoService
         order.StockInId = stockIn.Id;
         order.Status = OrderPartStatus.Finished;
         order.FinishedAt = DateTime.Now;
+
+        // Tự động ghi nhận công nợ NCC theo Ser_SupplierDebit idn.CarService
+        var sup = await db.Suppliers.FirstOrDefaultAsync(s => s.Name == order.SupplierName || s.Code == order.SupplierName);
+        if (sup != null && stockIn.Total > 0)
+        {
+            var count = await db.SupplierDebits.CountAsync() + 1;
+            db.SupplierDebits.Add(new SupplierDebit
+            {
+                DebitNo = $"SDB{DateTime.Today:yyMMdd}-{count:D3}",
+                SupplierId = sup.Id,
+                StockInId = stockIn.Id,
+                OrderPartId = order.Id,
+                DebitType = SupplierDebitType.StockIn,
+                Status = SupplierDebitStatus.Active,
+                DebitDate = stockIn.StockInDate,
+                DueDate = stockIn.StockInDate.AddDays(30),
+                DebitAmount = stockIn.Total,
+                PaidAmount = 0,
+                Description = $"Công nợ nhập kho từ đơn đặt hàng NCC {order.OrderPartNo}",
+                CreatedBy = stockIn.ApprovedBy ?? "Thủ kho",
+                CreatedAt = DateTime.Now
+            });
+        }
 
         // Nếu đơn hàng gắn với RO đang ở trạng thái Wait4Part (Đợi phụ tùng) -> Chuyển sang HasPart (Đã có phụ tùng)!
         if (order.ROId.HasValue)
@@ -6185,4 +6249,375 @@ public class RoService(AppDbContext db) : IRoService
             .Where(r => r.Status != ROStatus.Rejected && r.Status != ROStatus.NotResponding)
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync();
+
+    // =========================================================================
+    // QUẢN LÝ CÔNG NỢ NHÀ CUNG CẤP & THANH TOÁN NỢ NCC (Ser_SupplierDebit, Ser_SupplierDebitPayment / MH 56)
+    // =========================================================================
+
+    public async Task<List<SupplierDebit>> SupplierDebitsAsync(int? supplierId, SupplierDebitStatus? status, SupplierDebitType? type, string? q, bool? isOverdue, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.SupplierDebits
+            .Include(d => d.Supplier)
+            .Include(d => d.StockIn)
+            .Include(d => d.OrderPart)
+            .Include(d => d.Payments)
+            .AsQueryable();
+
+        if (supplierId.HasValue && supplierId.Value > 0)
+            query = query.Where(d => d.SupplierId == supplierId.Value);
+
+        if (status.HasValue)
+            query = query.Where(d => d.Status == status.Value);
+
+        if (type.HasValue)
+            query = query.Where(d => d.DebitType == type.Value);
+
+        if (isOverdue == true)
+        {
+            var today = DateTime.Today;
+            query = query.Where(d => d.Status == SupplierDebitStatus.Active && d.DueDate.HasValue && d.DueDate.Value.Date < today);
+        }
+
+        if (fromDate.HasValue)
+            query = query.Where(d => d.DebitDate >= fromDate.Value.Date);
+
+        if (toDate.HasValue)
+            query = query.Where(d => d.DebitDate <= toDate.Value.Date.AddDays(1).AddTicks(-1));
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(d => d.DebitNo.ToLower().Contains(term)
+                || d.Supplier.Name.ToLower().Contains(term)
+                || d.Supplier.Code.ToLower().Contains(term)
+                || (d.StockIn != null && d.StockIn.StockInNo.ToLower().Contains(term))
+                || (d.StockIn != null && d.StockIn.BillNo != null && d.StockIn.BillNo.ToLower().Contains(term))
+                || (d.OrderPart != null && d.OrderPart.OrderPartNo.ToLower().Contains(term))
+                || (d.Description != null && d.Description.ToLower().Contains(term)));
+        }
+
+        return await query.OrderByDescending(d => d.DebitDate).ThenByDescending(d => d.CreatedAt).ToListAsync();
+    }
+
+    public async Task<List<SupplierDebitSummaryDto>> SupplierDebitSummariesAsync(string? q, bool? onlyHasDebit)
+    {
+        var suppliers = await db.Suppliers
+            .Include(s => s.SupplierDebits)
+            .Include(s => s.SupplierDebitPayments)
+            .Where(s => s.IsActive)
+            .ToListAsync();
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            suppliers = suppliers.Where(s => s.Name.ToLower().Contains(term)
+                || s.Code.ToLower().Contains(term)
+                || (s.Phone != null && s.Phone.Contains(term))
+                || (s.ContactName != null && s.ContactName.ToLower().Contains(term))).ToList();
+        }
+
+        var summaries = suppliers.Select(s =>
+        {
+            var validDebits = s.SupplierDebits.Where(d => d.Status != SupplierDebitStatus.Cancelled).ToList();
+            var totalDebit = validDebits.Sum(d => d.DebitAmount);
+            var totalPaid = validDebits.Sum(d => d.PaidAmount);
+            var activeCount = validDebits.Count(d => d.Status == SupplierDebitStatus.Active && d.RemainAmount > 0);
+            var overdueCount = validDebits.Count(d => d.IsOverdue);
+            var lastDebit = validDebits.OrderByDescending(d => d.DebitDate).FirstOrDefault()?.DebitDate;
+            var lastPayment = s.SupplierDebitPayments.OrderByDescending(p => p.PaymentDate).FirstOrDefault()?.PaymentDate;
+
+            return new SupplierDebitSummaryDto
+            {
+                SupplierId = s.Id,
+                SupplierCode = s.Code,
+                SupplierName = s.Name,
+                Phone = s.Phone,
+                Address = s.Address,
+                ContactName = s.ContactName,
+                BankAccount = s.BankAccount,
+                BankName = s.BankName,
+                TotalDebitAmount = totalDebit,
+                TotalPaidAmount = totalPaid,
+                ActiveDebitCount = activeCount,
+                OverdueDebitCount = overdueCount,
+                LastDebitDate = lastDebit,
+                LastPaymentDate = lastPayment
+            };
+        });
+
+        if (onlyHasDebit == true)
+            summaries = summaries.Where(s => s.HasDebit);
+
+        return summaries.OrderByDescending(s => s.RemainingDebit).ThenBy(s => s.SupplierName).ToList();
+    }
+
+    public async Task<(Supplier supplier, List<SupplierDebit> debits, List<SupplierDebitPayment> payments, decimal totalDebit, decimal totalPaid, decimal remainingDebit)> GetSupplierDebitProfileAsync(int supplierId)
+    {
+        var supplier = await db.Suppliers
+            .Include(s => s.SupplierDebits).ThenInclude(d => d.StockIn)
+            .Include(s => s.SupplierDebits).ThenInclude(d => d.OrderPart)
+            .Include(s => s.SupplierDebits).ThenInclude(d => d.Payments)
+            .Include(s => s.SupplierDebitPayments).ThenInclude(p => p.SupplierDebit)
+            .FirstOrDefaultAsync(s => s.Id == supplierId);
+
+        if (supplier == null)
+            throw new InvalidOperationException("Không tìm thấy Nhà cung cấp.");
+
+        var debits = supplier.SupplierDebits.OrderByDescending(d => d.DebitDate).ThenByDescending(d => d.CreatedAt).ToList();
+        var payments = supplier.SupplierDebitPayments.OrderByDescending(p => p.PaymentDate).ThenByDescending(p => p.CreatedAt).ToList();
+
+        var validDebits = debits.Where(d => d.Status != SupplierDebitStatus.Cancelled).ToList();
+        var totalDebit = validDebits.Sum(d => d.DebitAmount);
+        var totalPaid = validDebits.Sum(d => d.PaidAmount);
+        var remainingDebit = Math.Max(0, totalDebit - totalPaid);
+
+        return (supplier, debits, payments, totalDebit, totalPaid, remainingDebit);
+    }
+
+    public Task<SupplierDebit?> GetSupplierDebitAsync(int id) =>
+        db.SupplierDebits
+            .Include(d => d.Supplier)
+            .Include(d => d.StockIn).ThenInclude(s => s!.Items)
+            .Include(d => d.OrderPart)
+            .Include(d => d.Payments)
+            .FirstOrDefaultAsync(d => d.Id == id);
+
+    public Task<SupplierDebitPayment?> GetSupplierDebitPaymentAsync(int paymentId) =>
+        db.SupplierDebitPayments
+            .Include(p => p.Supplier)
+            .Include(p => p.SupplierDebit).ThenInclude(d => d!.StockIn)
+            .Include(p => p.SupplierDebit).ThenInclude(d => d!.OrderPart)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+    public async Task<int> CreateSupplierDebitAsync(SupplierDebit debit)
+    {
+        if (debit.DebitAmount <= 0)
+            throw new InvalidOperationException("Số tiền công nợ phải lớn hơn 0.");
+
+        if (debit.SupplierId <= 0)
+            throw new InvalidOperationException("Vui lòng chọn Nhà cung cấp.");
+
+        if (string.IsNullOrWhiteSpace(debit.DebitNo))
+        {
+            var today = DateTime.Today;
+            var prefix = $"SDB{today:yyMMdd}-";
+            var count = await db.SupplierDebits.CountAsync(d => d.DebitNo.StartsWith(prefix)) + 1;
+            debit.DebitNo = $"{prefix}{count:D3}";
+        }
+
+        // Link with StockIn if supplied
+        if (debit.StockInId.HasValue && debit.StockInId.Value > 0)
+        {
+            var si = await db.StockIns.FirstOrDefaultAsync(s => s.Id == debit.StockInId.Value);
+            if (si != null)
+            {
+                if (!debit.OrderPartId.HasValue) debit.OrderPartId = si.OrderPartId;
+            }
+        }
+
+        debit.DebitDate = debit.DebitDate == default ? DateTime.Today : debit.DebitDate;
+        debit.DueDate = debit.DueDate ?? debit.DebitDate.AddDays(30);
+        debit.Status = SupplierDebitStatus.Active;
+        debit.PaidAmount = 0;
+        debit.CreatedAt = DateTime.Now;
+
+        db.SupplierDebits.Add(debit);
+        await db.SaveChangesAsync();
+        return debit.Id;
+    }
+
+    public async Task<int> CreateSupplierDebitPaymentAsync(SupplierDebitPayment payment, bool allocateFifoIfNoDebit = true)
+    {
+        if (payment.PaymentAmount <= 0)
+            throw new InvalidOperationException("Số tiền thanh toán phải lớn hơn 0.");
+
+        if (payment.SupplierId <= 0)
+            throw new InvalidOperationException("Vui lòng chọn Nhà cung cấp.");
+
+        var supplier = await db.Suppliers.FirstOrDefaultAsync(s => s.Id == payment.SupplierId);
+        if (supplier == null)
+            throw new InvalidOperationException("Không tìm thấy Nhà cung cấp.");
+
+        if (string.IsNullOrWhiteSpace(payment.PayPersonName))
+            payment.PayPersonName = !string.IsNullOrWhiteSpace(supplier.ContactName) ? supplier.ContactName : supplier.Name;
+
+        if (string.IsNullOrWhiteSpace(payment.BankAccount))
+            payment.BankAccount = supplier.BankAccount;
+
+        if (string.IsNullOrWhiteSpace(payment.BankName))
+            payment.BankName = supplier.BankName;
+
+        if (string.IsNullOrWhiteSpace(payment.PaymentNo))
+        {
+            var today = DateTime.Today;
+            var prefix = $"SDP{today:yyMMdd}-";
+            var count = await db.SupplierDebitPayments.CountAsync(p => p.PaymentNo.StartsWith(prefix)) + 1;
+            payment.PaymentNo = $"{prefix}{count:D3}";
+        }
+
+        payment.PaymentDate = payment.PaymentDate == default ? DateTime.Today : payment.PaymentDate;
+        payment.CreatedAt = DateTime.Now;
+
+        // Allocation logic
+        if (payment.SupplierDebitId.HasValue && payment.SupplierDebitId.Value > 0)
+        {
+            var debit = await db.SupplierDebits.FirstOrDefaultAsync(d => d.Id == payment.SupplierDebitId.Value);
+            if (debit == null)
+                throw new InvalidOperationException("Không tìm thấy khoản nợ được chỉ định.");
+
+            if (debit.Status == SupplierDebitStatus.Cancelled)
+                throw new InvalidOperationException("Khoản nợ này đã bị hủy.");
+
+            debit.PaidAmount += payment.PaymentAmount;
+            if (debit.PaidAmount >= debit.DebitAmount)
+            {
+                debit.Status = SupplierDebitStatus.Cleared;
+                debit.ClearedAt = DateTime.Now;
+            }
+        }
+        else if (allocateFifoIfNoDebit)
+        {
+            // Tự động phân bổ vào các khoản nợ của NCC theo thứ tự hạn thanh toán (FIFO)
+            var activeDebits = await db.SupplierDebits
+                .Where(d => d.SupplierId == payment.SupplierId && d.Status == SupplierDebitStatus.Active && d.DebitAmount > d.PaidAmount)
+                .OrderBy(d => d.DueDate ?? d.DebitDate)
+                .ThenBy(d => d.Id)
+                .ToListAsync();
+
+            var moneyLeft = payment.PaymentAmount;
+            foreach (var d in activeDebits)
+            {
+                if (moneyLeft <= 0) break;
+                var needed = d.DebitAmount - d.PaidAmount;
+                var alloc = Math.Min(moneyLeft, needed);
+                d.PaidAmount += alloc;
+                moneyLeft -= alloc;
+
+                if (d.PaidAmount >= d.DebitAmount)
+                {
+                    d.Status = SupplierDebitStatus.Cleared;
+                    d.ClearedAt = DateTime.Now;
+                }
+            }
+        }
+
+        db.SupplierDebitPayments.Add(payment);
+        await db.SaveChangesAsync();
+        return payment.Id;
+    }
+
+    public async Task<(bool ok, string msg)> CancelSupplierDebitAsync(int id, string? reason)
+    {
+        var debit = await db.SupplierDebits.FirstOrDefaultAsync(d => d.Id == id);
+        if (debit == null) return (false, "Không tìm thấy khoản nợ.");
+
+        if (debit.PaidAmount > 0)
+            return (false, $"Khoản nợ đã phát sinh thanh toán ({debit.PaidAmount:N0} đ), không thể hủy trực tiếp.");
+
+        debit.Status = SupplierDebitStatus.Cancelled;
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            debit.Description = string.IsNullOrWhiteSpace(debit.Description)
+                ? $"[Hủy: {reason.Trim()}]"
+                : $"{debit.Description}\n[Hủy: {reason.Trim()}]";
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy khoản nợ NCC {debit.DebitNo}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteSupplierDebitPaymentAsync(int paymentId)
+    {
+        var payment = await db.SupplierDebitPayments
+            .Include(p => p.SupplierDebit)
+            .FirstOrDefaultAsync(p => p.Id == paymentId);
+
+        if (payment == null) return (false, "Không tìm thấy phiếu chi thanh toán nợ.");
+
+        if (payment.SupplierDebit != null)
+        {
+            payment.SupplierDebit.PaidAmount = Math.Max(0, payment.SupplierDebit.PaidAmount - payment.PaymentAmount);
+            if (payment.SupplierDebit.Status == SupplierDebitStatus.Cleared && payment.SupplierDebit.PaidAmount < payment.SupplierDebit.DebitAmount)
+            {
+                payment.SupplierDebit.Status = SupplierDebitStatus.Active;
+                payment.SupplierDebit.ClearedAt = null;
+            }
+        }
+
+        db.SupplierDebitPayments.Remove(payment);
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy phiếu chi {payment.PaymentNo} và hoàn trả dư nợ NCC.");
+    }
+
+    public async Task<(bool ok, string msg, int? debitId)> CreateSupplierDebitFromStockInAsync(int stockInId, int? supplierId, DateTime? dueDate, string? note)
+    {
+        var stockIn = await db.StockIns.Include(s => s.Items).FirstOrDefaultAsync(s => s.Id == stockInId);
+        if (stockIn == null) return (false, "Không tìm thấy Phiếu nhập kho.", null);
+
+        var existing = await db.SupplierDebits.FirstOrDefaultAsync(d => d.StockInId == stockInId && d.Status != SupplierDebitStatus.Cancelled);
+        if (existing != null)
+            return (false, $"Phiếu nhập kho này đã được ghi nợ trước đó ({existing.DebitNo}).", existing.Id);
+
+        var supId = supplierId;
+        if (!supId.HasValue || supId.Value <= 0)
+        {
+            var matchSup = await db.Suppliers.FirstOrDefaultAsync(s => s.Name == stockIn.SupplierName || s.Code == stockIn.SupplierName);
+            if (matchSup != null) supId = matchSup.Id;
+            else
+            {
+                var firstSup = await db.Suppliers.FirstOrDefaultAsync(s => s.IsActive);
+                supId = firstSup?.Id;
+            }
+        }
+
+        if (!supId.HasValue || supId.Value <= 0)
+            return (false, "Vui lòng chỉ định Nhà cung cấp cho phiếu nợ.", null);
+
+        var debtAmount = stockIn.Total;
+        if (debtAmount <= 0)
+            return (false, "Phiếu nhập kho có giá trị bằng 0 đ, không thể tạo nợ.", null);
+
+        var today = DateTime.Today;
+        var prefix = $"SDB{today:yyMMdd}-";
+        var count = await db.SupplierDebits.CountAsync(d => d.DebitNo.StartsWith(prefix)) + 1;
+
+        var debit = new SupplierDebit
+        {
+            DebitNo = $"{prefix}{count:D3}",
+            SupplierId = supId.Value,
+            StockInId = stockIn.Id,
+            OrderPartId = stockIn.OrderPartId,
+            DebitType = SupplierDebitType.StockIn,
+            Status = SupplierDebitStatus.Active,
+            DebitDate = stockIn.StockInDate,
+            DueDate = dueDate ?? stockIn.StockInDate.AddDays(30),
+            DebitAmount = debtAmount,
+            PaidAmount = 0,
+            Description = !string.IsNullOrWhiteSpace(note) ? note.Trim() : $"Ghi nhận công nợ nhập kho phụ tùng {stockIn.StockInNo}" + (!string.IsNullOrWhiteSpace(stockIn.BillNo) ? $" (HĐ: {stockIn.BillNo})" : ""),
+            CreatedBy = "Kế toán kho",
+            CreatedAt = DateTime.Now
+        };
+
+        db.SupplierDebits.Add(debit);
+        await db.SaveChangesAsync();
+        return (true, $"Đã ghi nhận công nợ NCC {debit.DebitNo} số tiền {debtAmount:N0} đ cho phiếu nhập kho {stockIn.StockInNo}.", debit.Id);
+    }
+
+    public Task<List<Supplier>> SuppliersForDebitSelectAsync() =>
+        db.Suppliers.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
+
+    public async Task<List<StockIn>> StockInsForDebitSelectAsync()
+    {
+        var existingDebitStockInIds = await db.SupplierDebits
+            .Where(d => d.StockInId.HasValue && d.Status != SupplierDebitStatus.Cancelled)
+            .Select(d => d.StockInId!.Value)
+            .ToListAsync();
+
+        return await db.StockIns
+            .Include(s => s.Items)
+            .Where(s => s.Status == StockInStatus.Finished && !existingDebitStockInIds.Contains(s.Id))
+            .OrderByDescending(s => s.StockInDate)
+            .Take(30)
+            .ToListAsync();
+    }
 }

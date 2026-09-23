@@ -1,0 +1,309 @@
+@model (Supplier supplier, List<SupplierDebit> debits, List<SupplierDebitPayment> payments, decimal totalDebit, decimal totalPaid, decimal remainingDebit)
+@{
+    var (supplier, debits, payments, totalDebit, totalPaid, remainingDebit) = Model;
+    ViewData["Title"] = $"Hồ sơ công nợ NCC: {supplier.Name}";
+    var overdueDebits = debits.Where(d => d.IsOverdue).ToList();
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/SupplierDebit">Công nợ Nhà Cung Cấp</a></li>
+                <li class="breadcrumb-item active">@supplier.Name</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0"><i class="bi bi-building text-primary me-2"></i>Hồ sơ công nợ Nhà Cung Cấp: @supplier.Name</h5>
+    </div>
+    <div class="d-flex gap-2">
+        @if (remainingDebit > 0)
+        {
+            <a href="/SupplierDebit/CreatePayment?supplierId=@supplier.Id" class="btn btn-success"><i class="bi bi-wallet2 me-1"></i>Lập phiếu chi nợ NCC</a>
+        }
+        <a href="/SupplierDebit/Create?supplierId=@supplier.Id" class="btn btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>Ghi nhận nợ mới</a>
+        <a href="/SupplierDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-info-circle me-1"></i>Thông tin Nhà Cung Cấp</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Mã NCC:</span>
+                    <span class="font-monospace fw-semibold">@supplier.Code</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Tên NCC:</span>
+                    <span class="fw-bold">@supplier.Name</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Mã số thuế:</span>
+                    <span class="font-monospace">@(supplier.TaxCode ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Người liên hệ:</span>
+                    <span class="fw-semibold">@(supplier.ContactName ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Số điện thoại:</span>
+                    <span>@(supplier.Phone ?? supplier.ContactPhone ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Email:</span>
+                    <span>@(supplier.Email ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Số tài khoản:</span>
+                    <span class="font-monospace fw-bold text-primary">@(supplier.BankAccount ?? "—")</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 pb-1 border-bottom">
+                    <span class="text-muted">Ngân hàng:</span>
+                    <span>@(supplier.BankName ?? "—")</span>
+                </div>
+                <div>
+                    <span class="text-muted small">Địa chỉ trụ sở / kho:</span>
+                    <div class="mt-1 small">@(supplier.Address ?? "—")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="row g-3 h-100">
+            <div class="col-md-4">
+                <div class="card border-primary h-100"><div class="card-body">
+                    <div class="text-muted small">Tổng nợ tiền hàng</div>
+                    <div class="stat-num text-primary" style="font-size:22px">@totalDebit.ToString("N0")đ</div>
+                    <div class="text-muted small mt-1">@debits.Count phiếu nợ nhập hàng</div>
+                </div></div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-success h-100"><div class="card-body">
+                    <div class="text-muted small">Đã chi thanh toán</div>
+                    <div class="stat-num text-success" style="font-size:22px">@totalPaid.ToString("N0")đ</div>
+                    <div class="text-muted small mt-1">@payments.Count phiếu chi UNC / Tiền mặt</div>
+                </div></div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-danger h-100"><div class="card-body">
+                    <div class="text-muted small">Dư nợ còn phải trả</div>
+                    <div class="stat-num text-danger" style="font-size:22px">@remainingDebit.ToString("N0")đ</div>
+                    <div class="text-muted small mt-1">
+                        @if (remainingDebit > 0)
+                        {
+                            <span class="badge bg-warning text-dark">Chưa thanh toán đủ</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-success">Đã tất toán 100%</span>
+                        }
+                    </div>
+                </div></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (overdueDebits.Count > 0)
+{
+    <div class="alert alert-danger d-flex align-items-center mb-3">
+        <i class="bi bi-exclamation-octagon-fill fs-4 me-2"></i>
+        <div>
+            <strong>Cảnh báo quá hạn thanh toán:</strong> Nhà Cung Cấp này có <strong>@overdueDebits.Count</strong> khoản nợ đã quá hạn thanh toán với tổng số tiền nợ còn lại là <strong>@overdueDebits.Sum(d => d.RemainAmount).ToString("N0") VNĐ</strong>. Cần ưu tiên lập phiếu chi thanh toán sớm.
+        </div>
+    </div>
+}
+
+<div class="row g-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                <span class="fw-bold"><i class="bi bi-card-checklist me-1"></i>Danh sách chứng từ công nợ phát sinh (@debits.Count)</span>
+                <a href="/SupplierDebit/Create?supplierId=@supplier.Id" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus-lg me-1"></i>Thêm khoản nợ</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã phiếu nợ</th>
+                            <th>Loại công nợ</th>
+                            <th>Chứng từ liên quan</th>
+                            <th>Ngày ghi nợ</th>
+                            <th>Hạn trả</th>
+                            <th class="text-end">Tiền nợ</th>
+                            <th class="text-end">Đã trả</th>
+                            <th class="text-end">Còn nợ</th>
+                            <th class="text-center">Trạng thái</th>
+                            <th class="text-center">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (debits.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="10" class="text-center text-muted py-3">Chưa có chứng từ nợ nào cho Nhà Cung Cấp này.</td>
+                            </tr>
+                        }
+                        @foreach (var d in debits)
+                        {
+                            var (stxt, scode, scss) = Ui.SupplierDebitStatus(d.Status);
+                            var (ttxt, ticon, tcss) = Ui.SupplierDebitType(d.DebitType);
+                            <tr class="@(d.IsOverdue ? "table-warning bg-opacity-25" : "")">
+                                <td>
+                                    <a href="/SupplierDebit/DebitDetail/@d.Id" class="font-monospace fw-bold text-decoration-none">@d.DebitNo</a>
+                                </td>
+                                <td><span class="badge bg-@tcss"><i class="bi @ticon me-1"></i>@ttxt</span></td>
+                                <td>
+                                    @if (d.StockIn != null)
+                                    {
+                                        <a href="/StockIn/Detail/@d.StockIn.Id" class="text-decoration-none"><i class="bi bi-box-arrow-in-down me-1"></i>@d.StockIn.StockInNo</a>
+                                    }
+                                    else if (d.OrderPart != null)
+                                    {
+                                        <span class="text-muted"><i class="bi bi-cart me-1"></i>@d.OrderPart.OrderPartNo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td>@d.DebitDate.ToString("dd/MM/yyyy")</td>
+                                <td>
+                                    @if (d.DueDate.HasValue)
+                                    {
+                                        <span class="@(d.IsOverdue ? "text-danger fw-bold" : "")">@d.DueDate.Value.ToString("dd/MM/yyyy")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                                <td class="text-end fw-semibold">@d.DebitAmount.ToString("N0")đ</td>
+                                <td class="text-end text-success">@d.PaidAmount.ToString("N0")đ</td>
+                                <td class="text-end">
+                                    @if (d.RemainAmount > 0)
+                                    {
+                                        <span class="fw-bold text-danger">@d.RemainAmount.ToString("N0")đ</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">0đ</span>
+                                    }
+                                </td>
+                                <td class="text-center"><span class="badge bg-@scss">@stxt</span></td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="/SupplierDebit/DebitDetail/@d.Id" class="btn btn-outline-primary" title="Xem chi tiết phiếu nợ"><i class="bi bi-eye"></i></a>
+                                        @if (d.CanPay)
+                                        {
+                                            <a href="/SupplierDebit/CreatePayment?debitId=@d.Id" class="btn btn-success" title="Chi thanh toán"><i class="bi bi-cash"></i></a>
+                                        }
+                                        @if (d.PaidAmount == 0 && d.Status != SupplierDebitStatus.Cancelled)
+                                        {
+                                            <form asp-action="CancelDebit" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc muốn hủy chứng từ nợ @d.DebitNo không?')">
+                                                @Html.AntiForgeryToken()
+                                                <input type="hidden" name="id" value="@d.Id" />
+                                                <input type="hidden" name="supplierId" value="@supplier.Id" />
+                                                <input type="hidden" name="reason" value="Hủy từ hồ sơ NCC" />
+                                                <button type="submit" class="btn btn-outline-danger" title="Hủy chứng từ nợ"><i class="bi bi-x-circle"></i></button>
+                                            </form>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center py-2">
+                <span class="fw-bold"><i class="bi bi-receipt me-1"></i>Lịch sử phiếu chi thanh toán nợ NCC (@payments.Count)</span>
+                @if (remainingDebit > 0)
+                {
+                    <a href="/SupplierDebit/CreatePayment?supplierId=@supplier.Id" class="btn btn-sm btn-success"><i class="bi bi-wallet2 me-1"></i>Lập phiếu chi</a>
+                }
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã phiếu chi</th>
+                            <th>Ngày chi tiền</th>
+                            <th>Hình thức</th>
+                            <th>Đại diện nhận tiền</th>
+                            <th>Thông tin ngân hàng / UNC</th>
+                            <th>Chứng từ nợ cấn trừ</th>
+                            <th class="text-end">Số tiền chi</th>
+                            <th>Thủ quỹ / Kế toán</th>
+                            <th class="text-center">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (payments.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="9" class="text-center text-muted py-3">Chưa có phiếu chi nào cho Nhà Cung Cấp này.</td>
+                            </tr>
+                        }
+                        @foreach (var p in payments)
+                        {
+                            var (pmtxt, _, _) = Ui.PaymentMethod(p.Method);
+                            <tr>
+                                <td>
+                                    <span class="font-monospace fw-bold">@p.PaymentNo</span>
+                                </td>
+                                <td>@p.PaymentDate.ToString("dd/MM/yyyy")</td>
+                                <td><span class="badge bg-info text-dark">@pmtxt</span></td>
+                                <td>
+                                    <div class="fw-semibold">@p.PayPersonName</div>
+                                    @if (!string.IsNullOrWhiteSpace(p.PayPersonPhone))
+                                    {
+                                        <div class="text-muted small">@p.PayPersonPhone</div>
+                                    }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrWhiteSpace(p.TransactionRef))
+                                    {
+                                        <div class="font-monospace small"><i class="bi bi-bank me-1"></i>@p.TransactionRef</div>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(p.BankAccount))
+                                    {
+                                        <div class="text-muted small">@p.BankAccount (@p.BankName)</div>
+                                    }
+                                </td>
+                                <td>
+                                    @if (p.SupplierDebit != null)
+                                    {
+                                        <a href="/SupplierDebit/DebitDetail/@p.SupplierDebit.Id" class="font-monospace text-decoration-none">@p.SupplierDebit.DebitNo</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Phân bổ FIFO</span>
+                                    }
+                                </td>
+                                <td class="text-end fw-bold text-success">@p.PaymentAmount.ToString("N0")đ</td>
+                                <td><span class="small text-muted">@p.Cashier</span></td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="/SupplierDebit/Print/@p.Id" class="btn btn-outline-secondary" title="In phiếu chi Mẫu 02-TT" target="_blank"><i class="bi bi-printer"></i></a>
+                                        <form asp-action="DeletePayment" method="post" class="d-inline" onsubmit="return confirm('Bạn có chắc muốn hủy phiếu chi @p.PaymentNo? Dư nợ sẽ được hoàn trả lại cho NCC.')">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@p.Id" />
+                                            <input type="hidden" name="supplierId" value="@supplier.Id" />
+                                            <button type="submit" class="btn btn-outline-danger" title="Hủy phiếu chi"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

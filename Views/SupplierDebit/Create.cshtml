@@ -1,0 +1,129 @@
+@{
+    ViewData["Title"] = "Ghi nhận công nợ Nhà Cung Cấp mới";
+    var suppliers = (List<Supplier>)ViewBag.Suppliers;
+    var stockIns = (List<StockIn>)ViewBag.StockIns;
+    int? selectedSupId = ViewBag.SupplierId;
+    int? selectedStockInId = ViewBag.StockInId;
+    decimal? suggestedAmount = ViewBag.SuggestedAmount;
+    StockIn? preloadedStockIn = ViewBag.StockIn;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/SupplierDebit">Công nợ Nhà Cung Cấp</a></li>
+                <li class="breadcrumb-item active">Ghi nhận công nợ mới</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0"><i class="bi bi-wallet2 text-warning me-2"></i>Ghi nhận khoản công nợ Nhà Cung Cấp mới</h5>
+    </div>
+    <a href="/SupplierDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-file-earmark-plus me-1"></i>Thông tin chứng từ công nợ NCC</div>
+            <div class="card-body">
+                <form asp-action="Create" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Nhà Cung Cấp <span class="text-danger">*</span></label>
+                            <select id="supSelect" name="supplierId" class="form-select" required onchange="onSupChange()">
+                                <option value="">-- Chọn Nhà Cung Cấp --</option>
+                                @foreach (var s in suppliers)
+                                {
+                                    <option value="@s.Id" selected="@(selectedSupId == s.Id)">
+                                        @s.Code - @s.Name @(s.Phone != null ? $"({s.Phone})" : "")
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Phân loại công nợ <span class="text-danger">*</span></label>
+                            <select name="debitType" class="form-select" required>
+                                <option value="1">Nhập kho phụ tùng (StockIn)</option>
+                                <option value="2">Cước phí kho vận / Vận chuyển linh kiện</option>
+                                <option value="3">Đơn hàng khẩn cấp đặt nhanh (VOR)</option>
+                                <option value="4">Phát sinh khác / Dịch vụ gia công ngoài</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label">Phiếu nhập kho phụ tùng liên kết (StockIn)</label>
+                            <select id="stockInSelect" name="stockInId" class="form-select" onchange="onStockInChange()">
+                                <option value="">-- Không liên kết trực tiếp (Ghi nợ theo hóa đơn/chứng từ riêng) --</option>
+                                @if (preloadedStockIn != null)
+                                {
+                                    <option value="@preloadedStockIn.Id" data-amount="@preloadedStockIn.Total" selected>
+                                        @preloadedStockIn.StockInNo - NCC: @preloadedStockIn.SupplierName - Tiền hàng: @preloadedStockIn.Total.ToString("N0")đ (HĐ: @(preloadedStockIn.BillNo ?? "—"))
+                                    </option>
+                                }
+                                @foreach (var si in stockIns)
+                                {
+                                    if (preloadedStockIn?.Id == si.Id) continue;
+                                    <option value="@si.Id" data-amount="@si.Total" selected="@(selectedStockInId == si.Id)">
+                                        @si.StockInNo (@si.StockInDate.ToString("dd/MM/yyyy")) - @si.SupplierName - Giá trị: @si.Total.ToString("N0")đ
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text small">Nếu chọn phiếu nhập kho, số tiền nợ sẽ tự động điền theo tổng giá trị phiếu nhập.</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Số tiền nợ phát sinh (VNĐ) <span class="text-danger">*</span></label>
+                            <input type="number" id="debitAmount" name="debitAmount" class="form-control form-control-lg fw-bold text-danger" required min="1000" step="1000" value="@(suggestedAmount?.ToString("F0") ?? "")" placeholder="0" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Ngày ghi nợ <span class="text-danger">*</span></label>
+                            <input type="date" name="debitDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Hạn thanh toán</label>
+                            <input type="date" name="dueDate" class="form-control" value="@DateTime.Today.AddDays(30).ToString("yyyy-MM-dd")" />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Diễn giải / Lý do ghi nợ</label>
+                        <textarea name="description" class="form-control" rows="3" placeholder="Ghi chú chi tiết về lô hàng, số hóa đơn VAT, điều khoản thanh toán thỏa thuận..."></textarea>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Người lập chứng từ</label>
+                            <input type="text" name="createdBy" class="form-control" value="Kế toán kho" />
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="/SupplierDebit" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Lưu chứng từ công nợ</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function onStockInChange() {
+        var sel = document.getElementById("stockInSelect");
+        var opt = sel.options[sel.selectedIndex];
+        if (opt && opt.dataset.amount) {
+            document.getElementById("debitAmount").value = opt.dataset.amount;
+        }
+    }
+    function onSupChange() {
+        // Can be used for dynamic loading if needed
+    }
+</script>
+}

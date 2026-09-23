@@ -433,6 +433,23 @@ public enum CusDebitStatus
     Cancelled = 3  // 3: Đã hủy nợ (Cancelled)
 }
 
+/// <summary>Phân loại công nợ Nhà cung cấp — theo Ser_SupplierDebit DebitType trong idn.CarService (DebitType = '3').</summary>
+public enum SupplierDebitType
+{
+    StockIn = 1,        // 1: Nợ tiền hàng Nhập kho phụ tùng (StockIn)
+    Shipping = 2,       // 2: Cước phí kho vận / Vận chuyển linh kiện
+    EmergencyOrder = 3, // 3: Đơn hàng khẩn cấp đặt nhanh (VOR)
+    Other = 4           // 4: Phát sinh khác / Dịch vụ ngoài
+}
+
+/// <summary>Trạng thái công nợ Nhà cung cấp — theo Ser_SupplierDebit trong idn.CarService.</summary>
+public enum SupplierDebitStatus
+{
+    Active = 1,    // 1: Còn nợ NCC (Active / Unpaid / Partially Paid)
+    Cleared = 2,   // 2: Đã tất toán đủ (Cleared / Fully Paid)
+    Cancelled = 3  // 3: Đã hủy phiếu nợ (Cancelled)
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -673,6 +690,7 @@ public class StockIn : IOrgOwned
 
     public OrderPart? OrderPart { get; set; }
     public List<StockInDetail> Items { get; set; } = [];
+    public List<SupplierDebit> SupplierDebits { get; set; } = [];
 
     public decimal SubTotal => Items.Sum(i => i.Quantity * i.UnitPrice);
     public decimal TotalVat => Items.Sum(i => i.VatAmount);
@@ -1709,10 +1727,14 @@ public class Supplier : IOrgOwned
     public string? ContactName { get; set; }                  // Người phụ trách liên hệ
     public string? ContactPhone { get; set; }                 // Di động người liên hệ
     public string? TaxCode { get; set; }                      // Mã số thuế
+    public string? BankAccount { get; set; }                  // Số tài khoản ngân hàng thụ hưởng
+    public string? BankName { get; set; }                     // Tên ngân hàng & chi nhánh
     public bool IsActive { get; set; } = true;                // Cờ hoạt động
     public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo
 
     public List<SupplierPayment> SupplierPayments { get; set; } = [];
+    public List<SupplierDebit> SupplierDebits { get; set; } = [];
+    public List<SupplierDebitPayment> SupplierDebitPayments { get; set; } = [];
 }
 
 /// <summary>Phiếu xuất trả phụ tùng cho Nhà cung cấp — Ser_SupplierPayment trong idn.CarService.</summary>
@@ -1952,6 +1974,84 @@ public class CustomerDebitSummaryDto
     public DateTime? LastDebitDate { get; set; }
     public DateTime? LastPaymentDate { get; set; }
 }
+
+/// <summary>Phiếu ghi nhận công nợ Nhà Cung Cấp — Ser_SupplierDebit trong idn.CarService (DebitType = '3').</summary>
+public class SupplierDebit : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string DebitNo { get; set; } = "";                                 // Mã ghi nợ (VD: SDB260427-001)
+    public int SupplierId { get; set; }                                       // Nhà cung cấp ghi nợ (SupplierID)
+    public int? StockInId { get; set; }                                       // Phiếu nhập kho phát sinh nợ (StockInID)
+    public int? OrderPartId { get; set; }                                     // Đơn đặt hàng liên quan nếu có
+    public SupplierDebitType DebitType { get; set; } = SupplierDebitType.StockIn; // Phân loại nợ
+    public SupplierDebitStatus Status { get; set; } = SupplierDebitStatus.Active; // Trạng thái nợ (Active / Cleared / Cancelled)
+    public DateTime DebitDate { get; set; } = DateTime.Today;                 // Ngày phát sinh nợ (DebitDate)
+    public DateTime? DueDate { get; set; }                                    // Hạn thanh toán công nợ
+    public decimal DebitAmount { get; set; }                                  // Số tiền nợ phát sinh (DebitAmount)
+    public decimal PaidAmount { get; set; } = 0;                              // Số tiền đã thanh toán (PaymentAmount)
+    public string? Description { get; set; }                                  // Lý do ghi nợ / Ghi chú (Note)
+    public string CreatedBy { get; set; } = "Kế toán";                        // Người lập phiếu ghi nợ
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? ClearedAt { get; set; }                                  // Thời điểm tất toán nợ
+
+    public Supplier Supplier { get; set; } = null!;
+    public StockIn? StockIn { get; set; }
+    public OrderPart? OrderPart { get; set; }
+    public List<SupplierDebitPayment> Payments { get; set; } = [];
+
+    public decimal RemainAmount => Math.Max(0, DebitAmount - PaidAmount);     // Dư nợ còn lại phải trả NCC (Deb)
+    public bool IsOverdue => Status == SupplierDebitStatus.Active && DueDate.HasValue && DueDate.Value.Date < DateTime.Today;
+    public bool CanPay => Status == SupplierDebitStatus.Active && RemainAmount > 0;
+}
+
+/// <summary>Phiếu chi thanh toán nợ Nhà Cung Cấp — Ser_Payment / Ser_SupplierDebitPayment trong idn.CarService (PaymentType = '3').</summary>
+public class SupplierDebitPayment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string PaymentNo { get; set; } = "";                                 // Số phiếu chi (VD: SDP260427-001 hoặc PC260427-001)
+    public int SupplierId { get; set; }                                         // Nhà cung cấp được thanh toán (SupplierID)
+    public int? SupplierDebitId { get; set; }                                   // Khoản nợ cụ thể được cấn trừ (nếu có)
+    public DateTime PaymentDate { get; set; } = DateTime.Today;                // Ngày chi tiền (PayDate)
+    public decimal PaymentAmount { get; set; }                                  // Số tiền chi trả NCC (PaymentAmount)
+    public PaymentMethod Method { get; set; } = PaymentMethod.BankTransfer;    // Hình thức thanh toán (CK / Tiền mặt)
+    public string PayPersonName { get; set; } = "";                             // Người nhận tiền đại diện NCC (PayPersonName)
+    public string? PayPersonIdCard { get; set; }                                // CMND/CCCD người nhận (PayPersonIDCardNo)
+    public string? PayPersonPhone { get; set; }                                 // SĐT người nhận
+    public string? BankAccount { get; set; }                                    // Tài khoản ngân hàng thụ hưởng
+    public string? BankName { get; set; }                                       // Ngân hàng thụ hưởng
+    public string? TransactionRef { get; set; }                                 // Mã giao dịch ngân hàng / Ủy nhiệm chi UNC
+    public string? Note { get; set; }                                           // Diễn giải / Lý do chi tiền (Note)
+    public string Cashier { get; set; } = "Thủ quỹ";                            // Kế toán thanh toán / Thủ quỹ chi
+    public string CreatedBy { get; set; } = "web";
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+    public Supplier Supplier { get; set; } = null!;
+    public SupplierDebit? SupplierDebit { get; set; }
+}
+
+/// <summary>DTO tổng hợp công nợ theo Nhà cung cấp — Ser_SupplierDebitPayment / MH 56 trong idn.CarService.</summary>
+public class SupplierDebitSummaryDto
+{
+    public int SupplierId { get; set; }
+    public string SupplierCode { get; set; } = "";
+    public string SupplierName { get; set; } = "";
+    public string? Phone { get; set; }
+    public string? Address { get; set; }
+    public string? ContactName { get; set; }
+    public string? BankAccount { get; set; }
+    public string? BankName { get; set; }
+    public decimal TotalDebitAmount { get; set; }
+    public decimal TotalPaidAmount { get; set; }
+    public decimal RemainingDebit => Math.Max(0, TotalDebitAmount - TotalPaidAmount);
+    public int ActiveDebitCount { get; set; }
+    public int OverdueDebitCount { get; set; }
+    public bool HasDebit => RemainingDebit > 0;
+    public DateTime? LastDebitDate { get; set; }
+    public DateTime? LastPaymentDate { get; set; }
+}
+
 
 
 

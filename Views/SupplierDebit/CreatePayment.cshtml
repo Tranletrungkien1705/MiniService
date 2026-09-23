@@ -1,0 +1,144 @@
+@{
+    ViewData["Title"] = "Lập phiếu chi thanh toán nợ NCC";
+    var suppliers = (List<Supplier>)ViewBag.Suppliers;
+    int? selectedSupId = ViewBag.SupplierId;
+    int? selectedDebitId = ViewBag.DebitId;
+    decimal? suggestedAmount = ViewBag.SuggestedAmount;
+    SupplierDebit? preloadedDebit = ViewBag.Debit;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb small mb-1">
+                <li class="breadcrumb-item"><a href="/SupplierDebit">Công nợ Nhà Cung Cấp</a></li>
+                <li class="breadcrumb-item active">Lập phiếu chi nợ NCC</li>
+            </ol>
+        </nav>
+        <h5 class="fw-bold mb-0"><i class="bi bi-wallet2 text-success me-2"></i>Lập phiếu chi thanh toán nợ Nhà Cung Cấp</h5>
+    </div>
+    <a href="/SupplierDebit" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-light fw-bold py-2"><i class="bi bi-receipt me-1"></i>Thông tin phiếu chi tiền (Mẫu số 02-TT)</div>
+            <div class="card-body">
+                <form asp-action="CreatePayment" method="post">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Nhà Cung Cấp thụ hưởng <span class="text-danger">*</span></label>
+                            <select id="supSelect" name="supplierId" class="form-select" required onchange="onSupSelectChange()">
+                                <option value="">-- Chọn Nhà Cung Cấp --</option>
+                                @foreach (var s in suppliers)
+                                {
+                                    <option value="@s.Id" data-name="@s.Name" data-contact="@s.ContactName" data-phone="@s.Phone" data-bank="@s.BankAccount" data-bankname="@s.BankName" selected="@(selectedSupId == s.Id)">
+                                        @s.Code - @s.Name @(s.Phone != null ? $"({s.Phone})" : "")
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Chứng từ nợ cấn trừ</label>
+                            <select id="debitSelect" name="supplierDebitId" class="form-select">
+                                <option value="">-- Tự động phân bổ vào các khoản nợ cũ nhất (FIFO) --</option>
+                                @if (preloadedDebit != null)
+                                {
+                                    <option value="@preloadedDebit.Id" selected>
+                                        @preloadedDebit.DebitNo - Nợ gốc: @preloadedDebit.DebitAmount.ToString("N0")đ (Còn thiếu: @preloadedDebit.RemainAmount.ToString("N0")đ)
+                                    </option>
+                                }
+                            </select>
+                            <div class="form-text small">Để trống để hệ thống tự động cấn trừ các khoản nợ theo thứ tự hạn thanh toán.</div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Số tiền chi thanh toán (VNĐ) <span class="text-danger">*</span></label>
+                            <input type="number" id="payAmount" name="paymentAmount" class="form-control form-control-lg fw-bold text-success" required min="1000" step="1000" value="@(suggestedAmount?.ToString("F0") ?? "")" placeholder="0" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Ngày chi tiền <span class="text-danger">*</span></label>
+                            <input type="date" name="paymentDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Phương thức <span class="text-danger">*</span></label>
+                            <select name="method" class="form-select" required>
+                                <option value="2">Ủy nhiệm chi (Bank Transfer)</option>
+                                <option value="1">Tiền mặt (Cash)</option>
+                                <option value="3">Bù trừ công nợ / Hàng trả</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label fw-semibold">Người nhận tiền (Đại diện NCC)</label>
+                            <input type="text" id="payPersonName" name="payPersonName" class="form-control" value="@(preloadedDebit?.Supplier.ContactName ?? "")" placeholder="Họ tên đại diện nhận tiền hoặc tên NCC" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Số CMND / CCCD</label>
+                            <input type="text" name="payPersonIdCard" class="form-control" placeholder="Số CCCD người nhận nếu có" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Số điện thoại</label>
+                            <input type="text" id="payPersonPhone" name="payPersonPhone" class="form-control" value="@(preloadedDebit?.Supplier.Phone ?? "")" placeholder="09xx..." />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Tài khoản ngân hàng thụ hưởng</label>
+                            <input type="text" id="bankAccount" name="bankAccount" class="form-control font-monospace" value="@(preloadedDebit?.Supplier.BankAccount ?? "")" placeholder="Số TK ngân hàng" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Ngân hàng &amp; Chi nhánh thụ hưởng</label>
+                            <input type="text" id="bankName" name="bankName" class="form-control" value="@(preloadedDebit?.Supplier.BankName ?? "")" placeholder="VD: Vietcombank - CN Sở Giao Dịch Hà Nội" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Mã giao dịch / Số lệnh UNC ngân hàng</label>
+                            <input type="text" name="transactionRef" class="form-control font-monospace" placeholder="VD: UNC-VCB-260427-0091" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Thủ quỹ / Kế toán chi tiền</label>
+                            <input type="text" name="cashier" class="form-control" value="Thủ quỹ" />
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="form-label">Nội dung chi tiền / Ghi chú</label>
+                        <textarea name="note" class="form-control" rows="2" placeholder="Thanh toán tiền hàng phụ tùng nhập kho theo chứng từ nợ..."></textarea>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2">
+                        <a href="/SupplierDebit" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-printer-fill me-1"></i>Lưu &amp; In phiếu chi (Mẫu 02-TT)</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    function onSupSelectChange() {
+        var sel = document.getElementById("supSelect");
+        var opt = sel.options[sel.selectedIndex];
+        if (opt) {
+            if (opt.dataset.contact) document.getElementById("payPersonName").value = opt.dataset.contact;
+            else if (opt.dataset.name) document.getElementById("payPersonName").value = opt.dataset.name;
+            if (opt.dataset.phone) document.getElementById("payPersonPhone").value = opt.dataset.phone;
+            if (opt.dataset.bank) document.getElementById("bankAccount").value = opt.dataset.bank;
+            if (opt.dataset.bankname) document.getElementById("bankName").value = opt.dataset.bankname;
+        }
+    }
+</script>
+}

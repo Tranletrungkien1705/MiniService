@@ -521,4 +521,21 @@ public static class Ui
         Models.CusDebitType.Other => ("Dịch vụ khác", "bi-three-dots", "secondary"),
         _ => (t.ToString(), "bi-tag", "secondary")
     };
+
+    public static (string text, string code, string css) SupplierDebitStatus(SupplierDebitStatus s) => s switch
+    {
+        Models.SupplierDebitStatus.Active => ("Còn nợ NCC", "ACTIVE", "warning"),
+        Models.SupplierDebitStatus.Cleared => ("Đã tất toán", "CLEARED", "success"),
+        Models.SupplierDebitStatus.Cancelled => ("Đã hủy", "CANCELLED", "secondary"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) SupplierDebitType(SupplierDebitType t) => t switch
+    {
+        Models.SupplierDebitType.StockIn => ("Nhập kho phụ tùng", "bi-box-arrow-in-down", "primary"),
+        Models.SupplierDebitType.Shipping => ("Cước vận chuyển", "bi-truck", "info"),
+        Models.SupplierDebitType.EmergencyOrder => ("Đơn hàng khẩn (VOR)", "bi-lightning-fill", "danger"),
+        Models.SupplierDebitType.Other => ("Phát sinh khác", "bi-three-dots", "secondary"),
+        _ => (t.ToString(), "bi-tag", "secondary")
+    };
 }

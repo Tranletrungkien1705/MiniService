@@ -3835,6 +3835,224 @@ public class CusDebitController(IRoService svc) : Controller
     }
 }
 
+public class SupplierDebitController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, bool? onlyHasDebit, SupplierDebitStatus? status, SupplierDebitType? type, string? tab)
+    {
+        ViewBag.Q = q;
+        ViewBag.OnlyHasDebit = onlyHasDebit;
+        ViewBag.Status = status;
+        ViewBag.Type = type;
+        ViewBag.ActiveTab = string.IsNullOrWhiteSpace(tab) ? "summaries" : tab.Trim();
+
+        var summaries = await svc.SupplierDebitSummariesAsync(q, onlyHasDebit);
+        var debits = await svc.SupplierDebitsAsync(null, status, type, q, null, null, null);
+
+        var allSummaries = (q == null && onlyHasDebit == null) ? summaries : await svc.SupplierDebitSummariesAsync(null, null);
+        ViewBag.TotalDebitAmount = allSummaries.Sum(s => s.TotalDebitAmount);
+        ViewBag.TotalPaidAmount = allSummaries.Sum(s => s.TotalPaidAmount);
+        ViewBag.TotalRemainingDebit = allSummaries.Sum(s => s.RemainingDebit);
+        ViewBag.SuppliersWithDebitCount = allSummaries.Count(s => s.HasDebit);
+        ViewBag.OverdueDebitCount = allSummaries.Sum(s => s.OverdueDebitCount);
+
+        ViewBag.Summaries = summaries;
+        ViewBag.Debits = debits;
+
+        return View();
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        try
+        {
+            var profile = await svc.GetSupplierDebitProfileAsync(id);
+            return View(profile);
+        }
+        catch
+        {
+            return NotFound();
+        }
+    }
+
+    public async Task<IActionResult> DebitDetail(int id)
+    {
+        var debit = await svc.GetSupplierDebitAsync(id);
+        if (debit == null) return NotFound();
+        return View(debit);
+    }
+
+    public async Task<IActionResult> Create(int? supplierId, int? stockInId)
+    {
+        ViewBag.Suppliers = await svc.SuppliersForDebitSelectAsync();
+        ViewBag.StockIns = await svc.StockInsForDebitSelectAsync();
+        ViewBag.SupplierId = supplierId;
+        ViewBag.StockInId = stockInId;
+
+        if (stockInId.HasValue && stockInId.Value > 0)
+        {
+            var si = await svc.GetStockInAsync(stockInId.Value);
+            if (si != null)
+            {
+                ViewBag.SuggestedAmount = si.Total;
+                ViewBag.StockIn = si;
+            }
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(int supplierId, int? stockInId, int? orderPartId, SupplierDebitType debitType, decimal debitAmount, DateTime? debitDate, DateTime? dueDate, string? description, string? createdBy)
+    {
+        if (supplierId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn Nhà cung cấp.";
+            return RedirectToAction(nameof(Create), new { supplierId, stockInId });
+        }
+
+        if (debitAmount <= 0)
+        {
+            TempData["Error"] = "Số tiền công nợ phải lớn hơn 0.";
+            return RedirectToAction(nameof(Create), new { supplierId, stockInId });
+        }
+
+        try
+        {
+            var debit = new SupplierDebit
+            {
+                SupplierId = supplierId,
+                StockInId = (stockInId.HasValue && stockInId.Value > 0) ? stockInId : null,
+                OrderPartId = (orderPartId.HasValue && orderPartId.Value > 0) ? orderPartId : null,
+                DebitType = debitType,
+                DebitAmount = debitAmount,
+                DebitDate = debitDate ?? DateTime.Today,
+                DueDate = dueDate ?? DateTime.Today.AddDays(30),
+                Description = description?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Kế toán kho" : createdBy.Trim()
+            };
+
+            var id = await svc.CreateSupplierDebitAsync(debit);
+            TempData["Success"] = $"Đã ghi nhận khoản công nợ {debit.DebitNo} số tiền {debit.DebitAmount:N0} đ cho Nhà cung cấp thành công.";
+            return RedirectToAction(nameof(Detail), new { id = supplierId });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create), new { supplierId, stockInId });
+        }
+    }
+
+    public async Task<IActionResult> CreatePayment(int? supplierId, int? debitId)
+    {
+        ViewBag.Suppliers = await svc.SuppliersForDebitSelectAsync();
+        ViewBag.SupplierId = supplierId;
+        ViewBag.DebitId = debitId;
+
+        if (debitId.HasValue && debitId.Value > 0)
+        {
+            var debit = await svc.GetSupplierDebitAsync(debitId.Value);
+            if (debit != null)
+            {
+                ViewBag.SupplierId = debit.SupplierId;
+                ViewBag.SuggestedAmount = debit.RemainAmount;
+                ViewBag.Debit = debit;
+            }
+        }
+        else if (supplierId.HasValue && supplierId.Value > 0)
+        {
+            var summaries = await svc.SupplierDebitSummariesAsync(null, null);
+            var s = summaries.FirstOrDefault(x => x.SupplierId == supplierId.Value);
+            if (s != null)
+            {
+                ViewBag.SuggestedAmount = s.RemainingDebit;
+            }
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreatePayment(int supplierId, int? supplierDebitId, decimal paymentAmount, DateTime? paymentDate, PaymentMethod method, string? payPersonName, string? payPersonIdCard, string? payPersonPhone, string? bankAccount, string? bankName, string? transactionRef, string? note, string? cashier)
+    {
+        if (supplierId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn Nhà cung cấp.";
+            return RedirectToAction(nameof(CreatePayment), new { supplierId, debitId = supplierDebitId });
+        }
+
+        if (paymentAmount <= 0)
+        {
+            TempData["Error"] = "Số tiền thanh toán phải lớn hơn 0.";
+            return RedirectToAction(nameof(CreatePayment), new { supplierId, debitId = supplierDebitId });
+        }
+
+        try
+        {
+            var payment = new SupplierDebitPayment
+            {
+                SupplierId = supplierId,
+                SupplierDebitId = (supplierDebitId.HasValue && supplierDebitId.Value > 0) ? supplierDebitId : null,
+                PaymentAmount = paymentAmount,
+                PaymentDate = paymentDate ?? DateTime.Today,
+                Method = method,
+                PayPersonName = payPersonName?.Trim() ?? "",
+                PayPersonIdCard = payPersonIdCard?.Trim(),
+                PayPersonPhone = payPersonPhone?.Trim(),
+                BankAccount = bankAccount?.Trim(),
+                BankName = bankName?.Trim(),
+                TransactionRef = transactionRef?.Trim(),
+                Note = note?.Trim(),
+                Cashier = string.IsNullOrWhiteSpace(cashier) ? "Thủ quỹ" : cashier.Trim(),
+                CreatedBy = "web"
+            };
+
+            var id = await svc.CreateSupplierDebitPaymentAsync(payment, allocateFifoIfNoDebit: true);
+            TempData["Success"] = $"Đã lập phiếu chi {payment.PaymentNo} số tiền {payment.PaymentAmount:N0} đ cho Nhà cung cấp thành công.";
+            return RedirectToAction(nameof(Print), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(CreatePayment), new { supplierId, debitId = supplierDebitId });
+        }
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var p = await svc.GetSupplierDebitPaymentAsync(id);
+        if (p == null) return NotFound();
+        return View(p);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> DeletePayment(int id, int? supplierId)
+    {
+        var (ok, msg) = await svc.DeleteSupplierDebitPaymentAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (supplierId.HasValue && supplierId.Value > 0)
+            return RedirectToAction(nameof(Detail), new { id = supplierId.Value });
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CancelDebit(int id, string reason, int? supplierId)
+    {
+        var (ok, msg) = await svc.CancelSupplierDebitAsync(id, reason);
+        TempData[ok ? "Success" : "Error"] = msg;
+        if (supplierId.HasValue && supplierId.Value > 0)
+            return RedirectToAction(nameof(Detail), new { id = supplierId.Value });
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateFromStockIn(int stockInId, int? supplierId, DateTime? dueDate, string? note)
+    {
+        var (ok, msg, debitId) = await svc.CreateSupplierDebitFromStockInAsync(stockInId, supplierId, dueDate, note);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction("Detail", "StockIn", new { id = stockInId });
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()
