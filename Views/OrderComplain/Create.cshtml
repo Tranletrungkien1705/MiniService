@@ -1,0 +1,238 @@
+@{
+    ViewData["Title"] = "Lập Hồ sơ Khiếu nại Phụ tùng NCC TST / HTC (Ser_OrderComplain)";
+    var parts = (List<Part>)(ViewBag.Parts ?? new List<Part>());
+    var orderParts = (List<OrderPart>)(ViewBag.OrderParts ?? new List<OrderPart>());
+    var selectedOrderPartId = (int?)ViewBag.SelectedOrderPartId;
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-primary text-white py-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold"><i class="bi bi-shield-exclamation me-2"></i>Lập Hồ sơ Khiếu nại Phụ tùng Nhà Cung Cấp TST / HTC</h5>
+                    <a href="/OrderComplain" class="btn btn-sm btn-light text-primary"><i class="bi bi-arrow-left me-1"></i>Quay lại</a>
+                </div>
+            </div>
+            <div class="card-body p-4">
+                <form method="post" id="createComplainForm">
+                    @Html.AntiForgeryToken()
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12">
+                            <h6 class="text-primary fw-bold border-bottom pb-2 mb-3"><i class="bi bi-info-circle me-1"></i>1. Thông tin Đại lý &amp; Phân loại khiếu nại</h6>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Số phiếu khiếu nại</label>
+                            <input name="orderComplainNo" class="form-control" placeholder="Để trống hệ thống tự sinh (VD: KN260427-001)" />
+                            <div class="form-text">Mã chứng từ theo chuẩn đại lý Hyundai DMS.</div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Đại lý lập khiếu nại</label>
+                            <input name="dealerName" class="form-control" value="Hyundai Giải Phóng" required />
+                            <input type="hidden" name="dealerCode" value="HYUNDAI-MAIN" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold text-danger">Phân loại khiếu nại (*)</label>
+                            <select name="complainType" class="form-select" required>
+                                @foreach (OrderComplainType t in Enum.GetValues(typeof(OrderComplainType)))
+                                {
+                                    var (tName, _, _) = Ui.OrderComplainType(t);
+                                    <option value="@((int)t)">@tName</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12">
+                            <h6 class="text-primary fw-bold border-bottom pb-2 mb-3"><i class="bi bi-box-seam me-1"></i>2. Phụ tùng khiếu nại &amp; Đơn đặt hàng liên quan</h6>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Đơn đặt hàng phụ tùng liên quan (PO / Ser_Order_Part)</label>
+                            <select name="orderPartId" id="orderPartSelect" class="form-select">
+                                <option value="">— Không gắn đơn hàng / Hàng mua ngoài —</option>
+                                @foreach (var op in orderParts)
+                                {
+                                    var isSel = selectedOrderPartId.HasValue && selectedOrderPartId.Value == op.Id;
+                                    <option value="@op.Id" selected="@isSel" data-vin="@op.VIN">
+                                        [@op.OrderPartNo] - @op.OrderDate.ToString("dd/MM/yyyy") - @op.SupplierName (@op.Lines.Count món - @op.Total.ToString("N0") đ)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-danger">Phụ tùng khiếu nại (*)</label>
+                            <select name="partId" id="partSelect" class="form-select" required>
+                                <option value="">— Chọn phụ tùng trong danh mục kho —</option>
+                                @foreach (var p in parts)
+                                {
+                                    <option value="@p.Id" data-code="@p.Code" data-name="@p.Name" data-unit="@p.Unit" data-cost="@p.CostPrice">
+                                        [@p.Code] @p.Name (Tồn: @p.InStock @p.Unit - Giá nhập: @p.CostPrice.ToString("N0") đ)
+                                    </option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold text-danger">Số lượng khiếu nại (*)</label>
+                            <input type="number" step="1" min="1" name="quantity" class="form-control" value="1" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Đơn giá nhập (VNĐ)</label>
+                            <input type="number" step="1000" min="0" name="unitPrice" id="unitPriceInput" class="form-control" placeholder="Tự điền theo giá phụ tùng" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Số khung VIN áp dụng</label>
+                            <input name="vin" id="vinInput" class="form-control text-uppercase" placeholder="17 ký tự (VD: RLHXX...)" />
+                            <div class="form-text">Điền nếu phụ tùng đặt riêng cho xe bảo hành.</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold">Số phiếu giao hàng (DO)</label>
+                            <input name="requestOrderNo" class="form-control" placeholder="VD: DO-TST-2026-0425" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12">
+                            <h6 class="text-primary fw-bold border-bottom pb-2 mb-3"><i class="bi bi-truck me-1"></i>3. Thông tin giao nhận vận tải &amp; Quá trình phát hiện lỗi</h6>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Đơn vị vận tải vận chuyển</label>
+                            <input name="transportUnit" class="form-control" placeholder="VD: Viettel Post / Vận tải Thành Công" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Ngày giờ giao nhận hàng</label>
+                            <input type="datetime-local" name="deliveryDateTime" class="form-control" value="@DateTime.Now.ToString("yyyy-MM-ddTHH:mm")" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Người giao hàng / Tài xế</label>
+                            <input name="deliveryBy" class="form-control" placeholder="VD: Tài xế Nguyễn Văn A" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Địa điểm nhận hàng</label>
+                            <input name="deliveryLocation" class="form-control" value="Kho phụ tùng chính" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Thủ kho / Người nhận hàng</label>
+                            <input name="receiveBy" class="form-control" value="Thủ kho Tuấn" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold">Người lập hồ sơ khiếu nại</label>
+                            <input name="createdBy" class="form-control" value="Thủ kho Tuấn" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Thời điểm phát hiện khi lắp ráp (nếu có)</label>
+                            <input type="datetime-local" name="assembleDateTime" class="form-control" />
+                            <div class="form-text">Điền nếu lỗi chỉ phát hiện khi kỹ thuật viên xưởng đưa vào gá lắp.</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Kỹ thuật viên phát hiện</label>
+                            <input name="assembleBy" class="form-control" placeholder="VD: KTV Quang (Tổ máy gầm)" />
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12">
+                            <h6 class="text-primary fw-bold border-bottom pb-2 mb-3"><i class="bi bi-card-text me-1"></i>4. Mô tả chi tiết tình trạng hư hỏng / sai quy cách (*)</h6>
+                        </div>
+                        <div class="col-12">
+                            <textarea name="description" rows="3" class="form-control" required placeholder="Ghi nhận cụ thể: Hiện tượng móp méo, rách vỡ, số đo chênh lệch, so sánh nhầm mã hoặc nguyên nhân nghi ngờ..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-12 d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                            <h6 class="text-primary fw-bold mb-0"><i class="bi bi-paperclip me-1"></i>5. Bằng chứng hình ảnh &amp; Biên bản đính kèm</h6>
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="addAttachRow()"><i class="bi bi-plus-circle me-1"></i>Thêm ảnh/chứng từ</button>
+                        </div>
+                        <div class="col-12">
+                            <div class="table-responsive">
+                                <table class="table table-bordered align-middle" id="attachTable">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th style="width:25%;">Loại ảnh / Chứng từ</th>
+                                            <th style="width:30%;">Tên file hình ảnh</th>
+                                            <th style="width:35%;">Ghi chú chi tiết bằng chứng</th>
+                                            <th style="width:10%;" class="text-center">Xóa</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="attachBody">
+                                        <tr>
+                                            <td>
+                                                <select name="imageTypes[]" class="form-select form-select-sm">
+                                                    <option value="Ngoại quan hư hại">Ngoại quan hư hại</option>
+                                                    <option value="Tem nhãn & Barcode">Tem nhãn &amp; Barcode</option>
+                                                    <option value="Mã dập nổi chi tiết">Mã dập nổi chi tiết</option>
+                                                    <option value="Bao bì rách vỡ">Bao bì rách vỡ</option>
+                                                    <option value="Biên bản giao vận">Biên bản giao vận</option>
+                                                </select>
+                                            </td>
+                                            <td>
+                                                <input name="fileNames[]" class="form-control form-control-sm" placeholder="VD: AnhNgoaiQuan_Loi_01.jpg" value="Anh_Loi_ThucTe_01.jpg" />
+                                            </td>
+                                            <td>
+                                                <input name="notes[]" class="form-control form-control-sm" placeholder="Mô tả góc chụp / chi tiết khuyết tật" value="Ảnh chụp trực diện khuyết tật sản phẩm" />
+                                            </td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                        <a href="/OrderComplain" class="btn btn-outline-secondary">Hủy bỏ</a>
+                        <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-circle me-1"></i>Lưu Hồ sơ Khiếu nại</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.getElementById('partSelect')?.addEventListener('change', function () {
+        var opt = this.options[this.selectedIndex];
+        if (opt && opt.dataset.cost) {
+            document.getElementById('unitPriceInput').value = opt.dataset.cost;
+        }
+    });
+
+    document.getElementById('orderPartSelect')?.addEventListener('change', function () {
+        var opt = this.options[this.selectedIndex];
+        if (opt && opt.dataset.vin) {
+            document.getElementById('vinInput').value = opt.dataset.vin;
+        }
+    });
+
+    function addAttachRow() {
+        var tbody = document.getElementById('attachBody');
+        var tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>
+                <select name="imageTypes[]" class="form-select form-select-sm">
+                    <option value="Ngoại quan hư hại">Ngoại quan hư hại</option>
+                    <option value="Tem nhãn & Barcode">Tem nhãn & Barcode</option>
+                    <option value="Mã dập nổi chi tiết">Mã dập nổi chi tiết</option>
+                    <option value="Bao bì rách vỡ">Bao bì rách vỡ</option>
+                    <option value="Biên bản giao vận">Biên bản giao vận</option>
+                </select>
+            </td>
+            <td>
+                <input name="fileNames[]" class="form-control form-control-sm" placeholder="Tên file ảnh đính kèm" />
+            </td>
+            <td>
+                <input name="notes[]" class="form-control form-control-sm" placeholder="Ghi chú chi tiết bằng chứng" />
+            </td>
+            <td class="text-center">
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="this.closest('tr').remove()"><i class="bi bi-trash"></i></button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    }
+</script>
+}

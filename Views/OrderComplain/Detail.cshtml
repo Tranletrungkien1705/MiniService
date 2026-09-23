@@ -1,0 +1,330 @@
+@model OrderComplain
+@{
+    ViewData["Title"] = $"Chi tiết Khiếu nại Phụ tùng {Model.OrderComplainNo}";
+    var (typeName, typeIcon, typeCss) = Ui.OrderComplainType(Model.ComplainType);
+    var (dmsName, dmsCode, dmsCss) = Ui.DMSOrderComplainStatus(Model.DMSStatus);
+    var (tstName, tstCode, tstCss) = Ui.TSTOrderComplainStatus(Model.TSTStatus);
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h4 class="mb-0 fw-bold">@Model.OrderComplainNo</h4>
+            <span class="badge bg-@dmsCss">DMS: @dmsCode · @dmsName</span>
+            <span class="badge bg-@tstCss">TST: @tstCode · @tstName</span>
+            <span class="badge bg-@typeCss"><i class="bi @typeIcon me-1"></i>@typeName</span>
+        </div>
+        <div class="text-muted small mt-1">
+            <i class="bi bi-clock me-1"></i>Ngày lập: @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm") · Người lập: <strong>@Model.CreatedBy</strong> · Đại lý: <strong>@Model.DealerName</strong>
+        </div>
+    </div>
+    <div class="d-flex gap-2 flex-wrap">
+        <a href="/OrderComplain" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Danh sách</a>
+        <a href="/OrderComplain/Print/@Model.Id" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer me-1"></i>In biên bản</a>
+
+        @if (Model.CanSend)
+        {
+            <form method="post" action="/OrderComplain/SendTST/@Model.Id" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn gửi hồ sơ khiếu nại này sang Nhà cung cấp TST/HTC để yêu cầu thẩm định?');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-send me-1"></i>Gửi khiếu nại TST</button>
+            </form>
+        }
+
+        @if (Model.CanReview)
+        {
+            <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#reviewModal">
+                <i class="bi bi-check2-circle me-1"></i>Phê duyệt / Quyết định TST
+            </button>
+        }
+
+        @if (Model.DMSStatus == DMSOrderComplainStatus.Pending || Model.DMSStatus == DMSOrderComplainStatus.Cancelled)
+        {
+            <form method="post" action="/OrderComplain/Delete/@Model.Id" class="d-inline" onsubmit="return confirm('Bạn có chắc chắn muốn xóa hồ sơ khiếu nại này?');">
+                @Html.AntiForgeryToken()
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i>Xóa</button>
+            </form>
+        }
+    </div>
+</div>
+
+<!-- Workflow state timeline -->
+<div class="card mb-3">
+    <div class="card-body py-3">
+        <div class="row text-center g-2">
+            <div class="col-3">
+                <div class="p-2 rounded bg-light border @(Model.DMSStatus >= DMSOrderComplainStatus.Pending ? "border-primary" : "")">
+                    <i class="bi bi-pencil-square text-primary d-block fs-5"></i>
+                    <div class="fw-bold small">1. Lập hồ sơ DMS</div>
+                    <div class="text-muted" style="font-size:11px">@Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="p-2 rounded bg-light border @(Model.DMSStatus >= DMSOrderComplainStatus.Sent ? "border-info" : "")">
+                    <i class="bi bi-send @(Model.DMSStatus >= DMSOrderComplainStatus.Sent ? "text-info" : "text-muted") d-block fs-5"></i>
+                    <div class="fw-bold small">2. Đã gửi TST</div>
+                    <div class="text-muted" style="font-size:11px">@(Model.SentAt.HasValue ? Model.SentAt.Value.ToString("dd/MM/yyyy HH:mm") : "Chờ gửi")</div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="p-2 rounded bg-light border @(Model.DecidedAt.HasValue ? (Model.IsApproved ? "border-success" : "border-danger") : "")">
+                    <i class="bi @(Model.IsApproved ? "bi-check-circle text-success" : (Model.IsRejected ? "bi-x-circle text-danger" : "bi-search text-warning")) d-block fs-5"></i>
+                    <div class="fw-bold small">3. Thẩm định NCC</div>
+                    <div class="text-muted" style="font-size:11px">@(Model.DecidedAt.HasValue ? Model.DecidedAt.Value.ToString("dd/MM/yyyy HH:mm") : "Đang thẩm định")</div>
+                </div>
+            </div>
+            <div class="col-3">
+                <div class="p-2 rounded bg-light border @(Model.DMSStatus == DMSOrderComplainStatus.Finished ? "border-success bg-success-subtle" : "")">
+                    <i class="bi bi-box2 @(Model.DMSStatus == DMSOrderComplainStatus.Finished ? "text-success" : "text-muted") d-block fs-5"></i>
+                    <div class="fw-bold small">4. Giải quyết hoàn tất</div>
+                    <div class="text-muted" style="font-size:11px">@(Model.FinishedAt.HasValue ? Model.FinishedAt.Value.ToString("dd/MM/yyyy HH:mm") : "Chờ hoàn tất")</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <!-- Cột trái: Phụ tùng & Đơn hàng -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-light fw-bold"><i class="bi bi-box-seam me-2 text-primary"></i>Phụ tùng &amp; Đơn đặt hàng</div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted" style="width:35%;">Phụ tùng:</td>
+                        <td>
+                            <strong class="text-primary">@Model.PartName</strong>
+                            <div><code>@Model.PartCode</code></div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Số lượng khiếu nại:</td>
+                        <td><span class="badge bg-secondary fs-6">@Model.Quantity.ToString("G29") @Model.Unit</span></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Đơn giá nhập:</td>
+                        <td><strong>@Model.UnitPrice.ToString("N0") đ</strong></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Tổng giá trị bồi hoàn:</td>
+                        <td><strong class="text-danger fs-5">@Model.Amount.ToString("N0") đ</strong></td>
+                    </tr>
+                    <tr><td colspan="2"><hr class="my-1"></td></tr>
+                    <tr>
+                        <td class="text-muted">Đơn đặt hàng (PO):</td>
+                        <td>
+                            @if (Model.OrderPart != null)
+                            {
+                                <a href="/OrderPart/Detail/@Model.OrderPart.Id" class="badge bg-light text-dark border text-decoration-none">
+                                    <i class="bi bi-receipt me-1"></i>@Model.OrderPart.OrderPartNo
+                                </a>
+                                <span class="small text-muted ms-1">(Ngày đặt: @Model.OrderPart.OrderDate.ToString("dd/MM/yyyy") - @Model.OrderPart.SupplierName)</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Phiếu giao hàng DO:</td>
+                        <td>@(string.IsNullOrWhiteSpace(Model.RequestOrderNo) ? "—" : Model.RequestOrderNo)</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Số khung xe (VIN):</td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(Model.VIN))
+                            {
+                                <code>@Model.VIN</code>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cột phải: Vận chuyển & Giao nhận -->
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-light fw-bold"><i class="bi bi-truck me-2 text-primary"></i>Giao nhận vận tải &amp; Phát hiện sự cố</div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted" style="width:40%;">Đơn vị vận tải:</td>
+                        <td><strong>@(string.IsNullOrWhiteSpace(Model.TransportUnit) ? "Giao trực tiếp từ HTC" : Model.TransportUnit)</strong></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Thời điểm nhận hàng:</td>
+                        <td>@(Model.DeliveryDateTime.HasValue ? Model.DeliveryDateTime.Value.ToString("dd/MM/yyyy HH:mm") : "—")</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Người giao / Tài xế:</td>
+                        <td>@(string.IsNullOrWhiteSpace(Model.DeliveryBy) ? "—" : Model.DeliveryBy)</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Địa điểm nhận hàng:</td>
+                        <td>@(string.IsNullOrWhiteSpace(Model.DeliveryLocation) ? "Kho phụ tùng chính" : Model.DeliveryLocation)</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Người nhận tại đại lý:</td>
+                        <td><strong>@(string.IsNullOrWhiteSpace(Model.ReceiveBy) ? "Thủ kho" : Model.ReceiveBy)</strong></td>
+                    </tr>
+                    <tr><td colspan="2"><hr class="my-1"></td></tr>
+                    <tr>
+                        <td class="text-muted">Phát hiện khi lắp ráp:</td>
+                        <td>
+                            @if (Model.AssembleDateTime.HasValue)
+                            {
+                                <span>@Model.AssembleDateTime.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                                <div class="small text-muted">KTV phát hiện: <strong>@Model.AssembleBy</strong></div>
+                            }
+                            else
+                            {
+                                <span class="text-muted">Phát hiện ngay khi kiểm hàng nhập kho</span>
+                            }
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tình trạng lỗi & Phương án giải quyết -->
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-light fw-bold text-danger"><i class="bi bi-exclamation-triangle me-2"></i>Mô tả tình trạng hư hỏng / Sai quy cách</div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <span class="badge bg-@typeCss"><i class="bi @typeIcon me-1"></i>@typeName</span>
+                </div>
+                <div class="p-3 bg-light rounded border" style="white-space:pre-wrap;">@Model.Description</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header bg-light fw-bold text-success"><i class="bi bi-check-circle me-2"></i>Kết quả thẩm định &amp; Phương án bồi thường TST</div>
+            <div class="card-body">
+                @if (Model.TSTSolution.HasValue)
+                {
+                    var (solText, solCss) = Ui.ComplainSolution(Model.TSTSolution.Value);
+                    <div class="mb-3">
+                        <div class="text-muted small">Phương án giải quyết từ Nhà cung cấp:</div>
+                        <span class="badge bg-@solCss fs-6 mt-1">@solText</span>
+                    </div>
+                    @if (Model.DecidedAt.HasValue)
+                    {
+                        <div class="small text-muted mb-2">
+                            <i class="bi bi-calendar-check me-1"></i>Ngày quyết định: @Model.DecidedAt.Value.ToString("dd/MM/yyyy HH:mm")
+                        </div>
+                    }
+                    <div class="p-3 bg-light rounded border" style="white-space:pre-wrap;">
+                        <strong>Ghi chú giải quyết:</strong><br />
+                        @(string.IsNullOrWhiteSpace(Model.SolutionNote) ? "Không có ghi chú thêm." : Model.SolutionNote)
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-hourglass-split fs-2 d-block mb-2 text-warning"></i>
+                        Nhà cung cấp TST/HTC đang thụ lý hồ sơ giám định.<br />
+                        Chưa có phương án giải quyết chính thức.
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bằng chứng hình ảnh & Chứng từ đính kèm -->
+<div class="card mb-3">
+    <div class="card-header bg-light fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-paperclip me-2 text-primary"></i>Bằng chứng hình ảnh &amp; Chứng từ biên bản (@Model.AttachCount)</span>
+    </div>
+    <div class="card-body">
+        @if (Model.AttachFiles.Count == 0)
+        {
+            <div class="text-muted text-center py-3">Chưa có hình ảnh hoặc chứng từ nào được đính kèm.</div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var f in Model.AttachFiles)
+                {
+                    <div class="col-md-4">
+                        <div class="card h-100 border shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center gap-2 mb-2">
+                                    <span class="badge bg-info">@f.ImageType</span>
+                                    <span class="small text-muted ms-auto">@f.UploadedAt.ToString("dd/MM/yyyy")</span>
+                                </div>
+                                <div class="fw-bold text-truncate" title="@f.FileName">
+                                    <i class="bi bi-file-earmark-image me-1 text-primary"></i>@f.FileName
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(f.Note))
+                                {
+                                    <div class="small text-secondary mt-1">@f.Note</div>
+                                }
+                                <div class="mt-2 pt-2 border-top">
+                                    <a href="@f.FilePath" target="_blank" class="btn btn-xs btn-outline-primary small" style="font-size:12px">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>Xem ảnh chứng cứ
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Modal Thẩm định & Phê duyệt giải pháp TST -->
+<div class="modal fade" id="reviewModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/OrderComplain/Review/@Model.Id">
+                @Html.AntiForgeryToken()
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title fw-bold"><i class="bi bi-check2-circle me-2"></i>Quyết định &amp; Phương án Thẩm định TST</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Trạng thái thẩm định TST (*)</label>
+                        <select name="tstStatus" class="form-select" required>
+                            <option value="@((int)TSTOrderComplainStatus.Approved)">[31] Chấp thuận khiếu nại bồi thường</option>
+                            <option value="@((int)TSTOrderComplainStatus.Rejected)">[21] Không chấp thuận bồi thường (Từ chối)</option>
+                            <option value="@((int)TSTOrderComplainStatus.UnderReview)">[15] Đang tiếp tục giám định tại xưởng</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Phương án giải quyết từ Nhà cung cấp (*)</label>
+                        <select name="solution" class="form-select" required>
+                            @foreach (ComplainSolution sol in Enum.GetValues(typeof(ComplainSolution)))
+                            {
+                                var (sName, _) = Ui.ComplainSolution(sol);
+                                <option value="@((int)sol)">@sName</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Ghi chú chi tiết phương án / Lý do (*)</label>
+                        <textarea name="solutionNote" rows="3" class="form-control" required placeholder="Ghi nhận cụ thể: Ngày giao bù phụ tùng mới, số tiền cấn trừ công nợ, hoặc nguyên nhân từ chối..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Đóng</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Lưu quyết định</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

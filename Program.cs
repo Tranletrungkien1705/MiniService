@@ -2886,6 +2886,181 @@ app.MapDelete("/api/pdi-requests/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Khiếu nại đơn hàng phụ tùng Nhà Cung Cấp TST/HTC (Ser_OrderComplain & Ser_OrderComplainAttachFile)
+app.MapGet("/api/ordercomplains", async (DMSOrderComplainStatus? dmsStatus, TSTOrderComplainStatus? tstStatus, OrderComplainType? type, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.OrderComplainsAsync(dmsStatus, tstStatus, type, q, fromDate, toDate);
+    return Results.Ok(list.Select(c => new
+    {
+        c.Id,
+        c.OrderComplainNo,
+        c.DealerCode,
+        c.DealerName,
+        type = Ui.OrderComplainType(c.ComplainType).text,
+        typeIcon = Ui.OrderComplainType(c.ComplainType).icon,
+        typeValue = (int)c.ComplainType,
+        c.OrderPartId,
+        c.OrderPartNo,
+        c.PartId,
+        c.PartCode,
+        c.PartName,
+        c.Unit,
+        c.Quantity,
+        c.UnitPrice,
+        c.Amount,
+        c.VIN,
+        c.Description,
+        c.RequestOrderNo,
+        c.TransportUnit,
+        c.DeliveryDateTime,
+        c.DeliveryBy,
+        c.DeliveryLocation,
+        c.ReceiveBy,
+        c.AssembleDateTime,
+        c.AssembleBy,
+        dmsStatus = Ui.DMSOrderComplainStatus(c.DMSStatus).text,
+        dmsStatusCode = Ui.DMSOrderComplainStatus(c.DMSStatus).code,
+        dmsStatusValue = (int)c.DMSStatus,
+        tstStatus = Ui.TSTOrderComplainStatus(c.TSTStatus).text,
+        tstStatusCode = Ui.TSTOrderComplainStatus(c.TSTStatus).code,
+        tstStatusValue = (int)c.TSTStatus,
+        solution = c.TSTSolution.HasValue ? Ui.ComplainSolution(c.TSTSolution.Value).text : null,
+        solutionValue = c.TSTSolution.HasValue ? (int)c.TSTSolution.Value : (int?)null,
+        c.SolutionNote,
+        c.AttachCount,
+        c.CreatedBy,
+        c.CreatedAt,
+        c.SentAt,
+        c.DecidedAt,
+        c.FinishedAt
+    }));
+});
+
+app.MapGet("/api/ordercomplains/{id:int}", async (int id, IRoService svc) =>
+{
+    var c = await svc.GetOrderComplainAsync(id);
+    if (c == null) return Results.NotFound(new { error = "Không tìm thấy hồ sơ khiếu nại phụ tùng." });
+    return Results.Ok(new
+    {
+        c.Id,
+        c.OrderComplainNo,
+        c.DealerCode,
+        c.DealerName,
+        type = Ui.OrderComplainType(c.ComplainType).text,
+        typeIcon = Ui.OrderComplainType(c.ComplainType).icon,
+        typeValue = (int)c.ComplainType,
+        orderPart = c.OrderPart != null ? new { c.OrderPart.Id, c.OrderPart.OrderPartNo, c.OrderPart.SupplierName, c.OrderPart.OrderDate } : null,
+        part = new { c.Part.Id, c.Part.Code, c.Part.Name, c.Part.Unit, c.Part.CostPrice, c.Part.InStock },
+        c.Quantity,
+        c.UnitPrice,
+        c.Amount,
+        c.VIN,
+        c.Description,
+        c.RequestOrderNo,
+        c.TransportUnit,
+        c.DeliveryDateTime,
+        c.DeliveryBy,
+        c.DeliveryLocation,
+        c.ReceiveBy,
+        c.AssembleDateTime,
+        c.AssembleBy,
+        dmsStatus = Ui.DMSOrderComplainStatus(c.DMSStatus).text,
+        dmsStatusCode = Ui.DMSOrderComplainStatus(c.DMSStatus).code,
+        dmsStatusValue = (int)c.DMSStatus,
+        tstStatus = Ui.TSTOrderComplainStatus(c.TSTStatus).text,
+        tstStatusCode = Ui.TSTOrderComplainStatus(c.TSTStatus).code,
+        tstStatusValue = (int)c.TSTStatus,
+        solution = c.TSTSolution.HasValue ? Ui.ComplainSolution(c.TSTSolution.Value).text : null,
+        solutionValue = c.TSTSolution.HasValue ? (int)c.TSTSolution.Value : (int?)null,
+        c.SolutionNote,
+        c.CreatedBy,
+        c.CreatedAt,
+        c.SentAt,
+        c.DecidedAt,
+        c.FinishedAt,
+        attachFiles = c.AttachFiles.Select(f => new
+        {
+            f.Id,
+            f.ImageType,
+            f.FileName,
+            f.FilePath,
+            f.Note,
+            f.UploadedAt
+        })
+    });
+});
+
+app.MapPost("/api/ordercomplains", async (CreateOrderComplainDto dto, IRoService svc) =>
+{
+    try
+    {
+        if (dto.PartId <= 0)
+            return Results.BadRequest(new { error = "Vui lòng chọn phụ tùng khiếu nại (PartId)." });
+
+        if (dto.Quantity <= 0)
+            return Results.BadRequest(new { error = "Số lượng khiếu nại phải lớn hơn 0." });
+
+        if (string.IsNullOrWhiteSpace(dto.Description))
+            return Results.BadRequest(new { error = "Vui lòng nhập mô tả chi tiết tình trạng hư hỏng / sai quy cách (Description)." });
+
+        var complain = new OrderComplain
+        {
+            OrderComplainNo = dto.OrderComplainNo?.Trim() ?? "",
+            DealerCode = string.IsNullOrWhiteSpace(dto.DealerCode) ? "HYUNDAI-MAIN" : dto.DealerCode.Trim(),
+            DealerName = string.IsNullOrWhiteSpace(dto.DealerName) ? "Hyundai Giải Phóng" : dto.DealerName.Trim(),
+            ComplainType = dto.ComplainType,
+            OrderPartId = (dto.OrderPartId.HasValue && dto.OrderPartId.Value > 0) ? dto.OrderPartId : null,
+            PartId = dto.PartId,
+            Quantity = dto.Quantity,
+            UnitPrice = dto.UnitPrice ?? 0,
+            VIN = dto.VIN?.Trim(),
+            Description = dto.Description.Trim(),
+            RequestOrderNo = dto.RequestOrderNo?.Trim(),
+            TransportUnit = dto.TransportUnit?.Trim(),
+            DeliveryDateTime = dto.DeliveryDateTime,
+            DeliveryBy = dto.DeliveryBy?.Trim(),
+            DeliveryLocation = string.IsNullOrWhiteSpace(dto.DeliveryLocation) ? "Kho phụ tùng chính" : dto.DeliveryLocation.Trim(),
+            ReceiveBy = dto.ReceiveBy?.Trim(),
+            AssembleDateTime = dto.AssembleDateTime,
+            AssembleBy = dto.AssembleBy?.Trim(),
+            CreatedBy = dto.CreatedBy ?? "Thủ kho"
+        };
+
+        var files = dto.AttachFiles?.Select(f => new OrderComplainAttachFile
+        {
+            ImageType = string.IsNullOrWhiteSpace(f.ImageType) ? "Ngoại quan hư hại" : f.ImageType.Trim(),
+            FileName = f.FileName.Trim(),
+            FilePath = string.IsNullOrWhiteSpace(f.FilePath) ? $"/uploads/complain/{f.FileName.Trim()}" : f.FilePath.Trim(),
+            Note = f.Note?.Trim()
+        }).ToList();
+
+        var id = await svc.CreateOrderComplainAsync(complain, files);
+        return Results.Ok(new { complainId = id, orderComplainNo = complain.OrderComplainNo, message = "Đã lập hồ sơ khiếu nại phụ tùng thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/ordercomplains/{id:int}/send-tst", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.SendOrderComplainToTSTAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/ordercomplains/{id:int}/review", async (int id, ReviewOrderComplainDto dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ReviewOrderComplainAsync(id, dto.TSTStatus, dto.Solution, dto.SolutionNote);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/ordercomplains/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteOrderComplainAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -2974,3 +3149,6 @@ record CreatePdiRoDto(string? Technician);
 record UpdatePdiChecklistDto(string? Inspector, string? Notes, List<UpdatePdiChecklineDto>? Items);
 record UpdatePdiChecklineDto(int CheckId, AuditStatus Status, string? Note);
 record PassPdiDto(string? Inspector);
+record CreateOrderComplainDto(string? OrderComplainNo, string? DealerCode, string? DealerName, OrderComplainType ComplainType, int? OrderPartId, int PartId, decimal Quantity, decimal? UnitPrice, string? VIN, string Description, string? RequestOrderNo, string? TransportUnit, DateTime? DeliveryDateTime, string? DeliveryBy, string? DeliveryLocation, string? ReceiveBy, DateTime? AssembleDateTime, string? AssembleBy, string? CreatedBy, List<CreateOrderComplainAttachDto>? AttachFiles);
+record CreateOrderComplainAttachDto(string ImageType, string FileName, string? FilePath, string? Note);
+record ReviewOrderComplainDto(TSTOrderComplainStatus TSTStatus, ComplainSolution Solution, string? SolutionNote);

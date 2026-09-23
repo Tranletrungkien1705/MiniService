@@ -2025,6 +2025,156 @@ public static class Seeder
             db.PdiRequests.Add(pdi3);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.OrderComplains.AnyAsync())
+        {
+            var pOil = await db.Parts.FirstOrDefaultAsync(p => p.Code == "26300-35505");
+            var pBrake = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+            var pSpark = await db.Parts.FirstOrDefaultAsync(p => p.Code == "18846-11070");
+            var orderPart = await db.OrderParts.FirstOrDefaultAsync();
+
+            // 1. Khiếu nại đã giải quyết hoàn tất & TST chấp thuận đổi mới (Approved / Finished)
+            var c1 = new OrderComplain
+            {
+                OrderComplainNo = "KN260425-001",
+                DealerCode = "HYUNDAI-MAIN",
+                DealerName = "Hyundai Giải Phóng",
+                ComplainType = OrderComplainType.DamagedInTransit,
+                OrderPartId = orderPart?.Id,
+                OrderPartNo = orderPart?.OrderPartNo ?? "PO260427-001",
+                PartId = pOil?.Id ?? 1,
+                PartCode = pOil?.Code ?? "26300-35505",
+                PartName = pOil?.Name ?? "Lọc dầu động cơ chính hãng Hyundai",
+                Unit = pOil?.Unit ?? "Cái",
+                Quantity = 2,
+                UnitPrice = pOil?.CostPrice ?? 90000,
+                RequestOrderNo = "DO-TST-2026-0411",
+                TransportUnit = "Vận tải Đất Việt Express (Xe tải 29H-441.82)",
+                DeliveryDateTime = DateTime.Today.AddDays(-2).AddHours(9),
+                DeliveryBy = "Tài xế Nguyễn Văn Dũng",
+                DeliveryLocation = "Kho phụ tùng chính - Tầng 1",
+                ReceiveBy = "Thủ kho Tuấn",
+                Description = "Thùng carton ngoài bị bẹp dập trong quá trình xếp dỡ vận chuyển. Khi mở hộp kiểm tra có 02 lọc dầu bị móp méo đầu ren và cong vênh van cao su một chiều, không thể lắp ráp lên xe an toàn.",
+                DMSStatus = DMSOrderComplainStatus.Finished,
+                TSTStatus = TSTOrderComplainStatus.Approved,
+                TSTSolution = ComplainSolution.ReplaceNew,
+                SolutionNote = "Bộ phận Bảo hành TST/HTC đã tiếp nhận và xác nhận hư hại do khâu chằng buộc vận chuyển. Đồng ý đổi mới 02 lọc dầu nguyên seal trong chuyến xe giao hàng kế tiếp ngày 28/04.",
+                CreatedBy = "Thủ kho Tuấn",
+                CreatedAt = DateTime.Today.AddDays(-2).AddHours(10),
+                SentAt = DateTime.Today.AddDays(-2).AddHours(11),
+                DecidedAt = DateTime.Today.AddDays(-1).AddHours(15),
+                FinishedAt = DateTime.Today.AddDays(-1).AddHours(16),
+                AttachFiles = [
+                    new OrderComplainAttachFile
+                    {
+                        ImageType = "Ngoại quan hư hại",
+                        FileName = "LocDau_MopRen_01.jpg",
+                        FilePath = "/img/complain/locdau_mop_01.jpg",
+                        Note = "Vết móp méo sâu 4mm trên bề mặt ren bắt vào lốc máy"
+                    },
+                    new OrderComplainAttachFile
+                    {
+                        ImageType = "Bao bì rách vỡ",
+                        FileName = "ThungCarton_BepDap.jpg",
+                        FilePath = "/img/complain/carton_bep.jpg",
+                        Note = "Góc thùng carton bị vật nặng đè rách nát"
+                    },
+                    new OrderComplainAttachFile
+                    {
+                        ImageType = "Biên bản giao vận",
+                        FileName = "BienBanDongKiem_DatViet.pdf",
+                        FilePath = "/docs/complain/bb_dongkiem_0411.pdf",
+                        Note = "Biên bản kiểm hàng đồng kiểm có chữ ký xác nhận của tài xế Dũng"
+                    }
+                ]
+            };
+
+            // 2. Khiếu nại đã gửi TST đang thẩm định giám định mã lỗi (Sent / UnderReview)
+            var c2 = new OrderComplain
+            {
+                OrderComplainNo = "KN260427-002",
+                DealerCode = "HYUNDAI-MAIN",
+                DealerName = "Hyundai Giải Phóng",
+                ComplainType = OrderComplainType.WrongPart,
+                OrderPartId = orderPart?.Id,
+                OrderPartNo = orderPart?.OrderPartNo ?? "PO260427-001",
+                PartId = pBrake?.Id ?? 4,
+                PartCode = pBrake?.Code ?? "58101-C1A00",
+                PartName = pBrake?.Name ?? "Bộ má phanh đĩa trước",
+                Unit = pBrake?.Unit ?? "Bộ",
+                Quantity = 1,
+                UnitPrice = pBrake?.CostPrice ?? 850000,
+                VIN = "RLHXXTC002",
+                RequestOrderNo = "DO-TST-2026-0425",
+                TransportUnit = "Viettel Post (Vận đơn VT-HN-88219)",
+                DeliveryDateTime = DateTime.Today.AddHours(-4),
+                DeliveryBy = "Shipper Viettel Post Hoàng Nam",
+                DeliveryLocation = "Kho phụ tùng chính",
+                ReceiveBy = "Thủ kho Tuấn",
+                AssembleDateTime = DateTime.Today.AddHours(-2),
+                AssembleBy = "KTV Quang",
+                Description = "Đơn đặt hàng yêu cầu bộ má phanh trước cho xe Tucson/Santa Fe (mã 58101-C1A00), tem vỏ hộp ghi đúng mã nhưng ruột bên trong là má phanh xe Grand i10 kích thước nhỏ hơn 30%, KTV đưa vào gá không vừa đĩa.",
+                DMSStatus = DMSOrderComplainStatus.Sent,
+                TSTStatus = TSTOrderComplainStatus.UnderReview,
+                SolutionNote = "TST đang yêu cầu thủ kho tổng TST rà soát lại lô đóng gói ngày 24/04 từ nhà máy.",
+                CreatedBy = "Thủ kho Tuấn",
+                CreatedAt = DateTime.Today.AddHours(-3),
+                SentAt = DateTime.Today.AddHours(-1),
+                AttachFiles = [
+                    new OrderComplainAttachFile
+                    {
+                        ImageType = "Tem nhãn & Barcode",
+                        FileName = "TemNhan_VoHop_58101.jpg",
+                        FilePath = "/img/complain/tem_vohop.jpg",
+                        Note = "Tem dán ngoài hộp ghi mã 58101-C1A00"
+                    },
+                    new OrderComplainAttachFile
+                    {
+                        ImageType = "Ngoại quan hư hại",
+                        FileName = "SoSanh_MaPhanh_ThucTe.jpg",
+                        FilePath = "/img/complain/ma_phanh_lech.jpg",
+                        Note = "So sánh kích thước má thực tế ngắn hơn cùm phanh xe Tucson"
+                    }
+                ]
+            };
+
+            // 3. Khiếu nại mới lập chờ gửi phê duyệt (Pending / Processing)
+            var c3 = new OrderComplain
+            {
+                OrderComplainNo = "KN260427-003",
+                DealerCode = "HYUNDAI-MAIN",
+                DealerName = "Hyundai Giải Phóng",
+                ComplainType = OrderComplainType.QualityDefect,
+                PartId = pSpark?.Id ?? 5,
+                PartCode = pSpark?.Code ?? "18846-11070",
+                PartName = pSpark?.Name ?? "Bugi đánh lửa Iridium cao cấp",
+                Unit = pSpark?.Unit ?? "Cái",
+                Quantity = 1,
+                UnitPrice = pSpark?.CostPrice ?? 110000,
+                TransportUnit = "Giao trực tiếp từ Kho trung chuyển HTC",
+                DeliveryDateTime = DateTime.Today.AddMinutes(-45),
+                DeliveryBy = "Nhân viên kho HTC Lê Dũng",
+                DeliveryLocation = "Kho phụ tùng chính",
+                ReceiveBy = "Thủ kho Tuấn",
+                Description = "Khi mở nắp hộp kiểm tra kỹ thuật trước khi nhập kệ, phát hiện phần sứ cách điện của bugi bị rạn nứt một đường dài từ chân cực ren lên đầu chụp, có nguy cơ đánh lửa phóng điện ra ngoài thân máy.",
+                DMSStatus = DMSOrderComplainStatus.Pending,
+                TSTStatus = TSTOrderComplainStatus.Processing,
+                CreatedBy = "Thủ kho Tuấn",
+                CreatedAt = DateTime.Today.AddMinutes(-30),
+                AttachFiles = [
+                    new OrderComplainAttachFile
+                    {
+                        ImageType = "Ngoại quan hư hại",
+                        FileName = "Bugi_NutSu_ChiTiet.jpg",
+                        FilePath = "/img/complain/bugi_nut_su.jpg",
+                        Note = "Vết rạn nứt trên lớp men sứ cách điện"
+                    }
+                ]
+            };
+
+            db.OrderComplains.AddRange(c1, c2, c3);
+            await db.SaveChangesAsync();
+        }
     }
 
     private static List<PdiChecklistItem> CreateDefaultChecklist() =>
@@ -2064,7 +2214,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -2826,6 +2976,55 @@ public static class Seeder
                 ""Status"" INTEGER NOT NULL,
                 ""Note"" TEXT NULL,
                 FOREIGN KEY (""PdiRequestItemId"") REFERENCES ""PdiRequestItems"" (""Id"") ON DELETE CASCADE
+            );",
+            @"CREATE TABLE IF NOT EXISTS ""OrderComplains"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""OrderComplainNo"" TEXT NOT NULL,
+                ""DealerCode"" TEXT NOT NULL,
+                ""DealerName"" TEXT NOT NULL,
+                ""ComplainType"" INTEGER NOT NULL,
+                ""OrderPartId"" INTEGER NULL,
+                ""OrderPartNo"" TEXT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""PartCode"" TEXT NOT NULL,
+                ""PartName"" TEXT NOT NULL,
+                ""Unit"" TEXT NOT NULL,
+                ""Quantity"" TEXT NOT NULL,
+                ""UnitPrice"" TEXT NOT NULL,
+                ""VIN"" TEXT NULL,
+                ""Description"" TEXT NOT NULL,
+                ""RequestOrderNo"" TEXT NULL,
+                ""TransportUnit"" TEXT NULL,
+                ""DeliveryDateTime"" TEXT NULL,
+                ""DeliveryBy"" TEXT NULL,
+                ""DeliveryLocation"" TEXT NULL,
+                ""ReceiveBy"" TEXT NULL,
+                ""AssembleDateTime"" TEXT NULL,
+                ""AssembleBy"" TEXT NULL,
+                ""DMSStatus"" INTEGER NOT NULL,
+                ""TSTStatus"" INTEGER NOT NULL,
+                ""TSTSolution"" INTEGER NULL,
+                ""SolutionNote"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""SentAt"" TEXT NULL,
+                ""DecidedAt"" TEXT NULL,
+                ""FinishedAt"" TEXT NULL,
+                FOREIGN KEY (""OrderPartId"") REFERENCES ""OrderParts"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_OrderComplains_OrgId_OrderComplainNo"" ON ""OrderComplains"" (""OrgId"", ""OrderComplainNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""OrderComplainAttachFiles"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""OrderComplainId"" INTEGER NOT NULL,
+                ""ImageType"" TEXT NOT NULL,
+                ""FileName"" TEXT NOT NULL,
+                ""FilePath"" TEXT NOT NULL,
+                ""Note"" TEXT NULL,
+                ""UploadedAt"" TEXT NOT NULL,
+                FOREIGN KEY (""OrderComplainId"") REFERENCES ""OrderComplains"" (""Id"") ON DELETE CASCADE
             );"
         };
 

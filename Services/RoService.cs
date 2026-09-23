@@ -23,7 +23,8 @@ public record SvcDash(int OpenRO, int InGarage, int DoneToday, decimal RevenueMo
     List<(ROStatus Status, int Count)> ByStatus,
     int PendingStockAdjs = 0, int DiscrepancyStockAdjs = 0,
     int ActiveBulletins = 0, int PendingBulletinVins = 0,
-    int PendingPdiRequests = 0, int CompletedPdiVehicles = 0);
+    int PendingPdiRequests = 0, int CompletedPdiVehicles = 0,
+    int PendingOrderComplains = 0, int ApprovedOrderComplains = 0);
 
 public interface IRoService
 {
@@ -219,12 +220,28 @@ public interface IRoService
     Task<(bool ok, string msg)> PassPdiItemAsync(int itemId, string? inspector = null);
     Task<(bool ok, string msg)> DeletePdiRequestAsync(int id);
     List<PdiChecklistItem> GetDefaultPdiChecklist();
+    // Order Part Complaints against Supplier TST/HTC (Ser_OrderComplain & Ser_OrderComplainAttachFile)
+    Task<List<OrderComplain>> OrderComplainsAsync(DMSOrderComplainStatus? dmsStatus, TSTOrderComplainStatus? tstStatus, OrderComplainType? type, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<OrderComplain?> GetOrderComplainAsync(int id);
+    Task<int> CreateOrderComplainAsync(OrderComplain complain, List<OrderComplainAttachFile>? files = null);
+    Task<(bool ok, string msg)> SendOrderComplainToTSTAsync(int id);
+    Task<(bool ok, string msg)> ReviewOrderComplainAsync(int id, TSTOrderComplainStatus tstStatus, ComplainSolution solution, string? solutionNote);
+    Task<(bool ok, string msg)> DeleteOrderComplainAsync(int id);
+    Task<List<OrderPart>> OrderPartsForComplainSelectAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
 
 public class RoService(AppDbContext db) : IRoService
 {
+    /// <summary>Chuyển trạng thái Khiếu nại phụ tùng theo Ser_OrderComplain idn.CarService.</summary>
+    public static DMSOrderComplainStatus[] AllowedNextDMSComplain(DMSOrderComplainStatus s) => s switch
+    {
+        DMSOrderComplainStatus.Pending => [DMSOrderComplainStatus.Sent, DMSOrderComplainStatus.Cancelled],
+        DMSOrderComplainStatus.Sent => [DMSOrderComplainStatus.Finished, DMSOrderComplainStatus.Cancelled],
+        _ => []
+    };
+
     /// <summary>Chuyển trạng thái Yêu cầu PDI theo Dlr_PDIRequest idn.CarService.</summary>
     public static PdiRequestStatus[] AllowedNextPdiRequest(PdiRequestStatus s) => s switch
     {
@@ -660,6 +677,9 @@ public class RoService(AppDbContext db) : IRoService
         var pendingPdiRequests = await db.PdiRequests.CountAsync(p => p.Status == PdiRequestStatus.Pending || p.Status == PdiRequestStatus.Approved);
         var completedPdiVehicles = await db.PdiRequestItems.CountAsync(i => i.Status == PdiItemStatus.Passed);
 
+        var pendingOrderComplains = await db.OrderComplains.CountAsync(c => c.DMSStatus == DMSOrderComplainStatus.Pending || c.DMSStatus == DMSOrderComplainStatus.Sent);
+        var approvedOrderComplains = await db.OrderComplains.CountAsync(c => c.TSTStatus == TSTOrderComplainStatus.Approved);
+
         return new SvcDash(
             ros.Count(r => openStatuses.Contains(r.Status)),
             ros.Count(r => r.Status == ROStatus.InGarage),
@@ -706,7 +726,9 @@ public class RoService(AppDbContext db) : IRoService
             activeBulletins,
             pendingBulletinVins,
             pendingPdiRequests,
-            completedPdiVehicles);
+            completedPdiVehicles,
+            pendingOrderComplains,
+            approvedOrderComplains);
     }
 
     // --- Warranty Management (Ser_ROWarrantyReport) ---
@@ -4478,4 +4500,164 @@ public class RoService(AppDbContext db) : IRoService
         new PdiChecklistItem { Group = "Phụ kiện lắp thêm & Bàn giao", Code = "PDI.ACC.TOOLS", Name = "Bộ dụng cụ theo xe (kích nâng xe, tay quay bánh xe, móc kéo, tam giác phản quang)", Status = AuditStatus.Good },
         new PdiChecklistItem { Group = "Phụ kiện lắp thêm & Bàn giao", Code = "PDI.ACC.KEYS", Name = "Bàn giao đủ 2 chìa khóa Smartkey, sổ bảo hành HTC, sách hướng dẫn sử dụng", Status = AuditStatus.Good }
     ];
+
+    // --- Order Part Complaints against Supplier TST/HTC (Ser_OrderComplain & Ser_OrderComplainAttachFile) ---
+    public async Task<List<OrderComplain>> OrderComplainsAsync(DMSOrderComplainStatus? dmsStatus, TSTOrderComplainStatus? tstStatus, OrderComplainType? type, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.OrderComplains
+            .Include(c => c.Part)
+            .Include(c => c.OrderPart)
+            .Include(c => c.AttachFiles)
+            .AsQueryable();
+
+        if (dmsStatus.HasValue) query = query.Where(c => c.DMSStatus == dmsStatus.Value);
+        if (tstStatus.HasValue) query = query.Where(c => c.TSTStatus == tstStatus.Value);
+        if (type.HasValue) query = query.Where(c => c.ComplainType == type.Value);
+        if (fromDate.HasValue) query = query.Where(c => c.CreatedAt.Date >= fromDate.Value.Date);
+        if (toDate.HasValue) query = query.Where(c => c.CreatedAt.Date <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var term = q.Trim().ToLower();
+            query = query.Where(c => c.OrderComplainNo.ToLower().Contains(term)
+                || c.PartCode.ToLower().Contains(term)
+                || c.PartName.ToLower().Contains(term)
+                || (c.OrderPartNo != null && c.OrderPartNo.ToLower().Contains(term))
+                || (c.VIN != null && c.VIN.ToLower().Contains(term))
+                || (c.Description != null && c.Description.ToLower().Contains(term))
+                || (c.TransportUnit != null && c.TransportUnit.ToLower().Contains(term))
+                || (c.RequestOrderNo != null && c.RequestOrderNo.ToLower().Contains(term)));
+        }
+
+        var list = await query.ToListAsync();
+        return list.OrderByDescending(c => c.CreatedAt).ThenByDescending(c => c.Id).ToList();
+    }
+
+    public Task<OrderComplain?> GetOrderComplainAsync(int id) =>
+        db.OrderComplains
+            .Include(c => c.Part)
+            .Include(c => c.OrderPart).ThenInclude(o => o!.Lines)
+            .Include(c => c.AttachFiles)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+    public async Task<int> CreateOrderComplainAsync(OrderComplain complain, List<OrderComplainAttachFile>? files = null)
+    {
+        if (complain.Quantity <= 0)
+            throw new InvalidOperationException("Số lượng khiếu nại phải lớn hơn 0.");
+
+        var part = await db.Parts.FirstOrDefaultAsync(p => p.Id == complain.PartId);
+        if (part == null)
+            throw new InvalidOperationException("Không tìm thấy phụ tùng khiếu nại.");
+
+        complain.PartCode = part.Code;
+        complain.PartName = part.Name;
+        complain.Unit = string.IsNullOrWhiteSpace(complain.Unit) ? part.Unit : complain.Unit;
+        if (complain.UnitPrice <= 0) complain.UnitPrice = part.CostPrice;
+
+        if (complain.OrderPartId.HasValue && complain.OrderPartId.Value > 0)
+        {
+            var order = await db.OrderParts.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == complain.OrderPartId.Value);
+            if (order != null)
+            {
+                complain.OrderPartNo = order.OrderPartNo;
+                var line = order.Lines.FirstOrDefault(l => l.PartId == complain.PartId || l.PartCode == part.Code);
+                if (line != null)
+                {
+                    if (complain.Quantity > line.Quantity)
+                        throw new InvalidOperationException($"Số lượng khiếu nại ({complain.Quantity}) không được vượt quá số lượng trên đơn đặt hàng ({line.Quantity} {line.Unit}).");
+                    if (complain.UnitPrice <= 0) complain.UnitPrice = line.UnitPrice;
+                }
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(complain.OrderComplainNo))
+        {
+            var count = await db.OrderComplains.CountAsync() + 1;
+            complain.OrderComplainNo = $"KN{DateTime.Today:yyMMdd}-{count:D3}";
+        }
+
+        complain.CreatedAt = DateTime.Now;
+        complain.DMSStatus = DMSOrderComplainStatus.Pending;
+        complain.TSTStatus = TSTOrderComplainStatus.Processing;
+
+        if (files != null && files.Count > 0)
+        {
+            complain.AttachFiles = files;
+        }
+
+        db.OrderComplains.Add(complain);
+        await db.SaveChangesAsync();
+        return complain.Id;
+    }
+
+    public async Task<(bool ok, string msg)> SendOrderComplainToTSTAsync(int id)
+    {
+        var complain = await db.OrderComplains.FirstOrDefaultAsync(c => c.Id == id);
+        if (complain == null) return (false, "Không tìm thấy hồ sơ khiếu nại.");
+
+        if (complain.DMSStatus != DMSOrderComplainStatus.Pending)
+            return (false, $"Chỉ có thể gửi khiếu nại ở trạng thái Chờ gửi (hiện tại: {Ui.DMSOrderComplainStatus(complain.DMSStatus).text}).");
+
+        complain.DMSStatus = DMSOrderComplainStatus.Sent;
+        complain.TSTStatus = TSTOrderComplainStatus.Processing;
+        complain.SentAt = DateTime.Now;
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã gửi hồ sơ khiếu nại {complain.OrderComplainNo} sang Nhà cung cấp TST/HTC thành công.");
+    }
+
+    public async Task<(bool ok, string msg)> ReviewOrderComplainAsync(int id, TSTOrderComplainStatus tstStatus, ComplainSolution solution, string? solutionNote)
+    {
+        var complain = await db.OrderComplains.Include(c => c.Part).FirstOrDefaultAsync(c => c.Id == id);
+        if (complain == null) return (false, "Không tìm thấy hồ sơ khiếu nại.");
+
+        if (complain.DMSStatus != DMSOrderComplainStatus.Sent)
+            return (false, $"Chỉ có thể phê duyệt hồ sơ khiếu nại đã gửi sang TST (hiện tại: {Ui.DMSOrderComplainStatus(complain.DMSStatus).text}).");
+
+        complain.TSTStatus = tstStatus;
+        complain.TSTSolution = solution;
+        complain.SolutionNote = solutionNote?.Trim();
+        complain.DecidedAt = DateTime.Now;
+
+        if (tstStatus == TSTOrderComplainStatus.Approved)
+        {
+            complain.DMSStatus = DMSOrderComplainStatus.Finished;
+            complain.FinishedAt = DateTime.Now;
+
+            // Nếu phương án là đổi mới phụ tùng 1:1, tự động tăng tồn kho bù
+            if (solution == ComplainSolution.ReplaceNew && complain.Part != null)
+            {
+                complain.Part.InStock += complain.Quantity;
+            }
+        }
+        else if (tstStatus == TSTOrderComplainStatus.Rejected)
+        {
+            complain.DMSStatus = DMSOrderComplainStatus.Cancelled;
+            complain.FinishedAt = DateTime.Now;
+        }
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã cập nhật kết quả thẩm định NCC: {Ui.TSTOrderComplainStatus(tstStatus).text} ({Ui.ComplainSolution(solution).text}).");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteOrderComplainAsync(int id)
+    {
+        var complain = await db.OrderComplains.Include(c => c.AttachFiles).FirstOrDefaultAsync(c => c.Id == id);
+        if (complain == null) return (false, "Không tìm thấy hồ sơ khiếu nại.");
+
+        if (complain.DMSStatus != DMSOrderComplainStatus.Pending && complain.DMSStatus != DMSOrderComplainStatus.Cancelled)
+            return (false, "Chỉ có thể xóa hồ sơ khiếu nại ở trạng thái Mới tạo (Chờ gửi) hoặc Đã hủy.");
+
+        db.OrderComplainAttachFiles.RemoveRange(complain.AttachFiles);
+        db.OrderComplains.Remove(complain);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa hồ sơ khiếu nại {complain.OrderComplainNo}.");
+    }
+
+    public Task<List<OrderPart>> OrderPartsForComplainSelectAsync() =>
+        db.OrderParts
+            .Include(o => o.Lines).ThenInclude(l => l.Part)
+            .OrderByDescending(o => o.OrderDate)
+            .ThenByDescending(o => o.Id)
+            .ToListAsync();
 }

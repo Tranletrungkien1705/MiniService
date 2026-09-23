@@ -2680,6 +2680,179 @@ public class PdiController(IRoService svc) : Controller
     }
 }
 
+public class OrderComplainController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(DMSOrderComplainStatus? dmsStatus, TSTOrderComplainStatus? tstStatus, OrderComplainType? type, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.DMSStatus = dmsStatus;
+        ViewBag.TSTStatus = tstStatus;
+        ViewBag.Type = type;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+
+        var list = await svc.OrderComplainsAsync(dmsStatus, tstStatus, type, q, fromDate, toDate);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? orderPartId)
+    {
+        ViewBag.Parts = await svc.PartsForSelectAsync();
+        ViewBag.OrderParts = await svc.OrderPartsForComplainSelectAsync();
+        ViewBag.SelectedOrderPartId = orderPartId;
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        string? orderComplainNo,
+        string? dealerCode,
+        string? dealerName,
+        OrderComplainType complainType,
+        int? orderPartId,
+        int partId,
+        decimal quantity,
+        decimal? unitPrice,
+        string? vin,
+        string description,
+        string? requestOrderNo,
+        string? transportUnit,
+        DateTime? deliveryDateTime,
+        string? deliveryBy,
+        string? deliveryLocation,
+        string? receiveBy,
+        DateTime? assembleDateTime,
+        string? assembleBy,
+        string? createdBy,
+        string[]? imageTypes,
+        string[]? fileNames,
+        string[]? filePaths,
+        string[]? notes)
+    {
+        if (partId <= 0)
+        {
+            TempData["Error"] = "Vui lòng chọn phụ tùng cần khiếu nại.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.OrderParts = await svc.OrderPartsForComplainSelectAsync();
+            ViewBag.SelectedOrderPartId = orderPartId;
+            return View();
+        }
+
+        if (quantity <= 0)
+        {
+            TempData["Error"] = "Số lượng khiếu nại phải lớn hơn 0.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.OrderParts = await svc.OrderPartsForComplainSelectAsync();
+            ViewBag.SelectedOrderPartId = orderPartId;
+            return View();
+        }
+
+        if (string.IsNullOrWhiteSpace(description))
+        {
+            TempData["Error"] = "Vui lòng nhập mô tả chi tiết tình trạng hư hỏng / sai quy cách.";
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.OrderParts = await svc.OrderPartsForComplainSelectAsync();
+            ViewBag.SelectedOrderPartId = orderPartId;
+            return View();
+        }
+
+        try
+        {
+            var complain = new OrderComplain
+            {
+                OrderComplainNo = orderComplainNo?.Trim() ?? "",
+                DealerCode = string.IsNullOrWhiteSpace(dealerCode) ? "HYUNDAI-MAIN" : dealerCode.Trim(),
+                DealerName = string.IsNullOrWhiteSpace(dealerName) ? "Hyundai Giải Phóng" : dealerName.Trim(),
+                ComplainType = complainType,
+                OrderPartId = (orderPartId.HasValue && orderPartId.Value > 0) ? orderPartId : null,
+                PartId = partId,
+                Quantity = quantity,
+                UnitPrice = unitPrice ?? 0,
+                VIN = vin?.Trim(),
+                Description = description.Trim(),
+                RequestOrderNo = requestOrderNo?.Trim(),
+                TransportUnit = transportUnit?.Trim(),
+                DeliveryDateTime = deliveryDateTime,
+                DeliveryBy = deliveryBy?.Trim(),
+                DeliveryLocation = string.IsNullOrWhiteSpace(deliveryLocation) ? "Kho phụ tùng chính" : deliveryLocation.Trim(),
+                ReceiveBy = receiveBy?.Trim(),
+                AssembleDateTime = assembleDateTime,
+                AssembleBy = assembleBy?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Thủ kho" : createdBy.Trim()
+            };
+
+            var files = new List<OrderComplainAttachFile>();
+            if (fileNames != null && fileNames.Length > 0)
+            {
+                for (int i = 0; i < fileNames.Length; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(fileNames[i])) continue;
+                    var typeStr = (imageTypes != null && imageTypes.Length > i) ? imageTypes[i]?.Trim() ?? "Ngoại quan hư hại" : "Ngoại quan hư hại";
+                    var pathStr = (filePaths != null && filePaths.Length > i && !string.IsNullOrWhiteSpace(filePaths[i])) ? filePaths[i]!.Trim() : $"/uploads/complain/{fileNames[i].Trim()}";
+                    var noteStr = (notes != null && notes.Length > i) ? notes[i]?.Trim() : null;
+                    files.Add(new OrderComplainAttachFile
+                    {
+                        ImageType = typeStr,
+                        FileName = fileNames[i].Trim(),
+                        FilePath = pathStr,
+                        Note = noteStr
+                    });
+                }
+            }
+
+            var id = await svc.CreateOrderComplainAsync(complain, files);
+            TempData["Success"] = $"Đã lập hồ sơ khiếu nại phụ tùng {complain.OrderComplainNo} thành công.";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            ViewBag.Parts = await svc.PartsForSelectAsync();
+            ViewBag.OrderParts = await svc.OrderPartsForComplainSelectAsync();
+            ViewBag.SelectedOrderPartId = orderPartId;
+            return View();
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var c = await svc.GetOrderComplainAsync(id);
+        if (c == null) return NotFound();
+        return View(c);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> SendTST(int id)
+    {
+        var (ok, msg) = await svc.SendOrderComplainToTSTAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Review(int id, TSTOrderComplainStatus tstStatus, ComplainSolution solution, string? solutionNote)
+    {
+        var (ok, msg) = await svc.ReviewOrderComplainAsync(id, tstStatus, solution, solutionNote);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var c = await svc.GetOrderComplainAsync(id);
+        if (c == null) return NotFound();
+        return View(c);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteOrderComplainAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

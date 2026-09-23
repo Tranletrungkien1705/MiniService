@@ -51,6 +51,8 @@ public class AppDbContext : DbContext
     public DbSet<PdiRequest> PdiRequests => Set<PdiRequest>();
     public DbSet<PdiRequestItem> PdiRequestItems => Set<PdiRequestItem>();
     public DbSet<PdiChecklistItem> PdiChecklistItems => Set<PdiChecklistItem>();
+    public DbSet<OrderComplain> OrderComplains => Set<OrderComplain>();
+    public DbSet<OrderComplainAttachFile> OrderComplainAttachFiles => Set<OrderComplainAttachFile>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -459,6 +461,26 @@ public class AppDbContext : DbContext
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
         b.Entity<PdiChecklistItem>(e =>
+        {
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<OrderComplain>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.OrderComplainNo }).IsUnique();
+            e.Ignore(x => x.Amount);
+            e.Ignore(x => x.AttachCount);
+            e.Ignore(x => x.CanSend);
+            e.Ignore(x => x.CanReview);
+            e.Ignore(x => x.IsApproved);
+            e.Ignore(x => x.IsRejected);
+            e.Property(x => x.Quantity).HasPrecision(18, 2);
+            e.Property(x => x.UnitPrice).HasPrecision(18, 2);
+            e.HasOne(x => x.OrderPart).WithMany(x => x.Complains).HasForeignKey(x => x.OrderPartId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
+            e.HasMany(x => x.AttachFiles).WithOne(x => x.OrderComplain).HasForeignKey(x => x.OrderComplainId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<OrderComplainAttachFile>(e =>
         {
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });

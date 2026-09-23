@@ -389,4 +389,41 @@ public static class Ui
         Models.PdiItemStatus.Failed => ("Không đạt / Cần sửa", "FAIL", "danger"),
         _ => (s.ToString(), "", "secondary")
     };
+
+    public static (string text, string code, string css) DMSOrderComplainStatus(DMSOrderComplainStatus s) => s switch
+    {
+        Models.DMSOrderComplainStatus.Pending => ("Mới tạo (Chờ gửi)", "P", "warning"),
+        Models.DMSOrderComplainStatus.Sent => ("Đã gửi NCC TST", "A", "info"),
+        Models.DMSOrderComplainStatus.Finished => ("Đã giải quyết", "F", "success"),
+        Models.DMSOrderComplainStatus.Cancelled => ("Đã hủy", "C", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string code, string css) TSTOrderComplainStatus(TSTOrderComplainStatus s) => s switch
+    {
+        Models.TSTOrderComplainStatus.Processing => ("Chờ tiếp nhận", "1", "warning"),
+        Models.TSTOrderComplainStatus.UnderReview => ("Đang thẩm định", "15", "info"),
+        Models.TSTOrderComplainStatus.Approved => ("Chấp thuận bồi thường", "31", "success"),
+        Models.TSTOrderComplainStatus.Rejected => ("Từ chối bồi thường", "21", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) OrderComplainType(OrderComplainType t) => t switch
+    {
+        Models.OrderComplainType.DamagedInTransit => ("Vỡ móp / Hư hại vận chuyển", "bi-truck", "danger"),
+        Models.OrderComplainType.WrongPart => ("Sai mã / Nhầm quy cách", "bi-shuffle", "warning"),
+        Models.OrderComplainType.Shortage => ("Thiếu hụt số lượng", "bi-dash-circle", "info"),
+        Models.OrderComplainType.QualityDefect => ("Lỗi chất lượng xuất xưởng", "bi-wrench-adjustable", "danger"),
+        Models.OrderComplainType.PackagingBreach => ("Bao bì rách / Hỏng tem niêm", "bi-box-seam", "secondary"),
+        _ => (t.ToString(), "bi-question-circle", "secondary")
+    };
+
+    public static (string text, string css) ComplainSolution(ComplainSolution s) => s switch
+    {
+        Models.ComplainSolution.ReplaceNew => ("Đổi mới phụ tùng 1:1", "success"),
+        Models.ComplainSolution.CreditDebt => ("Bồi hoàn trừ công nợ", "primary"),
+        Models.ComplainSolution.ReturnRefund => ("Thu hồi hoàn tiền", "info"),
+        Models.ComplainSolution.RejectClaim => ("Từ chối bồi thường", "danger"),
+        _ => (s.ToString(), "secondary")
+    };
 }

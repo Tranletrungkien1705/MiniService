@@ -307,6 +307,43 @@ public enum PdiItemStatus
     Failed = 3      // Không đạt / Cần khắc phục kỹ thuật
 }
 
+/// <summary>Trạng thái khiếu nại đơn hàng phụ tùng tại Đại lý DMS — theo DMSOrderComplainStatus idn.CarService.</summary>
+public enum DMSOrderComplainStatus
+{
+    Pending = 0,    // P: Mới tạo / Chờ gửi khiếu nại sang NCC TST
+    Sent = 1,       // A: Đã gửi khiếu nại sang TST chờ thẩm định
+    Finished = 2,   // F: Hoàn tất giải quyết khiếu nại (đã nhận bồi thường/đổi hàng)
+    Cancelled = 3   // C: Hủy khiếu nại
+}
+
+/// <summary>Trạng thái thẩm định khiếu nại của Nhà cung cấp TST / HTC — theo TSTOrderComplainStatus idn.CarService.</summary>
+public enum TSTOrderComplainStatus
+{
+    Processing = 1,  // 1: Chờ tiếp nhận duyệt
+    UnderReview = 15,// 15: Đang thẩm định & giám định hư hỏng
+    Rejected = 21,   // 21: Không chấp thuận bồi thường khiếu nại
+    Approved = 31    // 31: Chấp thuận khiếu nại bồi thường
+}
+
+/// <summary>Phân loại khiếu nại phụ tùng — theo Mst_OrderComplainType idn.CarService.</summary>
+public enum OrderComplainType
+{
+    DamagedInTransit = 0, // Hàng vỡ móp, nứt vỡ, móp méo do vận chuyển
+    WrongPart = 1,        // Giao sai mã phụ tùng / Sai quy cách
+    Shortage = 2,         // Thiếu hụt số lượng so với đơn đặt hàng & phiếu giao
+    QualityDefect = 3,    // Lỗi chất lượng sản xuất / Khuyết tật xuất xưởng
+    PackagingBreach = 4   // Bao bì rách nát, tem mác rách niêm phong
+}
+
+/// <summary>Phương án giải quyết từ Nhà cung cấp TST/HTC — theo TSTSolution idn.CarService.</summary>
+public enum ComplainSolution
+{
+    ReplaceNew = 0,   // Đổi mới phụ tùng 1:1 (Giao bù hàng chuẩn)
+    CreditDebt = 1,   // Bồi hoàn tiền / Cấn trừ công nợ đại lý
+    ReturnRefund = 2, // Thu hồi hàng lỗi & hoàn lại tiền
+    RejectClaim = 3   // Từ chối bồi hoàn (Lỗi do ngoại lực/bảo quản)
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -826,6 +863,7 @@ public class OrderPart : IOrgOwned
     public RepairOrder? RO { get; set; }
     public StockIn? StockIn { get; set; }
     public List<OrderPartLine> Lines { get; set; } = [];
+    public List<OrderComplain> Complains { get; set; } = [];
 
     public decimal SubTotalBeforeDiscount => Lines.Sum(l => l.SubTotalBeforeDiscount);
     public decimal TotalDiscount => Lines.Sum(l => l.DiscountAmount);
@@ -1431,6 +1469,70 @@ public class PdiChecklistItem : IOrgOwned
     public string? Note { get; set; }                      // Nhận xét chi tiết của kỹ thuật viên
 
     public PdiRequestItem PdiRequestItem { get; set; } = null!;
+}
+
+/// <summary>Phiếu khiếu nại đơn hàng phụ tùng Nhà Cung Cấp TST / HTC — Ser_OrderComplain trong idn.CarService.</summary>
+public class OrderComplain : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string OrderComplainNo { get; set; } = "";             // Số khiếu nại (VD: KN260427-001)
+    public string DealerCode { get; set; } = "HYUNDAI-MAIN";      // Mã đại lý khiếu nại
+    public string DealerName { get; set; } = "Hyundai Giải Phóng"; // Tên đại lý
+    public OrderComplainType ComplainType { get; set; } = OrderComplainType.DamagedInTransit; // Loại khiếu nại
+    public int? OrderPartId { get; set; }                         // Đơn đặt hàng liên quan (OrderPart)
+    public string? OrderPartNo { get; set; }                      // Số đơn hàng đặt phụ tùng (DocNoSO)
+    public int PartId { get; set; }                               // Phụ tùng khiếu nại
+    public string PartCode { get; set; } = "";                    // Mã phụ tùng (PartCode / ItemCode)
+    public string PartName { get; set; } = "";                    // Tên phụ tùng (VieName)
+    public string Unit { get; set; } = "Cái";                     // Đơn vị tính
+    public decimal Quantity { get; set; } = 1;                    // Số lượng khiếu nại (bắt buộc > 0)
+    public decimal UnitPrice { get; set; }                        // Đơn giá phụ tùng tại thời điểm mua
+    public string? VIN { get; set; }                              // Số khung xe liên quan (nếu phụ tùng theo xe)
+    public string Description { get; set; } = "";                 // Tình trạng hỏng hóc & nguyên nhân ban đầu (Malfunction)
+    public string? RequestOrderNo { get; set; }                   // Số yêu cầu giao hàng / Số vận đơn phiếu DO (DocNoDO)
+    public string? TransportUnit { get; set; }                    // Đơn vị vận tải (Viettel Post, Vận tải Thành Công...)
+    public DateTime? DeliveryDateTime { get; set; }               // Ngày giờ nhận hàng thực tế
+    public string? DeliveryBy { get; set; }                       // Người / tài xế bên vận chuyển bàn giao
+    public string? DeliveryLocation { get; set; } = "Kho phụ tùng chính"; // Địa điểm nhận hàng
+    public string? ReceiveBy { get; set; }                        // Thủ kho / Người nhận hàng tại đại lý
+    public DateTime? AssembleDateTime { get; set; }               // Ngày giờ phát hiện lỗi khi lắp ráp
+    public string? AssembleBy { get; set; }                       // Kỹ thuật viên phát hiện lỗi
+    public DMSOrderComplainStatus DMSStatus { get; set; } = DMSOrderComplainStatus.Pending; // Trạng thái khiếu nại tại DMS (P / A / F / C)
+    public TSTOrderComplainStatus TSTStatus { get; set; } = TSTOrderComplainStatus.Processing; // Trạng thái xử lý của NCC TST (1 / 15 / 21 / 31)
+    public ComplainSolution? TSTSolution { get; set; }            // Phương án bồi thường từ NCC
+    public string? SolutionNote { get; set; }                     // Ghi chú chi tiết phương án giải quyết từ TST
+    public string CreatedBy { get; set; } = "Thủ kho";            // Người tạo hồ sơ khiếu nại
+    public DateTime CreatedAt { get; set; } = DateTime.Now;
+    public DateTime? SentAt { get; set; }                         // Thời điểm gửi hồ sơ khiếu nại sang NCC
+    public DateTime? DecidedAt { get; set; }                      // Thời điểm NCC phê duyệt quyết định
+    public DateTime? FinishedAt { get; set; }                     // Thời điểm đóng hoàn tất khiếu nại
+
+    public OrderPart? OrderPart { get; set; }
+    public Part Part { get; set; } = null!;
+    public List<OrderComplainAttachFile> AttachFiles { get; set; } = [];
+
+    public decimal Amount => Quantity * UnitPrice;
+    public int AttachCount => AttachFiles.Count;
+    public bool CanSend => DMSStatus == DMSOrderComplainStatus.Pending;
+    public bool CanReview => DMSStatus == DMSOrderComplainStatus.Sent;
+    public bool IsApproved => TSTStatus == TSTOrderComplainStatus.Approved;
+    public bool IsRejected => TSTStatus == TSTOrderComplainStatus.Rejected;
+}
+
+/// <summary>Ảnh chứng cứ đính kèm hồ sơ khiếu nại — Ser_OrderComplainAttachFile trong idn.CarService.</summary>
+public class OrderComplainAttachFile : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int OrderComplainId { get; set; }
+    public string ImageType { get; set; } = "Ngoại quan hư hại";  // Phân loại: Ngoại quan hư hại / Tem nhãn bao bì / Mã dập nổi chi tiết / Biên bản giao vận
+    public string FileName { get; set; } = "";                    // Tên file ảnh
+    public string FilePath { get; set; } = "";                    // Đường dẫn / URL
+    public string? Note { get; set; }                             // Chú thích ảnh
+    public DateTime UploadedAt { get; set; } = DateTime.Now;
+
+    public OrderComplain OrderComplain { get; set; } = null!;
 }
 
 
