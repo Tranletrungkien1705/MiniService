@@ -1,0 +1,133 @@
+@model List<Supplier>
+@{
+    ViewData["Title"] = "Quản lý Danh mục Nhà Cung Cấp (Ser_Mst_Supplier)";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0 fw-bold"><i class="bi bi-truck me-2"></i>Danh mục Nhà Cung Cấp (Suppliers)</h4>
+    <a href="/SupplierPayment" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Về DS Phiếu xuất trả</a>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h6 class="card-title mb-0 fw-bold text-primary"><i class="bi bi-plus-circle me-1"></i>Thêm Nhà Cung Cấp mới</h6>
+            </div>
+            <div class="card-body">
+                <form asp-action="CreateSupplier" method="post">
+                    @Html.AntiForgeryToken()
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Mã Nhà cung cấp <span class="text-danger">*</span></label>
+                        <input name="code" class="form-control form-control-sm" placeholder="VD: MOBIS-VN, CASTROL, 3M..." required />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Tên Nhà cung cấp <span class="text-danger">*</span></label>
+                        <input name="name" class="form-control form-control-sm" placeholder="Tên công ty / Chi nhánh..." required />
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-semibold">Địa chỉ trụ sở / Kho</label>
+                        <input name="address" class="form-control form-control-sm" placeholder="Địa chỉ giao dịch" />
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Điện thoại</label>
+                            <input name="phone" class="form-control form-control-sm" placeholder="SĐT bàn/Hotline" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Email</label>
+                            <input name="email" type="email" class="form-control form-control-sm" placeholder="Email nhận PO" />
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Người liên hệ</label>
+                            <input name="contactName" class="form-control form-control-sm" placeholder="Họ tên đại diện" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-semibold">Di động liên hệ</label>
+                            <input name="contactPhone" class="form-control form-control-sm" placeholder="SĐT di động" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold">Mã số thuế</label>
+                        <input name="taxCode" class="form-control form-control-sm" placeholder="MST công ty" />
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-save me-1"></i>Lưu Nhà Cung Cấp</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                <h6 class="card-title mb-0 fw-bold text-dark"><i class="bi bi-buildings me-1"></i>Danh sách Nhà cung cấp phụ tùng (@Model.Count NCC)</h6>
+                <form method="get" class="d-flex gap-2">
+                    <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Tìm theo tên/mã/SĐT..." style="max-width:200px" />
+                    <button class="btn btn-sm btn-outline-primary">Tìm</button>
+                </form>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Mã NCC</th>
+                            <th>Tên Nhà cung cấp</th>
+                            <th>Liên hệ</th>
+                            <th>Địa chỉ</th>
+                            <th class="text-center">Số phiếu trả</th>
+                            <th class="text-center">Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var s in Model)
+                    {
+                        <tr>
+                            <td>
+                                <span class="badge bg-primary-subtle text-primary border border-primary font-monospace">@s.Code</span>
+                            </td>
+                            <td>
+                                <div class="fw-bold">@s.Name</div>
+                                @if (!string.IsNullOrEmpty(s.TaxCode))
+                                {
+                                    <div class="small text-muted">MST: @s.TaxCode</div>
+                                }
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(s.ContactName))
+                                {
+                                    <div class="fw-semibold small"><i class="bi bi-person me-1"></i>@s.ContactName</div>
+                                }
+                                @if (!string.IsNullOrEmpty(s.Phone) || !string.IsNullOrEmpty(s.ContactPhone))
+                                {
+                                    <div class="small text-muted"><i class="bi bi-telephone me-1"></i>@(s.ContactPhone ?? s.Phone)</div>
+                                }
+                                @if (!string.IsNullOrEmpty(s.Email))
+                                {
+                                    <div class="small text-muted"><i class="bi bi-envelope me-1"></i>@s.Email</div>
+                                }
+                            </td>
+                            <td class="small text-muted" style="max-width:200px">
+                                @(s.Address ?? "—")
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-light text-dark border">@s.SupplierPayments.Count</span>
+                            </td>
+                            <td class="text-center">
+                                <a href="/SupplierPayment/Create?supplierId=@s.Id" class="btn btn-sm btn-outline-primary" title="Lập phiếu xuất trả cho NCC này"><i class="bi bi-box-arrow-left"></i> Xuất trả</a>
+                            </td>
+                        </tr>
+                    }
+                    @if (Model.Count == 0)
+                    {
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">Chưa có nhà cung cấp nào. Thêm mới ở form bên trái.</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

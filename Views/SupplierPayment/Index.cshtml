@@ -1,0 +1,155 @@
+@model List<SupplierPayment>
+@{
+    ViewData["Title"] = "Quản lý Phiếu Xuất trả Nhà Cung Cấp (Return to Supplier)";
+    var curStatus = (SupplierPaymentStatus?)ViewBag.Status;
+    var curType = (SupplierPaymentType?)ViewBag.Type;
+    var totalCount = (int)(ViewBag.TotalCount ?? Model.Count);
+    var pendingCount = (int)(ViewBag.PendingCount ?? Model.Count(x => x.Status == SupplierPaymentStatus.Pending));
+    var approvedCount = (int)(ViewBag.ApprovedCount ?? Model.Count(x => x.Status == SupplierPaymentStatus.Approved));
+    var totalReturnValue = (decimal)(ViewBag.TotalReturnValue ?? Model.Where(x => x.Status == SupplierPaymentStatus.Approved).Sum(x => x.TotalAmount));
+}
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng số phiếu xuất trả</div>
+            <div class="stat-num text-primary">@totalCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Chờ duyệt xuất kho</div>
+            <div class="stat-num text-warning">@pendingCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Đã xuất trả kho</div>
+            <div class="stat-num text-success">@approvedCount</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card"><div class="card-body">
+            <div class="text-muted small">Tổng giá trị xuất trả (đã duyệt)</div>
+            <div class="stat-num text-danger">@totalReturnValue.ToString("N0") <span style="font-size:14px;font-weight:normal">đ</span></div>
+        </div></div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+            <form method="get" class="d-flex gap-2 flex-wrap">
+                <input name="q" value="@ViewBag.Q" class="form-control form-control-sm" placeholder="Số phiếu / NCC / Đơn hàng / Mã phụ tùng..." style="max-width:270px" />
+                <input type="date" name="fromDate" value="@ViewBag.FromDate" class="form-control form-control-sm" title="Từ ngày" style="max-width:140px" />
+                <input type="date" name="toDate" value="@ViewBag.ToDate" class="form-control form-control-sm" title="Đến ngày" style="max-width:140px" />
+                <select name="type" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:190px">
+                    <option value="">— Tất cả lý do xuất —</option>
+                    @foreach (SupplierPaymentType t in Enum.GetValues(typeof(SupplierPaymentType)))
+                    {
+                        var (tName, _, _) = Ui.SupplierPaymentType(t);
+                        <option value="@((int)t)" selected="@(curType == t)">@tName</option>
+                    }
+                </select>
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" style="max-width:170px">
+                    <option value="">— Tất cả trạng thái —</option>
+                    @foreach (SupplierPaymentStatus s in Enum.GetValues(typeof(SupplierPaymentStatus)))
+                    {
+                        var (stName, stCode, _) = Ui.SupplierPaymentStatus(s);
+                        <option value="@((int)s)" selected="@(curStatus == s)">[@stCode] @stName</option>
+                    }
+                </select>
+                <button class="btn btn-sm btn-primary">Lọc</button>
+                @if (curStatus.HasValue || curType.HasValue || !string.IsNullOrEmpty(ViewBag.Q) || !string.IsNullOrEmpty(ViewBag.FromDate) || !string.IsNullOrEmpty(ViewBag.ToDate))
+                {
+                    <a href="/SupplierPayment" class="btn btn-sm btn-outline-secondary">Xóa lọc</a>
+                }
+            </form>
+            <div class="d-flex gap-2">
+                <a href="/SupplierPayment/Suppliers" class="btn btn-sm btn-outline-secondary"><i class="bi bi-truck me-1"></i>DS Nhà cung cấp</a>
+                <a href="/SupplierPayment/Create" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>Lập phiếu xuất trả</a>
+            </div>
+        </div>
+
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Số phiếu</th>
+                    <th>Ngày xuất</th>
+                    <th>Nhà cung cấp</th>
+                    <th>Lý do xuất trả</th>
+                    <th>Chứng từ liên quan</th>
+                    <th class="text-end">Mặt hàng</th>
+                    <th class="text-end">Tổng SL</th>
+                    <th class="text-end">Tổng tiền sau VAT</th>
+                    <th class="text-center">Trạng thái</th>
+                    <th class="text-end">Thao tác</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var p in Model)
+            {
+                var (stText, stCode, stCss) = Ui.SupplierPaymentStatus(p.Status);
+                var (typeText, typeIcon, typeCss) = Ui.SupplierPaymentType(p.PaymentType);
+                <tr>
+                    <td>
+                        <a href="/SupplierPayment/Detail/@p.Id" class="fw-bold text-decoration-none">@p.SupplierPaymentNo</a>
+                        <div class="small text-muted">Tạo: @p.CreatedAt.ToString("dd/MM/yyyy HH:mm")</div>
+                    </td>
+                    <td>@p.PaymentDate.ToString("dd/MM/yyyy")</td>
+                    <td>
+                        <div class="fw-semibold">@p.SupplierName</div>
+                        @if (!string.IsNullOrEmpty(p.Supplier?.Code))
+                        {
+                            <span class="badge bg-light text-dark border">@p.Supplier.Code</span>
+                        }
+                    </td>
+                    <td>
+                        <span class="badge bg-light text-@typeCss border border-@typeCss">
+                            <i class="bi @typeIcon me-1"></i>@typeText
+                        </span>
+                        @if (!string.IsNullOrEmpty(p.Description))
+                        {
+                            <div class="small text-muted text-truncate" style="max-width:200px" title="@p.Description">@p.Description</div>
+                        }
+                    </td>
+                    <td>
+                        @if (!string.IsNullOrEmpty(p.OrderPartNo))
+                        {
+                            <div><i class="bi bi-cart-check me-1 small text-muted"></i><span class="small">Đơn: @p.OrderPartNo</span></div>
+                        }
+                        @if (!string.IsNullOrEmpty(p.TSTRequestNo))
+                        {
+                            <div><i class="bi bi-file-earmark-code me-1 small text-muted"></i><span class="small">Mã TST: @p.TSTRequestNo</span></div>
+                        }
+                        @if (string.IsNullOrEmpty(p.OrderPartNo) && string.IsNullOrEmpty(p.TSTRequestNo))
+                        {
+                            <span class="text-muted small">—</span>
+                        }
+                    </td>
+                    <td class="text-end fw-semibold">@p.ItemCount</td>
+                    <td class="text-end">@p.TotalQuantity.ToString("N0")</td>
+                    <td class="text-end fw-bold text-primary">@p.TotalAmount.ToString("N0") đ</td>
+                    <td class="text-center">
+                        <span class="badge bg-@stCss">@stText</span>
+                    </td>
+                    <td class="text-end">
+                        <a href="/SupplierPayment/Detail/@p.Id" class="btn btn-sm btn-outline-primary" title="Xem chi tiết"><i class="bi bi-eye"></i></a>
+                        <a href="/SupplierPayment/Print/@p.Id" target="_blank" class="btn btn-sm btn-outline-secondary" title="In phiếu xuất trả"><i class="bi bi-printer"></i></a>
+                    </td>
+                </tr>
+            }
+            @if (Model.Count == 0)
+            {
+                <tr>
+                    <td colspan="10" class="text-center text-muted py-5">
+                        <i class="bi bi-inbox fs-2 d-block mb-2 text-secondary"></i>
+                        Không có phiếu xuất trả nhà cung cấp nào phù hợp với bộ lọc.<br />
+                        <a href="/SupplierPayment/Create" class="btn btn-sm btn-primary mt-2"><i class="bi bi-plus-lg me-1"></i>Tạo phiếu mới ngay</a>
+                    </td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    </div>
+</div>

@@ -374,6 +374,23 @@ public enum ServiceROType
     SPK = 5  // Chăm sóc & Phụ kiện xe (Detailing & Accessories)
 }
 
+/// <summary>Trạng thái Phiếu xuất trả Nhà cung cấp — theo Ser_SupplierPayment trong idn.CarService.</summary>
+public enum SupplierPaymentStatus
+{
+    Pending = 0,   // P: Mới tạo / Chờ duyệt xuất kho
+    Approved = 1,  // A: Đã duyệt xuất kho trả hàng & Đã trừ tồn kho
+    Cancelled = 2  // C: Đã hủy phiếu xuất trả
+}
+
+/// <summary>Loại yêu cầu xuất trả hàng cho Nhà cung cấp — theo PaymentType trong Ser_SupplierPayment idn.CarService.</summary>
+public enum SupplierPaymentType
+{
+    ReturnDefective = 0,   // "0" — Hàng lỗi chất lượng / Hư hại xuất xưởng
+    ReturnSurplus = 1,     // "1" — Giao thừa / Sai quy cách so với đơn đặt hàng
+    RecallWarranty = 2,    // "2" — Thu hồi bảo hành kỹ thuật theo yêu cầu Hãng HTC
+    ConsignmentReturn = 3  // "3" — Trả hàng ký gửi / Tồn kho thỏa thuận hợp đồng
+}
+
 public class Customer : IOrgOwned
 {
     public int Id { get; set; }
@@ -898,6 +915,7 @@ public class OrderPart : IOrgOwned
     public StockIn? StockIn { get; set; }
     public List<OrderPartLine> Lines { get; set; } = [];
     public List<OrderComplain> Complains { get; set; } = [];
+    public List<SupplierPayment> SupplierPayments { get; set; } = [];
 
     public decimal SubTotalBeforeDiscount => Lines.Sum(l => l.SubTotalBeforeDiscount);
     public decimal TotalDiscount => Lines.Sum(l => l.DiscountAmount);
@@ -1625,6 +1643,84 @@ public class ServiceItem : IOrgOwned
     public decimal TotalWithVat => Math.Round(Price * (1 + VatPercent / 100m), 2);
     public decimal GrossProfit => Price - Cost;
     public decimal GrossMargin => Price > 0 ? Math.Round((Price - Cost) / Price * 100m, 1) : 0;
+}
+
+/// <summary>Danh mục Nhà cung cấp Phụ tùng & Dịch vụ ngoài — Ser_Mst_Supplier trong idn.CarService.</summary>
+public class Supplier : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string Code { get; set; } = "";                     // Mã NCC (SupplierCode)
+    public string Name { get; set; } = "";                     // Tên Nhà cung cấp (SupplierName)
+    public string? Address { get; set; }                      // Địa chỉ trụ sở / kho
+    public string? Phone { get; set; }                        // Số điện thoại bàn / hotline
+    public string? Email { get; set; }                        // Email liên hệ đặt hàng
+    public string? ContactName { get; set; }                  // Người phụ trách liên hệ
+    public string? ContactPhone { get; set; }                 // Di động người liên hệ
+    public string? TaxCode { get; set; }                      // Mã số thuế
+    public bool IsActive { get; set; } = true;                // Cờ hoạt động
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo
+
+    public List<SupplierPayment> SupplierPayments { get; set; } = [];
+}
+
+/// <summary>Phiếu xuất trả phụ tùng cho Nhà cung cấp — Ser_SupplierPayment trong idn.CarService.</summary>
+public class SupplierPayment : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string SupplierPaymentNo { get; set; } = "";        // Số phiếu xuất trả (VD: SPN-260427-001 hoặc PXNCC-VS058-...)
+    public int? SupplierId { get; set; }                      // ID Nhà cung cấp
+    public string SupplierName { get; set; } = "";            // Tên Nhà cung cấp
+    public string? Address { get; set; }                      // Địa chỉ NCC
+    public DateTime PaymentDate { get; set; } = DateTime.Today;// Ngày xuất trả kho
+    public SupplierPaymentType PaymentType { get; set; } = SupplierPaymentType.ReturnDefective; // Loại YC xuất
+    public SupplierPaymentStatus Status { get; set; } = SupplierPaymentStatus.Pending; // Trạng thái phiếu (P/A/C)
+    public int? OrderPartId { get; set; }                     // Đơn đặt hàng liên quan nếu có
+    public string? OrderPartNo { get; set; }                  // Số đơn hàng NCC (OrderPartNo)
+    public string? TSTRequestNo { get; set; }                 // Số yêu cầu xuất NCC / Mã vụ việc bảo hành đổi trả TST
+    public string? Description { get; set; }                  // Diễn giải / Lý do xuất trả
+    public string CreatedBy { get; set; } = "Thủ kho";        // Người tạo phiếu
+    public DateTime CreatedAt { get; set; } = DateTime.Now;   // Ngày tạo
+    public string? ApprovedBy { get; set; }                   // Người duyệt xuất
+    public DateTime? ApprovedAt { get; set; }                 // Ngày duyệt xuất
+
+    public Supplier? Supplier { get; set; }
+    public OrderPart? OrderPart { get; set; }
+    public List<SupplierPaymentDetail> Items { get; set; } = [];
+
+    public int ItemCount => Items.Count;
+    public decimal TotalQuantity => Items.Sum(x => x.QtyPay);
+    public decimal SubTotal => Items.Sum(x => x.SubTotal);
+    public decimal TotalVat => Items.Sum(x => x.VatAmount);
+    public decimal TotalAmount => Items.Sum(x => x.Amount);
+
+    public bool CanApprove => Status == SupplierPaymentStatus.Pending;
+    public bool CanCancel => Status == SupplierPaymentStatus.Pending;
+}
+
+/// <summary>Chi tiết phụ tùng xuất trả Nhà cung cấp — Ser_SupplierPaymentDtl trong idn.CarService.</summary>
+public class SupplierPaymentDetail : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public int SupplierPaymentId { get; set; }
+    public int PartId { get; set; }
+    public int? StockInId { get; set; }                       // ID Phiếu nhập kho gốc
+    public string? StockInNo { get; set; }                    // Số phiếu nhập kho gốc
+    public decimal QtyPay { get; set; }                       // Số lượng trả NCC
+    public decimal Price { get; set; }                        // Đơn giá nhập / Giá xuất trả
+    public decimal VatPercent { get; set; } = 10;             // Thuế suất VAT (%)
+    public decimal QtyInventory { get; set; }                 // Tồn kho tại thời điểm lập phiếu
+    public string? LocationCode { get; set; }                 // Mã vị trí kệ kho xuất trả
+    public string? Reason { get; set; }                       // Ghi chú / Lý do chi tiết dòng
+
+    public SupplierPayment SupplierPayment { get; set; } = null!;
+    public Part Part { get; set; } = null!;
+
+    public decimal SubTotal => Math.Round(QtyPay * Price, 2);
+    public decimal VatAmount => Math.Round(SubTotal * (VatPercent / 100m), 2);
+    public decimal Amount => SubTotal + VatAmount;
 }
 
 

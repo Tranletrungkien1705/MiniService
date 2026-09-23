@@ -1,0 +1,304 @@
+@{
+    ViewData["Title"] = "Lập Phiếu Xuất trả Phụ tùng Nhà Cung Cấp";
+    var suppliers = ViewBag.Suppliers as List<Supplier> ?? [];
+    var parts = ViewBag.Parts as List<Part> ?? [];
+    var orderParts = ViewBag.OrderParts as List<OrderPart> ?? [];
+    var stockIns = ViewBag.StockIns as List<StockIn> ?? [];
+    var selectedSupId = (int?)ViewBag.SelectedSupplierId;
+    var selectedOrderPartId = (int?)ViewBag.SelectedOrderPartId;
+    var selectedStockInId = (int?)ViewBag.SelectedStockInId;
+    var preSupplierName = ViewBag.PreSupplierName as string ?? "";
+    var preOrderPartNo = ViewBag.PreOrderPartNo as string ?? "";
+    var preStockInNo = ViewBag.PreStockInNo as string ?? "";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-11">
+        <form asp-action="Create" method="post" id="formCreate">
+            @Html.AntiForgeryToken()
+            <div class="card mb-3">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0 fw-bold text-primary"><i class="bi bi-box-arrow-left me-2"></i>Lập Phiếu Xuất trả Nhà Cung Cấp (Return Voucher)</h5>
+                    <a href="/SupplierPayment" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Quay lại danh sách</a>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Nhà cung cấp tiếp nhận <span class="text-danger">*</span></label>
+                            <select name="supplierId" id="supplierSelect" class="form-select" onchange="onSupplierChange()">
+                                <option value="">— Chọn Nhà cung cấp có sẵn —</option>
+                                @foreach (var s in suppliers)
+                                {
+                                    <option value="@s.Id" data-name="@s.Name" data-address="@s.Address" selected="@(selectedSupId == s.Id || (!string.IsNullOrEmpty(preSupplierName) && s.Name.Contains(preSupplierName)))">
+                                        [@s.Code] @s.Name
+                                    </option>
+                                }
+                            </select>
+                            <div class="mt-1">
+                                <input name="supplierName" id="supplierNameInput" class="form-control form-control-sm" placeholder="Hoặc nhập trực tiếp tên NCC *" value="@preSupplierName" required />
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label fw-semibold">Địa chỉ NCC</label>
+                            <input name="address" id="supplierAddressInput" class="form-control" placeholder="Địa chỉ giao / trả hàng" />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Ngày xuất trả <span class="text-danger">*</span></label>
+                            <input type="date" name="paymentDate" class="form-control" value="@DateTime.Today.ToString("yyyy-MM-dd")" required />
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label fw-semibold">Người lập phiếu</label>
+                            <input name="createdBy" class="form-control" value="Thủ kho" />
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Lý do xuất trả hàng <span class="text-danger">*</span></label>
+                            <select name="paymentType" class="form-select">
+                                <option value="0">Hàng lỗi / Hư hại xuất xưởng</option>
+                                <option value="1">Giao thừa / Sai quy cách so với PO</option>
+                                <option value="2">Thu hồi bảo hành kỹ thuật HTC</option>
+                                <option value="3">Xuất trả hàng ký gửi / Tồn chậm</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Đơn đặt hàng gốc (PO)</label>
+                            <select name="orderPartId" id="orderPartSelect" class="form-select" onchange="onOrderPartChange()">
+                                <option value="">— Không liên kết đơn PO —</option>
+                                @foreach (var o in orderParts)
+                                {
+                                    <option value="@o.Id" data-no="@o.OrderPartNo" data-sup="@o.SupplierName" selected="@(selectedOrderPartId == o.Id || (!string.IsNullOrEmpty(preOrderPartNo) && o.OrderPartNo == preOrderPartNo))">
+                                        @o.OrderPartNo (@o.SupplierName - @o.OrderDate.ToString("dd/MM/yy"))
+                                    </option>
+                                }
+                            </select>
+                            <input type="hidden" name="orderPartNo" id="orderPartNoInput" value="@preOrderPartNo" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Mã yêu cầu TST / Vụ việc</label>
+                            <input name="tstRequestNo" class="form-control" placeholder="Số Claim / TST Case No nếu có" />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label fw-semibold">Số phiếu xuất trả (tự sinh)</label>
+                            <input name="supplierPaymentNo" class="form-control bg-light" placeholder="Hệ thống tự sinh PXNCC-..." readonly />
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">Diễn giải / Ghi chú thỏa thuận trả hàng</label>
+                            <input name="description" class="form-control" placeholder="Chi tiết lý do xuất trả, biên bản giao nhận hoặc thỏa thuận thu hồi..." />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="card-title mb-0 fw-bold text-dark"><i class="bi bi-list-check me-2"></i>Danh sách phụ tùng xuất trả (Ser_SupplierPaymentDtl)</h6>
+                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="addRow()"><i class="bi bi-plus-circle me-1"></i>Thêm dòng phụ tùng</button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0" id="itemsTable">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:30%">Phụ tùng <span class="text-danger">*</span></th>
+                                    <th style="width:11%" class="text-center">Tồn khả dụng</th>
+                                    <th style="width:11%" class="text-center">SL Trả <span class="text-danger">*</span></th>
+                                    <th style="width:13%" class="text-end">Đơn giá hoàn trả (đ)</th>
+                                    <th style="width:9%" class="text-center">VAT %</th>
+                                    <th style="width:13%" class="text-end">Thành tiền (đ)</th>
+                                    <th style="width:10%">Vị trí kệ / Phiếu PN</th>
+                                    <th style="width:3%"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="itemsBody">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                            <tfoot class="table-light fw-semibold">
+                                <tr>
+                                    <td colspan="2" class="text-end">Tổng cộng:</td>
+                                    <td class="text-center text-primary" id="lblTotalQty">0</td>
+                                    <td class="text-end text-muted small">Tiền hàng: <span id="lblSubTotal">0</span> đ</td>
+                                    <td class="text-center text-muted small">Thuế: <span id="lblTotalVat">0</span> đ</td>
+                                    <td class="text-end text-danger fw-bold fs-6" id="lblTotalAmount">0 đ</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mb-4">
+                <a href="/SupplierPayment" class="btn btn-secondary">Hủy bỏ</a>
+                <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check-lg me-1"></i>Lưu phiếu xuất trả (Chờ duyệt)</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<template id="rowTemplate">
+    <tr>
+        <td>
+            <select name="partIds" class="form-select form-select-sm part-select" onchange="onPartChange(this)" required>
+                <option value="">— Chọn phụ tùng kho —</option>
+                @foreach (var p in parts)
+                {
+                    <option value="@p.Id" data-stock="@p.InStock" data-price="@p.CostPrice" data-loc="@p.Location">
+                        [@p.Code] @p.Name (@p.Unit)
+                    </option>
+                }
+            </select>
+            <input type="text" name="reasons" class="form-control form-control-sm mt-1" placeholder="Lý do chi tiết dòng (hàng vỡ/lỗi...)" />
+        </td>
+        <td class="text-center">
+            <span class="badge bg-secondary badge-stock">0</span>
+        </td>
+        <td>
+            <input type="number" name="qtyPays" class="form-control form-control-sm text-center input-qty" value="1" min="1" step="1" onchange="calcRow(this)" oninput="calcRow(this)" required />
+            <div class="text-danger small mt-1 error-qty" style="display:none;font-size:11px">Vượt tồn kho!</div>
+        </td>
+        <td>
+            <input type="number" name="prices" class="form-control form-control-sm text-end input-price" value="0" min="0" step="1000" onchange="calcRow(this)" oninput="calcRow(this)" required />
+        </td>
+        <td>
+            <select name="vatPercents" class="form-select form-select-sm text-center input-vat" onchange="calcRow(this)">
+                <option value="10" selected>10%</option>
+                <option value="8">8%</option>
+                <option value="5">5%</option>
+                <option value="0">0%</option>
+            </select>
+        </td>
+        <td class="text-end fw-semibold text-primary cell-line-total">
+            0 đ
+        </td>
+        <td>
+            <input type="text" name="locationCodes" class="form-control form-control-sm mb-1 input-loc" placeholder="Vị trí kệ" />
+            <input type="text" name="stockInNos" class="form-control form-control-sm" placeholder="Mã phiếu PN gốc" value="@preStockInNo" />
+        </td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-danger border-0" onclick="removeRow(this)"><i class="bi bi-trash"></i></button>
+        </td>
+    </tr>
+</template>
+
+@section Scripts {
+<script>
+    function onSupplierChange() {
+        const sel = document.getElementById('supplierSelect');
+        const opt = sel.options[sel.selectedIndex];
+        if (opt && opt.value) {
+            document.getElementById('supplierNameInput').value = opt.getAttribute('data-name') || '';
+            document.getElementById('supplierAddressInput').value = opt.getAttribute('data-address') || '';
+        }
+    }
+
+    function onOrderPartChange() {
+        const sel = document.getElementById('orderPartSelect');
+        const opt = sel.options[sel.selectedIndex];
+        if (opt && opt.value) {
+            document.getElementById('orderPartNoInput').value = opt.getAttribute('data-no') || '';
+            const supName = opt.getAttribute('data-sup');
+            if (supName && !document.getElementById('supplierNameInput').value) {
+                document.getElementById('supplierNameInput').value = supName;
+            }
+        } else {
+            document.getElementById('orderPartNoInput').value = '';
+        }
+    }
+
+    function addRow() {
+        const tpl = document.getElementById('rowTemplate');
+        const clone = tpl.content.cloneNode(true);
+        document.getElementById('itemsBody').appendChild(clone);
+        recalcTotals();
+    }
+
+    function removeRow(btn) {
+        const row = btn.closest('tr');
+        if (row) {
+            row.remove();
+            recalcTotals();
+        }
+    }
+
+    function onPartChange(sel) {
+        const row = sel.closest('tr');
+        const opt = sel.options[sel.selectedIndex];
+        if (!opt || !opt.value) {
+            row.querySelector('.badge-stock').textContent = '0';
+            row.querySelector('.input-price').value = '0';
+            row.querySelector('.input-loc').value = '';
+            calcRow(sel);
+            return;
+        }
+
+        const stock = parseFloat(opt.getAttribute('data-stock') || '0');
+        const price = parseFloat(opt.getAttribute('data-price') || '0');
+        const loc = opt.getAttribute('data-loc') || '';
+
+        row.querySelector('.badge-stock').textContent = stock.toLocaleString();
+        row.querySelector('.badge-stock').className = stock > 0 ? 'badge bg-info badge-stock' : 'badge bg-danger badge-stock';
+        row.querySelector('.input-price').value = price;
+        row.querySelector('.input-loc').value = loc;
+
+        const qtyInput = row.querySelector('.input-qty');
+        qtyInput.max = stock > 0 ? stock : 1;
+
+        calcRow(sel);
+    }
+
+    function calcRow(el) {
+        const row = el.closest('tr');
+        const sel = row.querySelector('.part-select');
+        const opt = sel.options[sel.selectedIndex];
+        const stock = opt && opt.value ? parseFloat(opt.getAttribute('data-stock') || '0') : 0;
+
+        const qty = parseFloat(row.querySelector('.input-qty').value || '0');
+        const price = parseFloat(row.querySelector('.input-price').value || '0');
+        const vat = parseFloat(row.querySelector('.input-vat').value || '0');
+
+        const errDiv = row.querySelector('.error-qty');
+        if (stock > 0 && qty > stock) {
+            errDiv.style.display = 'block';
+        } else {
+            errDiv.style.display = 'none';
+        }
+
+        const subTotal = qty * price;
+        const lineTotal = subTotal * (1 + vat / 100);
+        row.querySelector('.cell-line-total').textContent = Math.round(lineTotal).toLocaleString() + ' đ';
+
+        recalcTotals();
+    }
+
+    function recalcTotals() {
+        let totalQty = 0;
+        let subTotal = 0;
+        let totalVat = 0;
+
+        document.querySelectorAll('#itemsBody tr').forEach(row => {
+            const qty = parseFloat(row.querySelector('.input-qty')?.value || '0');
+            const price = parseFloat(row.querySelector('.input-price')?.value || '0');
+            const vat = parseFloat(row.querySelector('.input-vat')?.value || '0');
+
+            const sTotal = qty * price;
+            const vTotal = sTotal * (vat / 100);
+
+            totalQty += qty;
+            subTotal += sTotal;
+            totalVat += vTotal;
+        });
+
+        document.getElementById('lblTotalQty').textContent = totalQty.toLocaleString();
+        document.getElementById('lblSubTotal').textContent = Math.round(subTotal).toLocaleString();
+        document.getElementById('lblTotalVat').textContent = Math.round(totalVat).toLocaleString();
+        document.getElementById('lblTotalAmount').textContent = Math.round(subTotal + totalVat).toLocaleString() + ' đ';
+    }
+
+    // Add first row on load
+    document.addEventListener('DOMContentLoaded', () => {
+        addRow();
+        onSupplierChange();
+    });
+</script>
+}

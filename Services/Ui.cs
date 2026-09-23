@@ -462,4 +462,21 @@ public static class Ui
 
     public static (string text, string css) ServiceItemActive(bool isActive) =>
         isActive ? ("Đang áp dụng", "success") : ("Tạm dừng", "secondary");
+
+    public static (string text, string code, string css) SupplierPaymentStatus(SupplierPaymentStatus s) => s switch
+    {
+        Models.SupplierPaymentStatus.Pending => ("Chờ duyệt xuất", "PEND", "warning"),
+        Models.SupplierPaymentStatus.Approved => ("Đã xuất trả kho", "APPR", "success"),
+        Models.SupplierPaymentStatus.Cancelled => ("Đã hủy", "CANC", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    public static (string text, string icon, string css) SupplierPaymentType(SupplierPaymentType t) => t switch
+    {
+        Models.SupplierPaymentType.ReturnDefective => ("Hàng lỗi / Hư hại", "bi-exclamation-triangle", "danger"),
+        Models.SupplierPaymentType.ReturnSurplus => ("Thừa / Sai quy cách", "bi-shuffle", "warning"),
+        Models.SupplierPaymentType.RecallWarranty => ("Thu hồi bảo hành HTC", "bi-shield-check", "primary"),
+        Models.SupplierPaymentType.ConsignmentReturn => ("Trả hàng ký gửi / Tồn chậm", "bi-arrow-left-right", "info"),
+        _ => (t.ToString(), "bi-box-seam", "secondary")
+    };
 }

@@ -3386,6 +3386,190 @@ app.MapPost("/api/services/{id:int}/apply-to-ro", async (int id, ApplyServiceToR
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// --- Suppliers & Return to Supplier Minimal APIs (Ser_Mst_Supplier, Ser_SupplierPayment) ---
+app.MapGet("/api/suppliers", async (string? q, IRoService svc) =>
+{
+    var list = await svc.SuppliersAsync(q);
+    return Results.Ok(list.Select(s => new
+    {
+        s.Id,
+        s.Code,
+        s.Name,
+        s.Address,
+        s.Phone,
+        s.Email,
+        s.ContactName,
+        s.ContactPhone,
+        s.TaxCode,
+        s.IsActive,
+        paymentCount = s.SupplierPayments.Count
+    }));
+});
+
+app.MapPost("/api/suppliers", async (CreateSupplierDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.Code) || string.IsNullOrWhiteSpace(dto.Name))
+        return Results.BadRequest(new { error = "Vui lòng nhập đầy đủ Code và Name." });
+
+    var s = new Supplier
+    {
+        Code = dto.Code.Trim().ToUpperInvariant(),
+        Name = dto.Name.Trim(),
+        Address = dto.Address?.Trim(),
+        Phone = dto.Phone?.Trim(),
+        Email = dto.Email?.Trim(),
+        ContactName = dto.ContactName?.Trim(),
+        ContactPhone = dto.ContactPhone?.Trim(),
+        TaxCode = dto.TaxCode?.Trim(),
+        IsActive = true
+    };
+
+    try
+    {
+        var id = await svc.CreateSupplierAsync(s);
+        return Results.Created($"/api/suppliers/{id}", new { id, s.Code, s.Name, message = "Đã thêm nhà cung cấp mới." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapGet("/api/supplier-payments", async (SupplierPaymentStatus? status, SupplierPaymentType? type, string? q, DateTime? fromDate, DateTime? toDate, IRoService svc) =>
+{
+    var list = await svc.SupplierPaymentsAsync(status, type, q, fromDate, toDate);
+    return Results.Ok(list.Select(p => new
+    {
+        p.Id,
+        p.SupplierPaymentNo,
+        p.PaymentDate,
+        p.SupplierName,
+        supplierCode = p.Supplier?.Code,
+        paymentType = Ui.SupplierPaymentType(p.PaymentType).text,
+        status = Ui.SupplierPaymentStatus(p.Status).text,
+        statusCode = Ui.SupplierPaymentStatus(p.Status).code,
+        p.OrderPartNo,
+        p.TSTRequestNo,
+        p.ItemCount,
+        p.TotalQuantity,
+        p.SubTotal,
+        p.TotalVat,
+        p.TotalAmount,
+        p.CreatedBy,
+        p.CreatedAt,
+        p.ApprovedBy,
+        p.ApprovedAt
+    }));
+});
+
+app.MapGet("/api/supplier-payments/{id:int}", async (int id, IRoService svc) =>
+{
+    var p = await svc.GetSupplierPaymentAsync(id);
+    if (p == null) return Results.NotFound(new { error = "Không tìm thấy phiếu xuất trả nhà cung cấp." });
+    return Results.Ok(new
+    {
+        p.Id,
+        p.SupplierPaymentNo,
+        p.PaymentDate,
+        p.SupplierId,
+        p.SupplierName,
+        p.Address,
+        supplier = p.Supplier != null ? new { p.Supplier.Code, p.Supplier.Name, p.Supplier.Phone, p.Supplier.ContactName } : null,
+        paymentType = Ui.SupplierPaymentType(p.PaymentType).text,
+        status = Ui.SupplierPaymentStatus(p.Status).text,
+        statusCode = Ui.SupplierPaymentStatus(p.Status).code,
+        p.OrderPartId,
+        p.OrderPartNo,
+        p.TSTRequestNo,
+        p.Description,
+        p.CreatedBy,
+        p.CreatedAt,
+        p.ApprovedBy,
+        p.ApprovedAt,
+        p.ItemCount,
+        p.TotalQuantity,
+        p.SubTotal,
+        p.TotalVat,
+        p.TotalAmount,
+        p.CanApprove,
+        p.CanCancel,
+        items = p.Items.Select(i => new
+        {
+            i.Id,
+            i.PartId,
+            partCode = i.Part?.Code,
+            partName = i.Part?.Name,
+            unit = i.Part?.Unit,
+            i.StockInNo,
+            i.LocationCode,
+            i.QtyPay,
+            i.Price,
+            i.VatPercent,
+            i.SubTotal,
+            i.VatAmount,
+            i.Amount,
+            i.Reason
+        })
+    });
+});
+
+app.MapPost("/api/supplier-payments", async (CreateSupplierPaymentDto dto, IRoService svc) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.SupplierName) && !dto.SupplierId.HasValue)
+        return Results.BadRequest(new { error = "Vui lòng chỉ định Nhà cung cấp nhận hàng." });
+
+    if (dto.Items == null || dto.Items.Count == 0)
+        return Results.BadRequest(new { error = "Vui lòng thêm ít nhất một phụ tùng cần xuất trả." });
+
+    var payment = new SupplierPayment
+    {
+        SupplierPaymentNo = dto.SupplierPaymentNo?.Trim() ?? "",
+        SupplierId = dto.SupplierId,
+        SupplierName = dto.SupplierName?.Trim() ?? "",
+        Address = dto.Address?.Trim(),
+        PaymentDate = dto.PaymentDate ?? DateTime.Today,
+        PaymentType = dto.PaymentType,
+        OrderPartId = dto.OrderPartId,
+        OrderPartNo = dto.OrderPartNo?.Trim(),
+        TSTRequestNo = dto.TSTRequestNo?.Trim(),
+        Description = dto.Description?.Trim(),
+        CreatedBy = string.IsNullOrWhiteSpace(dto.CreatedBy) ? "API" : dto.CreatedBy.Trim()
+    };
+
+    var items = dto.Items.Select(i => new SupplierPaymentDetail
+    {
+        PartId = i.PartId,
+        QtyPay = i.QtyPay,
+        Price = i.Price ?? 0,
+        VatPercent = i.VatPercent ?? 10,
+        StockInNo = i.StockInNo?.Trim(),
+        LocationCode = i.LocationCode?.Trim(),
+        Reason = i.Reason?.Trim()
+    }).ToList();
+
+    try
+    {
+        var id = await svc.CreateSupplierPaymentAsync(payment, items);
+        return Results.Created($"/api/supplier-payments/{id}", new { id, payment.SupplierPaymentNo, message = "Đã lập phiếu xuất trả NCC thành công." });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+app.MapPost("/api/supplier-payments/{id:int}/approve", async (int id, ApproveSupplierPaymentDto? dto, IRoService svc) =>
+{
+    var (ok, msg) = await svc.ApproveSupplierPaymentAsync(id, dto?.ApprovedBy);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapPost("/api/supplier-payments/{id:int}/cancel", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.CancelSupplierPaymentAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -3482,3 +3666,7 @@ record ApproveTechnicalLibraryDto(string? ApprovedBy);
 record CreateServiceItemDto(string Code, string Name, ServiceROType ROType, decimal StdManHour, decimal Price, decimal Cost, decimal VatPercent, string? Model, bool? FlagWarranty, string? Note, bool? IsActive);
 record UpdateServiceItemDto(string Name, ServiceROType ROType, decimal StdManHour, decimal Price, decimal Cost, decimal VatPercent, string? Model, bool FlagWarranty, bool IsActive, string? Note);
 record ApplyServiceToRoDto(int RoId, ExpenseType? ExpenseType, decimal? CustomHours, decimal? CustomPrice, string? Note);
+record CreateSupplierDto(string Code, string Name, string? Address, string? Phone, string? Email, string? ContactName, string? ContactPhone, string? TaxCode);
+record CreateSupplierPaymentDto(string? SupplierPaymentNo, int? SupplierId, string? SupplierName, string? Address, DateTime? PaymentDate, SupplierPaymentType PaymentType, int? OrderPartId, string? OrderPartNo, string? TSTRequestNo, string? Description, string? CreatedBy, List<CreateSupplierPaymentItemDto> Items);
+record CreateSupplierPaymentItemDto(int PartId, decimal QtyPay, decimal? Price, decimal? VatPercent, string? StockInNo, string? LocationCode, string? Reason);
+record ApproveSupplierPaymentDto(string? ApprovedBy);

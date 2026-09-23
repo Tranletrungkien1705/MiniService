@@ -2514,6 +2514,94 @@ public static class Seeder
             db.ServiceItems.AddRange(services);
             await db.SaveChangesAsync();
         }
+
+        if (!await db.Suppliers.AnyAsync())
+        {
+            var s1 = new Supplier { Code = "HTC", Name = "Công ty Cổ phần Liên doanh Ô tô Hyundai Thành Công Việt Nam", Address = "Tòa nhà Epic Tower, Nam Từ Liêm, Hà Nội", Phone = "024.3826.2614", Email = "parts@hyundai-thanhcong.vn", ContactName = "Nguyễn Hoàng Minh", ContactPhone = "0912.345.678", TaxCode = "0102872391", IsActive = true };
+            var s2 = new Supplier { Code = "MOBIS", Name = "Công ty TNHH Phụ tùng Hyundai Mobis Việt Nam", Address = "KCN Đình Trám, Việt Yên, Bắc Giang", Phone = "0204.387.9999", Email = "order@mobis.co.kr", ContactName = "Kim Jung Wook", ContactPhone = "0988.777.666", TaxCode = "2400589123", IsActive = true };
+            var s3 = new Supplier { Code = "CASTROL", Name = "Công ty TNHH Castrol BP Petco Việt Nam", Address = "Quận 1, TP. Hồ Chí Minh", Phone = "028.3821.9153", Email = "dauthuongmai@castrol.com", ContactName = "Lê Quang Vinh", ContactPhone = "0903.888.999", TaxCode = "0300628284", IsActive = true };
+            var s4 = new Supplier { Code = "DENSO", Name = "Công ty TNHH Denso Việt Nam", Address = "KCN Thăng Long, Đông Anh, Hà Nội", Phone = "024.3881.1601", Email = "sales@denso.com.vn", ContactName = "Phạm Tuấn Anh", ContactPhone = "0915.222.333", TaxCode = "0101183569", IsActive = true };
+            db.Suppliers.AddRange(s1, s2, s3, s4);
+            await db.SaveChangesAsync();
+        }
+
+        if (!await db.SupplierPayments.AnyAsync())
+        {
+            var supHtc = await db.Suppliers.FirstOrDefaultAsync(s => s.Code == "HTC");
+            var supMobis = await db.Suppliers.FirstOrDefaultAsync(s => s.Code == "MOBIS");
+            var sparkPart = await db.Parts.FirstOrDefaultAsync(p => p.Code == "18846-11070");
+            var brakePart = await db.Parts.FirstOrDefaultAsync(p => p.Code == "58101-C1A00");
+
+            if (supMobis != null && sparkPart != null)
+            {
+                var pay1 = new SupplierPayment
+                {
+                    SupplierPaymentNo = $"PXNCC-{DateTime.Today:yyMMdd}-001",
+                    SupplierId = supMobis.Id,
+                    SupplierName = supMobis.Name,
+                    Address = supMobis.Address,
+                    PaymentDate = DateTime.Today.AddDays(-2),
+                    PaymentType = SupplierPaymentType.ReturnDefective,
+                    Status = SupplierPaymentStatus.Approved,
+                    OrderPartNo = "PO260427-001",
+                    TSTRequestNo = "TST-CLAIM-2026-089",
+                    Description = "Xuất trả 1 bugi đánh lửa Iridium bị nứt sứ cách điện theo biên bản kiểm định bảo hành kỹ thuật NPP TST",
+                    CreatedBy = "Thủ kho Hùng",
+                    CreatedAt = DateTime.Now.AddDays(-2),
+                    ApprovedBy = "Trưởng kho dịch vụ Tuấn",
+                    ApprovedAt = DateTime.Now.AddDays(-2).AddHours(2),
+                    Items = [
+                        new SupplierPaymentDetail
+                        {
+                            PartId = sparkPart.Id,
+                            QtyPay = 1,
+                            Price = sparkPart.CostPrice > 0 ? sparkPart.CostPrice : 110000,
+                            VatPercent = 10,
+                            QtyInventory = sparkPart.InStock + 1,
+                            LocationCode = sparkPart.Location,
+                            StockInNo = "PN-260427-001",
+                            Reason = "Lỗi nứt sứ cách điện, kiểm định TST duyệt đổi mới bù trừ công nợ"
+                        }
+                    ]
+                };
+                db.SupplierPayments.Add(pay1);
+            }
+
+            if (supHtc != null && brakePart != null)
+            {
+                var pay2 = new SupplierPayment
+                {
+                    SupplierPaymentNo = $"PXNCC-{DateTime.Today:yyMMdd}-002",
+                    SupplierId = supHtc.Id,
+                    SupplierName = supHtc.Name,
+                    Address = supHtc.Address,
+                    PaymentDate = DateTime.Today,
+                    PaymentType = SupplierPaymentType.ReturnSurplus,
+                    Status = SupplierPaymentStatus.Pending,
+                    OrderPartNo = "PO260427-002",
+                    TSTRequestNo = "HTC-RET-2026-015",
+                    Description = "Xuất trả 2 bộ má phanh đĩa trước giao thừa so với đơn đặt hàng PO đại lý",
+                    CreatedBy = "Thủ kho Hùng",
+                    CreatedAt = DateTime.Now,
+                    Items = [
+                        new SupplierPaymentDetail
+                        {
+                            PartId = brakePart.Id,
+                            QtyPay = 2,
+                            Price = brakePart.CostPrice > 0 ? brakePart.CostPrice : 850000,
+                            VatPercent = 10,
+                            QtyInventory = brakePart.InStock,
+                            LocationCode = brakePart.Location,
+                            StockInNo = "PN-260427-002",
+                            Reason = "Giao thừa 2 bộ so với số lượng đặt hàng ban đầu"
+                        }
+                    ]
+                };
+                db.SupplierPayments.Add(pay2);
+            }
+
+            await db.SaveChangesAsync();
+        }
     }
 
     private static List<PdiChecklistItem> CreateDefaultChecklist() =>
@@ -2553,7 +2641,7 @@ public static class Seeder
     {
         if (!db.Database.IsNpgsql()) return;
         var def = TenantContext.DefaultOrgId;
-        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems" };
+        var tables = new[] { "Customers", "Cars", "ROs", "Lines", "Parts", "WarrantyReports", "WarrantyReportItems", "Appointments", "StockIns", "StockInDetails", "StockOuts", "StockOutDetails", "CustomerCares", "Payments", "Quotes", "QuoteItems", "ServicePackages", "ServicePackageItems", "OrderParts", "OrderPartLines", "Cavities", "ReceptionSheets", "ReceptionItems", "GroupRepairs", "Engineers", "AssignmentWorks", "AssignmentEngineers", "InsuranceCompanies", "InsuranceContracts", "InsuranceClaims", "InsuranceClaimItems", "CampaignMarketings", "CampaignMarketingItems", "CustomerCareMaces", "StockAdjs", "StockAdjDetails", "Bulletins", "BulletinDetails", "BulletinVins", "PdiRequests", "PdiRequestItems", "PdiChecklistItems", "OrderComplains", "OrderComplainAttachFiles", "TechnicalLibraries", "ServiceItems", "Suppliers", "SupplierPayments", "SupplierPaymentDetails" };
         var sql = new List<string>
         {
             "CREATE TABLE IF NOT EXISTS miniservice.\"Orgs\" (\"Id\" uuid PRIMARY KEY, \"Name\" text NOT NULL DEFAULT '', \"ApiKey\" text NOT NULL DEFAULT '', \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
@@ -2577,6 +2665,11 @@ public static class Seeder
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_TechnicalLibraries_OrgId_TechnicalLibraryCode\" ON miniservice.\"TechnicalLibraries\" (\"OrgId\", \"TechnicalLibraryCode\")",
             "CREATE TABLE IF NOT EXISTS miniservice.\"ServiceItems\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"ROType\" integer NOT NULL, \"StdManHour\" numeric(5,2) NOT NULL, \"Price\" numeric(18,2) NOT NULL, \"Cost\" numeric(18,2) NOT NULL, \"VatPercent\" numeric(5,2) NOT NULL, \"Model\" text NULL, \"FlagWarranty\" boolean NOT NULL DEFAULT false, \"Note\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
             "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_ServiceItems_OrgId_Code\" ON miniservice.\"ServiceItems\" (\"OrgId\", \"Code\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"Suppliers\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"Code\" text NOT NULL, \"Name\" text NOT NULL, \"Address\" text NULL, \"Phone\" text NULL, \"Email\" text NULL, \"ContactName\" text NULL, \"ContactPhone\" text NULL, \"TaxCode\" text NULL, \"IsActive\" boolean NOT NULL DEFAULT true, \"CreatedAt\" timestamp NOT NULL DEFAULT now())",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_Suppliers_OrgId_Code\" ON miniservice.\"Suppliers\" (\"OrgId\", \"Code\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"SupplierPayments\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"SupplierPaymentNo\" text NOT NULL, \"SupplierId\" integer NULL, \"SupplierName\" text NOT NULL, \"Address\" text NULL, \"PaymentDate\" timestamp NOT NULL, \"PaymentType\" integer NOT NULL, \"Status\" integer NOT NULL, \"OrderPartId\" integer NULL, \"OrderPartNo\" text NULL, \"TSTRequestNo\" text NULL, \"Description\" text NULL, \"CreatedBy\" text NOT NULL, \"CreatedAt\" timestamp NOT NULL DEFAULT now(), \"ApprovedBy\" text NULL, \"ApprovedAt\" timestamp NULL)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS \"IX_SupplierPayments_OrgId_SupplierPaymentNo\" ON miniservice.\"SupplierPayments\" (\"OrgId\", \"SupplierPaymentNo\")",
+            "CREATE TABLE IF NOT EXISTS miniservice.\"SupplierPaymentDetails\" (\"Id\" serial PRIMARY KEY, \"OrgId\" uuid NOT NULL, \"SupplierPaymentId\" integer NOT NULL, \"PartId\" integer NOT NULL, \"StockInId\" integer NULL, \"StockInNo\" text NULL, \"QtyPay\" numeric(18,2) NOT NULL, \"Price\" numeric(18,2) NOT NULL, \"VatPercent\" numeric(5,2) NOT NULL, \"QtyInventory\" numeric(18,2) NOT NULL, \"LocationCode\" text NULL, \"Reason\" text NULL)",
         };
         foreach (var t in tables) sql.Add($"ALTER TABLE miniservice.\"{t}\" ADD COLUMN IF NOT EXISTS \"OrgId\" uuid NOT NULL DEFAULT '{def}'");
         foreach (var s in sql) try { await db.Database.ExecuteSqlRawAsync(s); } catch { }
@@ -3418,7 +3511,61 @@ public static class Seeder
                 ""CreatedAt"" TEXT NOT NULL
             );",
             @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_ServiceItems_OrgId_Code"" ON ""ServiceItems"" (""OrgId"", ""Code"");",
-            @"CREATE INDEX IF NOT EXISTS ""IX_ServiceItems_OrgId_ROType"" ON ""ServiceItems"" (""OrgId"", ""ROType"");"
+            @"CREATE INDEX IF NOT EXISTS ""IX_ServiceItems_OrgId_ROType"" ON ""ServiceItems"" (""OrgId"", ""ROType"");",
+            @"CREATE TABLE IF NOT EXISTS ""Suppliers"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""Code"" TEXT NOT NULL,
+                ""Name"" TEXT NOT NULL,
+                ""Address"" TEXT NULL,
+                ""Phone"" TEXT NULL,
+                ""Email"" TEXT NULL,
+                ""ContactName"" TEXT NULL,
+                ""ContactPhone"" TEXT NULL,
+                ""TaxCode"" TEXT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_Suppliers_OrgId_Code"" ON ""Suppliers"" (""OrgId"", ""Code"");",
+            @"CREATE TABLE IF NOT EXISTS ""SupplierPayments"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""SupplierPaymentNo"" TEXT NOT NULL,
+                ""SupplierId"" INTEGER NULL,
+                ""SupplierName"" TEXT NOT NULL,
+                ""Address"" TEXT NULL,
+                ""PaymentDate"" TEXT NOT NULL,
+                ""PaymentType"" INTEGER NOT NULL,
+                ""Status"" INTEGER NOT NULL,
+                ""OrderPartId"" INTEGER NULL,
+                ""OrderPartNo"" TEXT NULL,
+                ""TSTRequestNo"" TEXT NULL,
+                ""Description"" TEXT NULL,
+                ""CreatedBy"" TEXT NOT NULL,
+                ""CreatedAt"" TEXT NOT NULL,
+                ""ApprovedBy"" TEXT NULL,
+                ""ApprovedAt"" TEXT NULL,
+                FOREIGN KEY (""SupplierId"") REFERENCES ""Suppliers"" (""Id"") ON DELETE SET NULL,
+                FOREIGN KEY (""OrderPartId"") REFERENCES ""OrderParts"" (""Id"") ON DELETE SET NULL
+            );",
+            @"CREATE UNIQUE INDEX IF NOT EXISTS ""IX_SupplierPayments_OrgId_SupplierPaymentNo"" ON ""SupplierPayments"" (""OrgId"", ""SupplierPaymentNo"");",
+            @"CREATE TABLE IF NOT EXISTS ""SupplierPaymentDetails"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""OrgId"" TEXT NOT NULL,
+                ""SupplierPaymentId"" INTEGER NOT NULL,
+                ""PartId"" INTEGER NOT NULL,
+                ""StockInId"" INTEGER NULL,
+                ""StockInNo"" TEXT NULL,
+                ""QtyPay"" TEXT NOT NULL,
+                ""Price"" TEXT NOT NULL,
+                ""VatPercent"" TEXT NOT NULL,
+                ""QtyInventory"" TEXT NOT NULL,
+                ""LocationCode"" TEXT NULL,
+                ""Reason"" TEXT NULL,
+                FOREIGN KEY (""SupplierPaymentId"") REFERENCES ""SupplierPayments"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""PartId"") REFERENCES ""Parts"" (""Id"") ON DELETE RESTRICT
+            );",
+            @"CREATE INDEX IF NOT EXISTS ""IX_SupplierPaymentDetails_OrgId_SupplierPaymentId"" ON ""SupplierPaymentDetails"" (""OrgId"", ""SupplierPaymentId"");"
         };
 
         foreach (var sql in sqls)

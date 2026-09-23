@@ -55,6 +55,9 @@ public class AppDbContext : DbContext
     public DbSet<OrderComplainAttachFile> OrderComplainAttachFiles => Set<OrderComplainAttachFile>();
     public DbSet<TechnicalLibrary> TechnicalLibraries => Set<TechnicalLibrary>();
     public DbSet<ServiceItem> ServiceItems => Set<ServiceItem>();
+    public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<SupplierPayment> SupplierPayments => Set<SupplierPayment>();
+    public DbSet<SupplierPaymentDetail> SupplierPaymentDetails => Set<SupplierPaymentDetail>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -507,6 +510,39 @@ public class AppDbContext : DbContext
             e.Property(x => x.Cost).HasPrecision(18, 2);
             e.Property(x => x.VatPercent).HasPrecision(5, 2);
             e.HasMany(x => x.RepairLines).WithOne(x => x.ServiceItem).HasForeignKey(x => x.ServiceItemId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<Supplier>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.Code }).IsUnique();
+            e.HasMany(x => x.SupplierPayments).WithOne(x => x.Supplier).HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SupplierPayment>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.SupplierPaymentNo }).IsUnique();
+            e.Ignore(x => x.ItemCount);
+            e.Ignore(x => x.TotalQuantity);
+            e.Ignore(x => x.SubTotal);
+            e.Ignore(x => x.TotalVat);
+            e.Ignore(x => x.TotalAmount);
+            e.Ignore(x => x.CanApprove);
+            e.Ignore(x => x.CanCancel);
+            e.HasOne(x => x.Supplier).WithMany(x => x.SupplierPayments).HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.SetNull);
+            e.HasOne(x => x.OrderPart).WithMany(x => x.SupplierPayments).HasForeignKey(x => x.OrderPartId).OnDelete(DeleteBehavior.SetNull);
+            e.HasMany(x => x.Items).WithOne(x => x.SupplierPayment).HasForeignKey(x => x.SupplierPaymentId).OnDelete(DeleteBehavior.Cascade);
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<SupplierPaymentDetail>(e =>
+        {
+            e.Ignore(x => x.SubTotal);
+            e.Ignore(x => x.VatAmount);
+            e.Ignore(x => x.Amount);
+            e.Property(x => x.QtyPay).HasPrecision(18, 2);
+            e.Property(x => x.Price).HasPrecision(18, 2);
+            e.Property(x => x.VatPercent).HasPrecision(5, 2);
+            e.Property(x => x.QtyInventory).HasPrecision(18, 2);
+            e.HasOne(x => x.Part).WithMany().HasForeignKey(x => x.PartId).OnDelete(DeleteBehavior.Restrict);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

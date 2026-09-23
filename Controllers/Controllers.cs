@@ -3110,6 +3110,226 @@ public class ServiceItemController(IRoService svc) : Controller
     }
 }
 
+public class SupplierPaymentController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(SupplierPaymentStatus? status, SupplierPaymentType? type, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        ViewBag.Status = status;
+        ViewBag.Type = type;
+        ViewBag.Q = q;
+        ViewBag.FromDate = fromDate?.ToString("yyyy-MM-dd");
+        ViewBag.ToDate = toDate?.ToString("yyyy-MM-dd");
+
+        var list = await svc.SupplierPaymentsAsync(status, type, q, fromDate, toDate);
+
+        ViewBag.TotalCount = list.Count;
+        ViewBag.PendingCount = list.Count(x => x.Status == SupplierPaymentStatus.Pending);
+        ViewBag.ApprovedCount = list.Count(x => x.Status == SupplierPaymentStatus.Approved);
+        ViewBag.TotalReturnValue = list.Where(x => x.Status == SupplierPaymentStatus.Approved).Sum(x => x.TotalAmount);
+
+        return View(list);
+    }
+
+    public async Task<IActionResult> Create(int? supplierId, int? orderPartId, int? stockInId)
+    {
+        ViewBag.Suppliers = await svc.SuppliersAsync(null);
+        ViewBag.Parts = await svc.PartsForSupplierPaymentAsync();
+        ViewBag.OrderParts = await svc.OrderPartsForSupplierPaymentAsync();
+        ViewBag.StockIns = await svc.StockInsForSupplierPaymentAsync();
+
+        ViewBag.SelectedSupplierId = supplierId;
+        ViewBag.SelectedOrderPartId = orderPartId;
+        ViewBag.SelectedStockInId = stockInId;
+
+        if (orderPartId.HasValue && orderPartId.Value > 0)
+        {
+            var op = await svc.GetOrderPartAsync(orderPartId.Value);
+            if (op != null)
+            {
+                ViewBag.PreOrderPartNo = op.OrderPartNo;
+                ViewBag.PreSupplierName = op.SupplierName;
+            }
+        }
+
+        if (stockInId.HasValue && stockInId.Value > 0)
+        {
+            var si = await svc.GetStockInAsync(stockInId.Value);
+            if (si != null)
+            {
+                ViewBag.PreStockInNo = si.StockInNo;
+                ViewBag.PreSupplierName = si.SupplierName;
+            }
+        }
+
+        return View();
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(
+        string? supplierPaymentNo,
+        int? supplierId,
+        string? supplierName,
+        string? address,
+        DateTime? paymentDate,
+        SupplierPaymentType paymentType,
+        int? orderPartId,
+        string? orderPartNo,
+        string? tstRequestNo,
+        string? description,
+        string? createdBy,
+        int[]? partIds,
+        decimal[]? qtyPays,
+        decimal[]? prices,
+        decimal[]? vatPercents,
+        string[]? stockInNos,
+        string[]? locationCodes,
+        string[]? reasons)
+    {
+        if (partIds == null || partIds.Length == 0)
+        {
+            TempData["Error"] = "Vui lòng chọn ít nhất một phụ tùng cần xuất trả.";
+            return RedirectToAction(nameof(Create));
+        }
+
+        try
+        {
+            var payment = new SupplierPayment
+            {
+                SupplierPaymentNo = supplierPaymentNo?.Trim() ?? "",
+                SupplierId = supplierId,
+                SupplierName = supplierName?.Trim() ?? "",
+                Address = address?.Trim(),
+                PaymentDate = paymentDate ?? DateTime.Today,
+                PaymentType = paymentType,
+                OrderPartId = orderPartId,
+                OrderPartNo = orderPartNo?.Trim(),
+                TSTRequestNo = tstRequestNo?.Trim(),
+                Description = description?.Trim(),
+                CreatedBy = string.IsNullOrWhiteSpace(createdBy) ? "Thủ kho" : createdBy.Trim()
+            };
+
+            var items = new List<SupplierPaymentDetail>();
+            for (int i = 0; i < partIds.Length; i++)
+            {
+                var pid = partIds[i];
+                if (pid <= 0) continue;
+
+                var qty = (qtyPays != null && qtyPays.Length > i) ? qtyPays[i] : 1;
+                var prc = (prices != null && prices.Length > i) ? prices[i] : 0;
+                var vat = (vatPercents != null && vatPercents.Length > i) ? vatPercents[i] : 10;
+                var sInNo = (stockInNos != null && stockInNos.Length > i) ? stockInNos[i]?.Trim() : null;
+                var loc = (locationCodes != null && locationCodes.Length > i) ? locationCodes[i]?.Trim() : null;
+                var rsn = (reasons != null && reasons.Length > i) ? reasons[i]?.Trim() : null;
+
+                items.Add(new SupplierPaymentDetail
+                {
+                    PartId = pid,
+                    QtyPay = qty,
+                    Price = prc,
+                    VatPercent = vat,
+                    StockInNo = sInNo,
+                    LocationCode = loc,
+                    Reason = rsn
+                });
+            }
+
+            if (items.Count == 0)
+            {
+                TempData["Error"] = "Vui lòng chọn phụ tùng hợp lệ để xuất trả.";
+                return RedirectToAction(nameof(Create));
+            }
+
+            var id = await svc.CreateSupplierPaymentAsync(payment, items);
+            TempData["Success"] = $"Đã lập phiếu xuất trả {payment.SupplierPaymentNo} thành công ({items.Count} mặt hàng)!";
+            return RedirectToAction(nameof(Detail), new { id });
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Create));
+        }
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var item = await svc.GetSupplierPaymentAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Approve(int id, string? approvedBy)
+    {
+        var (ok, msg) = await svc.ApproveSupplierPaymentAsync(id, approvedBy);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id)
+    {
+        var (ok, msg) = await svc.CancelSupplierPaymentAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Detail), new { id });
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteSupplierPaymentAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+
+    public async Task<IActionResult> Print(int id)
+    {
+        var item = await svc.GetSupplierPaymentAsync(id);
+        if (item == null) return NotFound();
+        return View(item);
+    }
+
+    public async Task<IActionResult> Suppliers(string? q)
+    {
+        ViewBag.Q = q;
+        var list = await svc.SuppliersAsync(q);
+        return View(list);
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> CreateSupplier(string code, string name, string? address, string? phone, string? email, string? contactName, string? contactPhone, string? taxCode)
+    {
+        if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(name))
+        {
+            TempData["Error"] = "Vui lòng nhập Mã và Tên Nhà cung cấp.";
+            return RedirectToAction(nameof(Suppliers));
+        }
+
+        try
+        {
+            var s = new Supplier
+            {
+                Code = code.Trim().ToUpperInvariant(),
+                Name = name.Trim(),
+                Address = address?.Trim(),
+                Phone = phone?.Trim(),
+                Email = email?.Trim(),
+                ContactName = contactName?.Trim(),
+                ContactPhone = contactPhone?.Trim(),
+                TaxCode = taxCode?.Trim(),
+                IsActive = true
+            };
+            await svc.CreateSupplierAsync(s);
+            TempData["Success"] = $"Đã thêm Nhà cung cấp [{s.Code}] {s.Name}.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = ex.Message;
+        }
+
+        return RedirectToAction(nameof(Suppliers));
+    }
+}
+
 public class OrgController(AppDbContext db) : Controller
 {
     public async Task<IActionResult> Index()

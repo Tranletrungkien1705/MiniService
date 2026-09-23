@@ -247,6 +247,20 @@ public interface IRoService
     Task<List<ServiceItem>> ServiceItemsForSelectAsync();
     Task<(bool ok, string msg)> AddServiceItemToROAsync(int roId, int serviceItemId, ExpenseType expenseType, decimal? customHours = null, decimal? customPrice = null, string? note = null);
     Task<List<string>> GetDistinctServiceModelsAsync();
+    // Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment, Ser_SupplierPaymentDtl / MNU_QT_DL_QUANLYPHIEUXUATTRANHACUNGCAP)
+    Task<List<Supplier>> SuppliersAsync(string? q);
+    Task<Supplier?> GetSupplierAsync(int id);
+    Task<int> CreateSupplierAsync(Supplier supplier);
+    Task<List<SupplierPayment>> SupplierPaymentsAsync(SupplierPaymentStatus? status, SupplierPaymentType? type, string? q, DateTime? fromDate, DateTime? toDate);
+    Task<SupplierPayment?> GetSupplierPaymentAsync(int id);
+    Task<SupplierPayment?> GetSupplierPaymentByNoAsync(string supplierPaymentNo);
+    Task<int> CreateSupplierPaymentAsync(SupplierPayment payment, List<SupplierPaymentDetail> items);
+    Task<(bool ok, string msg)> ApproveSupplierPaymentAsync(int id, string? approvedBy = null);
+    Task<(bool ok, string msg)> CancelSupplierPaymentAsync(int id);
+    Task<(bool ok, string msg)> DeleteSupplierPaymentAsync(int id);
+    Task<List<Part>> PartsForSupplierPaymentAsync();
+    Task<List<StockIn>> StockInsForSupplierPaymentAsync();
+    Task<List<OrderPart>> OrderPartsForSupplierPaymentAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -258,6 +272,13 @@ public class RoService(AppDbContext db) : IRoService
     {
         DMSOrderComplainStatus.Pending => [DMSOrderComplainStatus.Sent, DMSOrderComplainStatus.Cancelled],
         DMSOrderComplainStatus.Sent => [DMSOrderComplainStatus.Finished, DMSOrderComplainStatus.Cancelled],
+        _ => []
+    };
+
+    /// <summary>Chuyển trạng thái Phiếu xuất trả NCC theo Ser_SupplierPayment idn.CarService.</summary>
+    public static SupplierPaymentStatus[] AllowedNextSupplierPayment(SupplierPaymentStatus s) => s switch
+    {
+        SupplierPaymentStatus.Pending => [SupplierPaymentStatus.Approved, SupplierPaymentStatus.Cancelled],
         _ => []
     };
 
@@ -4953,4 +4974,243 @@ public class RoService(AppDbContext db) : IRoService
             .Distinct()
             .OrderBy(m => m)
             .ToListAsync();
+
+    // --- Supplier Management & Return Parts to Supplier (Ser_Mst_Supplier, Ser_SupplierPayment) ---
+    public async Task<List<Supplier>> SuppliersAsync(string? q)
+    {
+        var query = db.Suppliers.Include(s => s.SupplierPayments).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(x => x.Code.ToLower().Contains(s)
+                || x.Name.ToLower().Contains(s)
+                || (x.Phone != null && x.Phone.ToLower().Contains(s))
+                || (x.ContactName != null && x.ContactName.ToLower().Contains(s)));
+        }
+        return await query.OrderBy(s => s.Name).ToListAsync();
+    }
+
+    public Task<Supplier?> GetSupplierAsync(int id) =>
+        db.Suppliers.Include(s => s.SupplierPayments).FirstOrDefaultAsync(s => s.Id == id);
+
+    public async Task<int> CreateSupplierAsync(Supplier supplier)
+    {
+        if (string.IsNullOrWhiteSpace(supplier.Code))
+            throw new InvalidOperationException("Vui lòng nhập mã nhà cung cấp (SupplierCode).");
+        if (string.IsNullOrWhiteSpace(supplier.Name))
+            throw new InvalidOperationException("Vui lòng nhập tên nhà cung cấp (SupplierName).");
+
+        supplier.Code = supplier.Code.Trim().ToUpperInvariant();
+        supplier.Name = supplier.Name.Trim();
+        var exists = await db.Suppliers.AnyAsync(s => s.Code == supplier.Code);
+        if (exists)
+            throw new InvalidOperationException($"Mã nhà cung cấp {supplier.Code} đã tồn tại trong danh mục.");
+
+        supplier.CreatedAt = DateTime.Now;
+        db.Suppliers.Add(supplier);
+        await db.SaveChangesAsync();
+        return supplier.Id;
+    }
+
+    public async Task<List<SupplierPayment>> SupplierPaymentsAsync(SupplierPaymentStatus? status, SupplierPaymentType? type, string? q, DateTime? fromDate, DateTime? toDate)
+    {
+        var query = db.SupplierPayments
+            .Include(p => p.Supplier)
+            .Include(p => p.OrderPart)
+            .Include(p => p.Items).ThenInclude(i => i.Part)
+            .AsQueryable();
+
+        if (status.HasValue)
+            query = query.Where(p => p.Status == status.Value);
+
+        if (type.HasValue)
+            query = query.Where(p => p.PaymentType == type.Value);
+
+        if (fromDate.HasValue)
+            query = query.Where(p => p.PaymentDate >= fromDate.Value.Date);
+
+        if (toDate.HasValue)
+            query = query.Where(p => p.PaymentDate <= toDate.Value.Date);
+
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(p => p.SupplierPaymentNo.ToLower().Contains(s)
+                || p.SupplierName.ToLower().Contains(s)
+                || (p.OrderPartNo != null && p.OrderPartNo.ToLower().Contains(s))
+                || (p.TSTRequestNo != null && p.TSTRequestNo.ToLower().Contains(s))
+                || (p.Description != null && p.Description.ToLower().Contains(s))
+                || p.Items.Any(i => i.Part.Code.ToLower().Contains(s) || i.Part.Name.ToLower().Contains(s)));
+        }
+
+        return await query.OrderByDescending(p => p.CreatedAt).ToListAsync();
+    }
+
+    public Task<SupplierPayment?> GetSupplierPaymentAsync(int id) =>
+        db.SupplierPayments
+            .Include(p => p.Supplier)
+            .Include(p => p.OrderPart)
+            .Include(p => p.Items).ThenInclude(i => i.Part)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+    public Task<SupplierPayment?> GetSupplierPaymentByNoAsync(string supplierPaymentNo)
+    {
+        var clean = supplierPaymentNo.Trim().ToUpperInvariant();
+        return db.SupplierPayments
+            .Include(p => p.Supplier)
+            .Include(p => p.OrderPart)
+            .Include(p => p.Items).ThenInclude(i => i.Part)
+            .FirstOrDefaultAsync(p => p.SupplierPaymentNo == clean);
+    }
+
+    public async Task<int> CreateSupplierPaymentAsync(SupplierPayment payment, List<SupplierPaymentDetail> items)
+    {
+        if (items == null || items.Count == 0)
+            throw new InvalidOperationException("Phiếu xuất trả NCC cần ít nhất một phụ tùng (Ser_SupplierPaymentDtl).");
+
+        if (string.IsNullOrWhiteSpace(payment.SupplierPaymentNo))
+        {
+            var today = DateTime.Today;
+            var prefix = $"PXNCC-{today:yyMMdd}-";
+            var count = await db.SupplierPayments.CountAsync(p => p.SupplierPaymentNo.StartsWith(prefix)) + 1;
+            payment.SupplierPaymentNo = $"{prefix}{count:D3}";
+        }
+        else
+        {
+            payment.SupplierPaymentNo = payment.SupplierPaymentNo.Trim().ToUpperInvariant();
+            var exists = await db.SupplierPayments.AnyAsync(p => p.SupplierPaymentNo == payment.SupplierPaymentNo);
+            if (exists)
+                throw new InvalidOperationException($"Số phiếu xuất trả {payment.SupplierPaymentNo} đã tồn tại.");
+        }
+
+        // Link Supplier metadata
+        if (payment.SupplierId.HasValue && payment.SupplierId.Value > 0)
+        {
+            var sup = await db.Suppliers.FirstOrDefaultAsync(s => s.Id == payment.SupplierId.Value);
+            if (sup != null)
+            {
+                payment.SupplierName = sup.Name;
+                payment.Address = sup.Address;
+            }
+        }
+        if (string.IsNullOrWhiteSpace(payment.SupplierName))
+            throw new InvalidOperationException("Vui lòng chỉ định Nhà cung cấp tiếp nhận phụ tùng xuất trả.");
+
+        // Link OrderPart if provided
+        if (payment.OrderPartId.HasValue && payment.OrderPartId.Value > 0)
+        {
+            var op = await db.OrderParts.FirstOrDefaultAsync(o => o.Id == payment.OrderPartId.Value);
+            if (op != null)
+            {
+                payment.OrderPartNo = op.OrderPartNo;
+            }
+        }
+
+        payment.PaymentDate = payment.PaymentDate == default ? DateTime.Today : payment.PaymentDate;
+        payment.Status = SupplierPaymentStatus.Pending;
+        payment.CreatedAt = DateTime.Now;
+
+        // Validate items and check stock availability
+        var partIds = items.Select(i => i.PartId).Distinct().ToList();
+        var parts = await db.Parts.Where(p => partIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id);
+
+        foreach (var item in items)
+        {
+            if (item.QtyPay <= 0)
+                throw new InvalidOperationException("Số lượng phụ tùng xuất trả phải lớn hơn 0.");
+
+            if (!parts.TryGetValue(item.PartId, out var part))
+                throw new InvalidOperationException($"Không tìm thấy phụ tùng với ID {item.PartId}.");
+
+            item.QtyInventory = part.InStock;
+            if (item.QtyPay > part.InStock)
+            {
+                throw new InvalidOperationException($"Số lượng trả phụ tùng [{part.Code}] {part.Name} ({item.QtyPay:N0}) vượt quá tồn kho thực tế ({part.InStock:N0}).");
+            }
+
+            if (item.Price <= 0)
+                item.Price = part.CostPrice > 0 ? part.CostPrice : part.SalePrice;
+
+            if (item.VatPercent < 0)
+                item.VatPercent = 10;
+
+            if (string.IsNullOrWhiteSpace(item.LocationCode))
+                item.LocationCode = part.Location;
+
+            payment.Items.Add(item);
+        }
+
+        db.SupplierPayments.Add(payment);
+        await db.SaveChangesAsync();
+        return payment.Id;
+    }
+
+    public async Task<(bool ok, string msg)> ApproveSupplierPaymentAsync(int id, string? approvedBy = null)
+    {
+        var payment = await db.SupplierPayments
+            .Include(p => p.Items).ThenInclude(i => i.Part)
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (payment == null) return (false, "Không tìm thấy phiếu xuất trả nhà cung cấp.");
+        if (payment.Status != SupplierPaymentStatus.Pending)
+            return (false, "Chỉ có thể phê duyệt phiếu xuất trả ở trạng thái Chờ duyệt.");
+
+        if (payment.Items.Count == 0)
+            return (false, "Phiếu xuất trả không có phụ tùng để xuất kho.");
+
+        // Check stock balance before deduction (Ser_SupplierPayment_Appr_Input_QtyInventoryNotEnough)
+        foreach (var line in payment.Items)
+        {
+            if (line.Part.InStock < line.QtyPay)
+            {
+                return (false, $"Tồn kho phụ tùng [{line.Part.Code}] {line.Part.Name} không đủ để xuất trả (Tồn: {line.Part.InStock:N0}, Cần xuất: {line.QtyPay:N0}).");
+            }
+        }
+
+        // Deduct inventory
+        foreach (var line in payment.Items)
+        {
+            line.Part.InStock -= line.QtyPay;
+        }
+
+        payment.Status = SupplierPaymentStatus.Approved;
+        payment.ApprovedAt = DateTime.Now;
+        payment.ApprovedBy = !string.IsNullOrWhiteSpace(approvedBy) ? approvedBy.Trim() : "Thủ kho trưởng";
+
+        await db.SaveChangesAsync();
+        return (true, $"Đã phê duyệt xuất kho trả hàng phiếu {payment.SupplierPaymentNo}. Đã trừ tồn kho {payment.TotalQuantity:N0} phụ tùng với tổng giá trị {payment.TotalAmount:N0} đ.");
+    }
+
+    public async Task<(bool ok, string msg)> CancelSupplierPaymentAsync(int id)
+    {
+        var payment = await db.SupplierPayments.FirstOrDefaultAsync(p => p.Id == id);
+        if (payment == null) return (false, "Không tìm thấy phiếu xuất trả nhà cung cấp.");
+        if (payment.Status != SupplierPaymentStatus.Pending)
+            return (false, "Chỉ có thể hủy phiếu xuất trả ở trạng thái Chờ duyệt.");
+
+        payment.Status = SupplierPaymentStatus.Cancelled;
+        await db.SaveChangesAsync();
+        return (true, $"Đã hủy phiếu xuất trả {payment.SupplierPaymentNo}.");
+    }
+
+    public async Task<(bool ok, string msg)> DeleteSupplierPaymentAsync(int id)
+    {
+        var payment = await db.SupplierPayments.Include(p => p.Items).FirstOrDefaultAsync(p => p.Id == id);
+        if (payment == null) return (false, "Không tìm thấy phiếu xuất trả nhà cung cấp.");
+        if (payment.Status == SupplierPaymentStatus.Approved)
+            return (false, "Phiếu xuất trả đã duyệt xuất kho không thể xóa (vui lòng kiểm tra sổ kho).");
+
+        db.SupplierPayments.Remove(payment);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu xuất trả {payment.SupplierPaymentNo}.");
+    }
+
+    public Task<List<Part>> PartsForSupplierPaymentAsync() =>
+        db.Parts.Where(p => p.InStock > 0).OrderBy(p => p.Code).ToListAsync();
+
+    public Task<List<StockIn>> StockInsForSupplierPaymentAsync() =>
+        db.StockIns.Where(s => s.Status == StockInStatus.Finished).OrderByDescending(s => s.StockInDate).Take(25).ToListAsync();
+
+    public Task<List<OrderPart>> OrderPartsForSupplierPaymentAsync() =>
+        db.OrderParts.OrderByDescending(o => o.OrderDate).Take(25).ToListAsync();
 }
