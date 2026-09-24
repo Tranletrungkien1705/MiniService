@@ -6946,6 +6946,78 @@ app.MapDelete("/api/system-params/{id:int}", async (int id, IRoService svc) =>
     return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
 });
 
+// API Cập nhật Ngày đăng ký bảo hành xe (Ser_Car_HTCUpdateWarrantyDate)
+app.MapGet("/api/warranty-registrations", async (string? q, WarrantyRegSource? source, WarrantyRegStatus? status, IRoService svc) =>
+{
+    var list = await svc.WarrantyRegistrationUpdatesAsync(q, source, status);
+    return Results.Ok(list.Select(x => new
+    {
+        x.Id,
+        x.UpdateNo,
+        x.FrameNo,
+        x.PlateNo,
+        x.ModelCode,
+        x.DealerCode,
+        x.DateBuyCar,
+        x.OldWarrantyRegistrationDate,
+        x.WarrantyRegistrationDate,
+        source = Ui.WarrantyRegSource(x.Source).text,
+        sourceValue = (int)x.Source,
+        status = Ui.WarrantyRegStatus(x.Status).text,
+        statusValue = (int)x.Status,
+        x.RejectReason,
+        x.SyncedDealerCount,
+        x.Note,
+        x.CreatedBy,
+        x.CreatedAt
+    }));
+});
+
+app.MapGet("/api/warranty-registrations/summary", async (IRoService svc) =>
+{
+    var s = await svc.GetWarrantyRegistrationSummaryAsync();
+    return Results.Ok(new { s.TotalUpdates, s.AppliedCount, s.RejectedCount, s.HtcCount, s.DealerCount, s.DistinctCarCount });
+});
+
+app.MapGet("/api/warranty-registrations/{id:int}", async (int id, IRoService svc) =>
+{
+    var x = await svc.GetWarrantyRegistrationUpdateAsync(id);
+    if (x == null) return Results.NotFound(new { error = "Không tìm thấy phiếu cập nhật ngày bảo hành." });
+    return Results.Ok(new
+    {
+        x.Id,
+        x.UpdateNo,
+        x.FrameNo,
+        x.PlateNo,
+        x.ModelCode,
+        x.DealerCode,
+        x.DateBuyCar,
+        x.OldWarrantyRegistrationDate,
+        x.WarrantyRegistrationDate,
+        source = Ui.WarrantyRegSource(x.Source).text,
+        sourceValue = (int)x.Source,
+        status = Ui.WarrantyRegStatus(x.Status).text,
+        statusValue = (int)x.Status,
+        x.RejectReason,
+        x.SyncedDealerCount,
+        x.Note,
+        x.CreatedBy,
+        x.CreatedAt
+    });
+});
+
+app.MapPost("/api/warranty-registrations", async (UpdateWarrantyRegistrationDto dto, IRoService svc) =>
+{
+    var (ok, msg, id) = await svc.UpdateWarrantyRegistrationDateAsync(dto.FrameNo ?? "", dto.DealerCode ?? "", dto.WarrantyRegistrationDate, dto.Source, dto.Note, dto.User ?? "api");
+    return ok ? Results.Ok(new { warrantyRegistrationId = id, message = msg }) : Results.BadRequest(new { error = msg });
+});
+
+app.MapDelete("/api/warranty-registrations/{id:int}", async (int id, IRoService svc) =>
+{
+    var (ok, msg) = await svc.DeleteWarrantyRegistrationUpdateAsync(id);
+    return ok ? Results.Ok(new { message = msg }) : Results.BadRequest(new { error = msg });
+});
+
 // API Lịch sử giá bán phụ tùng theo ngày hiệu lực (Ser_Inv_PartPrice)
 app.MapGet("/api/part-prices", async (string? q, bool? isActive, DateTime? dateFrom, DateTime? dateTo, int? partId, IRoService svc) =>
 {

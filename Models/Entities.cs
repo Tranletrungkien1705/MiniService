@@ -511,6 +511,7 @@ public class Car : IOrgOwned
     public string? Vin { get; set; }
     public string Model { get; set; } = "";
     public int Year { get; set; }
+    public DateTime? WarrantyStartDate { get; set; } // Ngày đăng ký bảo hành xe (WarrantyRegistrationDate) — cập nhật qua Ser_Car_HTCUpdateWarrantyDate
     public int CustomerId { get; set; }
     public Customer Customer { get; set; } = null!;
     public List<CustomerGroupMember> GroupMemberships { get; set; } = [];
@@ -3747,4 +3748,58 @@ public class SystemParamSummaryDto
     public int TypeCount { get; set; }                        // Số nhóm tham số (ParamType) khác nhau
     public int IntegrationCount { get; set; }                 // Số tham số nhóm kết nối hệ thống ngoài
     public int EmptyValueCount { get; set; }                  // Số tham số chưa có giá trị (ParamValue rỗng)
+}
+
+/// <summary>Nguồn cập nhật ngày đăng ký bảo hành xe — theo Ser_Car_HTCUpdateWarrantyDate idn.CarService.
+/// Phân biệt cập nhật do Hãng (HTC) hay do đại lý (NPP) thực hiện.</summary>
+public enum WarrantyRegSource
+{
+    HTC = 0,   // Hãng HTC cập nhật (UpdateHQ) — đồng bộ toàn mạng lưới đại lý
+    Dealer = 1 // Đại lý / NPP cập nhật (UpdateDL) — chỉ áp dụng cho đại lý hiện tại
+}
+
+/// <summary>Trạng thái xử lý một lần cập nhật ngày đăng ký bảo hành xe.</summary>
+public enum WarrantyRegStatus
+{
+    Applied = 0,   // Đã cập nhật thành công ngày đăng ký bảo hành
+    Rejected = 1   // Bị từ chối (không tìm thấy xe / ngày không hợp lệ)
+}
+
+/// <summary>Lịch sử cập nhật Ngày đăng ký bảo hành xe (Warranty Registration Date) — Ser_Car_HTCUpdateWarrantyDate trong idn.CarService.
+/// Nghiệp vụ: Hãng HTC (hoặc đại lý) cập nhật ngày bắt đầu tính bảo hành cho xe theo số khung (FrameNo/VIN).
+/// Luật cốt lõi: xe phải tồn tại theo FrameNo; ngày đăng ký bảo hành KHÔNG được trước ngày mua xe (DateBuyCar);
+/// khi HTC cập nhật thì đồng bộ sang toàn bộ đại lý trong mạng lưới (Ser_Car_HTCUpdateWarrantyDate_SaveDealer).</summary>
+public class WarrantyRegistrationUpdate : IOrgOwned
+{
+    public int Id { get; set; }
+    public Guid OrgId { get; set; }
+    public string UpdateNo { get; set; } = "";                 // Số phiếu cập nhật (VD: WRU260427-001)
+    public string FrameNo { get; set; } = "";                  // Số khung / VIN xe (FrameNo) — khóa tra cứu
+    public string? PlateNo { get; set; }                       // Biển số xe (PlateNo) — thông tin tham chiếu
+    public string? ModelCode { get; set; }                     // Mã dòng xe (ModelCode) — thông tin tham chiếu
+    public string DealerCode { get; set; } = "";               // Mã đại lý thực hiện cập nhật (DealerCode)
+    public DateTime? DateBuyCar { get; set; }                  // Ngày mua xe (DateBuyCar) — mốc chặn dưới
+    public DateTime? OldWarrantyRegistrationDate { get; set; } // Ngày đăng ký bảo hành cũ (trước khi cập nhật)
+    public DateTime WarrantyRegistrationDate { get; set; }     // Ngày đăng ký bảo hành mới (WarrantyRegistrationDate)
+    public WarrantyRegSource Source { get; set; } = WarrantyRegSource.HTC; // Nguồn cập nhật (HTC / Dealer)
+    public WarrantyRegStatus Status { get; set; } = WarrantyRegStatus.Applied; // Trạng thái xử lý
+    public string? RejectReason { get; set; }                  // Lý do từ chối (nếu bị từ chối)
+    public int SyncedDealerCount { get; set; } = 0;            // Số đại lý đã đồng bộ (khi HTC cập nhật)
+    public string? Note { get; set; }                          // Ghi chú
+    public string CreatedBy { get; set; } = "web";             // Người thực hiện (LogLUBy)
+    public DateTime CreatedAt { get; set; } = DateTime.Now;    // Thời điểm cập nhật (LogLUDateTime)
+
+    public bool IsApplied => Status == WarrantyRegStatus.Applied;
+    public bool IsHtcUpdate => Source == WarrantyRegSource.HTC;
+}
+
+/// <summary>DTO tổng hợp chỉ số nghiệp vụ Cập nhật Ngày đăng ký bảo hành xe — phục vụ màn hình quản lý.</summary>
+public class WarrantyRegistrationSummaryDto
+{
+    public int TotalUpdates { get; set; }        // Tổng số lần cập nhật
+    public int AppliedCount { get; set; }        // Số lần cập nhật thành công
+    public int RejectedCount { get; set; }       // Số lần bị từ chối
+    public int HtcCount { get; set; }            // Số lần do Hãng HTC cập nhật
+    public int DealerCount { get; set; }         // Số lần do đại lý cập nhật
+    public int DistinctCarCount { get; set; }    // Số xe (FrameNo) khác nhau đã cập nhật
 }

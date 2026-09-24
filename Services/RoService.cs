@@ -589,6 +589,13 @@ public interface IRoService
     Task<(bool ok, string msg)> DeleteSystemParamAsync(int id);
     Task<SystemParamSummaryDto> GetSystemParamSummaryAsync();
     Task<List<string>> GetDistinctSystemParamDealersAsync();
+    // Warranty Registration Date — Cập nhật Ngày đăng ký bảo hành xe (Ser_Car_HTCUpdateWarrantyDate)
+    Task<List<WarrantyRegistrationUpdate>> WarrantyRegistrationUpdatesAsync(string? q, WarrantyRegSource? source, WarrantyRegStatus? status);
+    Task<WarrantyRegistrationUpdate?> GetWarrantyRegistrationUpdateAsync(int id);
+    Task<(bool ok, string msg, int id)> UpdateWarrantyRegistrationDateAsync(string frameNo, string dealerCode, DateTime warrantyRegistrationDate, WarrantyRegSource source, string? note, string user);
+    Task<(bool ok, string msg)> DeleteWarrantyRegistrationUpdateAsync(int id);
+    Task<WarrantyRegistrationSummaryDto> GetWarrantyRegistrationSummaryAsync();
+    Task<List<string>> GetDistinctWarrantyRegDealersAsync();
     // dropdown data
     Task<List<Car>> CarsForSelectAsync();
 }
@@ -12219,6 +12226,122 @@ public class RoService(AppDbContext db) : IRoService
         db.SystemParams.Select(p => p.DealerCode)
             .Distinct()
             .OrderBy(p => p)
+            .ToListAsync();
+
+    // --- Warranty Registration Date — Cập nhật Ngày đăng ký bảo hành xe (Ser_Car_HTCUpdateWarrantyDate) ---
+    public async Task<List<WarrantyRegistrationUpdate>> WarrantyRegistrationUpdatesAsync(string? q, WarrantyRegSource? source, WarrantyRegStatus? status)
+    {
+        var query = db.WarrantyRegistrationUpdates.AsQueryable();
+        if (source.HasValue) query = query.Where(x => x.Source == source.Value);
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+        if (!string.IsNullOrWhiteSpace(q))
+        {
+            var s = q.Trim().ToLower();
+            query = query.Where(x => x.UpdateNo.ToLower().Contains(s)
+                || x.FrameNo.ToLower().Contains(s)
+                || (x.PlateNo != null && x.PlateNo.ToLower().Contains(s))
+                || (x.ModelCode != null && x.ModelCode.ToLower().Contains(s))
+                || x.DealerCode.ToLower().Contains(s));
+        }
+        return await query.OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.Id).ToListAsync();
+    }
+
+    public Task<WarrantyRegistrationUpdate?> GetWarrantyRegistrationUpdateAsync(int id) =>
+        db.WarrantyRegistrationUpdates.FirstOrDefaultAsync(x => x.Id == id);
+
+    /// <summary>Cập nhật Ngày đăng ký bảo hành xe — theo Ser_Car_HTCUpdateWarrantyDate.
+    /// Luật: xe phải tồn tại theo FrameNo; ngày đăng ký bảo hành KHÔNG được trước ngày mua xe (DateBuyCar).
+    /// Khi HTC cập nhật thì đồng bộ sang toàn bộ đại lý trong mạng lưới (đếm SyncedDealerCount).</summary>
+    public async Task<(bool ok, string msg, int id)> UpdateWarrantyRegistrationDateAsync(string frameNo, string dealerCode, DateTime warrantyRegistrationDate, WarrantyRegSource source, string? note, string user)
+    {
+        if (string.IsNullOrWhiteSpace(frameNo))
+            return (false, "Vui lòng nhập Số khung / VIN xe (FrameNo).", 0);
+        if (string.IsNullOrWhiteSpace(dealerCode))
+            return (false, "Vui lòng nhập Mã đại lý (DealerCode).", 0);
+        if (warrantyRegistrationDate == default)
+            return (false, "Vui lòng chọn Ngày đăng ký bảo hành.", 0);
+
+        var frame = frameNo.Trim();
+        var dc = dealerCode.Trim().ToUpperInvariant();
+        var now = DateTime.Now;
+
+        // Tra cứu xe theo số khung (FrameNo) — nguồn: Ser_Car.FrameNo.
+        var car = await db.Cars.FirstOrDefaultAsync(c => c.Vin == frame);
+        if (car == null)
+            return (false, $"Không tìm thấy xe theo số khung (FrameNo) '{frame}'.", 0);
+
+        // Chặn: ngày đăng ký bảo hành không được trước ngày mua xe (nếu có).
+        var dateBuyCar = car.WarrantyStartDate; // Ngày mua xe / bắt đầu bảo hành hiện tại (nếu có)
+        if (dateBuyCar.HasValue && dateBuyCar.Value.Date > warrantyRegistrationDate.Date)
+            return (false, $"Ngày đăng ký bảo hành ({warrantyRegistrationDate:dd/MM/yyyy}) không được trước ngày mua xe ({dateBuyCar.Value:dd/MM/yyyy}).", 0);
+
+        var oldDate = car.WarrantyStartDate;
+        // Cập nhật ngày đăng ký bảo hành trên xe.
+        car.WarrantyStartDate = warrantyRegistrationDate.Date;
+
+        // Khi HTC cập nhật: đồng bộ sang toàn bộ đại lý trong mạng lưới (mô phỏng đếm số đại lý).
+        var syncedDealers = source == WarrantyRegSource.HTC
+            ? await db.WarrantyRegistrationUpdates.Select(x => x.DealerCode).Distinct().CountAsync()
+            : 0;
+
+        var row = new WarrantyRegistrationUpdate
+        {
+            UpdateNo = await NextWarrantyRegNoAsync(now),
+            FrameNo = frame,
+            PlateNo = car.Plate,
+            ModelCode = car.Model,
+            DealerCode = dc,
+            DateBuyCar = oldDate,
+            OldWarrantyRegistrationDate = oldDate,
+            WarrantyRegistrationDate = warrantyRegistrationDate.Date,
+            Source = source,
+            Status = WarrantyRegStatus.Applied,
+            SyncedDealerCount = syncedDealers,
+            Note = note?.Trim(),
+            CreatedBy = user,
+            CreatedAt = now
+        };
+        db.WarrantyRegistrationUpdates.Add(row);
+        await db.SaveChangesAsync();
+
+        var scope = source == WarrantyRegSource.HTC ? $" và đồng bộ {syncedDealers} đại lý trong mạng lưới" : "";
+        return (true, $"Đã cập nhật ngày đăng ký bảo hành xe {frame} thành {warrantyRegistrationDate:dd/MM/yyyy}{scope}.", row.Id);
+    }
+
+    private async Task<string> NextWarrantyRegNoAsync(DateTime now)
+    {
+        var prefix = $"WRU{now:yyMMdd}-";
+        var count = await db.WarrantyRegistrationUpdates.CountAsync(x => x.UpdateNo.StartsWith(prefix));
+        return $"{prefix}{count + 1:D3}";
+    }
+
+    public async Task<(bool ok, string msg)> DeleteWarrantyRegistrationUpdateAsync(int id)
+    {
+        var existing = await db.WarrantyRegistrationUpdates.FirstOrDefaultAsync(x => x.Id == id);
+        if (existing == null) return (false, "Không tìm thấy phiếu cập nhật ngày bảo hành.");
+        db.WarrantyRegistrationUpdates.Remove(existing);
+        await db.SaveChangesAsync();
+        return (true, $"Đã xóa phiếu cập nhật [{id}] {existing.UpdateNo}.");
+    }
+
+    public async Task<WarrantyRegistrationSummaryDto> GetWarrantyRegistrationSummaryAsync()
+    {
+        var all = await db.WarrantyRegistrationUpdates.ToListAsync();
+        return new WarrantyRegistrationSummaryDto
+        {
+            TotalUpdates = all.Count,
+            AppliedCount = all.Count(x => x.Status == WarrantyRegStatus.Applied),
+            RejectedCount = all.Count(x => x.Status == WarrantyRegStatus.Rejected),
+            HtcCount = all.Count(x => x.Source == WarrantyRegSource.HTC),
+            DealerCount = all.Count(x => x.Source == WarrantyRegSource.Dealer),
+            DistinctCarCount = all.Select(x => x.FrameNo).Distinct().Count()
+        };
+    }
+
+    public Task<List<string>> GetDistinctWarrantyRegDealersAsync() =>
+        db.WarrantyRegistrationUpdates.Select(x => x.DealerCode)
+            .Distinct()
+            .OrderBy(x => x)
             .ToListAsync();
 }
 

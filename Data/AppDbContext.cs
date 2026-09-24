@@ -105,6 +105,7 @@ public class AppDbContext : DbContext
     public DbSet<TradeMark> TradeMarks => Set<TradeMark>();
     public DbSet<ModelAuditImage> ModelAuditImages => Set<ModelAuditImage>();
     public DbSet<SystemParam> SystemParams => Set<SystemParam>();
+    public DbSet<WarrantyRegistrationUpdate> WarrantyRegistrationUpdates => Set<WarrantyRegistrationUpdate>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -1030,6 +1031,14 @@ public class AppDbContext : DbContext
         {
             e.HasIndex(x => new { x.OrgId, x.DealerCode, x.ParamType }).IsUnique();
             e.HasIndex(x => new { x.OrgId, x.ParamCode });
+            e.HasQueryFilter(x => x.OrgId == _orgId);
+        });
+        b.Entity<WarrantyRegistrationUpdate>(e =>
+        {
+            e.HasIndex(x => new { x.OrgId, x.UpdateNo }).IsUnique();
+            e.HasIndex(x => new { x.OrgId, x.FrameNo });
+            e.Ignore(x => x.IsApplied);
+            e.Ignore(x => x.IsHtcUpdate);
             e.HasQueryFilter(x => x.OrgId == _orgId);
         });
     }

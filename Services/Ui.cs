@@ -783,5 +783,21 @@ public static class Ui
         Models.SystemParamType.Other => ("Tham số khác", "OTH", "dark"),
         _ => (t.ToString(), "", "secondary")
     };
+
+    /// <summary>Nhãn nguồn cập nhật ngày đăng ký bảo hành xe (Ser_Car_HTCUpdateWarrantyDate).</summary>
+    public static (string text, string code, string css) WarrantyRegSource(WarrantyRegSource s) => s switch
+    {
+        Models.WarrantyRegSource.HTC => ("Hãng HTC cập nhật", "HTC", "primary"),
+        Models.WarrantyRegSource.Dealer => ("Đại lý / NPP cập nhật", "DL", "info"),
+        _ => (s.ToString(), "", "secondary")
+    };
+
+    /// <summary>Nhãn trạng thái xử lý cập nhật ngày đăng ký bảo hành xe.</summary>
+    public static (string text, string code, string css) WarrantyRegStatus(WarrantyRegStatus s) => s switch
+    {
+        Models.WarrantyRegStatus.Applied => ("Đã cập nhật", "APPLIED", "success"),
+        Models.WarrantyRegStatus.Rejected => ("Bị từ chối", "REJ", "danger"),
+        _ => (s.ToString(), "", "secondary")
+    };
 }
 

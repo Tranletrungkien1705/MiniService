@@ -6960,6 +6960,46 @@ public class SystemParamController(IRoService svc) : Controller
         return RedirectToAction(nameof(Index));
     }
 }
+/// <summary>Cập nhật Ngày đăng ký bảo hành xe (Warranty Registration Date) — Ser_Car_HTCUpdateWarrantyDate trong idn.CarService.
+/// Nguồn: Ser_Car_HTCUpdateWarrantyDate / _SaveDealer (BizCarSv.Car.cs).
+/// Hãng HTC (hoặc đại lý) cập nhật ngày bắt đầu tính bảo hành cho xe theo số khung (FrameNo/VIN).</summary>
+public class WarrantyRegistrationController(IRoService svc) : Controller
+{
+    public async Task<IActionResult> Index(string? q, WarrantyRegSource? source, WarrantyRegStatus? status)
+    {
+        ViewBag.Q = q;
+        ViewBag.Source = source;
+        ViewBag.Status = status;
+        ViewBag.Summary = await svc.GetWarrantyRegistrationSummaryAsync();
+        var list = await svc.WarrantyRegistrationUpdatesAsync(q, source, status);
+        return View(list);
+    }
+
+    public async Task<IActionResult> Detail(int id)
+    {
+        var row = await svc.GetWarrantyRegistrationUpdateAsync(id);
+        if (row == null) return NotFound();
+        return View(row);
+    }
+
+    public IActionResult Create() => View();
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Create(string frameNo, string dealerCode, DateTime warrantyRegistrationDate, WarrantyRegSource source, string? note)
+    {
+        var (ok, msg, id) = await svc.UpdateWarrantyRegistrationDateAsync(frameNo, dealerCode, warrantyRegistrationDate, source, note, "web");
+        TempData[ok ? "Success" : "Error"] = msg;
+        return ok ? RedirectToAction(nameof(Detail), new { id }) : RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost, ValidateAntiForgeryToken]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var (ok, msg) = await svc.DeleteWarrantyRegistrationUpdateAsync(id);
+        TempData[ok ? "Success" : "Error"] = msg;
+        return RedirectToAction(nameof(Index));
+    }
+}
 /// <summary>Hệ số giá phụ tùng theo loại khách hàng (Customer Part Factor) — Ser_Mst_CusPartFactor trong idn.CarService.
 /// Nguồn: Ser_Mst_CusPartFactor_Get_HQ / _Get_DL / _Update (BizCarSv.Master.cs).
 /// Giá hiệu lực = Part.SalePrice × COALESCE(Factor, CusType.CusFactor, 1).</summary>
