@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniService — Đơn đặt hàng phụ tùng</title>
+<style>
+  :root{color-scheme:light dark;--line:#8883;--accent:#4f46e5;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:1180px;margin:24px auto;padding:0 16px;line-height:1.5;background:transparent}
+  h1{font-size:20px;margin:0 0 2px} .muted{opacity:.65;font-size:13px} h3{font-size:14px;margin:16px 0 4px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+  label{font-size:12px;opacity:.7;display:block;margin-bottom:2px}
+  input,button,select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit}
+  button{cursor:pointer} button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.link{border:none;background:none;color:var(--accent);padding:2px 6px;cursor:pointer}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{opacity:.7;font-size:11px;text-transform:uppercase} .wrap{overflow-x:auto}
+  .chk{display:flex;gap:12px;flex-wrap:wrap;font-size:13px} .chk label{display:flex;gap:4px;align-items:center;opacity:1;font-size:13px;margin:0}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+  .msg{font-size:13px;margin-left:6px} .num{text-align:right}
+</style></head>
+<body>
+<h1>Đơn đặt hàng phụ tùng <span class="muted">(port 1:1 FrmOrderPartSearch — Ser_Part_Order)</span></h1>
+<p class="muted">
+  Nguồn: <code>2021.1.TCMotor/Dev/DMSCarSv/V20/TERP.HTCServiceClient/Views/PartOrder/FrmOrderPartSearch.cs</code>;
+  công thức <code>AMOUNT</code>, <code>STATUSTEXT</code>, <code>BEFORETAX/AFTERTAX/PENDINGDELIVERYQTY</code> lấy từ
+  <code>TERP.BizCarSv/BizCarSv.PartOrder.cs:2599-2624, 2679-2687</code>.
+</p>
+
+<div class="card">
+  <h3 style="margin-top:0">Tìm đơn hàng</h3>
+  <div class="row">
+    <div><label>Số đơn hàng</label><input id="qNo" style="width:140px" placeholder="DHSEED"></div>
+    <div><label>Số đơn của NCC</label><input id="qNoUser" style="width:140px"></div>
+    <div><label>Số xác nhận</label><input id="qConf" style="width:120px"></div>
+    <div><label>Mã nhà cung cấp</label><input id="qSup" type="number" style="width:110px" placeholder="0 = tất cả"></div>
+    <div><label>Mã phụ tùng</label><input id="qPart" style="width:120px"></div>
+    <div><label>Từ ngày gửi</label><input id="qFrom" type="date"></div>
+    <div><label>Đến ngày gửi</label><input id="qTo" type="date"></div>
+    <button class="primary" onclick="load()">Tìm</button><span id="msg" class="msg"></span>
+  </div>
+  <div class="chk" style="margin-top:10px">
+    <label><input type="checkbox" id="s1" checked> Mới tạo</label>
+    <label><input type="checkbox" id="sCONF"> Xác nhận</label>
+    <label><input type="checkbox" id="s2" checked> Hàng đang về</label>
+    <label><input type="checkbox" id="s3"> Hoàn thành</label>
+  </div>
+  <p class="muted" style="margin:8px 0 0">
+    Mặc định nguồn tick "Mới tạo" + "Hàng đang về", bỏ tick "Hoàn thành" (FrmOrderPartSearch.cs:79-81).
+    Khoảng ngày áp vào <code>Ser_Part_Order.SendDate</code> (PartOrder.cs:2641-2642) — nhãn trên form nguồn là
+    "ngày nhập" nhưng cột thật là SendDate; giữ nguyên nguồn, chỉ đổi nhãn cho đúng cột.
+    Nguồn luôn lọc <code>IsActive = '1'</code>.
+  </p>
+</div>
+
+<div class="wrap"><table>
+  <thead><tr>
+    <th>STT</th><th>Ngày tạo</th><th>Người tạo</th><th>Số đơn hàng</th><th>Số đơn NCC</th>
+    <th>Nhà cung cấp</th><th>Số xác nhận</th><th>Ngày gửi</th><th class="num">Tiền hàng</th>
+    <th>Trạng thái</th><th></th>
+  </tr></thead>
+  <tbody id="rows"><tr><td colspan="11" class="muted">Nhấn "Tìm".</td></tr></tbody>
+</table></div>
+
+<div class="card" id="detailCard" hidden>
+  <h3 style="margin-top:0">Chi tiết đơn hàng <span id="dNo" class="muted"></span></h3>
+  <div class="row">
+    <div><label>Nhà cung cấp</label><input id="dSup" readonly style="width:220px"></div>
+    <div><label>Ngày gửi</label><input id="dSend" readonly style="width:130px"></div>
+    <div><label>Số xác nhận</label><input id="dConf" readonly style="width:110px"></div>
+    <div><label>Tổng đặt</label><input id="dQty" readonly style="width:90px"></div>
+    <div><label>Tổng đã về</label><input id="dDel" readonly style="width:90px"></div>
+    <div><label>Trạng thái</label>
+      <select id="dStatus">
+        <option value="1">Mới tạo</option>
+        <option value="CONF">Xác nhận</option>
+        <option value="2">Hàng đang về</option>
+        <option value="3">Hoàn thành</option>
+      </select></div>
+    <button onclick="setStatus()">Đổi trạng thái</button><span id="msg2" class="msg"></span>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Model</th>
+      <th class="num">SL đặt</th><th class="num">Đã về</th><th class="num">Chờ về</th>
+      <th class="num">Giá</th><th class="num">VAT %</th><th class="num">Trước thuế</th><th class="num">Sau thuế</th>
+      <th class="num">OH</th><th class="num">OO</th><th class="num">BO</th><th class="num">MIP</th>
+      <th class="num">SOQ</th><th class="num">ICC</th><th>Ngày về cuối</th><th></th></tr></thead>
+    <tbody id="dRows"></tbody>
+  </table></div>
+  <div class="row" style="margin-top:10px">
+    <button onclick="document.getElementById('detailCard').hidden=true">Đóng</button>
+  </div>
+</div>
+
+<script>
+const KEY="demo-service"; const F=id=>document.getElementById(id);
+const esc=s=>(s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+let CUR=null;
+function H(extra){ return Object.assign({"X-Api-Key":KEY}, extra||{}); }
+function m(id,t){ F(id).textContent=t; setTimeout(()=>{ if(F(id).textContent===t) F(id).textContent=""; },3500); }
+function d(s){ return s? new Date(s).toLocaleDateString("vi-VN") : ""; }
+function n(v){ return (v==null?0:Number(v)).toLocaleString("vi-VN"); }
+
+function statuses(){
+  const v=[]; [["s1","1"],["sCONF","CONF"],["s2","2"],["s3","3"]].forEach(([id,val])=>{ if(F(id).checked) v.push(val); });
+  return v.join(",");
+}
+
+async function load(){
+  const p=new URLSearchParams();
+  if(F("qNo").value)     p.set("orderNo",F("qNo").value);
+  if(F("qNoUser").value) p.set("orderNoUser",F("qNoUser").value);
+  if(F("qConf").value)   p.set("confirmNo",F("qConf").value);
+  if(F("qSup").value)    p.set("supplierId",F("qSup").value);
+  if(F("qPart").value)   p.set("partCode",F("qPart").value);
+  if(F("qFrom").value)   p.set("from",F("qFrom").value);
+  if(F("qTo").value)     p.set("to",F("qTo").value);
+  const st=statuses(); if(st) p.set("statuses",st);
+  const r=await fetch("/api/v1/partorders?"+p,{headers:H()});
+  if(!r.ok){ m("msg","Lỗi "+r.status); return; }
+  const ds=await r.json();
+  if(!ds.length){ F("rows").innerHTML='<tr><td colspan="11" class="muted">Không tìm thấy đơn hàng nào.</td></tr>'; return; }
+  F("rows").innerHTML=ds.map(x=>`<tr>
+    <td>${x.index}</td><td>${d(x.createDate)}</td><td>${esc(x.userCreate)}</td><td>${esc(x.orderNo)}</td>
+    <td>${esc(x.orderNoUser)}</td><td>${esc(x.supplierName)}</td><td>${esc(x.confirmNo)}</td>
+    <td>${d(x.sendDate)}</td><td class="num">${n(x.amount)}</td>
+    <td><span class="pill">${esc(x.statusText)}</span></td>
+    <td><button class="link" onclick="detail(${x.id})">Xem</button></td></tr>`).join("");
+}
+
+async function detail(id){
+  const r=await fetch("/api/v1/partorders/"+id,{headers:H()});
+  if(!r.ok){ m("msg","Lỗi "+r.status); return; }
+  const x=await r.json(); CUR=id;
+  F("detailCard").hidden=false;
+  F("dNo").textContent="— "+x.orderNo+" ("+x.statusText+")";
+  F("dSup").value=x.supplierName||""; F("dSend").value=d(x.sendDate);
+  F("dConf").value=x.confirmNo||""; F("dQty").value=n(x.sumQuantity); F("dDel").value=n(x.sumDeliveryQuantity);
+  F("dStatus").value=x.status||"1";
+  F("dRows").innerHTML=(x.details||[]).map(t=>`<tr>
+    <td>${t.index}</td><td>${esc(t.partCode)}</td><td>${esc(t.partName)}</td><td>${esc(t.unit)}</td>
+    <td>${esc(t.model)}</td><td class="num">${n(t.quantity)}</td><td class="num">${n(t.deliveryQuantity)}</td>
+    <td class="num">${n(t.pendingDeliveryQty)}</td><td class="num">${n(t.cost)}</td><td class="num">${n(t.vat)}</td>
+    <td class="num">${n(t.beforeTax)}</td><td class="num">${n(t.afterTax)}</td>
+    <td class="num">${n(t.oh)}</td><td class="num">${n(t.oo)}</td><td class="num">${n(t.bo)}</td>
+    <td class="num">${n(t.mip)}</td><td class="num">${n(t.soq)}</td><td class="num">${n(t.icc)}</td>
+    <td>${d(t.lastDateDelivery)}</td>
+    <td><button class="link" onclick="deliver(${t.id},${t.pendingDeliveryQty})">Ghi hàng về</button></td></tr>`).join("")
+    || '<tr><td colspan="20" class="muted">Đơn chưa có dòng phụ tùng.</td></tr>';
+}
+
+async function deliver(detailId, pending){
+  if(!pending || pending<=0){ m("msg2","Dòng này đã về đủ."); return; }
+  const r=await fetch("/api/v1/partorders/details/"+detailId+"/deliver",
+    {method:"POST",headers:H({"Content-Type":"application/json"}),body:JSON.stringify({Qty:pending})});
+  const j=await r.json().catch(()=>({}));
+  m("msg2", j.msg || (r.ok?"Đã ghi nhận":"Lỗi "+r.status));
+  if(r.ok){ load(); detail(CUR); }
+}
+
+async function setStatus(){
+  if(!CUR) return;
+  const r=await fetch("/api/v1/partorders/"+CUR+"/status",
+    {method:"POST",headers:H({"Content-Type":"application/json"}),body:JSON.stringify({Status:F("dStatus").value})});
+  const j=await r.json().catch(()=>({}));
+  m("msg2", j.msg || (r.ok?"Đã đổi":"Lỗi "+r.status));
+  if(r.ok){ load(); detail(CUR); }
+}
+
+(function init(){
+  const t=new Date(), f=new Date(t.getFullYear(), t.getMonth(), 1);
+  F("qTo").value=t.toISOString().slice(0,10);
+  F("qFrom").value=f.toISOString().slice(0,10);
+  load();
+})();
+</script>
+</body></html>

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniService — Báo giá phụ tùng</title>
+<style>
+  :root{color-scheme:light dark;--line:#8883;--accent:#4f46e5;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:1100px;margin:24px auto;padding:0 16px;line-height:1.5;background:transparent}
+  h1{font-size:20px;margin:0 0 2px} .muted{opacity:.65;font-size:13px} h3{font-size:14px;margin:16px 0 4px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+  label{font-size:12px;opacity:.7;display:block;margin-bottom:2px}
+  input,button,select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit}
+  button{cursor:pointer} button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.link{border:none;background:none;color:var(--accent);padding:2px 6px;cursor:pointer}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{opacity:.7;font-size:11px;text-transform:uppercase} .wrap{overflow-x:auto}
+  .chk{display:flex;gap:12px;flex-wrap:wrap;font-size:13px} .chk label{display:flex;gap:4px;align-items:center;opacity:1;font-size:13px;margin:0}
+  .pill{font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid var(--line)}
+  .msg{font-size:13px;margin-left:6px} .num{text-align:right}
+</style></head>
+<body>
+<h1>Báo giá phụ tùng <span class="muted">(port 1:1 FrmPartQuotationSearch — Ser_Inv_Quote)</span></h1>
+<p class="muted">
+  Nguồn: <code>2021.1.TCMotor/Dev/DMSCarSv/V20/TERP.HTCServiceClient/Views/Inventory/FrmPartQuotationSearch.cs</code>;
+  công thức <code>SUMAMOUNT</code> và <code>STATUSTEXT</code> lấy từ
+  <code>TERP.BizCarSv/BizCarSv.Inventory.Quote.cs:1773-1775, 1806-1822</code>.
+</p>
+
+<div class="card">
+  <h3 style="margin-top:0">Tìm báo giá</h3>
+  <div class="row">
+    <div><label>Số báo giá</label><input id="qNo" style="width:150px" placeholder="BGSEED"></div>
+    <div><label>Tên khách hàng</label><input id="qCus" style="width:170px"></div>
+    <div><label>Từ ngày</label><input id="qFrom" type="date"></div>
+    <div><label>Đến ngày</label><input id="qTo" type="date"></div>
+    <button class="primary" onclick="load()">Tìm</button><span id="msg" class="msg"></span>
+  </div>
+  <div class="chk" style="margin-top:10px">
+    <label><input type="checkbox" id="c1"> Mới tạo</label>
+    <label><input type="checkbox" id="c3"> Đã tạo phiếu xuất</label>
+    <label><input type="checkbox" id="c4"> Đã xuất</label>
+    <label><input type="checkbox" id="c5"> Đã điều chỉnh phiếu xuất</label>
+    <label><input type="checkbox" id="c6"> Đã hủy phiếu xuất</label>
+  </div>
+  <p class="muted" style="margin:8px 0 0">
+    Không tick ô nào = không lọc trạng thái (SerPartQuotationService.cs:174-177). Trạng thái là cột
+    <b>dẫn xuất</b> từ <code>Ser_Inv_StockOut.Status</code>, nên nguồn lọc SAU khi đã tính (Quote.cs:1838).
+  </p>
+</div>
+
+<div class="wrap"><table>
+  <thead><tr>
+    <th>STT</th><th>Số báo giá</th><th>Ngày lập</th><th>Người lập</th><th class="num">Tổng tiền</th>
+    <th>Khách hàng</th><th>Địa chỉ</th><th>Điện thoại</th><th>Trạng thái</th><th>Ghi chú</th><th></th>
+  </tr></thead>
+  <tbody id="rows"><tr><td colspan="11" class="muted">Nhấn "Tìm".</td></tr></tbody>
+</table></div>
+
+<div class="card" id="detailCard" hidden>
+  <h3 style="margin-top:0">Chi tiết báo giá <span id="dNo" class="muted"></span></h3>
+  <div class="row">
+    <div><label>Khách hàng</label><input id="dCus" readonly style="width:180px"></div>
+    <div><label>Người nhận</label><input id="dRcv" readonly style="width:150px"></div>
+    <div><label>Hình thức TT</label><input id="dPay" readonly style="width:110px"></div>
+    <div><label>Trạng thái phiếu xuất</label>
+      <select id="dSo">
+        <option value="">(chưa có phiếu xuất)</option>
+        <option value="1">1 — Đã tạo phiếu xuất</option>
+        <option value="3">3 — Đã xuất</option>
+        <option value="4">4 — Đã điều chỉnh phiếu xuất</option>
+        <option value="5">5 — Đã hủy phiếu xuất</option>
+      </select></div>
+    <button onclick="setSo()">Cập nhật trạng thái</button><span id="msg2" class="msg"></span>
+  </div>
+  <div class="wrap"><table>
+    <thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th class="num">SL</th>
+      <th class="num">Đơn giá</th><th class="num">VAT %</th><th class="num">Factor</th>
+      <th class="num">Thành tiền</th><th>Ghi chú</th></tr></thead>
+    <tbody id="dRows"></tbody>
+  </table></div>
+  <p class="muted" style="margin:6px 0 0">
+    Thành tiền dòng <b>có</b> nhân Factor (Quote.cs:1884) nhưng tổng đầu phiếu <b>không</b> nhân Factor
+    (Quote.cs:1773-1775) — giữ đúng chỗ lệch của nguồn, không tự "sửa cho khớp".
+  </p>
+  <div class="row" style="margin-top:10px">
+    <button onclick="document.getElementById('detailCard').hidden=true">Đóng</button>
+  </div>
+</div>
+
+<script>
+const KEY="demo-service"; const F=id=>document.getElementById(id);
+const esc=s=>(s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;");
+let CUR=null;
+function H(extra){ return Object.assign({"X-Api-Key":KEY}, extra||{}); }
+function m(id,t){ F(id).textContent=t; setTimeout(()=>{ if(F(id).textContent===t) F(id).textContent=""; },3500); }
+function d(s){ return s? new Date(s).toLocaleDateString("vi-VN") : ""; }
+function n(v){ return (v==null?0:Number(v)).toLocaleString("vi-VN"); }
+
+function statusValues(){
+  const v=[]; [["c1","1"],["c3","3"],["c4","4"],["c5","5"],["c6","6"]].forEach(([id,val])=>{ if(F(id).checked) v.push(val); });
+  return v.join(",");
+}
+
+async function load(){
+  const p=new URLSearchParams();
+  if(F("qNo").value)  p.set("quoteNo",F("qNo").value);
+  if(F("qCus").value) p.set("customerName",F("qCus").value);
+  if(F("qFrom").value) p.set("from",F("qFrom").value);
+  if(F("qTo").value)   p.set("to",F("qTo").value);
+  const sv=statusValues(); if(sv) p.set("statusValues",sv);
+  const r=await fetch("/api/v1/partquotations?"+p,{headers:H()});
+  if(!r.ok){ m("msg","Lỗi "+r.status); return; }
+  const ds=await r.json();
+  if(!ds.length){ F("rows").innerHTML='<tr><td colspan="11" class="muted">Không tìm thấy báo giá nào.</td></tr>'; return; }
+  F("rows").innerHTML=ds.map(x=>`<tr>
+    <td>${x.index}</td><td>${esc(x.quoteNo)}</td><td>${d(x.createdDate)}</td><td>${esc(x.logLuBy)}</td>
+    <td class="num">${n(x.sumAmount)}</td><td>${esc(x.cusName)}</td><td>${esc(x.address)}</td>
+    <td>${esc(x.phone)}</td><td><span class="pill">${esc(x.statusText)}</span></td><td>${esc(x.note)}</td>
+    <td><button class="link" onclick="detail(${x.id})">Xem</button></td></tr>`).join("");
+}
+
+async function detail(id){
+  const r=await fetch("/api/v1/partquotations/"+id,{headers:H()});
+  if(!r.ok){ m("msg","Lỗi "+r.status); return; }
+  const x=await r.json(); CUR=id;
+  F("detailCard").hidden=false;
+  F("dNo").textContent="— "+x.quoteNo+" ("+x.statusText+")";
+  F("dCus").value=x.customer? x.customer.name : "";
+  F("dRcv").value=x.receiveName||""; F("dPay").value=x.paymentMethod||"";
+  F("dSo").value=x.soStatus||"";
+  F("dRows").innerHTML=(x.items||[]).map(i=>`<tr><td>${i.index}</td><td>${esc(i.partCode)}</td>
+    <td>${esc(i.partName)}</td><td class="num">${n(i.quantity)}</td><td class="num">${n(i.price)}</td>
+    <td class="num">${n(i.vat)}</td><td class="num">${i.factor}</td><td class="num">${n(i.amount)}</td>
+    <td>${esc(i.note)}</td></tr>`).join("")
+    || '<tr><td colspan="9" class="muted">Báo giá chưa có dòng phụ tùng.</td></tr>';
+}
+
+async function setSo(){
+  if(!CUR) return;
+  const r=await fetch("/api/v1/partquotations/"+CUR+"/sostatus",
+    {method:"POST",headers:H({"Content-Type":"application/json"}),body:JSON.stringify({SOStatus:F("dSo").value})});
+  const j=await r.json().catch(()=>({}));
+  m("msg2", j.msg || (r.ok?"Đã cập nhật":"Lỗi "+r.status));
+  if(r.ok){ load(); detail(CUR); }
+}
+
+(function init(){
+  const t=new Date(), f=new Date(t.getFullYear(), t.getMonth(), 1);
+  F("qTo").value=t.toISOString().slice(0,10);
+  F("qFrom").value=f.toISOString().slice(0,10);
+  load();
+})();
+</script>
+</body></html>

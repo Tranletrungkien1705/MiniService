@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniService — Phụ tùng RO đợi hàng</title>
+<style>
+  :root{color-scheme:light dark;--line:#8883;--accent:#4f46e5;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:1180px;margin:24px auto;padding:0 16px;line-height:1.5;background:transparent}
+  h1{font-size:20px;margin:0 0 2px} .muted{opacity:.65;font-size:13px} h3{font-size:14px;margin:16px 0 4px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+  label{font-size:12px;opacity:.7;display:block;margin-bottom:2px}
+  input,button,select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit}
+  button{cursor:pointer} button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{opacity:.7;font-size:11px;text-transform:uppercase} .wrap{overflow-x:auto}
+  .msg{font-size:13px;margin-left:6px} .num{text-align:right} .bad{color:var(--bad)} .ok{color:var(--ok)}
+</style></head>
+<body>
+<h1>Phụ tùng của lệnh sửa chữa đang đợi hàng <span class="muted">(port 1:1 FrmPartROSearch — Ser_ROPartItems)</span></h1>
+<p class="muted">
+  Nguồn: <code>2021.1.TCMotor/Dev/DMSCarSv/V20.2023.Release.V2/TERP.HTCServiceClient/Views/PartOrder/FrmPartROSearch.cs</code>;
+  SQL đang chạy ở <code>TERP.BizCarSv/BizCarSv.PartOrder.cs:4041-4080</code>
+  (<code>Ser_Inv_OrderInshipment_GetAll_01</code>, truy từ <code>WSCarSv.asmx:23909</code>).
+  Điều kiện: <code>ro.status = 'w4p'</code> (Đợi phụ tùng) · <code>ro.DealerCode = &lt;đại lý&gt;</code> ·
+  <code>part.IsActive = '1'</code>. Thứ tự <code>Row_Number() over (order by part.PartId desc)</code>.
+</p>
+
+<div class="card">
+  <h3 style="margin-top:0">Phân trang &amp; lọc</h3>
+  <div class="row">
+    <div><label>Số dòng / trang</label>
+      <select id="qSize"><option>20</option><option selected>30</option><option>50</option></select></div>
+    <div><label>Trang</label><input id="qPage" type="number" value="1" min="1" style="width:90px"></div>
+    <div><label>Mã đại lý</label><input id="qDealer" style="width:110px" placeholder="VNN054"></div>
+    <button class="primary" onclick="load()">Tìm</button>
+    <button onclick="prev()">◀ Trước</button>
+    <button onclick="next()">Sau ▶</button>
+    <button onclick="pick()">Chọn phụ tùng đã tick</button>
+    <span id="msg" class="msg"></span>
+  </div>
+  <p class="muted" style="margin:8px 0 0">
+    Ba cỡ trang 20/30/50, mặc định 30 — đúng như <code>FrmPartROSearch.cs:27, 146-160</code>.
+  </p>
+</div>
+
+<div class="wrap"><table>
+  <thead><tr>
+    <th></th><th>STT</th><th>Mã PT</th><th>Tên PT</th><th>Số báo giá</th><th>Tên TA</th>
+    <th>ĐVT</th><th class="num">VAT</th><th class="num">SL Cần</th><th>Số lượng đã đặt</th><th>Ghi chú</th>
+  </tr></thead>
+  <tbody id="rows"><tr><td colspan="11" class="muted">Đang tải…</td></tr></tbody>
+</table></div>
+<p class="muted" id="foot"></p>
+
+<h3>Ba chỗ nguồn HỎNG / trống — khai rõ, không im lặng</h3>
+<ol class="muted">
+  <li><strong>Cột “Số lượng đã đặt” luôn rỗng trên WinForm.</strong> Grid bind field
+    <code>INSHIPMENTQUANTITY</code> (<code>FrmPartROSearch.cs:44, 112</code>) và đặt
+    <code>Visible = true</code> (<code>:132</code>), nhưng SQL đang chạy KHÔNG trả cột đó
+    (<code>PartOrder.cs:4049-4060</code>). Đích để trống y nguyên thay vì tự bịa số.
+    Ba cột <code>Giá nhập / Giá hãng / Model</code> cũng không có trong SQL nhưng designer đặt
+    <code>Visible = false</code> nên không hiện — đích bỏ luôn.</li>
+  <li><strong>Nút “Chọn” của nguồn không bao giờ chạy.</strong> Dòng <code>385</code> gọi
+    <code>dtPartNEW.Rows.Clear()</code> — xoá chính DataSource của grid — TRƯỚC vòng lặp dòng
+    <code>386</code> đọc <code>gviewSearch.RowCount</code>, nên <code>RowCount = 0</code> và luôn rơi vào
+    thông báo “Chưa chọn phụ tùng” (<code>:403</code>). Đích làm đúng ý định (đọc dòng đã tick rồi trả về
+    4 cột <code>PartID/PartCode/VieName/Unit</code> như <code>:392-396</code>) và <strong>khai lệch này</strong>.</li>
+  <li><strong>Đếm tổng dòng của nguồn tràn ở 32.767.</strong> <code>PartOrderService.cs:57</code> dùng
+    <code>Convert.ToInt16(...)</code> cho <code>MyCount</code>; quá 32.767 dòng sẽ ném
+    <code>OverflowException</code>. Đích dùng <code>int</code>.</li>
+</ol>
+<p class="muted">
+  Ngoài ra nguồn viết <code>left join Ser_MST_Part</code> nhưng đặt <code>part.IsActive</code> trong
+  <code>WHERE</code> (<code>PartOrder.cs:4065-4070</code>) ⇒ thực chất INNER JOIN, dòng phụ tùng chưa gắn
+  <code>PartID</code> bị loại. Đích giữ đúng hành vi đang chạy đó.
+</p>
+
+<script>
+const KEY="demo-service"; const F=id=>document.getElementById(id);
+function H(extra){ return Object.assign({"X-Api-Key":KEY}, extra||{}); }
+function esc(s){ return (s??'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+let pageCount = 1;
+
+async function load(){
+  const p = new URLSearchParams({pageSize:F('qSize').value, page:F('qPage').value});
+  const d = F('qDealer').value.trim(); if(d) p.set('dealerCode', d);
+  const r = await fetch('/api/v1/ropartneeds?'+p.toString(),{headers:H()});
+  const data = await r.json();
+  pageCount = data.pageCount || 1;
+  const tb = F('rows');
+  if(!data.rows || !data.rows.length){
+    tb.innerHTML='<tr><td colspan="11" class="muted">Không có dòng nào (không RO nào ở trạng thái W4P).</td></tr>';
+  } else {
+    tb.innerHTML = data.rows.map(r=>`<tr>
+      <td><input type="checkbox" class="pk" value="${r.partId}"></td>
+      <td>${r.myRowIdx}</td>
+      <td>${esc(r.partCode)}</td>
+      <td>${esc(r.vieName)}</td>
+      <td>${esc(r.roNo)}</td>
+      <td>${esc(r.engName)}</td>
+      <td>${esc(r.unit)}</td>
+      <td class="num">${r.vat}</td>
+      <td class="num">${r.quantity}</td>
+      <td class="muted">(nguồn trống)</td>
+      <td>${esc(r.note)}</td>
+    </tr>`).join('');
+  }
+  F('foot').textContent = `${data.pageTitle} — tổng ${data.total} dòng, cỡ trang ${data.pageSize}.`;
+}
+function prev(){ const v=Math.max(1, parseInt(F('qPage').value||'1')-1); F('qPage').value=v; load(); }
+function next(){ const v=Math.min(pageCount, parseInt(F('qPage').value||'1')+1); F('qPage').value=v; load(); }
+async function pick(){
+  const ids=[...document.querySelectorAll('.pk:checked')].map(x=>parseInt(x.value));
+  const r = await fetch('/api/v1/ropartneeds/select',{method:'POST',headers:H({'Content-Type':'application/json'}),
+    body:JSON.stringify({PartIds:ids, PageSize:parseInt(F('qSize').value), Page:parseInt(F('qPage').value),
+      DealerCode:F('qDealer').value.trim()||null})});
+  const j = await r.json();
+  F('msg').textContent = r.ok ? j.message : j.error;
+  F('msg').className = 'msg ' + (r.ok?'ok':'bad');
+}
+load();
+</script>
+</body></html>

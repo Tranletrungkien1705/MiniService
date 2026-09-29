@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniService — Tra cứu lệnh sửa chữa</title>
+<style>
+  :root{color-scheme:light dark;--line:#8883;--accent:#4f46e5;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:1280px;margin:24px auto;padding:0 16px;line-height:1.5;background:transparent}
+  h1{font-size:20px;margin:0 0 2px} .muted{opacity:.65;font-size:13px} h3{font-size:14px;margin:16px 0 4px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+  label{font-size:12px;opacity:.7;display:block;margin-bottom:2px}
+  input,button,select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit}
+  button{cursor:pointer} button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{opacity:.7;font-size:11px;text-transform:uppercase} .wrap{overflow-x:auto}
+  .chk{display:flex;gap:12px;flex-wrap:wrap;font-size:13px} .chk label{display:flex;gap:4px;align-items:center;opacity:1;font-size:13px;margin:0}
+  .msg{font-size:13px;margin-left:6px} .num{text-align:right} .dot{padding:1px 6px;border-radius:4px;color:#111}
+</style></head>
+<body>
+<h1>Tra cứu lệnh sửa chữa <span class="muted">(port 1:1 FrmROSearchInfo + ROSearchInfoController.cs — Ser_RO)</span></h1>
+<p class="muted">
+  Hai nguồn của CÙNG một màn, đã đối chiếu chéo với nhau:
+  <code>2021.1.TCMotor/Dev/DMSCarSv/V20.2023.Release.V2/TERP.HTCServiceClient/Views/Services/FrmROSearchInfo.cs</code>
+  (bản WinForm) và
+  <code>2023.H.CarServices/13.ClientGate/V10/idn.CarSv/idn.CarService.WebAPI/Controllers/ROSearchInfoController.cs</code>
+  (bản web, <code>SearchDL</code>, biz <code>Ser_RO_GetStatusList02_DL</code> ở
+  <code>11.BackEnd/V10/idn.CarService.Biz/BizCarSv.Master.cs:80967</code>).
+  SQL thật là hàm <strong>đang chạy</strong> <code>Ser_RO_GetStatusList02_New20230220</code>
+  (<code>TERP.BizCarSv/BizCarSv.Service.RO.cs:498</code>), truy từ <code>WSCarSv.asmx:10149</code>;
+  hàm trùng tên <code>Ser_RO_GetStatusList02</code> ở <code>BizCarSv.Service01.cs:1214</code> KHÔNG có chỗ gọi (mã chết).
+  Kết quả giới hạn <strong>TOP 500</strong> bản mới nhất theo ngày vào xưởng (<code>Service.RO.cs:572</code>),
+  sau đó xếp lại tăng dần đúng như <code>SerROService.cs:637</code>.
+</p>
+
+<div class="card">
+  <h3 style="margin-top:0">Điều kiện tìm</h3>
+  <div class="row">
+    <div><label>Từ ngày (ngày vào)</label><input id="qFrom" type="date"></div>
+    <div><label>Đến ngày (ngày vào)</label><input id="qTo" type="date"></div>
+    <div><label>Biển số</label><input id="qPlate" style="width:130px" placeholder="30A12345"></div>
+    <div><label>Số khung (VIN)</label><input id="qFrame" style="width:150px"></div>
+    <div><label>Tên khách hàng</label><input id="qCus" style="width:160px"></div>
+    <div><label>Mã đại lý</label><input id="qDealer" style="width:110px" placeholder="VNN054"></div>
+    <button class="primary" onclick="load()">Tìm</button><span id="msg" class="msg"></span>
+  </div>
+  <div class="chk" id="boxes" style="margin-top:10px"></div>
+  <p class="muted" style="margin:8px 0 0">
+    Mặc định nguồn <strong>không tick ô trạng thái nào</strong> (designer không đặt <code>Checked</code>)
+    ⇒ không lọc trạng thái. Hai ngày mặc định đều là hôm nay (<code>FrmROSearchInfo.cs:209-210</code>).
+    Biển số được bỏ hết <code>' ' . - _</code> ở cả ô nhập và cột DB trước khi so
+    (<code>Service.RO.cs:760-762</code>) nên gõ <code>30A-123.45</code> hay <code>30a12345</code> đều ra.
+    Ô tick “Chờ sửa” chỉ gửi <code>PRT,HRO</code> — <strong>không gửi <code>CRE</code></strong> dù biz coi
+    <code>CRE</code> là “Chờ sửa”; ô “Không dùng” gửi <code>W4P,HPA,NORE</code> nhưng biz trả chữ
+    “Hủy, Hẹn lại”. Hai lệch này của chính nguồn, port y nguyên.
+  </p>
+</div>
+
+<div class="wrap"><table>
+  <thead><tr>
+    <th>STT</th><th>Biển số</th><th>Số khung</th><th>Hãng - Model</th><th>Khách hàng</th><th>Màu</th>
+    <th>CVDV</th><th>Ngày vào</th><th>Hẹn giờ giao xe</th><th>Tình trạng</th>
+    <th>Ngày thanh toán</th><th>Nội dung cv</th><th>Số báo giá</th><th>Số lệnh SC</th><th>Tên CVDV</th>
+  </tr></thead>
+  <tbody id="rows"><tr><td colspan="15" class="muted">Đang tải…</td></tr></tbody>
+</table></div>
+<p class="muted" id="foot"></p>
+
+<p class="muted">
+  Cột <strong>CVDV</strong> bind vào <code>ro.Creator</code>, KHÔNG phải <code>ro.Assistant</code>
+  (<code>FrmROSearchInfo.cs:66</code>) — giữ đúng nguồn. Cột <strong>Số báo giá</strong> =
+  <code>'BG-' + RONo</code>; <strong>Số lệnh SC</strong> = <code>'LS-' + RONo</code> và bị che
+  <code>******</code> khi hồ sơ thuộc đại lý khác (<code>Service.RO.cs:728-736</code>).
+  Màu nền ô biển số/số báo giá theo bảng màu <code>FrmROSearchInfo.cs:389-427</code>; nguồn KHÔNG có màu cho
+  “Hủy, Hẹn lại” và “Không xác định” nên hai trạng thái đó không tô.
+</p>
+<p class="muted">
+  <strong>Lệch đã khai</strong>: (1) đích không có cột <code>ro.PlateNo</code> ghi đè nên ô tìm biển số so trên
+  <code>Ser_Car.PlateNo</code>, còn nguồn so trên <code>ro.PlateNo</code> ⇒ hồ sơ có <code>ro.PlateNo</code> NULL bị nguồn
+  loại mà đích vẫn thấy; (2) không có bảng <code>mst_dealer</code> nên cột <code>DealerName</code> chưa port;
+  (3) cờ “Dữ liệu lịch sử” gọi nhánh <code>*_WH</code> trên DB Warehouse — đích chỉ một DB nên chưa port;
+  (4) <code>LIKE</code> của SQLite chỉ bỏ hoa/thường với ASCII nên tìm “Văn”/“VĂN” chưa tương đương collation
+  tiếng Việt của SQL Server.
+</p>
+<h3>Hai bản nguồn lệch nhau ở đâu (đối chiếu chéo WinForm ⇄ web)</h3>
+<ul class="muted">
+  <li><strong>Ô tìm biển số của bản WEB bị hỏng.</strong> Biz web cũng chuẩn hoá cột bằng
+    <code>REPLACE(...)</code> (<code>BizCarSv.Master.cs</code>, <code>PlateNoProxy</code>) nhưng controller
+    ghép mẫu thẳng <code>"%" + strPlateNo + "%"</code> (<code>ROSearchInfoController.cs:251</code>)
+    mà KHÔNG bỏ <code>' ' . - _</code> như bản WinForm
+    (<code>BizCarSv.Service.RO.cs:760</code>) ⇒ gõ <code>30A-123.45</code> trên web ra 0 dòng.
+    Đích chuẩn hoá cả hai vế theo bản WinForm (đúng) và khai lệch này.</li>
+  <li><strong>Sắp xếp</strong>: bản WinForm xếp lại TĂNG ở client; bản web có dòng
+    <code>dv_ROSearchInfo.Sort = "CheckInDate ASC"</code> <em>bị comment</em>
+    (<code>ROSearchInfoController.cs:363-365</code>) nhưng biz đã đánh <code>Row_Number()</code> theo
+    <code>CheckInDate asc, ROID asc</code> nên kết quả vẫn TĂNG. Hai bản trùng nhau ⇒ đích xếp TĂNG.</li>
+  <li><strong>Giới hạn dòng</strong>: WinForm <code>TOP 500</code>; web phân trang
+    <code>Ft_PageIndex/Ft_PageSize</code> (mặc định 0/10). Đích hỗ trợ cả hai:
+    không truyền <code>pageSize</code> ⇒ TOP 500; truyền ⇒ trả thêm <code>itemCount</code>/<code>pageCount</code>.</li>
+  <li><strong>Bản web KHÔNG có</strong> ô “số báo giá”, khoảng “ngày giao xe thực tế”, cờ “Dữ liệu lịch sử” ở
+    <code>SearchDL</code> (truyền <code>""</code> — <code>ROSearchInfoController.cs:242-247</code>); có hàm riêng
+    <code>SearchWHDL</code> cho DB Warehouse.</li>
+  <li><strong>Cột “Tên CVDV” chỉ có ở bản web</strong> (<code>ROSearchInfo.cs:20</code>,
+    <code>isnull(su.UserName, ro.Creator)</code>); đích chưa có bảng người dùng nên luôn ra nhánh
+    <code>ro.Creator</code>.</li>
+</ul>
+
+<script>
+const H = {'X-Api-Key':'demo-service'};   // = TenantContext.DefaultApiKey
+const boxes = [];
+function fmtDate(s, withHour){ if(!s) return ''; const d=new Date(s); if(isNaN(d)) return '';
+  const p=n=>String(n).padStart(2,'0');
+  return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+(withHour?(' '+p(d.getHours())+':'+p(d.getMinutes())):''); }
+function esc(s){ return (s??'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+async function initBoxes(){
+  const r = await fetch('/api/v1/rosearch/statusboxes',{headers:H});
+  const bs = await r.json();
+  document.getElementById('boxes').innerHTML = bs.map((b,i)=>
+    `<label><input type="checkbox" id="b${i}" data-codes="${b.codes.join('|')}"> ${esc(b.caption)}</label>`).join('');
+  bs.forEach((b,i)=>boxes.push({id:'b'+i, codes:b.codes}));
+}
+function pickedCodes(){
+  const out=[];
+  for(const b of boxes) if(document.getElementById(b.id).checked) out.push(...b.codes);
+  return out;
+}
+async function load(){
+  const q = new URLSearchParams();
+  const f=document.getElementById('qFrom').value, t=document.getElementById('qTo').value;
+  if(f) q.set('checkInFrom', f); if(t) q.set('checkInTo', t);
+  const p=document.getElementById('qPlate').value.trim(); if(p) q.set('plateNo', p);
+  const fr=document.getElementById('qFrame').value.trim(); if(fr) q.set('frameNo', fr);
+  const c=document.getElementById('qCus').value.trim(); if(c) q.set('cusName', c);
+  const d=document.getElementById('qDealer').value.trim(); if(d) q.set('dealerCode', d);
+  const codes = pickedCodes(); if(codes.length) q.set('status', codes.join('|'));
+  const res = await fetch('/api/v1/rosearch?'+q.toString(),{headers:H});
+  const data = await res.json();
+  const tb = document.getElementById('rows');
+  if(!data.rows || !data.rows.length){ tb.innerHTML='<tr><td colspan="15" class="muted">Không có dòng nào.</td></tr>';
+    document.getElementById('foot').textContent='0 dòng.'; return; }
+  tb.innerHTML = data.rows.map((r,i)=>{
+    const st = r.rowColor ? ` style="background:${r.rowColor}" class="dot"` : '';
+    return `<tr>
+      <td>${i+1}</td>
+      <td${st}>${esc(r.plateNo)}</td>
+      <td>${esc(r.frameNo)}</td>
+      <td>${esc(r.tradeMarkNameModel)}</td>
+      <td>${esc(r.cusName)}</td>
+      <td>${esc(r.colorCode)}</td>
+      <td>${esc(r.creator)}</td>
+      <td>${fmtDate(r.checkInDate,true)}</td>
+      <td>${fmtDate(r.planedDeliveryDate,true)}</td>
+      <td>${esc(r.statusName)} <span class="muted">(${esc(r.statusCode)})</span></td>
+      <td>${fmtDate(r.paidCreatedDate,true)}</td>
+      <td>${esc(r.cusRequest)}</td>
+      <td${st}>${esc(r.roRoNo)}</td>
+      <td>${esc(r.normalizedRoNo)}</td>
+      <td>${esc(r.creatorName)}</td>
+    </tr>`;}).join('');
+  document.getElementById('foot').textContent = data.total + ' dòng (bản WinForm: tối đa 500 bản mới nhất).';
+}
+initBoxes().then(load);
+</script>
+</body></html>

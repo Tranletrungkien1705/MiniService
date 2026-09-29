@@ -55,6 +55,14 @@ builder.Services.AddSingleton<ICache, RedisCache>();          // Redis cache (m�
 builder.Services.AddScoped<IIntegrationService, IntegrationService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<IRoService, RoService>();
+// 3 màn port 1:1 từ DMSCarSv: phiếu YC xuất kho / báo giá phụ tùng / đơn đặt phụ tùng.
+builder.Services.AddScoped<IStockReqService, StockReqService>();
+builder.Services.AddScoped<IPartQuotationService, PartQuotationService>();
+builder.Services.AddScoped<IPartOrderService, PartOrderService>();
+// Đợt 2 — 3 màn port 1:1 nữa: tra cứu lệnh sửa chữa / phụ tùng RO đợi hàng / bảng kê phiếu thu.
+builder.Services.AddScoped<ISerRoSearchService, SerRoSearchService>();
+builder.Services.AddScoped<IRoPartNeedService, RoPartNeedService>();
+builder.Services.AddScoped<ISerPaymentReportService, SerPaymentReportService>();
 // SSO chung: tin token MiniSSO (OIDC RS256).
 var ssoAuthority = Environment.GetEnvironmentVariable("SSO_AUTHORITY") ?? "https://minisso.onrender.com";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(o =>

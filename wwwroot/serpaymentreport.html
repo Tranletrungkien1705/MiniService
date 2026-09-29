@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniService — Bảng kê phiếu thu dịch vụ</title>
+<style>
+  :root{color-scheme:light dark;--line:#8883;--accent:#4f46e5;--ok:#16a34a;--bad:#dc2626;--warn:#d97706}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;max-width:1280px;margin:24px auto;padding:0 16px;line-height:1.5;background:transparent}
+  h1{font-size:20px;margin:0 0 2px} .muted{opacity:.65;font-size:13px} h3{font-size:14px;margin:16px 0 4px}
+  .card{border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+  label{font-size:12px;opacity:.7;display:block;margin-bottom:2px}
+  input,button,select{font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:inherit}
+  button{cursor:pointer} button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{opacity:.7;font-size:11px;text-transform:uppercase} .wrap{overflow-x:auto}
+  tfoot td{font-weight:600;border-top:2px solid var(--line)}
+  .chk{display:flex;gap:12px;flex-wrap:wrap;font-size:13px} .chk label{display:flex;gap:4px;align-items:center;opacity:1;font-size:13px;margin:0}
+  .msg{font-size:13px;margin-left:6px} .num{text-align:right} .bad{color:var(--bad)} .ok{color:var(--ok)}
+</style></head>
+<body>
+<h1>Bảng kê phiếu thu dịch vụ <span class="muted">(port 1:1 FrmReportSerPaymentGet — Ser_Payment)</span></h1>
+<p class="muted">
+  Nguồn: <code>2021.1.TCMotor/Dev/DMSCarSv/V20.2023.Release.V2/TERP.HTCServiceClient/Views/Debit/FrmReportSerPaymentGet.cs</code>;
+  SQL đang chạy ở <code>TERP.BizCarSv/BizCarSv.Debit.cs:3679-3708</code> (<code>SerPaymentGet</code>,
+  truy từ <code>WSCarSv.asmx:18647</code>). Lập phiếu thu theo
+  <code>BizCarSv.Debit.cs:2800-2890</code>, sinh số phiếu theo <code>:3414-3462</code> + <code>:357-422</code>.
+</p>
+
+<div class="card">
+  <h3 style="margin-top:0">Kỳ thống kê</h3>
+  <div class="row">
+    <div><label>Từ ngày</label><input id="qFrom" type="date"></div>
+    <div><label>Đến ngày</label><input id="qTo" type="date"></div>
+    <div><label>Mã đại lý</label><input id="qDealer" style="width:110px" placeholder="VNN054"></div>
+    <button class="primary" onclick="load()">Tìm</button><span id="msg" class="msg"></span>
+  </div>
+  <div class="chk" style="margin-top:10px">
+    <label><input type="checkbox" id="t1"> Khách hàng</label>
+    <label><input type="checkbox" id="t2"> Bảo hiểm</label>
+  </div>
+  <p class="muted" style="margin:8px 0 0">
+    Mặc định nguồn: từ ngày = <strong>ngày đầu tháng</strong>, đến ngày = <strong>hôm nay</strong>
+    (<code>FrmReportSerPaymentGet.cs:182-183</code>). Không tick ô nào ⇒ vẫn lấy cả hai loại vì SQL
+    chốt cứng <code>p.PaymentType in ('1','2')</code> (<code>Debit.cs:3707</code>).
+    Khoảng ngày so bằng <code>datediff(day, …)</code> nên <strong>bao gồm cả hai đầu ngày</strong>
+    (<code>:3705-3706</code>) — khác màn phiếu yêu cầu xuất kho đợt trước vốn cắt mất phần cuối “đến ngày”.
+  </p>
+</div>
+
+<div class="wrap"><table>
+  <thead><tr>
+    <th>STT</th><th>Ngày</th><th>Số phiếu thu</th><th>Tên khách hàng</th><th>Số ĐT khách hàng</th>
+    <th>Người thanh toán</th><th>Mã hãng BH</th><th>Tên hãng BH</th><th>Số ĐT hãng BH</th>
+    <th>Ghi chú</th><th class="num">Tổng số</th><th>Loại PT</th>
+  </tr></thead>
+  <tbody id="rows"><tr><td colspan="12" class="muted">Đang tải…</td></tr></tbody>
+  <tfoot><tr><td colspan="10">Tổng:</td><td class="num" id="sum">0</td><td></td></tr></tfoot>
+</table></div>
+<p class="muted" id="foot"></p>
+
+<div class="card">
+  <h3 style="margin-top:0">Lập phiếu thu (thử guard bằng số thật)</h3>
+  <div class="row">
+    <div><label>Mã đại lý *</label><input id="cDealer" style="width:110px" value="VNN054"></div>
+    <div><label>Mã khách hàng</label><input id="cCus" type="number" style="width:110px"></div>
+    <div><label>Số tiền *</label><input id="cAmt" style="width:130px" value="500000"></div>
+    <div><label>Người thanh toán</label><input id="cPerson" style="width:160px"></div>
+    <div><label>Số CMND/CCCD</label><input id="cId" style="width:140px"></div>
+    <div><label>Ngày thu *</label><input id="cDate" type="date"></div>
+    <div><label>Loại</label><select id="cType"><option value="1">1 — Khách hàng</option><option value="2">2 — Bảo hiểm</option></select></div>
+    <div><label>Ghi chú</label><input id="cNote" style="width:180px"></div>
+    <button class="primary" onclick="create()">Lập phiếu</button><span id="msg2" class="msg"></span>
+  </div>
+  <p class="muted" style="margin:8px 0 0">
+    Chỉ <strong>bốn</strong> guard được port vì đó là bốn guard ĐANG CHẠY
+    (<code>checkPaymentFieldEmpty</code>, <code>Debit.cs:69-134</code>): thiếu mã đại lý (<code>:78</code>),
+    thiếu số tiền (<code>:87</code>), số tiền không phải số (<code>:96-104</code>), thiếu ngày thu (<code>:126</code>).
+    Hai guard “thiếu người thanh toán” và “thiếu số CMND” nằm trong khối
+    <code>/* … */</code> ở <code>:106-124</code> ⇒ <strong>mã chết, KHÔNG port</strong> — vì thế hai ô đó để trống vẫn lập được phiếu.
+    Số phiếu sinh dạng <code>PT-&lt;đại lý&gt;-&lt;yyMMdd&gt;-&lt;001&gt;</code>.
+  </p>
+</div>
+
+<h3>Cột / hành vi đã khai lệch</h3>
+<ul class="muted">
+  <li><strong>Cột “PAYPERSONIDCAR” của nguồn luôn rỗng.</strong> Grid bind field
+    <code>"PAYPERSONIDCAR"</code> (<code>FrmReportSerPaymentGet.cs:56</code>) trong khi cột DB thật là
+    <code>PayPersonIDCardNo</code> (<code>DbDefine.cs:1535</code>, <code>Debit.cs:2873</code>) — tên thành viên ≠
+    tên cột DB. Designer cũng để nguyên caption <code>"PAYPERSONIDCAR"</code> và
+    <code>Visible = false</code>. Đích lưu và trả đúng <code>payPersonIDCardNo</code>, không hiển thị trên bảng
+    (đúng như nguồn ẩn cột), và khai bug này.</li>
+  <li><strong>Bốn cột nhà cung cấp bị ẩn ở nguồn</strong> (<code>SUPPLIERID/SUPPLIERCODE/SUPPLIERNAME/SPPPHONE</code>,
+    <code>Visible = false</code>): đích giữ <code>supplierId</code> trong dữ liệu, còn mã/tên/ĐT NCC
+    <strong>cố ý bỏ</strong> vì chưa có bảng master nhà cung cấp.</li>
+  <li><strong>Tên/ĐT hãng bảo hiểm</strong> nguồn lấy qua join <code>ser_insurance</code>; đích chưa có master đó
+    nên lưu phi chuẩn hoá ngay trên phiếu thu — khai rõ là đổi nguồn lấy dữ liệu, không phải bỏ cột.</li>
+  <li><strong>Số ĐT khách hàng</strong>: nguồn <code>isnull(cus.tel, cus.mobile)</code> (2 cột), đích chỉ có
+    <code>Phone</code> (1 cột) — lệch đã khai từ đợt trước.</li>
+  <li><strong>Nguồn để trống “đến ngày” sẽ ra 0 dòng</strong> vì <code>convert(datetime, '', 20)</code> của SQL Server
+    thành 1900-01-01 (<code>Debit.cs:3706</code>). Đích coi trống = không chặn đầu đó — <em>lệch có chủ đích</em>.</li>
+  <li><strong>Kết xuất Excel / in Crystal</strong> (<code>btnExportExcel_Click</code>, <code>btnPrint_Click</code>) dùng
+    <code>SaveFileDialog</code> + DevExpress/Crystal nên không port.</li>
+  <li><strong>Cờ “Dữ liệu lịch sử”</strong> gọi nhánh <code>Ser_Payment_get_WH</code> trên DB Warehouse — đích một DB, không port.</li>
+</ul>
+
+<script>
+const KEY="demo-service"; const F=id=>document.getElementById(id);
+function H(extra){ return Object.assign({"X-Api-Key":KEY}, extra||{}); }
+function esc(s){ return (s??'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function n0(v){ return (v??0).toLocaleString('vi-VN'); }
+function d10(s){ if(!s) return ''; const d=new Date(s); if(isNaN(d)) return '';
+  const p=x=>String(x).padStart(2,'0'); return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear(); }
+
+async function load(){
+  const p = new URLSearchParams();
+  if(F('qFrom').value) p.set('fromDate', F('qFrom').value);
+  if(F('qTo').value) p.set('toDate', F('qTo').value);
+  const ts=[]; if(F('t1').checked) ts.push('1'); if(F('t2').checked) ts.push('2');
+  if(ts.length) p.set('type', ts.join('|'));
+  const d=F('qDealer').value.trim(); if(d) p.set('dealerCode', d);
+  const r = await fetch('/api/v1/serpayments?'+p.toString(),{headers:H()});
+  const data = await r.json();
+  F('qFrom').value = data.fromDate; F('qTo').value = data.toDate;
+  const tb=F('rows');
+  if(!data.rows || !data.rows.length){ tb.innerHTML='<tr><td colspan="12" class="muted">Không có phiếu thu nào trong kỳ.</td></tr>'; }
+  else tb.innerHTML = data.rows.map((r,i)=>`<tr>
+      <td>${i+1}</td><td>${d10(r.payDate)}</td><td>${esc(r.paymentNo)}</td>
+      <td>${esc(r.cusName)}</td><td>${esc(r.cusPhone)}</td><td>${esc(r.payPersonName)}</td>
+      <td>${esc(r.insNo)}</td><td>${esc(r.insName)}</td><td>${esc(r.insPhone)}</td>
+      <td>${esc(r.note)}</td><td class="num">${n0(r.paymentAmount)}</td><td>${esc(r.paymentTypeText)}</td>
+    </tr>`).join('');
+  F('sum').textContent = n0(data.sumAmount);
+  F('foot').textContent = `${data.total} phiếu — kỳ ${data.fromDate} → ${data.toDate}.`;
+}
+async function create(){
+  const body = {
+    DealerCode: F('cDealer').value.trim() || null,
+    CusId: F('cCus').value ? parseInt(F('cCus').value) : null,
+    PaymentAmount: F('cAmt').value,
+    PayPersonName: F('cPerson').value.trim() || null,
+    PayPersonIDCardNo: F('cId').value.trim() || null,
+    PayDate: F('cDate').value || null,
+    Note: F('cNote').value.trim() || null,
+    PaymentType: F('cType').value
+  };
+  const r = await fetch('/api/v1/serpayments',{method:'POST',headers:H({'Content-Type':'application/json'}),body:JSON.stringify(body)});
+  const j = await r.json();
+  F('msg2').textContent = r.ok ? j.message : j.error;
+  F('msg2').className = 'msg ' + (r.ok?'ok':'bad');
+  if(r.ok) load();
+}
+F('cDate').value = new Date().toISOString().slice(0,10);
+load();
+</script>
+</body></html>

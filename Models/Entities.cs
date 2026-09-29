@@ -55,6 +55,9 @@ public class Car : IOrgOwned
     public string? EngineNo { get; set; }
     public string? Color { get; set; }           // ColorCode
     public int CurrentKm { get; set; }
+    // Đợt 2 — màn FrmROSearchInfo cần cột "Hãng - Model" = tm.TradeMarkName + ' - ' + mdl.ModelName
+    // (BizCarSv.Service.RO.cs:697). Đích chỉ có Model nên bổ sung tên hãng.
+    public string? TradeMarkName { get; set; }    // ser_mst_TradeMark.TRADEMARKNAME
     public int CustomerId { get; set; }
     public Customer Customer { get; set; } = null!;
 }
@@ -76,8 +79,11 @@ public class RepairOrder : IOrgOwned
     public DateTime? ExpectedDelivery { get; set; } // ngày hẹn trả xe
     public string CreatedBy { get; set; } = "";
     public DateTime CreatedAt { get; set; } = DateTime.Now;
-    public DateTime? IntakeAt { get; set; }        // xe vào xưởng (INGA)
-    public DateTime? FinishedAt { get; set; }      // giao xe (FNS)
+    public DateTime? IntakeAt { get; set; }        // xe vào xưởng (INGA) = Ser_RO.CHECKINDATE (DbDefine.cs:813)
+    public DateTime? FinishedAt { get; set; }      // giao xe (FNS) = Ser_RO.ACTUALDELIVERYDATE (DbDefine.cs:817)
+    // ---- Đợt 2: hai cột màn FrmROSearchInfo cần mà đích chưa có ----
+    public string? DealerCode { get; set; }        // Ser_RO.DEALERCODE — DbDefine.cs:795
+    public DateTime? PaidCreatedDate { get; set; } // Ser_RO.PAIDCREATEDDATE — DbDefine.cs:851 (cột grid "Ngày thanh toán")
 
     // Tích hợp HĐĐT: khi quyết toán (PAID) tự đẩy hóa đơn sang MiniTVAN → lên cơ quan thuế.
     public string? EInvoiceCode { get; set; }      // mã tra cứu CQT cấp
@@ -109,6 +115,9 @@ public class RepairLine : IOrgOwned
     public decimal Quantity { get; set; } = 1;
     public decimal UnitPrice { get; set; }
     public int? PartId { get; set; }              // dòng phụ tùng gắn mã kho → xuất kho
+    // ---- Đợt 2: hai cột của Ser_ROPartItems mà màn FrmPartROSearch đọc ----
+    public decimal Vat { get; set; }              // Ser_ROPartItems.VAT — DbDefine.cs:1004
+    public string? Note { get; set; }             // Ser_ROPartItems.NOTE — DbDefine.cs:1005
     public decimal Amount => Quantity * UnitPrice;
     public RepairOrder RO { get; set; } = null!;
 }
@@ -125,6 +134,9 @@ public class Part : IOrgOwned
     public decimal Price { get; set; }            // giá bán
     public int OnHand { get; set; }               // tồn kho
     public int MinStock { get; set; } = 5;        // định mức cảnh báo
+    // ---- Đợt 2: hai cột của Ser_MST_Part mà màn FrmPartROSearch đọc ----
+    public string? EngName { get; set; }          // Ser_MST_Part.ENGNAME (cột grid "Tên TA") — DbDefine.cs:671
+    public string IsActive { get; set; } = "1";   // Ser_MST_Part.ISACTIVE — DbDefine.cs:683; Flag.Active='1' (Const.Main.cs:28)
     public bool LowStock => OnHand <= MinStock;
     public decimal StockValue => OnHand * Price;
 }
@@ -154,8 +166,23 @@ public class Payment : IOrgOwned
     public Guid OrgId { get; set; }
     public int ROId { get; set; }
     public string ROCode { get; set; } = "";
-    public decimal Amount { get; set; }
+    public decimal Amount { get; set; }           // Ser_Payment.PAYMENTAMOUNT — DbDefine.cs:1533 (đổi tên)
     public PayMethod Method { get; set; }
-    public string? Note { get; set; }
-    public DateTime PaidAt { get; set; } = DateTime.Now;
+    public string? Note { get; set; }             // Ser_Payment.NOTE — DbDefine.cs:1537
+    public DateTime PaidAt { get; set; } = DateTime.Now;  // Ser_Payment.PAYDATE — DbDefine.cs:1536 (đổi tên)
+    // ---- Đợt 2: các cột Ser_Payment mà màn FrmReportSerPaymentGet đọc ----
+    // (Ser_Payment ở nguồn nằm trên DB Main/CommonCenter — BizCarSv.Debit.cs:3694; đích chỉ 1 DB.)
+    public string? PaymentNo { get; set; }            // PAYMENTNO — DbDefine.cs:1530; sinh 'PT-<dealer>-<yymmdd>-<001>'
+    public string? DealerCode { get; set; }           // DEALERCODE — DbDefine.cs:1531
+    public int? CustomerId { get; set; }              // CUSID — DbDefine.cs:1532 (join ser_customer lấy tên/ĐT)
+    public string? PayPersonName { get; set; }        // PAYPERSONNAME — DbDefine.cs:1534
+    public string? PayPersonIDCardNo { get; set; }    // PAYPERSONIDCARDNO — DbDefine.cs:1535
+    public string? InsNo { get; set; }                // INSNO — DbDefine.cs:456 (mã hãng bảo hiểm)
+    /// <summary>ins.InsVieName — đích CHƯA có master ser_insurance nên lưu phi chuẩn hoá tại chỗ.</summary>
+    public string? InsName { get; set; }
+    /// <summary>ins.TelePhone — như trên, lưu phi chuẩn hoá (DbDefine.cs:461).</summary>
+    public string? InsPhone { get; set; }
+    public int? SupplierId { get; set; }             // SUPPLIERID — DbDefine.cs:1118 (cột ẩn trên grid nguồn)
+    /// <summary>PAYMENTTYPE: '1' Khách hàng / '2' Bảo hiểm — BizCarSv.Debit.cs:3688-3693.</summary>
+    public string PaymentType { get; set; } = SerPaymentType.Customer;
 }
