@@ -68,7 +68,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
     };
 });
 builder.Services.AddAuthorization();
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(o =>
+{
+    o.Filters.Add<PortJsonResultFilter>();   // controller port 1-1: JSON PascalCase + ngoai le -> 400 PortResult.Fail
+    o.Filters.Add<PortExceptionFilter>();
+});
 builder.Services.AddEndpointsApiExplorer();                  // Swagger/OpenAPI
 builder.Services.AddSwaggerGen(c => c.SwaggerDoc("v1", new() { Title = "MiniService API", Version = "v1", Description = "Car Service (RO) — API-first cho SPA + tích hợp HĐĐT" }));
 
