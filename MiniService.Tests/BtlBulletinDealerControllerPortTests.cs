@@ -28,6 +28,7 @@ public class BtlBulletinDealerControllerPortTests : IDisposable
         _db = new AppDbContext(opt, new TenantContext());
         _db.Database.EnsureCreated();
         new Btl_BulletinSeeder().SeedAsync(_db).GetAwaiter().GetResult();
+        new Btl_BulletinDtlSeeder().SeedAsync(_db).GetAwaiter().GetResult();
         _controller = new BtlBulletinDealerControllerPort(_db);
         _controller.ControllerContext = new ControllerContext
         {
@@ -254,5 +255,70 @@ public class BtlBulletinDealerControllerPortTests : IDisposable
         var root = Root(await _controller.GetAllActiveByVIN(new BtlBulletinDealer_GetAllActiveByVINReq { VIN = "RLHXXAC001" }));
         var list = root.GetProperty("Data").GetProperty("DataList");
         Assert.Equal(0, list.GetArrayLength());
+    }
+
+    // ---- GetAllActiveByVINMapStatusP (Gate :757-999 -> Biz :100-261 Blt_Bulletin_GetByVin_DL) ----
+
+    [Fact]
+    public async Task GetAllActiveByVINMapStatusP_BodyRong_TraChiTietCuaBanTinPendingConHan()
+    {
+        // Gate :845 — VIN rỗng ⇒ bỏ mệnh đề VIN; gate :849-850 — Status = PENDING, FlagActive = '1'.
+        // Gate :917-937 — bỏ bản tin hết hạn (BLT004).
+        // Seed: bản tin PENDING + Active + còn hạn = BLT001, BLT006 ⇒ chi tiết BLTD001, BLTD002, BLTD005 = 3 dòng.
+        var root = Root(await _controller.GetAllActiveByVINMapStatusP(null));
+
+        Assert.True(root.GetProperty("Success").GetBoolean());
+        var data = root.GetProperty("Data");
+        var list = data.GetProperty("DataList");
+        Assert.Equal(3, list.GetArrayLength());
+        Assert.Equal("BLTD001", list[0].GetProperty("BulletinDtlID").GetString());
+        Assert.Equal("BLTD002", list[1].GetProperty("BulletinDtlID").GetString());
+        Assert.Equal("BLTD005", list[2].GetProperty("BulletinDtlID").GetString());
+        // Gate :853-854 — pageIndex = 0, pageSize = 0.
+        Assert.Equal(0, data.GetProperty("PageIndex").GetInt32());
+        Assert.Equal(0, data.GetProperty("PageSize").GetInt32());
+    }
+
+    [Fact]
+    public async Task GetAllActiveByVINMapStatusP_VIN1_ChiTraChiTietCuaVINDo()
+    {
+        // Gate :848 — VIN = @VIN; BLT001, BLT002 còn hạn ⇒ chi tiết BLTD001, BLTD002 (2 dòng).
+        var root = Root(await _controller.GetAllActiveByVINMapStatusP(
+            new BtlBulletinDealer_GetAllActiveByVINMapStatusPReq { VIN = "RLHXXAC001" }));
+        var list = root.GetProperty("Data").GetProperty("DataList");
+        Assert.Equal(2, list.GetArrayLength());
+        Assert.Equal("BLTD001", list[0].GetProperty("BulletinDtlID").GetString());
+        Assert.Equal("BLTD002", list[1].GetProperty("BulletinDtlID").GetString());
+    }
+
+    [Fact]
+    public async Task GetAllActiveByVINMapStatusP_VIN2_RaSoDongKhac()
+    {
+        // Bộ lọc thứ hai ra số dòng khác: VIN RLHXXTC002 ⇒ BLT006 (PENDING, còn hạn) ⇒ chi tiết BLTD005 (1 dòng).
+        var root = Root(await _controller.GetAllActiveByVINMapStatusP(
+            new BtlBulletinDealer_GetAllActiveByVINMapStatusPReq { VIN = "RLHXXTC002" }));
+        var list = root.GetProperty("Data").GetProperty("DataList");
+        Assert.Equal(1, list.GetArrayLength());
+        Assert.Equal("BLTD005", list[0].GetProperty("BulletinDtlID").GetString());
+    }
+
+    [Fact]
+    public async Task GetAllActiveByVINMapStatusP_VINKhongCo_TraDanhSachRong()
+    {
+        // VIN không có dòng nào ⇒ DataList rỗng (PageInfo, không phải null).
+        var root = Root(await _controller.GetAllActiveByVINMapStatusP(
+            new BtlBulletinDealer_GetAllActiveByVINMapStatusPReq { VIN = "KHONGCO" }));
+        Assert.True(root.GetProperty("Success").GetBoolean());
+        Assert.Equal(0, root.GetProperty("Data").GetProperty("DataList").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task GetAllActiveByVINMapStatusP_BanTinHetHan_ChiTietBiBo()
+    {
+        // Gate :917-937 — BLT004 hết hạn ⇒ bị bỏ khỏi dtBulletinActive; gate :945-957 — chi tiết BLTD004 cũng bị bỏ.
+        var root = Root(await _controller.GetAllActiveByVINMapStatusP(
+            new BtlBulletinDealer_GetAllActiveByVINMapStatusPReq { VIN = "RLHXXAC001" }));
+        var list = root.GetProperty("Data").GetProperty("DataList");
+        Assert.DoesNotContain(list.EnumerateArray(), x => x.GetProperty("BulletinDtlID").GetString() == "BLTD004");
     }
 }

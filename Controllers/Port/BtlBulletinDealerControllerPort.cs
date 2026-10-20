@@ -255,7 +255,85 @@ public class BtlBulletinDealerControllerPort : ControllerBase
         });
     }
 
-    // Gate :620-621 — Ft_RecordStart / Ft_RecordCount là thuộc tính của BaseController nguồn; giá trị KHÔNG có trong
+    /// <summary>
+    /// Lấy chi tiết bản tin (Btl_BulletinDtl) còn hiệu lực theo số VIN — bản MapStatusP.
+    /// Gate: BtlBulletinDealerController.cs:757-999 GetAllActiveByVINMapStatusP(VIN).
+    /// Biz:  BizCarSv.Bulletin.cs:100-261 Blt_Bulletin_GetByVin_DL -> Blt_Bulletin_GetByVinX.
+    /// </summary>
+    [HttpPost("getallactivebyvinmapstatusp")]
+    public async Task<IActionResult> GetAllActiveByVINMapStatusP(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] BtlBulletinDealer_GetAllActiveByVINMapStatusPReq? req = null)
+    {
+        // Gate :845 — strVIN = StdStr(VIN) (Trim, rỗng -> null).
+        var strVIN = StdStr(req?.VIN);
+
+        // Gate :847-850 — các danh sách điều kiện:
+        //   strDealerCodeConditionList = "" (gate :847)                    ⇒ bỏ mệnh đề
+        //   strVINConditionList        = GenEqualConditionSingle(strVIN)   ⇒ VIN = @VIN
+        //   strStatusConditionList     = GenEqualConditionSingle(TConst.Stage.Pending) ⇒ Status = 'PENDING'
+        //   strIsActive                = TConst.Flag.Active                ⇒ FlagActive = '1'
+        // Gate :853-854 — pageIndex = 0, pageSize = 0 (PageInfo rỗng, không phân trang).
+        // Gate :863-864 — strFt_RecordStart = Ft_RecordStart, strFt_RecordCount = Ft_RecordCount (BaseController).
+        var recordStart = Ft_RecordStart;
+        var recordCount = Ft_RecordCount;
+
+        // Biz :191-216 — Blt_Bulletin_GetByVinX với các bộ lọc trên (các danh sách "" ⇒ bỏ mệnh đề).
+        var query = _db.Set<Btl_Bulletin>().AsNoTracking()
+            .Where(x => EF.Functions.Like((x.FlagActive ?? "").ToLower(), PortQuery.Equal("1"), PortQuery.Esc))
+            .Where(x => EF.Functions.Like((x.Status ?? "").ToLower(), PortQuery.Equal("PENDING"), PortQuery.Esc));
+        if (strVIN != null)
+            query = query.Where(x => EF.Functions.Like((x.VIN ?? "").ToLower(), PortQuery.Equal(strVIN), PortQuery.Esc));
+
+        // Gate :863-864 — Ft_RecordStart / Ft_RecordCount của BaseController (giá trị KHÔNG có trong excerpt — xem GAP).
+        if (recordStart > 0)
+            query = query.Skip((int)Math.Min(recordStart, int.MaxValue));
+        if (recordCount > 0)
+            query = query.Take((int)Math.Min(recordCount, int.MaxValue));
+
+        var lst_Btl_Bulletin = await query.ToListAsync();
+
+        // Gate :917-937 — Bỏ bản tin hết hạn: DateExpired rỗng hoặc "0001-01-01" ⇒ bỏ;
+        // còn lại giữ khi (DateExpired - hôm nay).TotalDays >= 0.
+        var dtBulletinActive = new List<Btl_Bulletin>();
+        foreach (var dtrw in lst_Btl_Bulletin)
+        {
+            var strDateExpired = dtrw.DateExpired ?? "";
+            if (!string.IsNullOrEmpty(strDateExpired) && strDateExpired != DateTime.MinValue.ToString("yyyy-MM-dd"))
+            {
+                if (!DateTime.TryParse(strDateExpired, out var dateExpiredCur)) continue;
+                var dateExpiredCal = new DateTime(dateExpiredCur.Year, dateExpiredCur.Month, dateExpiredCur.Day);
+                var datenow = DateTime.Now;
+                var datenowCal = new DateTime(datenow.Year, datenow.Month, datenow.Day);
+                var day = (dateExpiredCal - datenowCal).TotalDays;
+                if (day >= 0) dtBulletinActive.Add(dtrw);
+            }
+        }
+
+        // Gate :941-959 — Bỏ chi tiết của bản tin hết hạn: chỉ giữ Btl_BulletinDtl có BulletinID thuộc dtBulletinActive
+        // (so bằng StdParam + StringEqual ⇒ phân biệt hoa/thường, xem LESSONS A.17).
+        var activeBulletinIds = new HashSet<string>(
+            dtBulletinActive.Select(x => StdParam(x.BulletinID) ?? ""), StringComparer.Ordinal);
+        var lst_Btl_BulletinDtl = await _db.Set<Btl_BulletinDtl>().AsNoTracking()
+            .Where(x => activeBulletinIds.Contains(x.BulletinID))
+            .ToListAsync();
+
+        // Gate :963-965 — pageInfo.DataList.AddRange(lst_Btl_BulletinDtl); msgResult._objResult = pageInfo.
+        // Gate :970 — Result<CMyMsgResult>(msgResult) ⇒ Success = true, Data = PageInfo.
+        return Ok(new
+        {
+            Success = true,
+            Data = new PageInfo<Btl_BulletinDtl>(lst_Btl_BulletinDtl, 0, 0, 0, 0)
+        });
+    }
+
+    /// <summary>TUtils.CUtils.StdParam: Trim + ToUpper, rỗng -> null (PORT_RULES mục 3).</summary>
+    private static string? StdParam(string? value)
+    {
+        var s = value?.Trim().ToUpperInvariant();
+        return string.IsNullOrEmpty(s) ? null : s;
+    }
+
+    // Gate :863-864 — Ft_RecordStart / Ft_RecordCount là thuộc tính của BaseController nguồn; giá trị KHÔNG có trong
     // source_excerpt.txt ⇒ GAP, không tự đặt giá trị (dùng 0 = không cắt dòng).
     private const int Ft_RecordStart = 0;
     private const int Ft_RecordCount = 0;
@@ -289,6 +367,14 @@ public class BtlBulletinDealer_SearchWHDLReq
 /// Body của GetAllActiveByVIN — 1 tham số của gate (BtlBulletinDealerController.cs:513-515).
 /// </summary>
 public class BtlBulletinDealer_GetAllActiveByVINReq
+{
+    public string? VIN { get; set; }
+}
+
+/// <summary>
+/// Body của GetAllActiveByVINMapStatusP — 1 tham số của gate (BtlBulletinDealerController.cs:757-759).
+/// </summary>
+public class BtlBulletinDealer_GetAllActiveByVINMapStatusPReq
 {
     public string? VIN { get; set; }
 }
