@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 3/1152 (0.26%)
+**Tiến độ hiện tại**: 4/1152 (0.35%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -221,7 +221,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 209 | ReqPartPriceController/SendDL | Chưa làm | - |
 | 210 | ReqPartPriceController/SearchDL | Chưa làm | - |
 | 211 | ReqPartPriceController/SearchWHDL | Chưa làm | - |
-| 212 | ReqPartPriceController/GetByReqPartPriceNoDL | Chưa làm | - |
+| 212 | ReqPartPriceController/GetByReqPartPriceNoDL | Đã làm | 1d37494 |
 | 213 | ReqPartPriceController/GetByReqPartPriceNoWHDL | Chưa làm | - |
 | 214 | ReqPartPriceController/ExportDL | Chưa làm | - |
 | 215 | ReqPartPriceController/ExportWHDL | Chưa làm | - |
