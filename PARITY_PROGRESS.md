@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 0/1152 (0%)
+**Tiến độ hiện tại**: 1/1152 (0.09%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -91,7 +91,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 79 | Mst_DeliveryLocationController/Update | Chưa làm | - |
 | 80 | Mst_DeliveryLocationController/Delete | Chưa làm | - |
 | 81 | Mst_OrderComplainImageTypeController/Search | Chưa làm | - |
-| 82 | Mst_OrderComplainImageTypeController/GetAllActive | Chưa làm | - |
+| 82 | Mst_OrderComplainImageTypeController/GetAllActive | Đã làm | c8194cd |
 | 83 | Mst_OrderComplainImageTypeController/ExportExcel | Chưa làm | - |
 | 84 | Mst_OrderComplainTypeController/Search | Chưa làm | - |
 | 85 | Mst_OrderComplainTypeController/GetAllActive | Chưa làm | - |
