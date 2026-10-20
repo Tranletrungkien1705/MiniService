@@ -7,10 +7,14 @@ using MiniService.Models.Port;
 namespace MiniService.Controllers.Port;
 
 // port 1:1 ReqPartPriceController.cs — Req_PartPrice
-// Gate: D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\idn.CarService.WebAPI\Controllers\ReqPartPriceController.cs:1818-2114
-//       + :3042-3087 (strWhereClause_Req_PartPrice_Search)
-// Biz:  D:\idocNet\2023.H.CarServices\11.BackEnd\V10\idn.CarService.Biz\BizCarSv.SuggestPrice.cs:136-270 (Req_PartPrice_Get_DL)
-//       -> :413-613 (Req_PartPrice_GetX)
+// Gate:
+//   • GetByReqPartPriceNoDL    :1818-2114 + strWhereClause_Req_PartPrice_Search :3042-3087
+//     Biz: BizCarSv.SuggestPrice.cs:136-270 (Req_PartPrice_Get_DL) → :413-613 (Req_PartPrice_GetX)
+//   • GetByReqPartPriceNoWHDL  :2116-2412 + strWhereClause_Req_PartPrice_Search :3042-3087
+//     Biz: BizCarSv.SuggestPrice.cs:272-406 (Req_PartPrice_Get_WH_DL) → :413-613 (Req_PartPrice_GetX)
+// Ở đích chỉ có 1 DB SQLite ⇒ cả 2 biz gọi cùng `Req_PartPrice_GetX` trên cùng entity set; khác biệt
+// thực sự còn lại: `_cfWH.db` / `_cfDealer.db` (GAP — 2 kết nối nguồn tới cùng bảng) và mã lỗi mặc
+// định của biz ("Req_PartPrice_Get_DL" vs "Req_PartPrice_Get_WH_DL").
 [ApiController]
 [Route("api/reqpartprice")]
 public class ReqPartPriceControllerPort : ControllerBase
@@ -27,18 +31,40 @@ public class ReqPartPriceControllerPort : ControllerBase
     public async Task<IActionResult> GetByReqPartPriceNoDL(
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ReqPartPrice_GetByReqPartPriceNoDLReq? req = null)
     {
+        // Biz :161 — mã lỗi mặc định của Get_DL.
+        return await GetByReqPartPriceNoCoreAsync(req, "Req_PartPrice_Get_DL");
+    }
+
+    /// <summary>
+    /// #213 — Lấy đề nghị báo giá + dòng chi tiết theo Số đề nghị (like). Gate :2116-2412.
+    /// Biz :272-406 (Req_PartPrice_Get_WH_DL) → :413-613 (Req_PartPrice_GetX) — cùng logic
+    /// với Get_DL, chỉ khác DB handle (`_cfWH.db`) và mã lỗi mặc định.
+    /// </summary>
+    [HttpPost("getbyreqpartpricenoWHDL")]
+    public async Task<IActionResult> GetByReqPartPriceNoWHDL(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] ReqPartPrice_GetByReqPartPriceNoDLReq? req = null)
+    {
+        // Biz :297 — mã lỗi mặc định của Get_WH_DL.
+        return await GetByReqPartPriceNoCoreAsync(req, "Req_PartPrice_Get_WH_DL");
+    }
+
+    // Thân dùng chung: 2 biz (Get_DL :136-270 và Get_WH_DL :272-406) chỉ khác `_cfWH.db` / `_cfDealer.db`
+    // (ở đích 1 DB) và mã lỗi mặc định; `Req_PartPrice_GetX` (:413-613) — nơi dựng toàn bộ SQL — là 1 hàm chung.
+    private async Task<IActionResult> GetByReqPartPriceNoCoreAsync(
+        ReqPartPrice_GetByReqPartPriceNoDLReq? req, string errorCode)
+    {
         try
         {
-            // Gate :1900 — `CUtils.StdStr(ReqPartPriceNo)` = Trim + normalize, rỗng → null.
+            // Gate :2198 (DL :1900) — `CUtils.StdStr(ReqPartPriceNo)` = Trim + normalize, rỗng → null.
             var reqPartPriceNo = string.IsNullOrWhiteSpace(req?.ReqPartPriceNo) ? null : req.ReqPartPriceNo!.Trim();
 
-            // Gate :1910-1911 + BaseController:43-44 — Ft_RecordStart = "0", Ft_RecordCount = "123456000".
+            // Gate :2208-2209 (DL :1910-1911) + BaseController — Ft_RecordStart = "0", Ft_RecordCount = "123456000".
             // Biz :446-447 — nFilterRecordStart = 0; nFilterRecordEnd = 0 + 123456000 - 1.
             long recordStart = 0;
             long recordCount = 123456000;
             var recordEnd = recordStart + recordCount - 1;
 
-            // Gate :1913-1916 + :3050-3053 — Where: nếu non-empty thì `Req_PartPrice.ReqPartPriceNo like '%x%'`.
+            // Gate :2211-2214 (DL :1913-1916) + :3050-3053 — Where: nếu non-empty thì `Req_PartPrice.ReqPartPriceNo like '%x%'`.
             var query = _db.Set<Req_PartPrice>().AsNoTracking().AsQueryable();
             if (reqPartPriceNo != null)
             {
@@ -46,7 +72,7 @@ public class ReqPartPriceControllerPort : ControllerBase
                 query = query.Where(x => EF.Functions.Like((x.ReqPartPriceNo ?? "").ToLower(), pattern, PortQuery.Esc));
             }
 
-            // Biz :461-473 — #tbl_Req_PartPrice_Draft: `select distinct rpp.ReqPartPriceNo from Req_PartPrice rpp left join Req_PartPriceDtl rppdt on rpp.ReqPartPriceNo=rppdt.ReqPartPriceNo where (1=1) <where> order by rpp.ReqPartPriceNo asc`.
+            // Biz :461-473 — #tbl_Req_PartPrice_Draft: `select distinct rpp.ReqPartPriceNo from Req_PartPrice rpp left join Req_PartPriceDtl rppdt on ... where (1=1) <where> order by rpp.ReqPartPriceNo asc`.
             // Khoá ReqPartPriceNo là duy nhất ⇒ distinct không mất dòng.
             var draftNos = await query
                 .OrderBy(x => x.ReqPartPriceNo)
@@ -87,14 +113,14 @@ public class ReqPartPriceControllerPort : ControllerBase
                         Description = rpp.Description,
                         FlagIsCheck = rpp.FlagIsCheck,
                         TSTReqPartPriceID = rpp.TSTReqPartPriceID,
-                        // Gate :2016-2034 — CreateDTime: IsDateTime ⇒ "yyyy-MM-dd"; null ⇒ null.
+                        // Gate :2314-2332 (DL :2016-2034) — CreateDTime: IsDateTime ⇒ "yyyy-MM-dd"; null ⇒ null.
                         CreateDTime = FormatDate(rpp.CreateDTime),
                         CreateBy = rpp.CreateBy,
                         DMSReqPartPriceStatus = rpp.DMSReqPartPriceStatus,
                         TSTReqPartPriceStatus = rpp.TSTReqPartPriceStatus,
-                        // Gate :2036-2054 — TSTSentDate cùng định dạng.
+                        // Gate :2334-2352 (DL :2036-2054) — TSTSentDate cùng định dạng.
                         TSTSentDate = FormatDate(rpp.TSTSentDate),
-                        // Gate :1976-1996 / :1998-2014 — bổ sung Name sau khi đọc bảng.
+                        // Gate :2277-2312 (DL :1976-2014) — bổ sung Name sau khi đọc bảng.
                         DMSReqPartPriceStatusName = MapDmsName(rpp.DMSReqPartPriceStatus),
                         TSTReqPartPriceStatusName = MapTstName(rpp.TSTReqPartPriceStatus),
                     });
@@ -136,8 +162,8 @@ public class ReqPartPriceControllerPort : ControllerBase
                 }
             }
 
-            // Gate :2071-2077 — Data = new { Lst_Req_PartPrice, Lst_Req_PartPriceDtl }; objJsonResultEntry.SetSuccess().
-            // Gate :2084 — Result<CMyMsgResult>(msgResult) ⇒ Success = true.
+            // Gate :2369-2374 (DL :2071-2077) — Data = new { Lst_Req_PartPrice, Lst_Req_PartPriceDtl }; objJsonResultEntry.SetSuccess().
+            // Gate :2382 (DL :2084) — Result<CMyMsgResult>(msgResult) ⇒ Success = true.
             return Ok(new
             {
                 Success = true,
@@ -150,12 +176,12 @@ public class ReqPartPriceControllerPort : ControllerBase
         }
         catch (Exception ex)
         {
-            // Biz :656 — mã lỗi mặc định của biz = "Req_PartPrice_Get_DL".
-            return PortResult.Fail("Req_PartPrice_Get_DL", "Exception", ex.Message);
+            // Biz :297 (Get_WH_DL) / :161 (Get_DL) — mã lỗi mặc định của biz tương ứng action.
+            return PortResult.Fail(errorCode, "Exception", ex.Message);
         }
     }
 
-    // Gate :1976-1996 — DMSReqPartPriceStatus ⇒ tên (TConst.DMSReqPartPriceStatus.*, Const.Main.cs:19358-19364).
+    // Gate :2277-2293 — DMSReqPartPriceStatus ⇒ tên (TConst.DMSReqPartPriceStatus.*, Const.Main.cs:19358-19364).
     // Gate gán strName = "" trước khi kiểm từng giá trị.
     private static string MapDmsName(string? status)
     {
@@ -170,7 +196,7 @@ public class ReqPartPriceControllerPort : ControllerBase
         };
     }
 
-    // Gate :1998-2014 — TSTReqPartPriceStatus ⇒ tên tiếng Việt (Const.Main.cs:19366-19371).
+    // Gate :2299-2311 — TSTReqPartPriceStatus ⇒ tên tiếng Việt (Const.Main.cs:19366-19371).
     private static string MapTstName(string? status)
     {
         var s = (status ?? "").Trim();
@@ -183,15 +209,15 @@ public class ReqPartPriceControllerPort : ControllerBase
         };
     }
 
-    // Gate :2016-2054 — CreateDTime / TSTSentDate: StdStr != "" ⇒ IsDateTime ? ToString("yyyy-MM-dd") : Substring(0,10).
+    // Gate :2314-2352 — CreateDTime / TSTSentDate: StdStr != "" ⇒ IsDateTime ? ToString("yyyy-MM-dd") : Substring(0,10).
     // Ở đích kiểu đã là DateTime? ⇒ format "yyyy-MM-dd"; null giữ null.
     private static string? FormatDate(DateTime? value)
         => value?.ToString("yyyy-MM-dd");
 }
 
 /// <summary>
-/// Body của action — gate chỉ nhận 1 tham số `string ReqPartPriceNo` (ReqPartPriceController.cs:1819).
-/// A.14: đích nhận qua JSON body.
+/// Body của action — gate chỉ nhận 1 tham số `string ReqPartPriceNo` (ReqPartPriceController.cs:1819 / :2117).
+/// A.14: đích nhận qua JSON body. Dùng CHUNG cho cả 2 action (DL và WHDL) vì hình dạng body trùng khít.
 /// </summary>
 public class ReqPartPrice_GetByReqPartPriceNoDLReq
 {
@@ -200,7 +226,7 @@ public class ReqPartPrice_GetByReqPartPriceNoDLReq
 
 /// <summary>
 /// Dòng Req_PartPrice trong Data — theo model nguồn 12.Dev.Common\...\CarSv\Req_PartPrice.cs:9-22
-/// (thêm MyIdxSeq = identity(bigint,0,1) và 2 cột Name do gate tự sinh ở :1963-2014).
+/// (thêm MyIdxSeq = identity(bigint,0,1) và 2 cột Name do gate tự sinh ở :1963-2014 / :2261-2312).
 /// </summary>
 public class ReqPartPrice_GetByReqPartPriceNoDLRow
 {

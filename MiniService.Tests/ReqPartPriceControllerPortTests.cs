@@ -50,6 +50,8 @@ public class ReqPartPriceControllerPortTests : IDisposable
         => (data.GetProperty("Lst_Req_PartPrice").GetArrayLength(),
             data.GetProperty("Lst_Req_PartPriceDtl").GetArrayLength());
 
+    // ================= GetByReqPartPriceNoDL =================
+
     [Fact]
     public async Task BodyRong_TraRpp3Dtl4_VaMapName()
     {
@@ -124,6 +126,63 @@ public class ReqPartPriceControllerPortTests : IDisposable
         var bad400 = Assert.IsType<BadRequestObjectResult>(result);
         var json = JsonDocument.Parse(JsonSerializer.Serialize(bad400.Value)).RootElement;
         Assert.Equal("ErridNCarService.Req_PartPrice_Get_DL", json.GetProperty("ErrorCode").GetString());
+        conn2.Dispose();
+    }
+
+    // ================= #213 GetByReqPartPriceNoWHDL =================
+
+    [Fact]
+    public async Task WHDL_BodyRong_TraRpp3Dtl4()
+    {
+        var root = Root(await _controller.GetByReqPartPriceNoWHDL(null));
+        Assert.True(root.GetProperty("Success").GetBoolean());
+        var (rpp, dtl) = Counts(root.GetProperty("Data"));
+        Assert.Equal(3, rpp);
+        Assert.Equal(4, dtl);
+    }
+
+    [Fact]
+    public async Task WHDL_LocPP001_1Rpp2Dtl()
+    {
+        var root = Root(await _controller.GetByReqPartPriceNoWHDL(
+            new ReqPartPrice_GetByReqPartPriceNoDLReq { ReqPartPriceNo = "PP001" }));
+        var (rpp, dtl) = Counts(root.GetProperty("Data"));
+        Assert.Equal(1, rpp);
+        Assert.Equal(2, dtl);
+    }
+
+    [Fact]
+    public async Task WHDL_LocPP_3Rpp_KhacVoiPP001()
+    {
+        var root = Root(await _controller.GetByReqPartPriceNoWHDL(
+            new ReqPartPrice_GetByReqPartPriceNoDLReq { ReqPartPriceNo = "PP" }));
+        var (rpp, _) = Counts(root.GetProperty("Data"));
+        Assert.Equal(3, rpp);
+    }
+
+    [Fact]
+    public async Task WHDL_KhongKhop_TraRong()
+    {
+        var root = Root(await _controller.GetByReqPartPriceNoWHDL(
+            new ReqPartPrice_GetByReqPartPriceNoDLReq { ReqPartPriceNo = "KHONGCO" }));
+        var (rpp, dtl) = Counts(root.GetProperty("Data"));
+        Assert.Equal(0, rpp);
+        Assert.Equal(0, dtl);
+    }
+
+    [Fact]
+    public async Task WHDL_LoiDb_TraMaReq_PartPrice_Get_WH_DL()
+    {
+        var conn2 = new SqliteConnection("DataSource=:memory:");
+        conn2.Open();
+        var opt = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conn2).Options;
+        var dead = new AppDbContext(opt, new TenantContext());
+        dead.Dispose();
+        var bad = new ReqPartPriceControllerPort(dead);
+        var result = await bad.GetByReqPartPriceNoWHDL(null);
+        var bad400 = Assert.IsType<BadRequestObjectResult>(result);
+        var json = JsonDocument.Parse(JsonSerializer.Serialize(bad400.Value)).RootElement;
+        Assert.Equal("ErridNCarService.Req_PartPrice_Get_WH_DL", json.GetProperty("ErrorCode").GetString());
         conn2.Dispose();
     }
 }
