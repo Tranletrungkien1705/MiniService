@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 4/1152 (0.35%)
+**Tiến độ hiện tại**: 5/1152 (0.43%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -113,7 +113,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 101 | Mst_VINModelOrginalController/Delete | Chưa làm | - |
 | 102 | Mst_VINModelOrginalController/DeleteMultiple | Chưa làm | - |
 | 103 | Mst_VINModelOrginalController/Import | Chưa làm | - |
-| 104 | Mst_VINModelOrginalController/ExportTemplate | Chưa làm | - |
+| 104 | Mst_VINModelOrginalController/ExportTemplate | Đã làm | 296d39b |
 | 105 | MstBOMController/Search | Chưa làm | - |
 | 106 | MstBOMController/GetAllActive | Chưa làm | - |
 | 107 | MstBOMController/GetByBOMCode | Chưa làm | - |
