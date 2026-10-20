@@ -333,6 +333,168 @@ public class BtlBulletinDealerControllerPort : ControllerBase
         return string.IsNullOrEmpty(s) ? null : s;
     }
 
+    /// <summary>
+    /// Lấy danh sách bản tin (bulletin) còn hiệu lực theo VIN cho lệnh sửa chữa (RO).
+    /// Gate: BtlBulletinDealerController.cs:1001-1467 GetForRO(VIN, ROID, FlagDataWH).
+    /// Biz:  BizCarSv.Bulletin.cs:100-261 Blt_Bulletin_GetByVin_DL -> Blt_Bulletin_GetByVinX;
+    ///       BizCarSv.Service01.cs:7451-7585 Ser_RO_Get_DL / :7723-7857 Ser_RO_Get_WH_DL (nhánh ROID);
+    ///       BizCarSv.WarrantyReport.cs:303-455 Ser_ROWarrantyReport_GetWHDL (lọc bản tin đã có báo cáo bảo hành).
+    /// </summary>
+    [HttpPost("getforro")]
+    public async Task<IActionResult> GetForRO(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] BtlBulletinDealer_GetForROReq? req = null)
+    {
+        // Gate :1091-1102 — VIN rỗng ⇒ BtlBulletinDealerGetForRO_VINEmpty (kiểm TRƯỚC khi StdStr).
+        if (string.IsNullOrEmpty(req?.VIN))
+        {
+            return PortResult.Fail("BtlBulletinDealerGetForRO_VINEmpty", "Check.Input.VIN", req?.VIN);
+        }
+
+        // Gate :1104-1113 — chuẩn hoá tham số.
+        var strVIN = StdStr(req!.VIN);
+        var strROID = StdStr(req.ROID);
+        // Gate :1106 — strDealerCode = StdStr(orgUserUI.DealerCode); ở đích không có phiên đăng nhập ⇒ nhận qua body
+        // (LESSONS A.14), không truyền thì null ⇒ bộ lọc DealerCode rỗng như nguồn khi DealerCode trống.
+        var strDealerCode = StdStr(req.DealerCode);
+        // Gate :1113 — bFlagDataWH = Flag2Bool(FlagDataWH).
+        var bFlagDataWH = Flag2Bool(req.FlagDataWH);
+
+        // Gate :1112 — strROCreate = "" (chỉ gán khi có ROID).
+        string? strROCreate = null;
+
+        // Gate :1132-1236 — nhánh ROID: kiểm RO tồn tại + CreatedDate hợp lệ.
+        if (!string.IsNullOrEmpty(req.ROID))
+        {
+            // Gate :1143-1196 — bFlagDataWH ? Ser_RO_Get_WH_DL : Ser_RO_Get_DL (lọc ROID = @ROID, DealerCode = @DealerCode).
+            // GAP: thân Ser_RO_GetX / Ser_RO_GetWHX không có trong source_excerpt.txt ⇒ chỉ port bộ lọc ROID/DealerCode
+            //   trên bảng Ser_RO (cột CreatedDate là cột gate dùng), không port cột khác.
+            var roQuery = _db.Set<Ser_RO>().AsNoTracking()
+                .Where(x => EF.Functions.Like((x.ROID ?? "").ToLower(), PortQuery.Equal(req.ROID), PortQuery.Esc));
+            if (strDealerCode != null)
+                roQuery = roQuery.Where(x => EF.Functions.Like((x.DealerCode ?? "").ToLower(), PortQuery.Equal(strDealerCode), PortQuery.Esc));
+            var dt_Ser_RO = await roQuery.OrderBy(x => x.ROID).FirstOrDefaultAsync();
+
+            // Gate :1208-1219 — không có dòng Ser_RO ⇒ BtlBulletinDealerGetForRO_ROIDNotFound.
+            if (dt_Ser_RO == null)
+            {
+                return PortResult.Fail("BtlBulletinDealerGetForRO_ROIDNotFound", "Check.Input.ROID", req.ROID);
+            }
+
+            // Gate :1221-1234 — CreatedDate không phải ngày ⇒ BtlBulletinDealerGetForRO_InvalidROCreate.
+            strROCreate = StdStr(dt_Ser_RO.CreatedDate);
+            if (!IsDateTime(strROCreate))
+            {
+                return PortResult.Fail("BtlBulletinDealerGetForRO_InvalidROCreate",
+                    "Check.Input.ROID", req.ROID, "Check.RO.CreatedDate", strROCreate);
+            }
+        }
+
+        // Gate :1242-1265 — Blt_Bulletin_GetByVin_DL: VIN = @VIN, FlagActive = '1', Status = 'PENDING',
+        //   DealerCode rỗng (gate :1108) ⇒ bỏ mệnh đề; Ft_RecordStart/Ft_RecordCount của BaseController (GAP, dùng 0).
+        // Gate :1104 — StdStr(VIN) rỗng ⇒ strVIN = null ⇒ GenEqualConditionSingle(null) = "" ⇒ bỏ mệnh đề VIN.
+        var bulletinQuery = _db.Set<Btl_Bulletin>().AsNoTracking()
+            .Where(x => EF.Functions.Like((x.FlagActive ?? "").ToLower(), PortQuery.Equal("1"), PortQuery.Esc))
+            .Where(x => EF.Functions.Like((x.Status ?? "").ToLower(), PortQuery.Equal("PENDING"), PortQuery.Esc));
+        if (strVIN != null)
+            bulletinQuery = bulletinQuery.Where(x => EF.Functions.Like((x.VIN ?? "").ToLower(), PortQuery.Equal(strVIN), PortQuery.Esc));
+        if (strDealerCode != null)
+            bulletinQuery = bulletinQuery.Where(x => EF.Functions.Like((x.DealerCode ?? "").ToLower(), PortQuery.Equal(strDealerCode), PortQuery.Esc));
+
+        var dtBulletin = await bulletinQuery.OrderBy(x => x.BulletinID).ToListAsync();
+
+        // Gate :1283-1315 — duyệt NGƯỢC dtBulletinVIN: DateExpired rỗng hoặc "0001-01-01" ⇒ giữ nguyên;
+        //   còn lại: so (DateExpired - ngày tạo RO nếu có, ngược lại hôm nay).TotalDays >= 0 ⇒ giữ, < 0 ⇒ bỏ.
+        var checkDateExpired = false;
+        for (var i = dtBulletin.Count - 1; i >= 0; i--)
+        {
+            var strDateExpired = StdStr(dtBulletin[i].DateExpired);
+            if (!string.IsNullOrEmpty(strDateExpired) && strDateExpired != DateTime.MinValue.ToString("yyyy-MM-dd"))
+            {
+                var dateExpiredCur = GetDateTimeValue(strDateExpired);
+                var dateExpiredCal = new DateTime(dateExpiredCur.Year, dateExpiredCur.Month, dateExpiredCur.Day);
+
+                var datenow = DateTime.Now;
+                var datenowCal = new DateTime(datenow.Year, datenow.Month, datenow.Day);
+                // Gate :1296-1301 — BG đã tạo ⇒ so với ngày tạo BG; chưa tạo ⇒ so với hôm nay.
+                if (!string.IsNullOrEmpty(strROCreate))
+                {
+                    var dateROCreate = GetDateTimeValue(strROCreate);
+                    datenowCal = new DateTime(dateROCreate.Year, dateROCreate.Month, dateROCreate.Day);
+                }
+
+                var day = (dateExpiredCal - datenowCal).TotalDays;
+                if (day >= 0)
+                {
+                    checkDateExpired = true;
+                }
+                else
+                {
+                    dtBulletin.RemoveAt(i);
+                }
+            }
+        }
+
+        // Gate :1319-1322 — check = còn ít nhất 1 dòng Btl_Bulletin_VIN sau khi lọc hạn.
+        var check = dtBulletin.Count > 0;
+
+        // Gate :1324-1409 — chỉ khi còn dòng mới gọi Ser_ROWarrantyReport_GetWHDL và lọc bản tin đã có báo cáo bảo hành.
+        if (dtBulletin.Count > 0)
+        {
+            // Gate :1331-1338 — DealerCode = @DealerCode, Status in SENT,CONF,ACCE, FrameNo like %VIN%.
+            // GAP: thân Ser_ROWarrantyReport_GetWHX không có trong source_excerpt.txt ⇒ chỉ port bộ lọc DealerCode/FrameNo
+            //   trên bảng Ser_ROWarrantyReportServiceItems (cột BulletinID là cột gate dùng), không port cột khác.
+            var warrantyQuery = _db.Set<Ser_ROWarrantyReportServiceItems>().AsNoTracking();
+            if (strDealerCode != null)
+                warrantyQuery = warrantyQuery.Where(x => EF.Functions.Like((x.DealerCode ?? "").ToLower(), PortQuery.Equal(strDealerCode), PortQuery.Esc));
+            if (strVIN != null)
+                warrantyQuery = warrantyQuery.Where(x => EF.Functions.Like((x.FrameNo ?? "").ToLower(), PortQuery.Contains(strVIN), PortQuery.Esc));
+            var warrantyBulletinIds = new HashSet<string>(
+                (await warrantyQuery.Select(x => x.BulletinID).ToListAsync()).Where(x => x != null).Select(x => x!), StringComparer.Ordinal);
+
+            // Gate :1379-1389 — bản tin đã có dòng báo cáo bảo hành ⇒ bỏ.
+            if (warrantyBulletinIds.Count > 0)
+            {
+                for (var i = dtBulletin.Count - 1; i >= 0; i--)
+                {
+                    if (warrantyBulletinIds.Contains(dtBulletin[i].BulletinID)) dtBulletin.RemoveAt(i);
+                }
+            }
+
+            // Gate :1391-1406 — !(check && checkDateExpired) ⇒ xoá sạch; ngược lại chỉ giữ bản tin còn trong dtBulletinVIN.
+            if (!(check && checkDateExpired))
+            {
+                dtBulletin.Clear();
+            }
+            else
+            {
+                var remainingIds = new HashSet<string>(dtBulletin.Select(x => x.BulletinID), StringComparer.Ordinal);
+                for (var i = dtBulletin.Count - 1; i >= 0; i--)
+                {
+                    if (!remainingIds.Contains(dtBulletin[i].BulletinID)) dtBulletin.RemoveAt(i);
+                }
+            }
+        }
+
+        // Gate :1422-1433 — bGet_Btl_Bulletin = ("*" != null && Length > 0) = true ⇒ Data = { Lst_Btl_Bulletin }.
+        // Gate :1438 — Result<CMyMsgResult>(msgResult) ⇒ Success = true.
+        return Ok(new
+        {
+            Success = true,
+            Data = new { Lst_Btl_Bulletin = dtBulletin }
+        });
+    }
+
+    /// <summary>TUtils.CUtils.Flag2Bool: chỉ "1" là true, mọi giá trị khác (kể cả null) là false.</summary>
+    private static bool Flag2Bool(string? value) => value == "1";
+
+    /// <summary>TUtils.CUtils.IsDateTime: chuỗi rỗng/null ⇒ false; còn lại thử parse ngày.</summary>
+    private static bool IsDateTime(string? value)
+        => !string.IsNullOrEmpty(value) && DateTime.TryParse(value, out _);
+
+    /// <summary>TUtils.CUtils.GetDateTimeValue: parse ngày, không parse được ⇒ DateTime.MinValue.</summary>
+    private static DateTime GetDateTimeValue(string? value)
+        => DateTime.TryParse(value, out var d) ? d : DateTime.MinValue;
+
     // Gate :863-864 — Ft_RecordStart / Ft_RecordCount là thuộc tính của BaseController nguồn; giá trị KHÔNG có trong
     // source_excerpt.txt ⇒ GAP, không tự đặt giá trị (dùng 0 = không cắt dòng).
     private const int Ft_RecordStart = 0;
@@ -369,6 +531,18 @@ public class BtlBulletinDealer_SearchWHDLReq
 public class BtlBulletinDealer_GetAllActiveByVINReq
 {
     public string? VIN { get; set; }
+}
+
+/// <summary>
+/// Body của GetForRO — 3 tham số của gate (BtlBulletinDealerController.cs:1001-1005) + DealerCode lấy từ phiên đăng nhập
+/// (gate :1106 `orgUserUI.DealerCode`; đích không có phiên ⇒ nhận tuỳ chọn qua body, LESSONS A.14).
+/// </summary>
+public class BtlBulletinDealer_GetForROReq
+{
+    public string? VIN { get; set; }
+    public string? ROID { get; set; }
+    public string? FlagDataWH { get; set; }
+    public string? DealerCode { get; set; }
 }
 
 /// <summary>
