@@ -48,6 +48,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 {
     if (DbUtil.IsPostgres(conn)) o.UseNpgsql(DbUtil.ToNpgsql(conn));
     else o.UseSqlite(conn);
+    o.AddInterceptors(new SqliteUnicodeLowerInterceptor());   // lower() hiểu Unicode (tìm kiếm tiếng Việt có dấu) — xem Data/SqliteUnicodeLower.cs
 });
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddHttpClient();

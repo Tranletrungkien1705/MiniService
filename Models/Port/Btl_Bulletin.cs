@@ -7,7 +7,9 @@ namespace MiniService.Models.Port;
 // port 1:1 BtlBulletinDealerController.cs — Btl_Bulletin
 // Nguồn:
 //   Gate: D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\idn.CarService.WebAPI\Controllers\BtlBulletinDealerController.cs:273-512 (SearchWHDL)
+//         :513-756 (GetAllActiveByVIN)
 //   Biz:  D:\idocNet\2023.H.CarServices\11.BackEnd\V10\idn.CarService.Biz\BizCarSv.Bulletin.cs:262-423 (Blt_Bulletin_GetByVin_WHDL)
+//         :100-261 (Blt_Bulletin_GetByVin_DL)
 //         -> Blt_Bulletin_GetByVinX (thân hàm KHÔNG có trong source_excerpt.txt — xem GAP trong controller port)
 // Cột: gate :391 `strRt_Cols_Btl_Bulletin = "*"` (trả mọi cột của bảng); DDL đầy đủ KHÔNG có trong excerpt.
 //   Các cột dưới đây là cột được gate/biz DÙNG (bộ lọc + sắp xếp), không phải DDL đầy đủ.
@@ -38,6 +40,7 @@ public class Btl_Bulletin
     public string? VIN { get; set; }
 
     // Gate :435 — strIsActive = TConst.Flag.Active.
+    // Gate :606 (GetAllActiveByVIN) — strIsActive = TConst.Flag.Active.
     public string? FlagActive { get; set; }
 
     // Gate :436 — strStatusConditionList = GenEqualConditionSingle(TConst.Stage.Pending).
@@ -65,7 +68,7 @@ public class Btl_BulletinConfiguration : IEntityTypeConfiguration<Btl_Bulletin>
 }
 
 /// <summary>
-/// Dữ liệu mẫu Btl_Bulletin. Nguồn chỉ có hàm ĐỌC (Blt_Bulletin_GetByVin_WHDL) nên dữ liệu mẫu là phần thêm
+/// Dữ liệu mẫu Btl_Bulletin. Nguồn chỉ có hàm ĐỌC (Blt_Bulletin_GetByVin_WHDL, Blt_Bulletin_GetByVin_DL) nên dữ liệu mẫu là phần thêm
 /// của port để kiểm chứng bộ lọc VIN / Status / FlagActive / DateExpired.
 /// </summary>
 public class Btl_BulletinSeeder : IPortSeeder
