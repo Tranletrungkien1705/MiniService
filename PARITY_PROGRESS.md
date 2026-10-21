@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 12/1152 (1.04%)
+**Tiến độ hiện tại**: 13/1152 (1.13%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -28,7 +28,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 16 | BtlBulletinDealerController/GetAllActiveByVINMapStatusP | Đã làm | 3733940 |
 | 17 | BtlBulletinDealerController/GetForRO | Đã làm | 3aa3623 |
 | 18 | BtlBulletinDealerController/GetFileAttachmentDL | Chưa làm | - |
-| 19 | CarWarrantyInformationController/GetByPlateNoVIN | Chưa làm | - |
+| 19 | CarWarrantyInformationController/GetByPlateNoVIN | Đã làm | ab9f5c8 |
 | 20 | CarWarrantyInformationController/GetWHByPlateNoVIN | Đã làm | 7184bff |
 | 21 | CommonController/GetDTime | Đã làm | ee2e273 |
 | 22 | DashboardController/GetDL | Chưa làm | - |
