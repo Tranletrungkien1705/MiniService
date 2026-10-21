@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 14/1152 (1.22%)
+**Tiến độ hiện tại**: 15/1152 (1.3%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -36,7 +36,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 24 | DealerHistoryShareMngController/SearchWHDL | Chưa làm | - |
 | 25 | DealerHistoryShareMngController/SearchHQ | Chưa làm | - |
 | 26 | DealerHistoryShareMngController/SearchWHHQ | Chưa làm | - |
-| 27 | DealerHistoryShareMngController/GetListClaimByPlateNoHQ | Chưa làm | - |
+| 27 | DealerHistoryShareMngController/GetListClaimByPlateNoHQ | Đã làm | 308814f |
 | 28 | DealerHistoryShareMngController/ExporExcelDL | Chưa làm | - |
 | 29 | DealerHistoryShareMngController/ExporExcelHQ | Chưa làm | - |
 | 30 | DealerHistoryShareMngController/ExporExcelListClaimByPlateNoHQ | Chưa làm | - |
