@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 15/1152 (1.3%)
+**Tiến độ hiện tại**: 16/1152 (1.39%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -40,7 +40,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 28 | DealerHistoryShareMngController/ExporExcelDL | Chưa làm | - |
 | 29 | DealerHistoryShareMngController/ExporExcelHQ | Chưa làm | - |
 | 30 | DealerHistoryShareMngController/ExporExcelListClaimByPlateNoHQ | Chưa làm | - |
-| 31 | DlrMstDealerContractFormPrintController/GetAllPrintType | Chưa làm | - |
+| 31 | DlrMstDealerContractFormPrintController/GetAllPrintType | Đã làm | 0ff1656 |
 | 32 | DlrMstDealerContractFormPrintController/GetTempPrint | Chưa làm | - |
 | 33 | DlrMstDealerContractFormPrintController/SaveDlrMstDealerContractFormPrint | Chưa làm | - |
 | 34 | DlrMstDealerContractFormPrintController/CreateTempPrintGroup | Chưa làm | - |
