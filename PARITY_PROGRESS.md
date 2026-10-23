@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 23/1152 (2%)
+**Tiến độ hiện tại**: 24/1152 (2.08%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -54,7 +54,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 42 | DlrPDIRequestController/GetByDlrPDIReqNoWHHQ | Đã làm | 0c30b7e |
 | 43 | DlrPDIRequestController/GetROForCreateDL | Đã làm | 8c2beaa |
 | 44 | DlrPDIRequestController/ExportDL | Chưa làm | - |
-| 45 | DlrPDIRequestController/ExportWHDL | Chưa làm | - |
+| 45 | DlrPDIRequestController/ExportWHDL | Đã làm | c68622f |
 | 46 | DlrPDIRequestController/ExportHQ | Chưa làm | - |
 | 47 | DlrPDIRequestController/ExportWHHQ | Chưa làm | - |
 | 48 | FileController/CheckFileExist | Chưa làm | - |
