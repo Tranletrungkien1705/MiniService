@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 27/1152 (2.34%)
+**Tiến độ hiện tại**: 28/1152 (2.43%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -70,7 +70,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 58 | JDPMstJDPowerTermController/SearchHQ | Đã làm | 36e4af1 |
 | 59 | JDPMstJDPowerTermController/SearchWHHQ | Đã làm | 189442b |
 | 60 | JDPMstJDPowerTermController/GetByJDPTermCodeHQ | Đã làm | b2dd377 |
-| 61 | JDPMstJDPowerTermController/GetByJDPTermCodeWHHQ | Chưa làm | - |
+| 61 | JDPMstJDPowerTermController/GetByJDPTermCodeWHHQ | Đã làm | 23b3ae7 |
 | 62 | JDPMstJDPowerTermController/CreateHQ | Chưa làm | - |
 | 63 | JDPMstJDPowerTermController/UpdateHQ | Chưa làm | - |
 | 64 | JDPMstJDPowerTermController/DeleteHQ | Chưa làm | - |
