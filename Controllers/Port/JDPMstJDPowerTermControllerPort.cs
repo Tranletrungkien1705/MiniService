@@ -14,6 +14,9 @@ namespace MiniService.Controllers.Port;
 //   Gate: JDPMstJDPowerTermController.cs:260-476 (SearchWHHQ)
 //   Biz:  BizCarSv.Master.cs:84458-84604 (JDP_Mst_JDPowerTerm_Get_WH)
 //         -> 84606-84739 (JDP_Mst_JDPowerTerm_Get_WHX)
+//   Gate: JDPMstJDPowerTermController.cs:693-906 (GetByJDPTermCodeWHHQ)
+//   Biz:  BizCarSv.Master.cs:84458-84604 (JDP_Mst_JDPowerTerm_Get_WH)
+//         -> 84606-84739 (JDP_Mst_JDPowerTerm_Get_WHX) — CÙNG hàm biz với SearchWHHQ
 // Bỏ qua có chủ đích (GAP, không mô phỏng): CheckGatewayAuthentication (BaseController.cs:291-299),
 // GetUserFullInfo (BaseController.cs:441-575 — Inos_GetUserInfoByToken / Inos_GetMyOrgUserList / Sys_User_GetForCurrentUser),
 // Sys_Access_CheckDenyCarSv (BizCarSv.Master.cs:84237-84241) — đều là xác thực/phân quyền của nguồn, đích không có.
@@ -178,15 +181,57 @@ public class JDPMstJDPowerTermControllerPort : ControllerBase
         var filterRecordStart = recordStart + 1;
         var filterRecordEnd = recordStart + recordCount;
 
+        // Biz :84318-84453 (JDP_Mst_JDPowerTerm_GetX) — cùng thân với Get_WHX ⇒ dùng lại hàm dùng chung (LESSONS A.3).
+        return await GetByJDPTermCodeWHCoreAsync(jdpTermCode, jdpTermCodeList, filterRecordStart, filterRecordEnd);
+    }
+
+    /// <summary>
+    /// Lấy kỳ J.D. Power theo mã kỳ cho kho (GetByJDPTermCodeWHHQ) — trả kỳ + danh sách chi tiết.
+    /// Gate: JDPMstJDPowerTermController.cs:693-906 GetByJDPTermCodeWHHQ(string JDPTermCode)
+    /// Biz: BizCarSv.Master.cs:84458-84604 (JDP_Mst_JDPowerTerm_Get_WH) -> 84606-84739 (JDP_Mst_JDPowerTerm_Get_WHX).
+    /// </summary>
+    [HttpPost("getbyjdptcrmcodewhhq")]   // route /api/jdpmstjdpowerterm/getbyjdptcrmcodewhhq
+    public async Task<IActionResult> GetByJDPTermCodeWHHQ(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JDPMstJDPowerTerm_GetByJDPTermCodeWHHQReq? req = null)
+    {
+        // Gate :779 — strJDPTermCode = StdStr(JDPTermCode): Trim, rỗng -> null.
+        var jdpTermCode = StdStr(req?.JDPTermCode);
+
+        // Gate :782 — GenLikeCondition2Percent(strJDPTermCode): rỗng -> "" (không lọc), ngược lại like '%x%'.
+        var jdpTermCodeList = string.IsNullOrEmpty(jdpTermCode) ? "" : "%" + jdpTermCode + "%";
+
+        // Gate :783-788 — các danh sách điều kiện còn lại đều "" ⇒ bỏ mệnh đề (biz :84708-84714).
+        // Gate :791-792 — strFt_RecordStart = Ft_RecordStart, strFt_RecordCount = Ft_RecordCount (BaseController).
+        //   Giá trị của BaseController KHÔNG có trong excerpt ⇒ GAP, không tự đặt (dùng 0 = không cắt dòng).
+        const long recordStart = 0;
+        const long recordCount = 0;
+
+        // Biz :84641-84642 — nFilterRecordStart = RecordStart + 1; nFilterRecordEnd = RecordStart + RecordCount.
+        //   RecordCount = 0 (GAP: giá trị BaseController không có trong excerpt) ⇒ nguồn lọc `MyRowIdx <= 0` ⇒ 0 dòng.
+        //   Giữ NGUYÊN hành vi nguồn (không tự nới thành "không cắt dòng").
+        var filterRecordStart = recordStart + 1;
+        var filterRecordEnd = recordStart + recordCount;
+
+        // Biz :84606-84739 (JDP_Mst_JDPowerTerm_Get_WHX) — cùng thân với GetByJDPTermCodeHQ ⇒ dùng lại hàm dùng chung (LESSONS A.3).
+        return await GetByJDPTermCodeWHCoreAsync(jdpTermCode, jdpTermCodeList, filterRecordStart, filterRecordEnd);
+    }
+
+    /// <summary>
+    /// Thân dùng chung của GetByJDPTermCodeHQ / GetByJDPTermCodeWHHQ: 2 gate gọi CÙNG hàm biz
+    /// (JDP_Mst_JDPowerTerm_Get / JDP_Mst_JDPowerTerm_Get_WH → JDP_Mst_JDPowerTerm_GetX / Get_WHX) với cùng bộ lọc.
+    /// </summary>
+    private async Task<IActionResult> GetByJDPTermCodeWHCoreAsync(
+        string? jdpTermCode, string jdpTermCodeList, long filterRecordStart, long filterRecordEnd)
+    {
         var query = _db.Set<JDP_Mst_JDPowerTerm>().AsNoTracking().AsQueryable();
 
-        // Biz :84421 / :84381 — t.JDPTermCode like '%x%'
+        // Biz :84708 / :84669 — t.JDPTermCode like '%x%'
         if (!string.IsNullOrEmpty(jdpTermCodeList))
             query = query.Where(x => EF.Functions.Like((x.JDPTermCode ?? "").ToLower(), PortQuery.Contains(jdpTermCode!), PortQuery.Esc));
 
-        // Biz :84370-84371 — Row_Number() over(order by t.JDPTermCode asc) MyRowIdx
-        // Biz :84394-84395 — MyRowIdx >= nFilterRecordStart and MyRowIdx <= nFilterRecordEnd (1-based)
-        // Biz :84405 — order by t.MyRowIdx asc
+        // Biz :84659 — Row_Number() over(order by t.JDPTermCode asc) MyRowIdx
+        // Biz :84682-84683 — MyRowIdx >= nFilterRecordStart and MyRowIdx <= nFilterRecordEnd (1-based)
+        // Biz :84692 — order by t.MyRowIdx asc
         var list = (filterRecordStart < 1 || filterRecordEnd < filterRecordStart)
             ? new List<JDP_Mst_JDPowerTerm>()
             : await query
@@ -195,7 +240,7 @@ public class JDPMstJDPowerTermControllerPort : ControllerBase
                 .Take((int)Math.Min(filterRecordEnd - filterRecordStart + 1, int.MaxValue))
                 .ToListAsync();
 
-        // Biz :84408-84416 — JDP_Mst_JDPowerTermDtl: inner join theo JDPTermCode của các kỳ đã lọc, order by MyRowIdx asc.
+        // Biz :84736-84737 — bảng "JDP_Mst_JDPowerTermDtl" của DataSet (inner join theo JDPTermCode của các kỳ đã lọc).
         var termCodes = list.Select(x => x.JDPTermCode).ToList();
         var dtlList = termCodes.Count == 0
             ? new List<JDP_Mst_JDPowerTermDtl>()
@@ -206,7 +251,7 @@ public class JDPMstJDPowerTermControllerPort : ControllerBase
         for (var i = 0; i < termCodes.Count; i++) order[termCodes[i]] = i;
         dtlList = dtlList.OrderBy(x => order.TryGetValue(x.JDPTermCode, out var idx) ? idx : int.MaxValue).ToList();
 
-        // Gate :651-656 — Data = new { lst_JDP_Mst_JDPowerTerm, lst_JDP_Mst_JDPowerTermDtl }; objJsonResultEntry.SetSuccess().
+        // Gate :866-871 — Data = new { lst_JDP_Mst_JDPowerTerm, lst_JDP_Mst_JDPowerTermDtl }; objJsonResultEntry.SetSuccess().
         return Ok(new
         {
             Success = true,
@@ -246,6 +291,12 @@ public class JDPMstJDPowerTerm_SearchWHHQReq
 
 /// <summary>Body của GetByJDPTermCodeHQ (gate JDPMstJDPowerTermController.cs:478-480 — tham số duy nhất JDPTermCode).</summary>
 public class JDPMstJDPowerTerm_GetByJDPTermCodeHQReq
+{
+    public string? JDPTermCode { get; set; }
+}
+
+/// <summary>Body của GetByJDPTermCodeWHHQ (gate JDPMstJDPowerTermController.cs:693-695 — tham số duy nhất JDPTermCode).</summary>
+public class JDPMstJDPowerTerm_GetByJDPTermCodeWHHQReq
 {
     public string? JDPTermCode { get; set; }
 }
