@@ -151,6 +151,73 @@ public class JDPMstJDPowerTermControllerPort : ControllerBase
         });
     }
 
+    /// <summary>
+    /// Lấy kỳ J.D. Power theo mã kỳ (GetByJDPTermCodeHQ) — trả kỳ + danh sách chi tiết.
+    /// Gate: JDPMstJDPowerTermController.cs:478-691 GetByJDPTermCodeHQ(string JDPTermCode)
+    /// Biz: BizCarSv.Master.cs:84169-84316 (JDP_Mst_JDPowerTerm_Get) -> 84318-84453 (JDP_Mst_JDPowerTerm_GetX).
+    /// </summary>
+    [HttpPost("getbyjdptcrmcodehq")]   // route /api/jdpmstjdpowerterm/getbyjdptcrmcodehq
+    public async Task<IActionResult> GetByJDPTermCodeHQ(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] JDPMstJDPowerTerm_GetByJDPTermCodeHQReq? req = null)
+    {
+        // Gate :564 — strJDPTermCode = StdStr(JDPTermCode): Trim, rỗng -> null.
+        var jdpTermCode = StdStr(req?.JDPTermCode);
+
+        // Gate :567 — GenLikeCondition2Percent(strJDPTermCode): rỗng -> "" (không lọc), ngược lại like '%x%'.
+        var jdpTermCodeList = string.IsNullOrEmpty(jdpTermCode) ? "" : "%" + jdpTermCode + "%";
+
+        // Gate :568-573 — các danh sách điều kiện còn lại đều "" ⇒ bỏ mệnh đề (biz :84421-84427).
+        // Gate :576-577 — strFt_RecordStart = Ft_RecordStart, strFt_RecordCount = Ft_RecordCount (BaseController).
+        //   Giá trị của BaseController KHÔNG có trong excerpt ⇒ GAP, không tự đặt (dùng 0 = không cắt dòng).
+        const long recordStart = 0;
+        const long recordCount = 0;
+
+        // Biz :84353-84354 — nFilterRecordStart = RecordStart + 1; nFilterRecordEnd = RecordStart + RecordCount.
+        //   RecordCount = 0 (GAP: giá trị BaseController không có trong excerpt) ⇒ nguồn lọc `MyRowIdx <= 0` ⇒ 0 dòng.
+        //   Giữ NGUYÊN hành vi nguồn (không tự nới thành "không cắt dòng").
+        var filterRecordStart = recordStart + 1;
+        var filterRecordEnd = recordStart + recordCount;
+
+        var query = _db.Set<JDP_Mst_JDPowerTerm>().AsNoTracking().AsQueryable();
+
+        // Biz :84421 / :84381 — t.JDPTermCode like '%x%'
+        if (!string.IsNullOrEmpty(jdpTermCodeList))
+            query = query.Where(x => EF.Functions.Like((x.JDPTermCode ?? "").ToLower(), PortQuery.Contains(jdpTermCode!), PortQuery.Esc));
+
+        // Biz :84370-84371 — Row_Number() over(order by t.JDPTermCode asc) MyRowIdx
+        // Biz :84394-84395 — MyRowIdx >= nFilterRecordStart and MyRowIdx <= nFilterRecordEnd (1-based)
+        // Biz :84405 — order by t.MyRowIdx asc
+        var list = (filterRecordStart < 1 || filterRecordEnd < filterRecordStart)
+            ? new List<JDP_Mst_JDPowerTerm>()
+            : await query
+                .OrderBy(x => x.JDPTermCode)
+                .Skip((int)Math.Min(filterRecordStart - 1, int.MaxValue))
+                .Take((int)Math.Min(filterRecordEnd - filterRecordStart + 1, int.MaxValue))
+                .ToListAsync();
+
+        // Biz :84408-84416 — JDP_Mst_JDPowerTermDtl: inner join theo JDPTermCode của các kỳ đã lọc, order by MyRowIdx asc.
+        var termCodes = list.Select(x => x.JDPTermCode).ToList();
+        var dtlList = termCodes.Count == 0
+            ? new List<JDP_Mst_JDPowerTermDtl>()
+            : await _db.Set<JDP_Mst_JDPowerTermDtl>().AsNoTracking()
+                .Where(x => termCodes.Contains(x.JDPTermCode))
+                .ToListAsync();
+        var order = new Dictionary<string, int>();
+        for (var i = 0; i < termCodes.Count; i++) order[termCodes[i]] = i;
+        dtlList = dtlList.OrderBy(x => order.TryGetValue(x.JDPTermCode, out var idx) ? idx : int.MaxValue).ToList();
+
+        // Gate :651-656 — Data = new { lst_JDP_Mst_JDPowerTerm, lst_JDP_Mst_JDPowerTermDtl }; objJsonResultEntry.SetSuccess().
+        return Ok(new
+        {
+            Success = true,
+            Data = new
+            {
+                lst_JDP_Mst_JDPowerTerm = list,
+                lst_JDP_Mst_JDPowerTermDtl = dtlList,
+            }
+        });
+    }
+
     /// <summary>TUtils.CUtils.StdStr: Trim, rỗng -> null (PORT_RULES mục 3).</summary>
     private static string? StdStr(string? s)
     {
@@ -175,4 +242,10 @@ public class JDPMstJDPowerTerm_SearchWHHQReq
     public string? FlagActive { get; set; }
     public int Ft_PageIndex { get; set; } = 0;
     public int Ft_PageSize { get; set; } = 10;
+}
+
+/// <summary>Body của GetByJDPTermCodeHQ (gate JDPMstJDPowerTermController.cs:478-480 — tham số duy nhất JDPTermCode).</summary>
+public class JDPMstJDPowerTerm_GetByJDPTermCodeHQReq
+{
+    public string? JDPTermCode { get; set; }
 }

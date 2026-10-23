@@ -28,6 +28,7 @@ public class JDPMstJDPowerTermControllerPortTests : IDisposable
         _db = new AppDbContext(opt, new TenantContext());
         _db.Database.EnsureCreated();
         new JDP_Mst_JDPowerTermSeeder().SeedAsync(_db).GetAwaiter().GetResult();
+        new JDP_Mst_JDPowerTermDtlSeeder().SeedAsync(_db).GetAwaiter().GetResult();
         _controller = new JDPMstJDPowerTermControllerPort(_db);
         _controller.ControllerContext = new ControllerContext
         {
@@ -210,5 +211,45 @@ public class JDPMstJDPowerTermControllerPortTests : IDisposable
         Assert.Equal(3, data.GetProperty("ItemCount").GetInt32());
         Assert.Equal(0, data.GetProperty("PageCount").GetInt32());
         Assert.Equal(0, data.GetProperty("DataList").GetArrayLength());
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // GetByJDPTermCodeHQ — gate JDPMstJDPowerTermController.cs:478-691 -> BizCarSv.Master.cs:84169-84316
+    //   -> 84318-84453 (JDP_Mst_JDPowerTerm_GetX). Trả 2 danh sách: kỳ + chi tiết (JDP_Mst_JDPowerTermDtl).
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetByJDPTermCodeHQ_BodyRong_TraHaiDanhSachRong()
+    {
+        // Gate :564/:567 — JDPTermCode rỗng ⇒ không mệnh đề lọc.
+        // Gate :576-577 + Biz :84353-84354 — Ft_RecordCount của BaseController KHÔNG có trong excerpt (GAP, dùng 0)
+        //   ⇒ nFilterRecordEnd = 0 ⇒ `MyRowIdx <= 0` ⇒ 0 dòng; hai danh sách khởi tạo rỗng (gate :579-580) ⇒ Data = 2 mảng rỗng.
+        var root = Root(await _controller.GetByJDPTermCodeHQ(null));
+
+        Assert.True(root.GetProperty("Success").GetBoolean());
+        var data = root.GetProperty("Data");
+        Assert.Equal(0, data.GetProperty("lst_JDP_Mst_JDPowerTerm").GetArrayLength());
+        Assert.Equal(0, data.GetProperty("lst_JDP_Mst_JDPowerTermDtl").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task GetByJDPTermCodeHQ_LocJDP02_TraHaiDanhSachRong()
+    {
+        // Gate :567 — GenLikeCondition2Percent ⇒ like '%02%' (không phân biệt hoa/thường như SQL Server).
+        // Cùng GAP Ft_RecordCount = 0 ⇒ nguồn trả 0 dòng cho cả hai danh sách.
+        var root = Root(await _controller.GetByJDPTermCodeHQ(new JDPMstJDPowerTerm_GetByJDPTermCodeHQReq { JDPTermCode = " jdp02 " }));
+        var data = root.GetProperty("Data");
+        Assert.Equal(0, data.GetProperty("lst_JDP_Mst_JDPowerTerm").GetArrayLength());
+        Assert.Equal(0, data.GetProperty("lst_JDP_Mst_JDPowerTermDtl").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task GetByJDPTermCodeHQ_KhongCoKy_TraHaiDanhSachRong()
+    {
+        // Gate :579-580 — hai danh sách khởi tạo rỗng; không khớp dòng nào ⇒ Data = 2 mảng rỗng (không null).
+        var root = Root(await _controller.GetByJDPTermCodeHQ(new JDPMstJDPowerTerm_GetByJDPTermCodeHQReq { JDPTermCode = "KHONGCO" }));
+        var data = root.GetProperty("Data");
+        Assert.Equal(0, data.GetProperty("lst_JDP_Mst_JDPowerTerm").GetArrayLength());
+        Assert.Equal(0, data.GetProperty("lst_JDP_Mst_JDPowerTermDtl").GetArrayLength());
     }
 }
