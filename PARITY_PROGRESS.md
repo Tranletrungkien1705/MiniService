@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 28/1152 (2.43%)
+**Tiến độ hiện tại**: 29/1152 (2.52%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -176,7 +176,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 164 | MstPlateColorController/GetAllActive | Chưa làm | - |
 | 165 | MstProvinceController/Search | Chưa làm | - |
 | 166 | MstProvinceController/GetAllActive | Chưa làm | - |
-| 167 | MstSerAppTypeController/GetAllActive | Chưa làm | - |
+| 167 | MstSerAppTypeController/GetAllActive | Đã làm | bbfc5b9 |
 | 168 | MstStaffController/Search | Chưa làm | - |
 | 169 | NPPSearchCarController/SearchHQ | Chưa làm | - |
 | 170 | NPPSearchCarController/SearchWHHQ | Chưa làm | - |
