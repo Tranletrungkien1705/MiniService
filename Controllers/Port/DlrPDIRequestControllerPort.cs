@@ -5,7 +5,7 @@ using MiniService.Data;
 namespace MiniService.Controllers.Port;
 
 // port 1:1 DlrPDIRequestController.cs — DlrPDIRequest / GetByDlrPDIReqNoDL (#39) + GetByDlrPDIReqNoHQ (#41)
-//        + GetByDlrPDIReqNoWHHQ (#42)
+//        + GetByDlrPDIReqNoWHHQ (#42) + GetROForCreateDL (#43)
 // Nguồn #39/#41: DlrPDIRequestController.cs:1416-1632 -> BizCarSv.DMSSales.cs:329-473 DlrPDIRequest_Get_FromDMSSalesHQ
 //        -> BizCarSv.DMSSales.cs:619-720 DlrPDIRequest_Get_FromDMSSalesX
 //        -> gọi dịch vụ ngoài wsDMSSale.DlrPDIRequest_Get_OS (WebService DMS Sale, không có bảng trong DB nội bộ).
@@ -13,6 +13,10 @@ namespace MiniService.Controllers.Port;
 //        DlrPDIRequest_GetWH_FromDMSSalesHQ -> BizCarSv.DMSSales.cs:723-826 DlrPDIRequest_GetWH_FromDMSSalesX
 //        -> gọi dịch vụ ngoài wsDMSSale.DlrPDIRequest_GetWH_OS (BizCarSv.DMSSales.cs:779-793);
 //        toàn bộ dữ liệu Dlr_PDIRequest/Dlr_PDIRequestDtl nằm ở DMS Sale, KHÔNG có bảng trong DB nội bộ.
+// Nguồn #43: DlrPDIRequestController.cs:1853-2300 GetROForCreateDL
+//   -> DlrPDIRequest_Get_FromDMSSalesDL -> wsDMSSale.DlrPDIRequest_Get_OS (DMS Sale ngoài)
+//   -> SerCustomerCarSync_FromPDIDL -> wsDMSSale.GetInforForSerCustomerCarSync (DMS Sale ngoài)
+//   -> Ser_CustomerCar_Get_DL (Ser_CustomerCar_GetX)
 [ApiController]
 [Route("api/dlrpdirequest")]
 public class DlrPDIRequestControllerPort : ControllerBase
@@ -87,13 +91,7 @@ public class DlrPDIRequestControllerPort : ControllerBase
             var lstDlrPdiRequest = new List<object>();
             var lstDlrPdiRequestDtl = new List<object>();
 
-            // Gate :1592-1599:
-            // objJsonResultEntry.Data = new
-            // {
-            //     lst_Dlr_PDIRequest = lst_Dlr_PDIRequest,
-            //     lst_Dlr_PDIRequestDtl = lst_Dlr_PDIRequestDtl
-            // };
-            // objJsonResultEntry.SetSuccess();
+            // Gate :1592-1599
             return Task.FromResult<IActionResult>(Ok(new
             {
                 Success = true,
@@ -132,18 +130,9 @@ public class DlrPDIRequestControllerPort : ControllerBase
             // Gate :1722: string strDlrPDIReqNo = TUtils.CUtils.StdStr(DlrPDIReqNo);
             var dlrPdiReqNo = string.IsNullOrWhiteSpace(req?.DlrPDIReqNo) ? null : req.DlrPDIReqNo!.Trim();
 
-            // Gate :1727: strDlrPDIReqStatus = TUtils.CUtils.StdStr(TConst.Stage.Approved) — chỉ dùng để dựng
-            // strWhereClause_Dlr_PDIRequest (gate :3292-3336) rồi chuyển sang DMS Sale; không đọc DB nội bộ.
-            // Gate :1737-1738: strFt_RecordStart = "0", strFt_RecordCount = "1".
-            // BizCarSv.DMSSales.cs:779-793: dữ liệu lấy từ wsDMSSale.DlrPDIRequest_GetWH_OS.
-            // Đích không có dịch vụ ngoài DMS Sale -> GAP: trả danh sách rỗng.
             var lstDlrPdiRequest = new List<object>();
             var lstDlrPdiRequestDtl = new List<object>();
 
-            // Gate :1809-1814:
-            // objJsonResultEntry.Data = new { lst_Dlr_PDIRequest = lst_Dlr_PDIRequest,
-            //                                  lst_Dlr_PDIRequestDtl = lst_Dlr_PDIRequestDtl };
-            // objJsonResultEntry.SetSuccess();
             return Task.FromResult<IActionResult>(Ok(new
             {
                 Success = true,
@@ -157,6 +146,66 @@ public class DlrPDIRequestControllerPort : ControllerBase
         catch (Exception ex)
         {
             return Task.FromResult<IActionResult>(PortResult.Fail(errorCode, "Exception", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Lấy thông tin lệnh RO tạo từ yêu cầu PDI (GetROForCreateDL) — hạng mục #43.
+    /// Chuỗi nguồn: gate DlrPDIRequestController.cs:1853-2300 GetROForCreateDL
+    ///   1. Check input DlrPDIReqNo (rỗng -> DlrPDIRequest_GetROForCreateDL_DlrPDIReqNoEmpty)
+    ///      và VIN (rỗng -> DlrPDIRequest_GetROForCreateDL_VINEmpty).
+    ///   2. Gọi DlrPDIRequest_Get_FromDMSSalesDL (BizCarSv.DMSSales.cs:39-183 -> DlrPDIRequest_Get_FromDMSSalesX:619-720
+    ///      -> wsDMSSale.DlrPDIRequest_Get_OS: WebService ngoài DMS Sales).
+    ///      Đích không có dịch vụ ngoài DMS Sales (GAP: NO_BACKEND) nên dừng tại bước này và báo lỗi
+    ///      DlrPDIRequest_GetROForCreateDL_DlrPDIReqNoNotFound theo guard nguồn gate :2043.
+    /// </summary>
+    [HttpPost("getroforcreatedl")]
+    public Task<IActionResult> GetROForCreateDL(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] DlrPDIRequest_GetROForCreateDLReq? req = null)
+    {
+        // Gate :1873: string strErrorCodeDefault = "DlrPDIRequest_GetROForCreateDL";
+        const string errorCodeDefault = "DlrPDIRequest_GetROForCreateDL";
+
+        try
+        {
+            // Gate :1940-1953: Refine and Check Input DlrPDIReqNo
+            // string strDlrPDIReqNo = TUtils.CUtils.StdStr(DlrPDIReqNo);
+            var dlrPdiReqNo = string.IsNullOrWhiteSpace(req?.DlrPDIReqNo) ? null : req.DlrPDIReqNo!.Trim();
+            if (string.IsNullOrEmpty(dlrPdiReqNo))
+            {
+                // Gate :1949: TError.ErridNCarService.DlrPDIRequest_GetROForCreateDL_DlrPDIReqNoEmpty
+                return Task.FromResult<IActionResult>(PortResult.Fail(
+                    "DlrPDIRequest_GetROForCreateDL_DlrPDIReqNoEmpty",
+                    "Check.Input.DlrPDIReqNo",
+                    req?.DlrPDIReqNo));
+            }
+
+            // Gate :1955-1967: Refine and Check Input VIN
+            // string strVIN = TUtils.CUtils.StdStr(VIN);
+            var vin = string.IsNullOrWhiteSpace(req?.VIN) ? null : req.VIN!.Trim();
+            if (string.IsNullOrEmpty(vin))
+            {
+                // Gate :1963: TError.ErridNCarService.DlrPDIRequest_GetROForCreateDL_VINEmpty
+                return Task.FromResult<IActionResult>(PortResult.Fail(
+                    "DlrPDIRequest_GetROForCreateDL_VINEmpty",
+                    "Check.Input.VIN",
+                    req?.VIN));
+            }
+
+            // Gate :2003-2020: mdsResult = _biz.DlrPDIRequest_Get_FromDMSSalesDL(...)
+            // -> BizCarSv.DMSSales.cs:39-183 -> DlrPDIRequest_Get_FromDMSSalesX
+            // -> wsDMSSale.DlrPDIRequest_Get_OS (DMS Sale ngoài).
+            // Do đích KHÔNG có dịch vụ ngoài DMS Sale và không có bảng Dlr_PDIRequest (NO_BACKEND),
+            // kết quả trả về từ DMS Sales rỗng -> gate :2034 dt_Dlr_PDIRequest == null || dt_Dlr_PDIRequest.Rows.Count < 0
+            // ném lỗi DlrPDIRequest_GetROForCreateDL_DlrPDIReqNoNotFound.
+            return Task.FromResult<IActionResult>(PortResult.Fail(
+                "DlrPDIRequest_GetROForCreateDL_DlrPDIReqNoNotFound",
+                "Check.Input.DlrPDIReqNo",
+                dlrPdiReqNo));
+        }
+        catch (Exception ex)
+        {
+            return Task.FromResult<IActionResult>(PortResult.Fail(errorCodeDefault, "Exception", ex.Message));
         }
     }
 }
@@ -174,4 +223,10 @@ public class DlrPDIRequest_GetByDlrPDIReqNoHQReq
 public class DlrPDIRequest_GetByDlrPDIReqNoWHHQReq
 {
     public string? DlrPDIReqNo { get; set; }
+}
+
+public class DlrPDIRequest_GetROForCreateDLReq
+{
+    public string? DlrPDIReqNo { get; set; }
+    public string? VIN { get; set; }
 }
