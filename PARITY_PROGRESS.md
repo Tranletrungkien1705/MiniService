@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 22/1152 (1.91%)
+**Tiến độ hiện tại**: 23/1152 (2%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -66,7 +66,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 54 | FileController/SaveUploadFileSerMstModelAudImage | Chưa làm | - |
 | 55 | FileController/UploadFileSerMstFilePathVideo | Chưa làm | - |
 | 56 | FileController/SaveUploadFileSerMstFilePathVideo | Chưa làm | - |
-| 57 | HomeController/Index | Chưa làm | - |
+| 57 | HomeController/Index | Đã làm | 870860d |
 | 58 | JDPMstJDPowerTermController/SearchHQ | Chưa làm | - |
 | 59 | JDPMstJDPowerTermController/SearchWHHQ | Chưa làm | - |
 | 60 | JDPMstJDPowerTermController/GetByJDPTermCodeHQ | Chưa làm | - |
