@@ -146,6 +146,44 @@ public class MstProvinceControllerPortTests : IDisposable
         Assert.Equal("04", list[1].GetProperty("ProvinceCode").GetString());
     }
 
+    // ===== GetByProvinceCode =====
+
+    [Fact]
+    public async Task GetByProvinceCode_ProvinceCode01_TraHaNoi()
+    {
+        // Gate: MstProvinceController.cs:149-202 GetByProvinceCode(string ProvinceCode)
+        // Biz: BizCarSv.Master.cs:5999 (Mst_Province_Get) -> 6144 (Mst_Province_GetX).
+        // Lọc: ProvinceCode = "01" → Hà Nội.
+        var req = new Mst_Province_GetByProvinceCodeReq { ProvinceCode = "01" };
+        var root = Root(await _controller.GetByProvinceCode(req));
+        Assert.True(root.GetProperty("Success").GetBoolean());
+        var data = root.GetProperty("Data");
+        Assert.Equal("01", data.GetProperty("ProvinceCode").GetString());
+        Assert.Equal("Hà Nội", data.GetProperty("ProvinceName").GetString());
+    }
+
+    [Fact]
+    public async Task GetByProvinceCode_BodyRong_TraNull()
+    {
+        // ProvinceCode rỗng → trả null.
+        var req = new Mst_Province_GetByProvinceCodeReq();
+        var root = Root(await _controller.GetByProvinceCode(req));
+        Assert.True(root.GetProperty("Success").GetBoolean());
+        var data = root.GetProperty("Data");
+        Assert.Equal(JsonValueKind.Null, data.ValueKind);
+    }
+
+    [Fact]
+    public async Task GetByProvinceCode_ProvinceCodeKhongTon_TraNull()
+    {
+        // ProvinceCode không tồn tại → trả null.
+        var req = new Mst_Province_GetByProvinceCodeReq { ProvinceCode = "XX" };
+        var root = Root(await _controller.GetByProvinceCode(req));
+        Assert.True(root.GetProperty("Success").GetBoolean());
+        var data = root.GetProperty("Data");
+        Assert.Equal(JsonValueKind.Null, data.ValueKind);
+    }
+
     // ===== GetAllActive =====
 
     [Fact]

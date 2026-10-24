@@ -48,6 +48,37 @@ public class MstProvinceControllerPort : ControllerBase
     }
 
     /// <summary>
+    /// Lấy chi tiết tỉnh/thành phố theo mã (GetByProvinceCode).
+    /// Gate: MstProvinceController.cs:149-202 GetByProvinceCode(string ProvinceCode)
+    /// Biz: BizCarSv.Master.cs:5999 (Mst_Province_Get) -> 6144 (Mst_Province_GetX).
+    /// Lọc: ProvinceCode = req.ProvinceCode (Biz:6216), Ft_RecordStart=0, Ft_RecordCount=1.
+    /// Trả về: dòng đầu hoặc null nếu không tìm được.
+    /// </summary>
+    [HttpPost("getbyprovincecheck")]
+    public async Task<IActionResult> GetByProvinceCode(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] Mst_Province_GetByProvinceCodeReq? req = null)
+    {
+        var provinceCode = req?.ProvinceCode;
+        if (string.IsNullOrEmpty(provinceCode))
+            return Ok(new { Success = true, Data = (object?)null });
+
+        var query = _db.Set<Mst_Province>()
+            .AsNoTracking()
+            .AsQueryable();
+
+        // Biz:6216 — ProvinceCode condition: GenEqualCondition2 (dùng =)
+        query = query.Where(x => EF.Functions.Like((x.ProvinceCode ?? "").ToLower(), PortQuery.Equal(provinceCode), PortQuery.Esc));
+
+        var item = await query.FirstOrDefaultAsync();
+
+        return Ok(new
+        {
+            Success = true,
+            Data = item
+        });
+    }
+
+    /// <summary>
     /// Tìm kiếm tỉnh/thành phố (Search).
     /// Gate: MstProvinceController.cs:41-272 Search(ProvinceCode, ProvinceName, FlagActive, CreatedDate, CreatedBy, AreaCode, Ft_PageIndex, Ft_PageSize)
     /// Biz: BizCarSv.Master.cs:5999 (Mst_Province_Get) -> 6144 (Mst_Province_GetX).
@@ -123,6 +154,11 @@ public class MstProvinceControllerPort : ControllerBase
             Data = new PageInfo<object>(data, itemCount, pageCount, pageIndex, pageSize)
         });
     }
+}
+
+public class Mst_Province_GetByProvinceCodeReq
+{
+    public string? ProvinceCode { get; set; }
 }
 
 public class Mst_Province_SearchReq
