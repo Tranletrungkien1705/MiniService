@@ -66,23 +66,24 @@ public class MstProvinceControllerPortTests : IDisposable
     }
 
     [Fact]
-    public async Task FilterProvinceCode_Tra1Dong()
+    public async Task FilterKeyWord_TraDongCoChứa()
     {
-        // Filter ProvinceCode = "01" → 1 dòng (Hà Nội).
-        var req = new Mst_Province_SearchReq { ProvinceCode = "01" };
+        // Filter KeyWord LIKE "Hà" → 1 dòng (Hà Nội).
+        // Gate:691 — ProvinceName condition: GenLikeCondition2Percent (%KeyWord%).
+        var req = new Mst_Province_SearchReq { KeyWord = "Hà" };
         var root = Root(await _controller.Search(req));
         var data = root.GetProperty("Data");
         Assert.Equal(1, data.GetProperty("ItemCount").GetInt32());
         var list = data.GetProperty("DataList");
         Assert.Equal(1, list.GetArrayLength());
-        Assert.Equal("01", list[0].GetProperty("ProvinceCode").GetString());
-        Assert.Equal("Hà Nội", list[0].GetProperty("ProvinceName").GetString());
+        Assert.Contains("Hà", list[0].GetProperty("ProvinceName").GetString()!);
     }
 
     [Fact]
     public async Task FilterFlagActive1_Tra3Dong()
     {
         // Filter FlagActive = "1" → 3 dòng (01, 02, 04).
+        // Gate:695-700 — FlagActive condition: tách chuỗi "0,1", dùng IN.
         var req = new Mst_Province_SearchReq { FlagActive = "1" };
         var root = Root(await _controller.Search(req));
         var data = root.GetProperty("Data");
@@ -92,29 +93,16 @@ public class MstProvinceControllerPortTests : IDisposable
     }
 
     [Fact]
-    public async Task FilterFlagActive0_Tra1Dong()
+    public async Task FilterFlagActive01_Tra4Dong()
     {
-        // Filter FlagActive = "0" → 1 dòng (03, Đà Nẵng).
-        var req = new Mst_Province_SearchReq { FlagActive = "0" };
+        // Filter FlagActive = "0,1" (chuỗi "0,1" tách bằng dấu phẩy) → 4 dòng (01, 02, 03, 04).
+        // Gate:695-700 — FlagActive IN ("0", "1").
+        var req = new Mst_Province_SearchReq { FlagActive = "0,1" };
         var root = Root(await _controller.Search(req));
         var data = root.GetProperty("Data");
-        Assert.Equal(1, data.GetProperty("ItemCount").GetInt32());
+        Assert.Equal(4, data.GetProperty("ItemCount").GetInt32());
         var list = data.GetProperty("DataList");
-        Assert.Equal(1, list.GetArrayLength());
-        Assert.Equal("03", list[0].GetProperty("ProvinceCode").GetString());
-    }
-
-    [Fact]
-    public async Task FilterProvinceName_TraDongCoChứa()
-    {
-        // Filter ProvinceName LIKE "Hồ" → 1 dòng (TP. Hồ Chí Minh).
-        var req = new Mst_Province_SearchReq { ProvinceName = "Hồ" };
-        var root = Root(await _controller.Search(req));
-        var data = root.GetProperty("Data");
-        Assert.Equal(1, data.GetProperty("ItemCount").GetInt32());
-        var list = data.GetProperty("DataList");
-        Assert.Equal(1, list.GetArrayLength());
-        Assert.Contains("Hồ", list[0].GetProperty("ProvinceName").GetString()!);
+        Assert.Equal(4, list.GetArrayLength());
     }
 
     [Fact]
