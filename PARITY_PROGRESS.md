@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 39/1152 (3.39%)
+**Tiến độ hiện tại**: 40/1152 (3.47%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -184,7 +184,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 172 | NPPSearchCarController/ExportWHHQ | Chưa làm | - |
 | 173 | OSHCCController/SearchROHistoryList | Đã làm | 2d84657 |
 | 174 | OSHCCController/SearchRODetailHistory | Đã làm | e792834 |
-| 175 | OSHCCController/SearchCustomerCar | Chưa làm | - |
+| 175 | OSHCCController/SearchCustomerCar | Đã làm | 420ad2e |
 | 176 | OSHCCController/SearchCar | Chưa làm | - |
 | 177 | OSHCCController/SearhCVDV | Chưa làm | - |
 | 178 | OSHCCController/SerAppCreate | Chưa làm | - |
