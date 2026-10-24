@@ -145,4 +145,36 @@ public class MstProvinceControllerPortTests : IDisposable
         Assert.Equal("03", list[0].GetProperty("ProvinceCode").GetString());
         Assert.Equal("04", list[1].GetProperty("ProvinceCode").GetString());
     }
+
+    // ===== GetAllActive =====
+
+    [Fact]
+    public async Task GetAllActive_TraCac3Dong()
+    {
+        // GetAllActive: lấy tất cả dòng có FlagActive = "1" → 3 dòng (01, 02, 04).
+        var root = Root(await _controller.GetAllActive());
+        Assert.True(root.GetProperty("Success").GetBoolean());
+        var data = root.GetProperty("Data");
+        Assert.Equal(3, data.GetProperty("ItemCount").GetInt32());
+        var list = data.GetProperty("DataList");
+        Assert.Equal(3, list.GetArrayLength());
+        Assert.Equal("01", list[0].GetProperty("ProvinceCode").GetString());
+        Assert.Equal("02", list[1].GetProperty("ProvinceCode").GetString());
+        Assert.Equal("04", list[2].GetProperty("ProvinceCode").GetString());
+    }
+
+    [Fact]
+    public async Task GetAllActive_BangRong_TraPageInfoRong()
+    {
+        // GetAllActive khi không có dòng FlagActive = "1".
+        var set = _db.Set<Mst_Province>();
+        set.RemoveRange(await set.ToListAsync());
+        await _db.SaveChangesAsync();
+
+        var root = Root(await _controller.GetAllActive());
+        var data = root.GetProperty("Data");
+        Assert.Equal(0, data.GetProperty("ItemCount").GetInt32());
+        var list = data.GetProperty("DataList");
+        Assert.Equal(0, list.GetArrayLength());
+    }
 }

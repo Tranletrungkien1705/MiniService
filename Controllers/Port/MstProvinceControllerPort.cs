@@ -23,6 +23,31 @@ public class MstProvinceControllerPort : ControllerBase
     }
 
     /// <summary>
+    /// Lấy tất cả tỉnh/thành phố đang hoạt động (GetAllActive).
+    /// Gate: MstProvinceController.cs:274-458 GetAllActive()
+    /// Biz: BizCarSv.Master.cs:5999 (Mst_Province_Get) -> 6144 (Mst_Province_GetX).
+    /// Lọc: FlagActive = "1" (Biz:356).
+    /// </summary>
+    [HttpGet("getallactive")]
+    public async Task<IActionResult> GetAllActive()
+    {
+        var query = _db.Set<Mst_Province>()
+            .AsNoTracking()
+            .Where(x => x.FlagActive == "1");
+
+        var list = await query
+            .OrderBy(x => x.ProvinceCode)
+            .ToListAsync();
+
+        var pageInfo = new PageInfo<Mst_Province>(list, list.Count, 1, 0, 0);
+        return Ok(new
+        {
+            Success = true,
+            Data = pageInfo
+        });
+    }
+
+    /// <summary>
     /// Tìm kiếm tỉnh/thành phố (Search).
     /// Gate: MstProvinceController.cs:41-272 Search(ProvinceCode, ProvinceName, FlagActive, CreatedDate, CreatedBy, AreaCode, Ft_PageIndex, Ft_PageSize)
     /// Biz: BizCarSv.Master.cs:5999 (Mst_Province_Get) -> 6144 (Mst_Province_GetX).
