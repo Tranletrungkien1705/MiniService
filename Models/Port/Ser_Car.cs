@@ -18,6 +18,11 @@ public class Ser_Car
     public string? Frameno { get; set; }
     public string? EngineNo { get; set; }
     public string? ProductYear { get; set; }
+    public string? SalesCarID { get; set; }
+    public string? CurrentKm { get; set; }
+    public string? WarrantyRegistrationDate { get; set; }
+    public int? IsActive { get; set; }
+    public string? InsNo { get; set; }
 }
 
 public class Ser_CarConfiguration : IEntityTypeConfiguration<Ser_Car>

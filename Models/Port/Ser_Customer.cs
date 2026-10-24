@@ -19,6 +19,14 @@ public class Ser_Customer
     public string? Mobile { get; set; }
     public string? ContMobile { get; set; }
     public string? TaxCode { get; set; }
+    public string? Email { get; set; }
+    public string? ProvinceCode { get; set; }
+    public string? DistrictCode { get; set; }
+    public string? IDCardNo { get; set; }
+    public string? ContEmail { get; set; }
+    public int? Sex { get; set; }
+    public string? DOB { get; set; }
+    public int? IsActive { get; set; }
 }
 
 public class Ser_CustomerConfiguration : IEntityTypeConfiguration<Ser_Customer>

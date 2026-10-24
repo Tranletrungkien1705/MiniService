@@ -123,6 +123,222 @@ public class OSHCCControllerPort : ControllerBase
             Data = (object?)null,
         };
     }
+
+    /// <summary>
+    /// Tìm kiếm khách hàng và xe dịch vụ — dữ liệu từ Ser_Customer, Ser_Car, Ser_Insurance và bảng danh mục.
+    /// Gate: D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\idn.CarService.WebAPI\Controllers\OSHCCController.cs:463-690
+    /// Biz: D:\idocNet\2023.H.CarServices\11.BackEnd\V10\idn.CarService.Biz\OSHCC\BizCarSv.HCC.cs:835-1192 (OSHCC_Ser_CustomerCar_Get + OSHCC_Ser_CustomerCar_GetX)
+    /// Trả 2 danh sách: Service_Ser_Customer_Summary, Service_Ser_CustomerCar_Service (tên bảng đặt theo source).
+    ///
+    /// GAP: Gate gọi GetUserFullInfo_OSHCC để xác thực bằng INOS service (dịch vụ ngoài).
+    ///      Action này bỏ qua xác thực dịch vụ ngoài, chỉ nhận tham số từ body.
+    /// </summary>
+    [HttpPost("searchcustomercar")]
+    public async Task<IActionResult> SearchCustomerCar(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] SearchCustomerCarReq? req = null)
+    {
+        const string errorCode = "OSHCC_Ser_CustomerCar_Get";
+        try
+        {
+            // Gate :560-566 — StdStr chuẩn hoá trim tất cả tham số.
+            var dealerCode = string.IsNullOrWhiteSpace(req?.DealerCode) ? null : req.DealerCode!.Trim();
+            var cusName = string.IsNullOrWhiteSpace(req?.CusName) ? null : req.CusName!.Trim();
+            var plateNo = string.IsNullOrWhiteSpace(req?.PlateNo) ? null : req.PlateNo!.Trim();
+            var frameNo = string.IsNullOrWhiteSpace(req?.FrameNo) ? null : req.FrameNo!.Trim();
+            var mobile = string.IsNullOrWhiteSpace(req?.Mobile) ? null : req.Mobile!.Trim();
+
+            // Gate :569 — StdParam viết hoa danh sách mã đại lý (danh sách được phân tách | trong biz).
+            var dealerCodeList = string.IsNullOrWhiteSpace(dealerCode) ? null : dealerCode.ToUpper();
+
+            // Gate :570-573 — tạo pattern %...% cho lọc LIKE.
+            var cusNamePattern = string.IsNullOrWhiteSpace(cusName) ? null : $"%{cusName}%";
+            var plateNoPattern = string.IsNullOrWhiteSpace(plateNo) ? null : $"%{plateNo}%";
+            var frameNoPattern = string.IsNullOrWhiteSpace(frameNo) ? null : $"%{frameNo}%";
+            var mobilePattern = string.IsNullOrWhiteSpace(mobile) ? null : $"%{mobile}%";
+
+            // Gate :569-570 — ResultRecordStart/Count: convert to int, mặc định 0.
+            var recordStart = int.TryParse(req?.ResultRecordStart, out var rs) ? rs : 0;
+            var recordCount = int.TryParse(req?.ResultRecordCount, out var rc) ? rc : 0;
+
+            var result = await SearchCustomerCarAsync(
+                dealerCodeList, cusNamePattern, plateNoPattern, frameNoPattern, mobilePattern,
+                recordStart, recordCount);
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return PortResult.Fail(errorCode, "Exception", ex.Message);
+        }
+    }
+
+    private async Task<object> SearchCustomerCarAsync(
+        string? dealerCodeList, string? cusNamePattern, string? plateNoPattern, string? frameNoPattern,
+        string? mobilePattern, int recordStart, int recordCount)
+    {
+        // Biz :1006-1191 — SQL dùng temp table #tbl_ID, #tbl_customer_Filter, #tbl_customer_tmp.
+        // Port logic: query Ser_Customer + Ser_Car + left join Ser_Insurance, Ser_MST_Model, Mst_Province, Mst_District.
+        // Trả 2 table: Service_Ser_Customer_Summary (count), Service_Ser_CustomerCar_Service (chi tiết).
+
+        var summaryList = new List<dynamic>();
+        var serviceList = new List<dynamic>();
+
+        // Biz :1020-1043 — SELECT từ #tbl_ID: CusID, CarID, Row_Number() MyRowIdx.
+        // Lọc: IsActive=1, DealerCode NOT IN ('VN101','VN023','VN009'), rồi dealerCodeList, cusNamePattern, ...
+        // Phân trang: MyRowIdx >= @MyRowIdx_Start (recordStart+1) và <= @MyRowIdx_End (recordStart+recordCount).
+
+        var query = _db.Set<Ser_Customer>()
+            .GroupJoin(
+                _db.Set<Ser_Car>().Where(c => c.IsActive == 1),
+                cus => cus.CusID,
+                car => car.CusID,
+                (cus, cars) => new { cus, cars })
+            .Where(x => x.cus.IsActive == 1)
+            .Where(x => x.cus.DealerCode != "VN101" && x.cus.DealerCode != "VN023" && x.cus.DealerCode != "VN009")
+            .AsQueryable();
+
+        // Lọc DealerCode (format: "CODE1|CODE2|...").
+        if (!string.IsNullOrWhiteSpace(dealerCodeList))
+        {
+            var dealers = dealerCodeList.Split('|');
+            query = query.Where(x => dealers.Contains(x.cus.DealerCode));
+        }
+
+        // Lọc CusName pattern (LIKE, không phân biệt hoa/thường trên SQLite).
+        if (!string.IsNullOrWhiteSpace(cusNamePattern))
+        {
+            query = query.Where(x =>
+                EF.Functions.Like((x.cus.CusName ?? "").ToLower(), PortQuery.Equal(cusNamePattern.ToLower()), "\\"));
+        }
+
+        // Lọc PlateNo, FrameNo, Mobile (LIKE).
+        if (!string.IsNullOrWhiteSpace(plateNoPattern))
+        {
+            query = query.Where(x =>
+                x.cars.Any(car => EF.Functions.Like((car.PlateNo ?? "").ToLower(), PortQuery.Equal(plateNoPattern.ToLower()), "\\")));
+        }
+
+        if (!string.IsNullOrWhiteSpace(frameNoPattern))
+        {
+            query = query.Where(x =>
+                x.cars.Any(car => EF.Functions.Like((car.Frameno ?? "").ToLower(), PortQuery.Equal(frameNoPattern.ToLower()), "\\")));
+        }
+
+        if (!string.IsNullOrWhiteSpace(mobilePattern))
+        {
+            query = query.Where(x =>
+                EF.Functions.Like((x.cus.Mobile ?? "").ToLower(), PortQuery.Equal(mobilePattern.ToLower()), "\\"));
+        }
+
+        // Biz :1044-1049 — Count tổng số dòng (sau lọc, trước phân trang).
+        var totalCount = query.Count();
+
+        // Biz :1056-1059 — Phân trang: MyRowIdx >= recordStart+1 và <= recordStart+recordCount.
+        // Port: SelectMany để flatten GroupJoin, rồi phân trang.
+        var pagedQuery = query
+            .SelectMany(x => x.cars.DefaultIfEmpty(), (x, car) => new { x.cus, car })
+            .OrderBy(x => x.cus.CusName)
+            .Skip(recordStart)
+            .Take(recordCount > 0 ? recordCount : int.MaxValue)
+            .ToList();
+
+        // Biz :1118-1147 — SELECT từ #tbl_customer_tmp + left join Mst_Province, Mst_District.
+        // Dùng SelectMany để lấy từng car (có thể nhiều car cho 1 customer).
+
+        foreach (var row in pagedQuery)
+        {
+            var cus = row.cus;
+            var car = row.car;
+
+            // Lấy Mst_Province + Mst_District (left join).
+            var province = cus.ProvinceCode != null
+                ? await _db.Set<Mst_Province>().FirstOrDefaultAsync(p => p.ProvinceCode == cus.ProvinceCode)
+                : null;
+
+            var district = cus.DistrictCode != null && cus.ProvinceCode != null
+                ? await _db.Set<Mst_District>().FirstOrDefaultAsync(d =>
+                    d.DistrictCode == cus.DistrictCode && d.ProvinceCode == cus.ProvinceCode)
+                : null;
+
+            // Lấy ModelName từ Ser_MST_Model (left join).
+            var model = car != null && car.ModelID != null
+                ? await _db.Set<Ser_MST_Model>().FirstOrDefaultAsync(m => m.ModelID == car.ModelID)
+                : null;
+
+            // Biz :1062-1089 — case Sex: 1='MALE'/'Nam', 0='FEMALE'/'Nữ', else='OTHER'/'Khác'.
+            var sexEnum = cus.Sex ?? -1;
+            var cusSex = sexEnum == 1 ? "MALE" : (sexEnum == 0 ? "FEMALE" : "OTHER");
+            var sexText = sexEnum == 1 ? "Nam" : (sexEnum == 0 ? "Nữ" : "Khác");
+
+            var customerItem = new
+            {
+                CusID = cus.CusID,
+                CarID = car?.CarID,
+                CusName = cus.CusName,
+                CusMobile = cus.Mobile,
+                CusTel = cus.Tel,
+                DOB = cus.DOB,
+                DealerCode = cus.DealerCode,
+                Sex = cusSex,
+                SexText = sexText,
+                Email = cus.Email,
+                CusAddress = cus.Address,
+                PlateNo = car?.PlateNo,
+                FrameNo = car?.Frameno,
+                IsActive = cus.IsActive,
+                TradeMarkCode = car?.TradeMarkCode,
+                ModelID = car?.ModelID,
+                ModelName = model?.ModelName,
+                ColorCode = car?.ColorCode,
+                WarrantyRegistrationDate = car?.WarrantyRegistrationDate,
+                CurrentKm = car?.CurrentKm,
+                ProvinceCode = cus.ProvinceCode,
+                ProvinceName = province?.ProvinceName,
+                DistrictCode = cus.DistrictCode,
+                DistrictName = district?.DistrictName,
+                TaxCode = cus.TaxCode,
+                IDCardNo = cus.IDCardNo,
+                ContName = cus.ContName,
+                ContAddress = cus.ContAddress,
+                ContEmail = cus.ContEmail,
+                ContMobile = cus.ContMobile
+            };
+
+            serviceList.Add(customerItem);
+        }
+
+        // Biz :1188-1191 — trả 2 table trong DataSet:
+        // [0] Service_Ser_Customer_Summary: Count (tổng số bản ghi sau lọc).
+        // [1] Service_Ser_CustomerCar_Service: chi tiết các khách hàng + xe.
+
+        summaryList.Add(new { MyCount = totalCount });
+
+        // Gate :645-655 — if (lst_Service_Ser_CustomerCar_Service.Count > 0) { Data = {...}; SetSuccess(); }
+        if (serviceList.Count > 0)
+        {
+            return new
+            {
+                Success = true,
+                Data = new
+                {
+                    Lst_Service_Ser_Customer_Summary = summaryList,
+                    Lst_Service_Ser_CustomerCar_Service = serviceList
+                }
+            };
+        }
+
+        // Nếu rỗng (không có dòng): Gate :656 — không ghi data nào (trường hợp này khác SearchRODetailHistory).
+        // Source gate không clear ngoài (data được ghi vào object rỗng).
+        return new
+        {
+            Success = true,
+            Data = new
+            {
+                Lst_Service_Ser_Customer_Summary = summaryList,
+                Lst_Service_Ser_CustomerCar_Service = serviceList
+            }
+        };
+    }
 }
 
 public class SearchRODetailHistoryReq
@@ -132,4 +348,49 @@ public class SearchRODetailHistoryReq
     /// Giá trị: mã báo giá (vd "RO123") hoặc null/rỗng (không lọc).
     /// </summary>
     public string? ROID { get; set; }
+}
+
+public class SearchCustomerCarReq
+{
+    /// <summary>
+    /// Gate :464 — DealerCode (string, mã đại lý).
+    /// Chuẩn hoá: StdStr (trim) → StdParam (viết hoa) để tạo danh sách "CODE1|CODE2|...".
+    /// </summary>
+    public string? DealerCode { get; set; }
+
+    /// <summary>
+    /// Gate :465 — CusName (string, tên khách hàng).
+    /// Chuẩn hoá: StdStr (trim) → thành pattern "%{value}%".
+    /// </summary>
+    public string? CusName { get; set; }
+
+    /// <summary>
+    /// Gate :466 — PlateNo (string, biển số xe).
+    /// Chuẩn hoá: StdStr → pattern "%{value}%".
+    /// </summary>
+    public string? PlateNo { get; set; }
+
+    /// <summary>
+    /// Gate :467 — FrameNo (string, số khung).
+    /// Chuẩn hoá: StdStr → pattern "%{value}%".
+    /// </summary>
+    public string? FrameNo { get; set; }
+
+    /// <summary>
+    /// Gate :468 — Mobile (string, số điện thoại).
+    /// Chuẩn hoá: StdStr → pattern "%{value}%".
+    /// </summary>
+    public string? Mobile { get; set; }
+
+    /// <summary>
+    /// Gate :469 — ResultRecordStart (string, chỉ số bắt đầu).
+    /// Chuẩn hoá: Convert.ToInt32, mặc định 0.
+    /// </summary>
+    public string? ResultRecordStart { get; set; }
+
+    /// <summary>
+    /// Gate :470 — ResultRecordCount (string, số bản ghi trả về).
+    /// Chuẩn hoá: Convert.ToInt32, mặc định 0.
+    /// </summary>
+    public string? ResultRecordCount { get; set; }
 }
