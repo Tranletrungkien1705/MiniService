@@ -9,6 +9,13 @@ namespace MiniService.Controllers.Port;
 // Action chỉ kiểm tra file trên đĩa (System.IO.File.Exists), KHÔNG truy vấn DB, KHÔNG gọi WA_*/BIZ riêng,
 // KHÔNG chép tài khoản/mật khẩu viết cứng của nguồn (BaseController.cs:295 — không chép giá trị).
 // Bỏ CheckGatewayAuthentication / GetUserFullInfo_File / INOS / Sys_User_GetForCurrentUser: gọi dịch vụ ngoài — ghi GAP.
+//
+// #49 UploadFileRO: KHÔNG port — xem NO_BACKEND.flag và conflicts/49_conflict.md.
+//   Gate FileController.cs:382 gọi FileService.Instance.WA_File_SaveUploadFileRO ->
+//   BizService\Services\FileService.cs:34 PostDataCG(addressAPIs, "File", "SaveUploadFileRO", ...)
+//   tới `_strConfig_FileLocal_Url` (Web.config:151 = http://localhost:19668/) — DỊCH VỤ NGOÀI.
+//   Grep toàn bộ 11.BackEnd\V10: KHÔNG có hàm File_SaveUploadFileRO; `idn.CarService.Biz.Web` và
+//   `idn.CarService.Biz\File.cs` không tồn tại.
 [ApiController]
 [Route("api/file")]
 public class FileControllerPort : ControllerBase
