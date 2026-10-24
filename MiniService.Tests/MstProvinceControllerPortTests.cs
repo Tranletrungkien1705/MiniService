@@ -43,6 +43,12 @@ public class MstProvinceControllerPortTests : IDisposable
         return JsonDocument.Parse(JsonSerializer.Serialize(ok.Value)).RootElement;
     }
 
+    private static JsonElement BadRoot(IActionResult result)
+    {
+        var bad = Assert.IsType<BadRequestObjectResult>(result);
+        return JsonDocument.Parse(JsonSerializer.Serialize(bad.Value)).RootElement;
+    }
+
     // ===== Search =====
 
     [Fact]
@@ -211,5 +217,63 @@ public class MstProvinceControllerPortTests : IDisposable
         var root = Root(await _controller.GetAllActive());
         var data = root.GetProperty("Data");
         Assert.Equal(JsonValueKind.Null, data.ValueKind);
+    }
+
+    // ===== Delete =====
+
+    [Fact]
+    public async Task Delete_ProvinceCode01_XoaThanhCong()
+    {
+        // Gate: MstProvinceController.cs:340-390 Delete(string ProvinceCode).
+        // Xoá tỉnh có mã "01" (Hà Nội) → thành công, Success=true, Data=null.
+        var req = new Mst_Province_DeleteReq { ProvinceCode = "01" };
+        var root = Root(await _controller.Delete(req));
+        Assert.True(root.GetProperty("Success").GetBoolean());
+        var data = root.GetProperty("Data");
+        Assert.Equal(JsonValueKind.Null, data.ValueKind);
+
+        // Kiểm tra: dòng "01" đã bị xoá.
+        var item = await _db.Set<Mst_Province>().FirstOrDefaultAsync(x => x.ProvinceCode == "01");
+        Assert.Null(item);
+    }
+
+    [Fact]
+    public async Task Delete_ProvinceCodeRong_TraLoi()
+    {
+        // Gate: MstProvinceController.cs:357-384 kiểm ProvinceCode không rỗng.
+        // ProvinceCode rỗng → trả lỗi "invalid_provincecode" (tương đương Check.ProvinceCode).
+        var req = new Mst_Province_DeleteReq();
+        var root = BadRoot(await _controller.Delete(req));
+        Assert.False(root.GetProperty("Success").GetBoolean());
+        var errorCode = root.GetProperty("ErrorCode").GetString();
+        Assert.Equal("ErridNCarService.Mst_Province_Delete", errorCode);
+    }
+
+    [Fact]
+    public async Task Delete_ProvinceCodeKhongTon_TraLoi()
+    {
+        // Xoá tỉnh không tồn tại → trả lỗi NotFound.
+        var req = new Mst_Province_DeleteReq { ProvinceCode = "XX" };
+        var root = BadRoot(await _controller.Delete(req));
+        Assert.False(root.GetProperty("Success").GetBoolean());
+        var errorCode = root.GetProperty("ErrorCode").GetString();
+        Assert.Equal("ErridNCarService.Mst_Province_Delete", errorCode);
+    }
+
+    [Fact]
+    public async Task Delete_SauXoa_CacDongConLaiVanO()
+    {
+        // Xoá dòng "02" (TP. Hồ Chí Minh) → các dòng khác vẫn tồn tại.
+        var beforeCount = await _db.Set<Mst_Province>().CountAsync();
+        var req = new Mst_Province_DeleteReq { ProvinceCode = "02" };
+        await _controller.Delete(req);
+
+        var afterCount = await _db.Set<Mst_Province>().CountAsync();
+        Assert.Equal(beforeCount - 1, afterCount);
+
+        // Dòng "01" vẫn tồn tại.
+        var item01 = await _db.Set<Mst_Province>().FirstOrDefaultAsync(x => x.ProvinceCode == "01");
+        Assert.NotNull(item01);
+        Assert.Equal("Hà Nội", item01.ProvinceName);
     }
 }

@@ -154,6 +154,30 @@ public class MstProvinceControllerPort : ControllerBase
             Data = new PageInfo<object>(data, itemCount, pageCount, pageIndex, pageSize)
         });
     }
+
+    /// <summary>
+    /// Xoá tỉnh/thành phố (Delete).
+    /// Gate: MstProvinceController.cs:340-390 Delete(string ProvinceCode).
+    /// Kiểm tra: ProvinceCode không rỗng; nếu rỗng trả lỗi "invalid_provincecode".
+    /// Xoá dòng theo ProvinceCode (khóa chính).
+    /// </summary>
+    [HttpPost("delete")]
+    public async Task<IActionResult> Delete(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] Mst_Province_DeleteReq? req = null)
+    {
+        var provinceCode = req?.ProvinceCode;
+        if (string.IsNullOrEmpty(provinceCode))
+            return PortResult.Fail("Mst_Province_Delete", "Check.ProvinceCode", null);
+
+        var item = await _db.Set<Mst_Province>().FirstOrDefaultAsync(x => x.ProvinceCode == provinceCode);
+        if (item == null)
+            return PortResult.Fail("Mst_Province_Delete", "NotFound", null);
+
+        _db.Set<Mst_Province>().Remove(item);
+        await _db.SaveChangesAsync();
+
+        return Ok(new { Success = true, Data = (object?)null });
+    }
 }
 
 public class Mst_Province_GetByProvinceCodeReq
@@ -171,4 +195,9 @@ public class Mst_Province_SearchReq
     public string? AreaCode { get; set; }
     public int Ft_PageIndex { get; set; } = 0;
     public int Ft_PageSize { get; set; } = 10;
+}
+
+public class Mst_Province_DeleteReq
+{
+    public string? ProvinceCode { get; set; }
 }
