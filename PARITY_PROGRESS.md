@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 34/1152 (2.95%)
+**Tiến độ hiện tại**: 35/1152 (3.04%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -78,7 +78,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 66 | JDPMstJDPowerTermController/ExportHQ | Chưa làm | - |
 | 67 | JDPMstJDPowerTermController/ExportWHHQ | Chưa làm | - |
 | 68 | JDPMstJDPowerTermController/ExportTemplate | Chưa làm | - |
-| 69 | MapSGSOController/GetByGroupCodeDL | Chưa làm | - |
+| 69 | MapSGSOController/GetByGroupCodeDL | Đã làm | 2577c89 |
 | 70 | MapSGSOController/SaveDL | Chưa làm | - |
 | 71 | MapSGSUController/GetByGroupCodeDL | Chưa làm | - |
 | 72 | MapSGSUController/SaveDL | Chưa làm | - |
