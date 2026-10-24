@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 40/1152 (3.47%)
+**Tiến độ hiện tại**: 41/1152 (3.56%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -101,7 +101,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 89 | Mst_ProvinceController/GetByProvinceCode | Đã làm | 95acaaf |
 | 90 | Mst_ProvinceController/Create | Chưa làm | - |
 | 91 | Mst_ProvinceController/Update | Chưa làm | - |
-| 92 | Mst_ProvinceController/Delete | Chưa làm | - |
+| 92 | Mst_ProvinceController/Delete | Đã làm | ea8e021 |
 | 93 | Mst_ProvinceController/DeleteMultiple | Chưa làm | - |
 | 94 | Mst_ProvinceController/Import | Chưa làm | - |
 | 95 | Mst_ProvinceController/Export | Chưa làm | - |
