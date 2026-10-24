@@ -7,7 +7,7 @@ using MiniService.Data;
 namespace MiniService.Controllers.Port;
 
 // port 1:1 DlrPDIRequestController.cs — DlrPDIRequest / GetByDlrPDIReqNoDL (#39) + GetByDlrPDIReqNoHQ (#41)
-//        + GetByDlrPDIReqNoWHHQ (#42) + GetROForCreateDL (#43) + ExportWHHQ (#47)
+//        + GetByDlrPDIReqNoWHHQ (#42) + SearchWHDL (#36) + GetROForCreateDL (#43) + ExportWHHQ (#47)
 // Nguồn #39/#41: DlrPDIRequestController.cs:1416-1632 -> BizCarSv.DMSSales.cs:329-473 DlrPDIRequest_Get_FromDMSSalesHQ
 //        -> BizCarSv.DMSSales.cs:619-720 DlrPDIRequest_Get_FromDMSSalesX
 //        -> gọi dịch vụ ngoài wsDMSSale.DlrPDIRequest_Get_OS (WebService DMS Sale, không có bảng trong DB nội bộ).
@@ -155,6 +155,64 @@ public class DlrPDIRequestControllerPort : ControllerBase
         catch (Exception ex)
         {
             return Task.FromResult<IActionResult>(PortResult.Fail(errorCode, "Exception", ex.Message));
+        }
+    }
+
+    /// <summary>
+    /// Tìm kiếm yêu cầu PDI từ DMS Sales WH (warehouse) cho DL — hạng mục #36.
+    /// Chuỗi nguồn: gate DlrPDIRequestController.cs:271-509 SearchWHDL
+    ///   -> biz BizCarSv.DMSSales.cs:184-328 DlrPDIRequest_GetWH_FromDMSSalesDL
+    ///   -> biz BizCarSv.DMSSales.cs:827-910 DlrPDIRequest_GetWH_FromDMSSalesX
+    ///   -> dịch vụ ngoài wsDMSSale.DlrPDIRequest_GetWH_OS (BizCarSv.DMSSales.cs:827-910).
+    /// Toàn bộ dữ liệu Dlr_PDIRequest / Dlr_PDIRequestDtl nằm ở DMS Sale; đích không có dịch vụ ngoài này
+    /// (GAP: NO_BACKEND) -> trả danh sách rỗng, KHÔNG tự dựng bảng/kết quả.
+    /// </summary>
+    [HttpPost("searchwhdl")]
+    public async Task<IActionResult> SearchWHDL(
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] DlrPDIRequest_SearchWHDLReq? req = null)
+    {
+        // BizCarSv.DMSSales.cs:200 strErrorCodeDefault = TError.ErridNCarService.DlrPDIRequest_GetWH_FromDMSSalesDL
+        const string errorCode = "DlrPDIRequest_GetWH_FromDMSSalesDL";
+
+        try
+        {
+            // Gate :271-280: các tham số từ query / header; chuẩn hoá TUtils.CUtils.StdStr
+            // Điều chỉnh: port nhận từ body JSON theo pattern (tham chiếu DlrPDIRequest_ExportWHHQReq)
+            var dealerCode = string.IsNullOrWhiteSpace(req?.DealerCode) ? null : req.DealerCode.Trim();
+            var dlrPdiReqNo = string.IsNullOrWhiteSpace(req?.DlrPDIReqNo) ? null : req.DlrPDIReqNo.Trim();
+            var createdDateFrom = string.IsNullOrWhiteSpace(req?.CreatedDateFrom) ? null : req.CreatedDateFrom.Trim();
+            var createdDateTo = string.IsNullOrWhiteSpace(req?.CreatedDateTo) ? null : req.CreatedDateTo.Trim();
+            var vin = string.IsNullOrWhiteSpace(req?.VIN) ? null : req.VIN.Trim();
+            var dlrContractNo = string.IsNullOrWhiteSpace(req?.DlrContractNo) ? null : req.DlrContractNo.Trim();
+            var dlrPdiReqStatus = string.IsNullOrWhiteSpace(req?.DlrPDIReqStatus) ? null : req.DlrPDIReqStatus.Trim();
+            var ftPageIndex = req?.Ft_PageIndex ?? 0;
+            var ftPageSize = req?.Ft_PageSize ?? 10;
+
+            // Gate :419-437: gọi _biz.DlrPDIRequest_GetWH_FromDMSSalesDL
+            // -> BizCarSv.DMSSales.cs:184-328 -> BizCarSv.DMSSales.cs:827-910 -> wsDMSSale.DlrPDIRequest_GetWH_OS
+            // Đích không có dịch vụ ngoài DMS Sale -> danh sách rỗng (GAP: NO_BACKEND)
+            var lstDlrPdiRequest = new List<object>();
+
+            // Gate :462-475: tính PageInfo
+            var itemCount = 0;
+            var pageCount = ftPageSize == 0 ? 0 : (itemCount % ftPageSize == 0) ? itemCount / ftPageSize : itemCount / ftPageSize + 1;
+
+            return await Task.FromResult<IActionResult>(Ok(new
+            {
+                Success = true,
+                Data = new
+                {
+                    PageIndex = ftPageIndex,
+                    PageSize = ftPageSize,
+                    PageCount = pageCount,
+                    ItemCount = itemCount,
+                    DataList = lstDlrPdiRequest
+                }
+            }));
+        }
+        catch (Exception ex)
+        {
+            return PortResult.Fail(errorCode, "Exception", ex.Message);
         }
     }
 
@@ -407,6 +465,19 @@ public class DlrPDIRequest_GetROForCreateDLReq
 {
     public string? DlrPDIReqNo { get; set; }
     public string? VIN { get; set; }
+}
+
+public class DlrPDIRequest_SearchWHDLReq
+{
+    public string? DealerCode { get; set; }
+    public string? DlrPDIReqNo { get; set; }
+    public string? CreatedDateFrom { get; set; }
+    public string? CreatedDateTo { get; set; }
+    public string? VIN { get; set; }
+    public string? DlrContractNo { get; set; }
+    public string? DlrPDIReqStatus { get; set; }
+    public int Ft_PageIndex { get; set; } = 0;
+    public int Ft_PageSize { get; set; } = 10;
 }
 
 public class DlrPDIRequest_ExportWHHQReq

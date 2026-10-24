@@ -1,0 +1,1 @@
+DlrPDIRequestControllerPort.SearchWHDL (#36): toàn bộ dữ liệu từ dịch vụ ngoài wsDMSSale (không có bảng Dlr_PDIRequest/Dlr_PDIRequestDtl trong DB đích)
