@@ -4,7 +4,7 @@ Nguồn mẫu số: `D:\idocNet\2023.H.CarServices\13.ClientGate\V10\idn.CarSv\i
 
 **Mẫu số (N)**: 1152
 
-**Tiến độ hiện tại**: 37/1152 (3.21%)
+**Tiến độ hiện tại**: 38/1152 (3.3%)
 
 Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã có` (đã port từ trước, có bằng chứng) · `Bỏ` (scaffold/không nghiệp vụ, ghi lý do) · `Cần xem tay`.
 
@@ -45,7 +45,7 @@ Trạng thái: `Chưa làm` · `Đã làm` (có commit, review PASS) · `Đã c�
 | 33 | DlrMstDealerContractFormPrintController/SaveDlrMstDealerContractFormPrint | Chưa làm | - |
 | 34 | DlrMstDealerContractFormPrintController/CreateTempPrintGroup | Đã làm | 974cc60 |
 | 35 | DlrPDIRequestController/SearchDL | Chưa làm | - |
-| 36 | DlrPDIRequestController/SearchWHDL | Chưa làm | - |
+| 36 | DlrPDIRequestController/SearchWHDL | Đã làm | 9e98127 |
 | 37 | DlrPDIRequestController/SearchHQ | Chưa làm | - |
 | 38 | DlrPDIRequestController/SearchWHHQ | Chưa làm | - |
 | 39 | DlrPDIRequestController/GetByDlrPDIReqNoDL | Đã làm | 5df61e3 |
