@@ -152,29 +152,26 @@ public class MstProvinceControllerPortTests : IDisposable
     public async Task GetAllActive_TraCac3Dong()
     {
         // GetAllActive: lấy tất cả dòng có FlagActive = "1" → 3 dòng (01, 02, 04).
+        // Gate trả List<Mst_Province> trực tiếp (không PageInfo).
         var root = Root(await _controller.GetAllActive());
         Assert.True(root.GetProperty("Success").GetBoolean());
         var data = root.GetProperty("Data");
-        Assert.Equal(3, data.GetProperty("ItemCount").GetInt32());
-        var list = data.GetProperty("DataList");
-        Assert.Equal(3, list.GetArrayLength());
-        Assert.Equal("01", list[0].GetProperty("ProvinceCode").GetString());
-        Assert.Equal("02", list[1].GetProperty("ProvinceCode").GetString());
-        Assert.Equal("04", list[2].GetProperty("ProvinceCode").GetString());
+        Assert.Equal(3, data.GetArrayLength());
+        Assert.Equal("01", data[0].GetProperty("ProvinceCode").GetString());
+        Assert.Equal("02", data[1].GetProperty("ProvinceCode").GetString());
+        Assert.Equal("04", data[2].GetProperty("ProvinceCode").GetString());
     }
 
     [Fact]
-    public async Task GetAllActive_BangRong_TraPageInfoRong()
+    public async Task GetAllActive_BangRong_TraNull()
     {
-        // GetAllActive khi không có dòng FlagActive = "1".
+        // GetAllActive khi không có dòng FlagActive = "1" → trả null (gate logic).
         var set = _db.Set<Mst_Province>();
         set.RemoveRange(await set.ToListAsync());
         await _db.SaveChangesAsync();
 
         var root = Root(await _controller.GetAllActive());
         var data = root.GetProperty("Data");
-        Assert.Equal(0, data.GetProperty("ItemCount").GetInt32());
-        var list = data.GetProperty("DataList");
-        Assert.Equal(0, list.GetArrayLength());
+        Assert.Equal(JsonValueKind.Null, data.ValueKind);
     }
 }

@@ -39,11 +39,11 @@ public class MstProvinceControllerPort : ControllerBase
             .OrderBy(x => x.ProvinceCode)
             .ToListAsync();
 
-        var pageInfo = new PageInfo<Mst_Province>(list, list.Count, 1, 0, 0);
+        var data = list.Count > 0 ? list : null;
         return Ok(new
         {
             Success = true,
-            Data = pageInfo
+            Data = data
         });
     }
 
